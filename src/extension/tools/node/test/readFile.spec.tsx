@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { afterAll, beforeAll, expect, suite, test } from 'vitest';
-import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
+import { IChatDebugFileLoggerService, sessionResourceToId } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
@@ -747,10 +747,10 @@ suite('ReadFile', () => {
 				_serviceBrand: undefined,
 				resolvePromptReferencesInPrompt: async (message: string) => ({ message }),
 				resolveToolReferencesInPrompt: async (message: string) => message,
-				resolveTemplateVariables: (content: string, sessionId: string | undefined) => {
+				resolveTemplateVariables: (content: string, sessionResource: URI | undefined) => {
 					const placeholder = '{{CURRENT_SESSION_LOG}}';
-					if (content.includes(placeholder) && sessionId) {
-						content = content.replaceAll(placeholder, joinPath(dirname(expectedLogDir), sessionId).fsPath);
+					if (content.includes(placeholder) && sessionResource) {
+						content = content.replaceAll(placeholder, joinPath(dirname(expectedLogDir), sessionResource.toString()).fsPath);
 					}
 					return content;
 				},
@@ -841,10 +841,10 @@ suite('ReadFile', () => {
 				_serviceBrand: undefined,
 				resolvePromptReferencesInPrompt: async (message: string) => ({ message }),
 				resolveToolReferencesInPrompt: async (message: string) => message,
-				resolveTemplateVariables: (content: string, sessionId: string | undefined) => {
+				resolveTemplateVariables: (content: string, sessionResource: URI | undefined) => {
 					const placeholder = '{{CURRENT_SESSION_LOG}}';
-					if (content.includes(placeholder) && sessionId) {
-						content = content.replaceAll(placeholder, joinPath(dirname(expectedLogDir), sessionId).fsPath);
+					if (content.includes(placeholder) && sessionResource) {
+						content = content.replaceAll(placeholder, joinPath(dirname(expectedLogDir), sessionResourceToId(sessionResource).toString()).fsPath);
 					}
 					return content;
 				},

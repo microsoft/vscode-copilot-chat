@@ -8,7 +8,6 @@ import { ITasksService } from '../../../../platform/tasks/common/tasksService';
 import { ITerminalService } from '../../../../platform/terminal/common/terminalService';
 
 export interface TerminalStateProps extends BasePromptElementProps {
-	sessionId?: string;
 }
 
 /**

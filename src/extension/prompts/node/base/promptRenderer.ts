@@ -53,26 +53,17 @@ export abstract class RendererIntentInvocation {
 	abstract createRenderer(promptParams: IBuildPromptContext, endpoint: IChatEndpoint, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): BasePromptRenderer<any, OutputMode.Raw> | Promise<BasePromptRenderer<any, OutputMode.Raw>>;
 }
 
-export interface PromptRendererProps extends BasePromptElementProps {
-	readonly promptContext?: IBuildPromptContext;
-}
-
 export class PromptRenderer<P extends BasePromptElementProps> extends BasePromptRenderer<P, OutputMode.Raw> {
 	private ctorName?: string; // when and iff tracing is enabled
 
-	public static create<P extends PromptRendererProps>(
+	public static create<P extends BasePromptElementProps>(
 		instantiationService: IInstantiationService,
 		endpoint: IChatEndpoint,
 		ctor: PromptElementCtor<P, any>,
 		props: P,
 	) {
 		// TODO@Alex, TODO@Joh: instantiationService.createInstance doesn't work here
-		const services = new ServiceCollection([IPromptEndpoint, endpoint]);
-		// Always register prompt context so child PromptElements can inject it.
-		// When the root element's props don't carry promptContext, we register
-		// undefined — consumers must tolerate that.
-		services.set(IBuildPromptContext, props.promptContext);
-		const hydratedInstaService = instantiationService.createChild(services);
+		const hydratedInstaService = instantiationService.createChild(new ServiceCollection([IPromptEndpoint, endpoint]));
 		return hydratedInstaService.invokeFunction((accessor) => {
 			const tokenizerProvider = accessor.get(ITokenizerProvider);
 			let renderer = new PromptRenderer(hydratedInstaService, endpoint, ctor, props, tokenizerProvider, accessor.get(IRequestLogger), accessor.get(ILogService), accessor.get(IConfigurationService));

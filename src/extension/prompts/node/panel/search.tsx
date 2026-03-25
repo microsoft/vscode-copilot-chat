@@ -24,7 +24,7 @@ export interface SearchPromptProps extends BasePromptElementProps {
 export class SearchPrompt extends PromptElement<SearchPromptProps> {
 
 	override render(state: void, sizing: PromptSizing): PromptPiece<any, any> | undefined {
-		const { query, history } = this.props.promptContext;
+		const { query, history, request } = this.props.promptContext;
 		return (
 			<>
 				<SystemMessage priority={1000}>
@@ -32,7 +32,7 @@ export class SearchPrompt extends PromptElement<SearchPromptProps> {
 					<CopilotIdentityRules />
 					<SafetyRules />
 				</SystemMessage>
-				<HistoryWithInstructions historyPriority={600} passPriority history={history} >
+				<HistoryWithInstructions historyPriority={600} passPriority history={history} sessionResource={request?.sessionResource}>
 					<InstructionMessage priority={1000}>
 
 						<EditorIntegrationRules />

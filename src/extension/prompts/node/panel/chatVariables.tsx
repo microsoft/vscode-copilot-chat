@@ -95,6 +95,7 @@ export class ChatVariables extends PromptElement<ChatVariablesProps, void> {
 export interface QueryProps extends BasePromptElementProps {
 	readonly chatVariables: ChatVariablesCollection;
 	readonly query: string;
+	readonly sessionResource: URI | undefined;
 }
 
 export class UserQuery extends PromptElement<QueryProps, void> {
@@ -109,7 +110,7 @@ export class UserQuery extends PromptElement<QueryProps, void> {
 		const promptFileIds: PromptFileSlashCommandId[] = [];
 		for (const v of this.props.chatVariables) {
 			if (isPromptFile(v)) {
-				promptFiles.push(<PromptFile variable={v} omitReferences={false} />);
+				promptFiles.push(<PromptFile variable={v} omitReferences={false} sessionResource={this.props.sessionResource} />);
 				promptFileIds.push(getPromptFileSlashCommandId(v));
 			}
 		}
@@ -184,6 +185,8 @@ export interface ChatVariablesAndQueryProps extends BasePromptElementProps, Embe
 	 * If true, file attachment contents are omitted and only the file names/paths are included.
 	 */
 	readonly omitFileContents?: boolean;
+
+	readonly sessionResource: URI | undefined;
 }
 
 export class ChatVariablesAndQuery extends PromptElement<ChatVariablesAndQueryProps, void> {
@@ -202,7 +205,7 @@ export class ChatVariablesAndQuery extends PromptElement<ChatVariablesAndQueryPr
 			if (!elements.length) {
 				return (
 					<Tag name='prompt'>
-						<UserQuery chatVariables={chatVariables} query={this.props.query} priority={this.props.priority} />
+						<UserQuery chatVariables={chatVariables} query={this.props.query} priority={this.props.priority} sessionResource={this.props.sessionResource} />
 					</Tag>
 				);
 			}
@@ -211,14 +214,14 @@ export class ChatVariablesAndQuery extends PromptElement<ChatVariablesAndQueryPr
 					{elements}
 				</Tag>}
 				<Tag name='prompt'>
-					<UserQuery chatVariables={chatVariables} query={this.props.query} priority={this.props.priority} />
+					<UserQuery chatVariables={chatVariables} query={this.props.query} priority={this.props.priority} sessionResource={this.props.sessionResource} />
 				</Tag>
 			</>);
 		}
 
 		return (<>
 			{...elements.map(element => asUserMessage(element, this.props.priority && this.props.priority - 1))}
-			{asUserMessage(<UserQuery chatVariables={chatVariables} query={this.props.query} />, this.props.priority)}
+			{asUserMessage(<UserQuery chatVariables={chatVariables} query={this.props.query} sessionResource={this.props.sessionResource} />, this.props.priority)}
 		</>);
 	}
 }

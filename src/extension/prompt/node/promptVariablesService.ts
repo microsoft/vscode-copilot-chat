@@ -5,6 +5,7 @@
 
 import type { ChatLanguageModelToolReference, ChatPromptReference } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
+import { URI } from '../../../util/vs/base/common/uri';
 
 
 export const IPromptVariablesService = createServiceIdentifier<IPromptVariablesService>('IPromptVariablesService');
@@ -18,12 +19,10 @@ export interface IPromptVariablesService {
 	 * Replace all known `{{VARIABLE}}` template placeholders in {@link content}.
 	 *
 	 * @param content  The raw template string (skill, agent, prompt, or instructions content).
-	 * @param sessionId  The chat session ID used to resolve session-scoped
-	 *   variables.  May be `undefined` when the session is not (yet) known;
-	 *   in that case session-scoped variables are left unresolved.
+	 * @param sessionResource  The current chat session resource, used for resolving variables that depend on the session context (e.g. `{{CURRENT_SESSION_LOG}}`).
 	 * @returns The content with all resolvable placeholders replaced.
 	 */
-	resolveTemplateVariables(content: string, sessionId: string | undefined): string;
+	resolveTemplateVariables(content: string, sessionResource: URI | undefined): string;
 }
 
 export class NullPromptVariablesService implements IPromptVariablesService {
@@ -37,7 +36,7 @@ export class NullPromptVariablesService implements IPromptVariablesService {
 		return message;
 	}
 
-	resolveTemplateVariables(content: string, _sessionId: string | undefined): string {
+	resolveTemplateVariables(content: string, sessionResource: URI | undefined): string {
 		return content;
 	}
 }

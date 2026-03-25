@@ -291,8 +291,7 @@ export interface AgentUserMessageProps extends BasePromptElementProps, AgentUser
 	readonly chatVariables: ChatVariablesCollection;
 	readonly enableCacheBreakpoints?: boolean;
 	readonly editedFileEvents?: readonly ChatRequestEditedFileEvent[];
-	readonly sessionId?: string;
-	readonly sessionResource?: string;
+	readonly sessionResource?: URI;
 	/** When true, indicates this is a stop hook continuation where the stop hook query is rendered as a separate message. */
 	readonly hasStopHookQuery?: boolean;
 	/** Additional context provided by SubagentStart hooks. */
@@ -326,9 +325,7 @@ export function getUserMessagePropsFromAgentProps(agentProps: AgentPromptProps, 
 		editedFileEvents: agentProps.promptContext.editedFileEvents,
 		hasStopHookQuery: agentProps.promptContext.hasStopHookQuery,
 		additionalHookContext: agentProps.promptContext.additionalHookContext,
-		// TODO:@roblourens
-		sessionId: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionId,
-		sessionResource: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionResource,
+		sessionResource: agentProps.promptContext.request?.sessionResource,
 		...customizations,
 	};
 }
@@ -394,7 +391,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<CurrentDatePrompt />
 						<EditedFileEvents editedFileEvents={this.props.editedFileEvents} />
 						<NotebookSummaryChange />
-						{hasTerminalTool && <TerminalStatePromptElement sessionId={this.props.sessionId} />}
+						{hasTerminalTool && <TerminalStatePromptElement />}
 						{hasTodoTool && <TodoListContextPrompt sessionResource={this.props.sessionResource} />}
 						{this.props.additionalHookContext && <AdditionalHookContextPrompt context={this.props.additionalHookContext} />}
 					</Tag>
@@ -406,7 +403,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						{this.configurationService.getNonExtensionConfig<boolean>(USE_SKILL_ADHERENCE_PROMPT_SETTING) && <SkillAdherenceReminder chatVariables={this.props.chatVariables} />}
 					</Tag>
 					{query && <Tag name={userQueryTagName} priority={900} flexGrow={7}>
-						<UserQuery chatVariables={this.props.chatVariables} query={query} />
+						<UserQuery chatVariables={this.props.chatVariables} query={query} sessionResource={this.props.sessionResource} />
 					</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 				</UserMessage>

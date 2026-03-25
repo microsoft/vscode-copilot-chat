@@ -395,7 +395,7 @@ ms-python.python,ms-python.vscode-pylance
 				</UserMessage>
 				<ChatToolReferences priority={850} flexGrow={2} promptContext={{ ...this.props.promptContext, query: state.query }} embeddedInsideUserMessage={false} />
 				<ChatToolCalls priority={899} flexGrow={2} promptContext={this.props.promptContext} toolCallRounds={this.props.promptContext.toolCallRounds} toolCallResults={this.props.promptContext.toolCallResults} />
-				<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={this.props.promptContext.chatVariables} query={this.props.promptContext.query} embeddedInsideUserMessage={false} />
+				<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={this.props.promptContext.chatVariables} query={this.props.promptContext.query} embeddedInsideUserMessage={false} sessionResource={this.props.promptContext.request?.sessionResource} />
 			</>);
 	}
 }
@@ -413,7 +413,7 @@ class VscodeMetaPrompt extends PromptElement<VscodeMetaPromptProps> {
 				You are a Visual Studio Code assistant who helps the user create well-formed and unambiguous queries about their Visual Studio Code development environment.<br />
 				Specifically, you help users rewrite questions about how to use Visual Studio Code's Commands and Settings.
 			</SystemMessage>
-			<HistoryWithInstructions historyPriority={500} passPriority history={this.props.history || []}>
+			<HistoryWithInstructions historyPriority={500} passPriority history={this.props.history || []} sessionResource={undefined}>
 				<InstructionMessage priority={1000}>
 					Evaluate the question to determine the user's intent. <br />
 					Determine if the user's question is about the editor, terminal, activity bar, side bar, status bar, panel or other parts of Visual Studio Code's workbench and include those keyword in the rewrite.<br />

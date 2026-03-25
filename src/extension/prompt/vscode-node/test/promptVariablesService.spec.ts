@@ -14,6 +14,8 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { Uri } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { PromptVariablesServiceImpl } from '../promptVariablesService';
+import { encodeBase64, VSBuffer } from '../../../../util/vs/base/common/buffer';
+import { Schemas } from '../../../../util/vs/base/common/network';
 
 describe('PromptVariablesServiceImpl', () => {
 	let accessor: ITestingServicesAccessor;
@@ -76,6 +78,12 @@ describe('PromptVariablesServiceImpl', () => {
 		expect(rewritten).toBe(msg);
 	});
 
+
+	function asSessionResource(sessionId: string): URI {
+		const encodedId = encodeBase64(VSBuffer.wrap(new TextEncoder().encode(sessionId)), false, true);
+		return URI.from({ scheme: Schemas.vscodeLocalChatSession, authority: 'local', path: '/' + encodedId });
+	}
+
 	describe('resolveTemplateVariables', () => {
 		test('replaces {{CURRENT_SESSION_LOG}} when sessionId and debugLogsDir are available', () => {
 			const debugLogsDir = URI.file('/mock/storage/debug-logs');
@@ -98,7 +106,7 @@ describe('PromptVariablesServiceImpl', () => {
 
 			const result = svc.resolveTemplateVariables(
 				'Log dir: `{{CURRENT_SESSION_LOG}}`\nMore content.',
-				'session-abc'
+				asSessionResource('session-abc')
 			);
 
 			const expected = promptPathRepresentationService.getFilePath(joinPath(debugLogsDir, 'session-abc'));
@@ -107,7 +115,7 @@ describe('PromptVariablesServiceImpl', () => {
 			acc.dispose();
 		});
 
-		test('leaves {{CURRENT_SESSION_LOG}} when sessionId is undefined', () => {
+		test('leaves {{CURRENT_SESSION_LOG}} when sessionResource is undefined', () => {
 			const content = 'Log dir: `{{CURRENT_SESSION_LOG}}`';
 			const result = service.resolveTemplateVariables(content, undefined);
 			expect(result).toBe(content);
@@ -116,13 +124,13 @@ describe('PromptVariablesServiceImpl', () => {
 		test('leaves {{CURRENT_SESSION_LOG}} when debugLogsDir is undefined', () => {
 			// The default mock has no debugLogsDir configured
 			const content = 'Log dir: `{{CURRENT_SESSION_LOG}}`';
-			const result = service.resolveTemplateVariables(content, 'session-abc');
+			const result = service.resolveTemplateVariables(content, asSessionResource('session-abc'));
 			expect(result).toBe(content);
 		});
 
 		test('returns content unchanged when no placeholders present', () => {
 			const content = 'No placeholders here.';
-			const result = service.resolveTemplateVariables(content, 'session-abc');
+			const result = service.resolveTemplateVariables(content, asSessionResource('session-abc'));
 			expect(result).toBe(content);
 		});
 
@@ -147,7 +155,7 @@ describe('PromptVariablesServiceImpl', () => {
 
 			const result = svc.resolveTemplateVariables(
 				'First: {{CURRENT_SESSION_LOG}}, Second: {{CURRENT_SESSION_LOG}}',
-				'sess'
+				asSessionResource('sess')
 			);
 
 			const expected = promptPathRepresentationService.getFilePath(joinPath(debugLogsDir, 'sess'));
