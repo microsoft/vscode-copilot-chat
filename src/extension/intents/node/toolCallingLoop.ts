@@ -1044,12 +1044,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let availableTools = await this.getAvailableTools(outputStream, token);
 		const context = this.createPromptContext(availableTools, outputStream);
 		const isContinuation = context.isContinuation || false;
-		performance.mark('code/chat/ext/willBuildPrompt');
 		const trace = getPerfTracer('code/chat/ext')?.findTraceByCorrelation('requestId', this.options.request.id);
 		trace?.mark('willBuildPrompt');
 		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
 		trace?.mark('didBuildPrompt');
-		performance.mark('code/chat/ext/didBuildPrompt');
 		this.throwIfCancelled(token);
 		this.turn.addReferences(buildPromptResult.references);
 		// Possible the tool call resulted in new tools getting added.
@@ -1156,7 +1154,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const enableThinking = !shouldDisableThinking;
 		let phase: string | undefined;
 		let compaction: OpenAIContextManagementResponse | undefined;
-		performance.mark('code/chat/ext/willFetch');
 		trace?.mark('willFetch');
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(effectiveBuildPromptResult.messages, { stripOrphanedToolCalls: isGeminiFamily(endpoint) }),
@@ -1209,7 +1206,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			this.stopHookUserInitiated = false;
 		});
 		trace?.mark('didFetch');
-		performance.mark('code/chat/ext/didFetch');
 
 		const promptTokenDetails = await computePromptTokenDetails({
 			messages: effectiveBuildPromptResult.messages,

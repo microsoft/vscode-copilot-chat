@@ -100,10 +100,8 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		}
 		const trace = getPerfTracer('code/chat/ext')?.findTraceByCorrelation('requestId', this.props.promptContext.requestId);
 		trace?.mark('willGetSystemPrompt');
-		performance.mark('code/chat/ext/willGetSystemPrompt');
 		const instructions = await this.getSystemPrompt(customizations);
 		trace?.mark('didGetSystemPrompt');
-		performance.mark('code/chat/ext/didGetSystemPrompt');
 		const CopilotIdentityRules = customizations.CopilotIdentityRulesClass;
 		const SafetyRules = customizations.SafetyRulesClass;
 
@@ -216,7 +214,6 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	private async getOrCreateGlobalAgentContext(endpoint: IChatEndpoint): Promise<PromptPieceChild[]> {
 		const trace = getPerfTracer('code/chat/ext')?.findTraceByCorrelation('requestId', this.props.promptContext.requestId);
 		trace?.mark('willGetGlobalAgentContext');
-		performance.mark('code/chat/ext/willGetGlobalAgentContext');
 		const globalContext = await this.getOrCreateGlobalAgentContextContent(endpoint);
 		const isNewChat = this.props.promptContext.history?.length === 0;
 		// TODO:@bhavyau find a better way to extract session resource
@@ -225,7 +222,6 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			renderedMessageToTsxChildren(globalContext, !!this.props.enableCacheBreakpoints) :
 			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} availableTools={this.props.promptContext.tools?.availableTools} isNewChat={isNewChat} sessionResource={sessionResource} />;
 		trace?.mark('didGetGlobalAgentContext');
-		performance.mark('code/chat/ext/didGetGlobalAgentContext');
 		return result;
 	}
 
