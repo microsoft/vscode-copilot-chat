@@ -1234,7 +1234,8 @@
 				"description": "",
 				"tools": [
 					"runNotebookCell",
-					"testFailure"
+					"testFailure",
+					"executionSubagent"
 				]
 			},
 			{
