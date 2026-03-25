@@ -1649,12 +1649,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				return customAgent;
 			}
 		}
-		const [sessionAgent, defaultAgent] = await Promise.all([
-			sessionId ? this.chatSessionMetadataStore.getSessionAgent(sessionId) : Promise.resolve(undefined),
-			this.copilotCLIAgents.getDefaultAgent(),
-		]);
-
-		return await this.copilotCLIAgents.resolveAgent(sessionAgent ?? defaultAgent);
+		const sessionAgent = sessionId ? await this.chatSessionMetadataStore.getSessionAgent(sessionId) : undefined;
+		return sessionAgent ? await this.copilotCLIAgents.resolveAgent(sessionAgent) : undefined;
 	}
 
 	private async getPromptInfoFromRequest(request: vscode.ChatRequest, token: vscode.CancellationToken): Promise<ParsedPromptFile | undefined> {

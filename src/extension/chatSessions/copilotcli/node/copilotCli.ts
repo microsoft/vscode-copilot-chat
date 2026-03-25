@@ -30,8 +30,6 @@ import { URI } from '../../../../util/vs/base/common/uri';
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 const COPILOT_CLI_REQUEST_MAP_KEY = 'github.copilot.cli.requestMap';
-// Store last used Agent per workspace.
-const COPILOT_CLI_AGENT_MEMENTO_KEY = 'github.copilot.cli.customAgent';
 // Store last used Agent for a Session.
 const COPILOT_CLI_SESSION_AGENTS_MEMENTO_KEY = 'github.copilot.cli.sessionAgents';
 /**
@@ -243,11 +241,8 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 export interface ICopilotCLIAgents {
 	readonly _serviceBrand: undefined;
 	readonly onDidChangeAgents: Event<void>;
-	getDefaultAgent(): Promise<string>;
 	resolveAgent(agentId: string): Promise<SweCustomAgent | undefined>;
-	setDefaultAgent(agent: string | undefined): Promise<void>;
 	getAgents(): Promise<Readonly<SweCustomAgent>[]>;
-	trackSessionAgent(sessionId: string, agent: string | undefined): Promise<void>;
 	getSessionAgent(sessionId: string): Promise<string | undefined>;
 }
 
@@ -316,21 +311,6 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		return agents.find(agent => agent.name.toLowerCase() === agentId)?.name;
 	}
 
-	async getDefaultAgent(): Promise<string> {
-		const agentId = this.extensionContext.workspaceState.get<string>(COPILOT_CLI_AGENT_MEMENTO_KEY, '').toLowerCase();
-		if (!agentId || agentId === COPILOT_CLI_DEFAULT_AGENT_ID) {
-			return '';
-		}
-
-		const agents = await this.getAgents();
-		return agents.find(agent => agent.name.toLowerCase() === agentId)?.name ?? '';
-	}
-	async setDefaultAgent(agent: string | undefined): Promise<void> {
-		await this.extensionContext.workspaceState.update(COPILOT_CLI_AGENT_MEMENTO_KEY, agent);
-	}
-	async trackUsedAgent(sessionId: string, agent: string | undefined): Promise<void> {
-		await this.extensionContext.workspaceState.update(COPILOT_CLI_AGENT_MEMENTO_KEY, agent);
-	}
 	async resolveAgent(agentId: string): Promise<SweCustomAgent | undefined> {
 		for (const promptFile of this.chatCustomAgentsService.getCustomAgents()) {
 			if (agentId === promptFile.uri.toString()) {
