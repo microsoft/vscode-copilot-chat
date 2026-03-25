@@ -7,8 +7,8 @@ import * as os from 'os';
 import * as vscode from 'vscode';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { TRAJECTORY_FILE_EXTENSION, type IAgentTrajectory, type IObservationResult, type ITrajectoryStep } from '../../../platform/otel/common/atif/atifTypes';
-import { convertConversationToAtif } from '../../../platform/otel/node/atif/otelToAtifConverter';
-import { IOTelSqliteStore, type OTelSqliteStore } from '../../../platform/otel/node/sqlite/otelSqliteStore';
+import { convertTraceToAtif } from '../../../platform/otel/node/atif/otelToAtifConverter';
+import { IOTelSqliteStore, type OTelSqliteStore, type SessionRow } from '../../../platform/otel/node/sqlite/otelSqliteStore';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IExtensionContribution } from '../../common/contributions';
 
@@ -43,21 +43,51 @@ export class AtifExportCommands extends Disposable implements IExtensionContribu
 	}
 
 	private async _exportTrajectories(savePath?: string, options?: { agentOnly?: boolean }): Promise<void> {
-		// Get all distinct conversation/trace IDs from the store
-		const traceIds = this._sqliteStore.getTraceIds();
-		if (traceIds.length === 0) {
+		const sessions = this._sqliteStore.getSessions();
+		if (sessions.length === 0) {
 			if (!savePath) {
-				vscode.window.showInformationMessage('No trajectories found to export.');
+				vscode.window.showInformationMessage('No agent sessions found to export.');
 			}
 			return;
 		}
 
-		// Convert all traces to ATIF
+		// When called programmatically (with savePath), export all sessions.
+		// When called interactively, let the user pick a session.
+		let selectedSession: SessionRow | undefined;
+		if (!savePath) {
+			const items = sessions.map(s => ({
+				label: `${s.agent_name ?? 'agent'} — ${s.model ?? 'unknown model'}`,
+				description: `${s.tool_calls} tool calls, ${s.llm_calls} LLM calls`,
+				detail: `${new Date(s.started_at).toLocaleString()} · ${Math.round(s.duration_ms / 1000)}s · ${s.total_input_tokens + s.total_output_tokens} tokens`,
+				session: s,
+			}));
+
+			const picked = await vscode.window.showQuickPick(items, {
+				placeHolder: 'Select a session to export as ATIF trajectory',
+				title: 'Export Agent Trajectory',
+			});
+
+			if (!picked) {
+				return; // User cancelled
+			}
+			selectedSession = picked.session;
+		}
+
+		// Get trace IDs for the selected session (or all sessions if programmatic)
+		const traceIds = selectedSession
+			? this._sqliteStore.getTraceIds(selectedSession.session_id)
+			: this._sqliteStore.getTraceIds();
+
+		if (traceIds.length === 0) {
+			return;
+		}
+
+		// Convert traces to ATIF
 		let mainTrajectory: IAgentTrajectory | undefined;
 		const allSubagents = new Map<string, IAgentTrajectory>();
 
 		for (const traceId of traceIds) {
-			const { main, subagents } = convertConversationToAtif(this._sqliteStore, traceId);
+			const { main, subagents } = convertTraceToAtif(this._sqliteStore, traceId);
 			if (main && !mainTrajectory) {
 				mainTrajectory = main;
 			} else if (main) {
