@@ -9,7 +9,7 @@ import { Event } from '../../../../../util/vs/base/common/event';
 import { Disposable, IDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../../util/vs/base/common/uuid';
-import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents } from '../copilotCli';
+import { ICopilotCLIAgents } from '../copilotCli';
 import { ICopilotCLIImageSupport } from '../copilotCLIImageSupport';
 import { ICopilotCLISkills } from '../copilotCLISkills';
 import { ICopilotCLIMCPHandler } from '../mcpHandler';
