@@ -16,6 +16,7 @@ import { IBuildPromptContext, IToolCallRound } from '../../../prompt/common/inte
 import { IBuildPromptResult, nullRenderPromptResult } from '../../../prompt/node/intents';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { IToolsService } from '../../../tools/common/toolsService';
+import { TestToolsService } from '../../../tools/node/test/testToolsService';
 import { IToolCallingLoopOptions, IToolCallSingleResult, ToolCallingLoop } from '../../node/toolCallingLoop';
 import { MockChatHookService } from './toolCallingLoopHooks.spec';
 
@@ -343,8 +344,8 @@ describe('ToolCallingLoop autopilot', () => {
 		};
 
 		function registerTaskCompleteTool(): void {
-			const toolsService = instantiationService.invokeFunction(acc => acc.get(IToolsService));
-			(toolsService as any)._tools.set('task_complete', mockTaskCompleteTool);
+			const toolsService = instantiationService.invokeFunction(acc => acc.get(IToolsService)) as TestToolsService;
+			toolsService.addTestToolOverride(mockTaskCompleteTool, { invoke: () => ({ content: [] }) });
 		}
 
 		it('should add task_complete when missing in autopilot mode', () => {
