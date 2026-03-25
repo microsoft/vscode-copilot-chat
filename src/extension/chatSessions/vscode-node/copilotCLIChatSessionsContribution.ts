@@ -158,7 +158,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	// As a temporary solution, return the same untitled session id back to core until the session is completed.
 	public readonly untitledSessionIdMapping = new Map<string, string>();
 	/**
-	 * Untill the untitled session is properly swappped with the new session, we should keep track of this mapping.
+	 * Until the untitled session is properly swappped with the new session, we should keep track of this mapping.
 	 * When VS Code asks for the session, always return the old untitled session Uri.
 	 */
 	public readonly sdkToUntitledUriMapping = new Map<string, Uri>();
