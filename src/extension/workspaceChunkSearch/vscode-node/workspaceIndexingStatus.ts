@@ -217,7 +217,7 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 						},
 					});
 				} else if (typeof state.remoteIndexState.externalIngestState !== 'undefined') {
-					// External indexing is enable but not yet built
+					// External indexing is enabled but not yet built
 					return this._writeStatusItem({
 						title: {
 							title: t('Index not yet built'),
