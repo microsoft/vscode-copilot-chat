@@ -7,6 +7,7 @@ import * as l10n from '@vscode/l10n';
 import { shouldInclude } from '../../../../util/common/glob';
 import { Result } from '../../../../util/common/result';
 import { CallTracker, TelemetryCorrelationId } from '../../../../util/common/telemetryCorrelationId';
+import { TokenizerType } from '../../../../util/common/tokenizer';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { raceCancellationError, raceTimeout } from '../../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
@@ -41,7 +42,9 @@ import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../workspace/common/workspaceService';
 import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId } from '../../common/workspaceChunkSearch';
 import { EmbeddingsChunkSearch } from '../embeddingsChunkSearch';
+import { TfidfChunkSearch } from '../tfidfChunkSearch';
 import { TfIdfWithSemanticChunkSearch } from '../tfidfWithSemanticChunkSearch';
+import { WorkspaceChunkEmbeddingsIndex } from '../workspaceChunkEmbeddingsIndex';
 import { IWorkspaceFileIndex } from '../workspaceFileIndex';
 import { AdoCodeSearchRepo, BuildIndexTriggerReason, CodeSearchRepo, CodeSearchRepoStatus, GithubCodeSearchRepo, TriggerIndexingError, TriggerRemoteIndexingError } from './codeSearchRepo';
 import { ExternalIngestClient } from './externalIngestClient';
@@ -122,7 +125,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	private readonly _workspaceDiffTracker: Lazy<CodeSearchWorkspaceDiffTracker>;
 
 	private readonly _embeddingsChunkSearch: EmbeddingsChunkSearch;
-	private readonly _tfIdfChunkSearch: TfIdfWithSemanticChunkSearch;
+	private readonly _tfIdfSemanticChunkSearch: TfIdfWithSemanticChunkSearch;
 
 	private readonly _onDidChangeIndexState = this._register(new Emitter<void>());
 	public readonly onDidChangeIndexState = this._onDidChangeIndexState.event;
@@ -132,22 +135,21 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	private readonly _codeSearchRepos = new ResourceMap<{ readonly repo: CodeSearchRepo; readonly disposables: IDisposable }>();
 
 	private readonly _onDidFinishInitialization = this._register(new Emitter<void>());
-	public readonly onDidFinishInitialization = this._onDidFinishInitialization.event;
+	private readonly onDidFinishInitialization = this._onDidFinishInitialization.event;
 
 	private readonly _onDidAddOrUpdateCodeSearchRepo = this._register(new Emitter<RepoEntry>());
-	public readonly onDidAddOrUpdateCodeSearchRepo = this._onDidAddOrUpdateCodeSearchRepo.event;
+	private readonly onDidAddOrUpdateCodeSearchRepo = this._onDidAddOrUpdateCodeSearchRepo.event;
 
 	private readonly _onDidRemoveCodeSearchRepo = this._register(new Emitter<RepoEntry>());
-	public readonly onDidRemoveCodeSearchRepo = this._onDidRemoveCodeSearchRepo.event;
+	private readonly onDidRemoveCodeSearchRepo = this._onDidRemoveCodeSearchRepo.event;
 
 	private readonly _repoTracker: CodeSearchRepoTracker;
 
+	private readonly _embeddingsIndex: WorkspaceChunkEmbeddingsIndex;
 	private readonly _externalIngestIndex: Lazy<ExternalIngestIndex>;
 
 	constructor(
 		private readonly _embeddingType: EmbeddingType,
-		embeddingsChunkSearch: EmbeddingsChunkSearch,
-		tfIdfChunkSearch: TfIdfWithSemanticChunkSearch,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IAdoCodeSearchService private readonly _adoCodeSearchService: IAdoCodeSearchService,
 		@IAuthenticationChatUpgradeService private readonly _authUpgradeService: IAuthenticationChatUpgradeService,
@@ -164,8 +166,10 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	) {
 		super();
 
-		this._embeddingsChunkSearch = embeddingsChunkSearch;
-		this._tfIdfChunkSearch = tfIdfChunkSearch;
+		this._embeddingsIndex = instantiationService.createInstance(WorkspaceChunkEmbeddingsIndex, this._embeddingType);
+		this._embeddingsChunkSearch = this._register(instantiationService.createInstance(EmbeddingsChunkSearch, this._embeddingsIndex));
+		const tfIdfChunkSearch = this._register(instantiationService.createInstance(TfidfChunkSearch, { tokenizer: TokenizerType.O200K })); // TODO mjbvz: remove hardcoding
+		this._tfIdfSemanticChunkSearch = this._register(instantiationService.createInstance(TfIdfWithSemanticChunkSearch, tfIdfChunkSearch, this._embeddingsIndex));
 
 		this._repoTracker = this._register(instantiationService.createInstance(CodeSearchRepoTracker));
 		this._externalIngestIndex = new Lazy(() => {
@@ -696,8 +700,8 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		const outdatedFiles = await raceCancellationError(this.getLocalDiff(), token);
 		if (outdatedFiles.length > this.maxEmbeddingsDiffSize) {
 			// Too many files, only do tfidf search
-			const result = await this._tfIdfChunkSearch.searchSubsetOfFiles(sizing, query, diffArray, subSearchOptions, innerTelemetryInfo, token);
-			return { ...result, strategyId: this._tfIdfChunkSearch.id };
+			const result = await this._tfIdfSemanticChunkSearch.searchSubsetOfFiles(sizing, query, diffArray, subSearchOptions, innerTelemetryInfo, token);
+			return { ...result, strategyId: this._tfIdfSemanticChunkSearch.id };
 		}
 
 		// Kick off embeddings search of diff
@@ -711,8 +715,8 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		}
 
 		// Start tfidf too but keep embeddings search running in parallel
-		const tfIdfSearch = this._tfIdfChunkSearch.searchSubsetOfFiles(sizing, query, diffArray, subSearchOptions, innerTelemetryInfo, token)
-			.then((result): DiffSearchResult => ({ ...result, strategyId: this._tfIdfChunkSearch.id }));
+		const tfIdfSearch = this._tfIdfSemanticChunkSearch.searchSubsetOfFiles(sizing, query, diffArray, subSearchOptions, innerTelemetryInfo, token)
+			.then((result): DiffSearchResult => ({ ...result, strategyId: this._tfIdfSemanticChunkSearch.id }));
 
 		return Promise.race([embeddingsSearch, tfIdfSearch]);
 	}

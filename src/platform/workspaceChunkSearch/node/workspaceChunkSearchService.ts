@@ -9,7 +9,6 @@ import { createFencedCodeBlock, getLanguageId } from '../../../util/common/markd
 import { Result } from '../../../util/common/result';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { CallTracker, TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
-import { TokenizerType } from '../../../util/common/tokenizer';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -35,13 +34,9 @@ import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../workspace/common/workspaceService';
 import { IGithubAvailableEmbeddingTypesService } from '../common/githubAvailableEmbeddingTypes';
 import { IRerankerService } from '../common/rerankerService';
-import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQuery, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId, WorkspaceSearchAlert } from '../common/workspaceChunkSearch';
+import { StrategySearchResult, StrategySearchSizing, WorkspaceChunkQuery, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId, WorkspaceSearchAlert } from '../common/workspaceChunkSearch';
 import { CodeSearchChunkSearch, CodeSearchRemoteIndexState } from './codeSearch/codeSearchChunkSearch';
 import { BuildIndexTriggerReason, CodeSearchRepoStatus, TriggerIndexingError } from './codeSearch/codeSearchRepo';
-import { EmbeddingsChunkSearch } from './embeddingsChunkSearch';
-import { TfidfChunkSearch } from './tfidfChunkSearch';
-import { TfIdfWithSemanticChunkSearch } from './tfidfWithSemanticChunkSearch';
-import { WorkspaceChunkEmbeddingsIndex } from './workspaceChunkEmbeddingsIndex';
 import { IWorkspaceFileIndex } from './workspaceFileIndex';
 
 const maxEmbeddingSpread = 0.65;
@@ -60,7 +55,6 @@ export interface WorkspaceChunkSearchResult {
 export interface WorkspaceChunkSearchSizing {
 	readonly endpoint: IChatEndpoint;
 	readonly tokenBudget: number | undefined;
-	readonly fullWorkspaceTokenBudget: number | undefined;
 	readonly maxResults: number | undefined;
 }
 
@@ -211,12 +205,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 
 	private readonly shouldEagerlyIndexKey = 'workspaceChunkSearch.shouldEagerlyIndex';
 
-	private readonly _embeddingsIndex: WorkspaceChunkEmbeddingsIndex;
-
-	private readonly _embeddingsChunkSearch: EmbeddingsChunkSearch;
 	private readonly _codeSearchChunkSearch: CodeSearchChunkSearch;
-	private readonly _tfidfChunkSearch: TfidfChunkSearch;
-	private readonly _tfIdfWithSemanticChunkSearch: TfIdfWithSemanticChunkSearch;
 
 	private readonly _onDidChangeIndexState = this._register(new Emitter<void>());
 	readonly onDidChangeIndexState = this._onDidChangeIndexState.event;
@@ -238,19 +227,11 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 	) {
 		super();
 
-		this._embeddingsIndex = instantiationService.createInstance(WorkspaceChunkEmbeddingsIndex, this._embeddingType);
-
-		this._embeddingsChunkSearch = this._register(instantiationService.createInstance(EmbeddingsChunkSearch, this._embeddingsIndex));
-		this._tfidfChunkSearch = this._register(instantiationService.createInstance(TfidfChunkSearch, { tokenizer: TokenizerType.O200K })); // TODO mjbvz: remove hardcoding
-		this._tfIdfWithSemanticChunkSearch = this._register(instantiationService.createInstance(TfIdfWithSemanticChunkSearch, this._tfidfChunkSearch, this._embeddingsIndex));
-		this._codeSearchChunkSearch = this._register(instantiationService.createInstance(CodeSearchChunkSearch, this._embeddingType, this._embeddingsChunkSearch, this._tfIdfWithSemanticChunkSearch));
+		this._codeSearchChunkSearch = this._register(instantiationService.createInstance(CodeSearchChunkSearch, this._embeddingType));
 
 		this._register(
 			Event.debounce(
-				Event.any(
-					this._embeddingsChunkSearch.onDidChangeIndexState,
-					this._codeSearchChunkSearch.onDidChangeIndexState
-				),
+				this._codeSearchChunkSearch.onDidChangeIndexState,
 				() => { },
 				250
 			)(() => this._onDidChangeIndexState.fire()));
@@ -318,7 +299,6 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 			const stratSizing: StrategySearchSizing = {
 				endpoint: sizing.endpoint,
 				tokenBudget: sizing.tokenBudget,
-				fullWorkspaceTokenBudget: sizing.fullWorkspaceTokenBudget,
 				maxResultCountHint: this.getMaxChunks(sizing),
 			};
 
@@ -450,33 +430,14 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 	): Promise<StrategySearchOutcome> {
 		this._logService.debug(`Searching for ${sizing.maxResultCountHint} chunks in workspace`);
 
-		// Then try code search
-		const codeSearchResult = await this.runSearchStrategy(this._codeSearchChunkSearch, sizing, query, options, telemetryInfo, token);
-		if (codeSearchResult.isOk()) {
-			return codeSearchResult;
-		}
-
-		return Result.error<StrategySearchErr>({
-			errorDiagMessage: 'semantic search not available',
-			alerts: [new ChatResponseWarningPart(l10n.t('Semantic search is not available for this workspace.'))],
-		});
-	}
-
-	private async runSearchStrategy(strategy: IWorkspaceChunkSearchStrategy, sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<StrategySearchOutcome> {
 		try {
-			if (strategy.prepareSearchWorkspace) {
-				await raceCancellationError(strategy.prepareSearchWorkspace(telemetryInfo, token), token);
-			}
+			await raceCancellationError(this._codeSearchChunkSearch.prepareSearchWorkspace(telemetryInfo, token), token);
 
-			const result = await raceCancellationError(strategy.searchWorkspace(sizing, query, options, telemetryInfo, token), token);
+			const result = await raceCancellationError(this._codeSearchChunkSearch.searchWorkspace(sizing, query, options, telemetryInfo, token), token);
 			if (result) {
 				return Result.ok<StrategySearchOk>({
-					strategy: strategy.id,
+					strategy: this._codeSearchChunkSearch.id,
 					result: result,
-				});
-			} else {
-				return Result.error<StrategySearchErr>({
-					errorDiagMessage: `${strategy.id}: no result`,
 				});
 			}
 		} catch (e) {
@@ -484,11 +445,13 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 				throw e;
 			}
 
-			this._logService.error(e, `Error during ${strategy.id} search`);
-			return Result.error<StrategySearchErr>({
-				errorDiagMessage: `${strategy.id} error: ` + e,
-			});
+			this._logService.error(e, `Error during ${this._codeSearchChunkSearch.id} search`);
 		}
+
+		return Result.error<StrategySearchErr>({
+			errorDiagMessage: 'semantic search not available',
+			alerts: [new ChatResponseWarningPart(l10n.t('Semantic search is not available for this workspace.'))],
+		});
 	}
 
 	private getMaxChunks(sizing: WorkspaceChunkSearchSizing): number {
