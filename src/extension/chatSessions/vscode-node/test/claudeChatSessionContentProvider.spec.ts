@@ -91,25 +91,19 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 
 	private readonly _untitledFolders = new Map<string, vscode.Uri>();
 	private _mruEntries: FolderRepositoryMRUEntry[] = [];
-	private _lastUsedFolderIdInUntitledWorkspace: string | undefined;
 
 	setMRUEntries(entries: FolderRepositoryMRUEntry[]): void {
 		this._mruEntries = entries;
 	}
 
 	setLastUsedFolderIdInUntitledWorkspace(id: string | undefined): void {
-		this._lastUsedFolderIdInUntitledWorkspace = id;
 	}
 
-	setUntitledSessionFolder(sessionId: string, folderUri: vscode.Uri): void {
+	setNewSessionFolder(sessionId: string, folderUri: vscode.Uri): void {
 		this._untitledFolders.set(sessionId, folderUri);
 	}
 
-	getUntitledSessionFolder(sessionId: string): vscode.Uri | undefined {
-		return this._untitledFolders.get(sessionId);
-	}
-
-	deleteUntitledSessionFolder(sessionId: string): void {
+	deleteNewSessionFolder(sessionId: string): void {
 		this._untitledFolders.delete(sessionId);
 	}
 
@@ -130,10 +124,6 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 	}
 
 	async deleteMRUEntry(): Promise<void> { }
-
-	getLastUsedFolderIdInUntitledWorkspace(): string | undefined {
-		return this._lastUsedFolderIdInUntitledWorkspace;
-	}
 }
 
 function createDefaultMocks() {
