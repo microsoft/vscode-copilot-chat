@@ -14,6 +14,7 @@ import { IAuthenticationService } from '../../authentication/common/authenticati
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
+import { isAbortError } from '../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../networking/common/networking';
 import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
@@ -220,7 +221,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 					"automode.routerFallback" : {
 						"owner": "lramos15",
 						"comment": "Reports when the auto mode router is skipped or fails and falls back to default model selection",
-						"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The reason the router was skipped or failed (hasImage, noMatchingEndpoint, routerError)" }
+						"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The reason the router was skipped or failed (hasImage, noMatchingEndpoint, routerError, routerTimeout)" }
 					}
 				*/
 				this._telemetryService.sendMSFTTelemetryEvent('automode.routerFallback', {
@@ -314,8 +315,10 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			}
 			return { selectedModel, lastRoutedPrompt: prompt };
 		} catch (e) {
-			this._logService.error(`Failed to get routed model for conversation ${conversationId}:`, (e as Error).message);
-			return { lastRoutedPrompt: prompt, fallbackReason: 'routerError' };
+			const isTimeout = isAbortError(e);
+			const fallbackReason = isTimeout ? 'routerTimeout' : 'routerError';
+			this._logService.error(`Failed to get routed model for conversation ${conversationId} (${fallbackReason}):`, (e as Error).message);
+			return { lastRoutedPrompt: prompt, fallbackReason };
 		}
 	}
 
