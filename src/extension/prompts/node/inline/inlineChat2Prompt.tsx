@@ -113,7 +113,7 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 				</UserMessage>
 				<UserMessage>
 					<Tag name='prompt'>
-						<UserQuery flexGrow={7} priority={900} chatVariables={variables} query={this.props.request.prompt} />
+						<UserQuery flexGrow={7} priority={900} chatVariables={variables} query={this.props.request.prompt} sessionResource={this.props.request.sessionResource} />
 					</Tag>
 					<cacheBreakpoint type={CacheType} />
 				</UserMessage>

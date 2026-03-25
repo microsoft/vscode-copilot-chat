@@ -4,11 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { ChatLanguageModelToolReference, ChatPromptReference } from 'vscode';
-import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
+import { IChatDebugFileLoggerService, sessionResourceToId } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { joinPath } from '../../../util/vs/base/common/resources';
 import { getToolName } from '../../tools/common/toolNames';
 import { IPromptVariablesService } from '../node/promptVariablesService';
+import { URI } from '../../../util/vs/base/common/uri';
 
 /**
  * Known template variables that can be resolved at runtime.
@@ -16,7 +17,7 @@ import { IPromptVariablesService } from '../node/promptVariablesService';
  * resolver that produces the replacement string, or `undefined` if the
  * variable cannot be resolved in the current context.
  */
-type VariableResolver = (sessionId: string | undefined) => string | undefined;
+type VariableResolver = (sessionResource: URI | undefined) => string | undefined;
 
 export class PromptVariablesServiceImpl implements IPromptVariablesService {
 
@@ -29,7 +30,11 @@ export class PromptVariablesServiceImpl implements IPromptVariablesService {
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 	) {
 		this._resolvers = new Map<string, VariableResolver>([
-			['CURRENT_SESSION_LOG', sessionId => {
+			['CURRENT_SESSION_LOG', sessionResource => {
+				if (!sessionResource) {
+					return undefined;
+				}
+				const sessionId = sessionResourceToId(sessionResource);
 				if (!sessionId) {
 					return undefined;
 				}
@@ -68,11 +73,11 @@ export class PromptVariablesServiceImpl implements IPromptVariablesService {
 		return message;
 	}
 
-	resolveTemplateVariables(content: string, sessionId: string | undefined): string {
+	resolveTemplateVariables(content: string, sessionResource: URI | undefined): string {
 		for (const [name, resolve] of this._resolvers) {
 			const placeholder = `{{${name}}}`;
 			if (content.includes(placeholder)) {
-				const value = resolve(sessionId);
+				const value = resolve(sessionResource);
 				if (value !== undefined) {
 					content = content.replaceAll(placeholder, () => value);
 				}

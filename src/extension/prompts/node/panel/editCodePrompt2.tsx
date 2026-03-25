@@ -135,7 +135,7 @@ class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const { query, chatVariables } = this.props.promptContext;
+		const { query, chatVariables, request } = this.props.promptContext;
 		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ProjectLabelsChat, this.experimentationService);
 		const hasReplaceStringTool = !!this.props.promptContext.tools?.availableTools.find(tool => tool.name === ToolName.ReplaceString);
 		const hasEditFileTool = !!this.props.promptContext.tools?.availableTools.find(tool => tool.name === ToolName.EditFile);
@@ -154,7 +154,7 @@ class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
 						<NotebookReminderInstructions chatVariables={chatVariables} query={query} />
 						<NewFilesLocationHint />
 					</Tag>
-					<Tag name='prompt'><UserQuery flexGrow={7} priority={900} chatVariables={chatVariables} query={query} /></Tag>
+					<Tag name='prompt'><UserQuery flexGrow={7} priority={900} chatVariables={chatVariables} query={query} sessionResource={request?.sessionResource} /></Tag>
 				</UserMessage>
 			</>
 		);

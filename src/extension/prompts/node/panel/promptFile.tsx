@@ -5,7 +5,6 @@
 
 import { BasePromptElementProps, PromptElement, PromptReference, PromptSizing } from '@vscode/prompt-tsx';
 import type { ChatLanguageModelToolReference } from 'vscode';
-import { sessionResourceToId } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -13,7 +12,6 @@ import { IPromptPathRepresentationService } from '../../../../platform/prompts/c
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { PromptVariable } from '../../../prompt/common/chatVariablesCollection';
-import { IBuildPromptContext } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { EmbeddedInsideUserMessage } from '../base/promptElement';
 import { Tag } from '../base/tag';
@@ -22,6 +20,7 @@ import { Tag } from '../base/tag';
 export interface PromptFileProps extends BasePromptElementProps, EmbeddedInsideUserMessage {
 	readonly variable: PromptVariable;
 	readonly omitReferences?: boolean;
+	readonly sessionResource: URI | undefined;
 }
 
 export class PromptFile extends PromptElement<PromptFileProps, void> {
@@ -34,7 +33,6 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
-		@IBuildPromptContext private readonly promptContext: IBuildPromptContext | undefined,
 	) {
 		super(props);
 	}
@@ -81,9 +79,7 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 			let bodyContent = content.substring(bodyOffset);
 
 			if (this.customInstructionsService.isSkillFile(fileUri)) {
-				const sessionResource = this.promptContext?.request?.sessionResource;
-				const chatSessionId = sessionResource ? sessionResourceToId(sessionResource) : undefined;
-				bodyContent = this.promptVariablesService.resolveTemplateVariables(bodyContent, chatSessionId);
+				bodyContent = this.promptVariablesService.resolveTemplateVariables(bodyContent, this.props.sessionResource);
 			}
 
 			return bodyContent;

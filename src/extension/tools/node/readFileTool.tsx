@@ -5,7 +5,6 @@
 import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptReference } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
-import { sessionResourceToId } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
@@ -333,8 +332,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		// Skills: resolve known variables in skill files
 		if (this.customInstructionsService.isSkillFile(uri)) {
 			const sessionResource = this._promptContext?.request?.sessionResource;
-			const chatSessionId = sessionResource ? sessionResourceToId(sessionResource) : undefined;
-			const replaced = this.promptVariablesService.resolveTemplateVariables(snapshot.getText(), chatSessionId);
+			const replaced = this.promptVariablesService.resolveTemplateVariables(snapshot.getText(), sessionResource);
 			if (replaced !== snapshot.getText()) {
 				return TextDocumentSnapshot.fromNewText(replaced, snapshot);
 			}
