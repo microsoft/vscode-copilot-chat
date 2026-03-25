@@ -6,19 +6,31 @@
 import * as os from 'os';
 import * as vscode from 'vscode';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
-import { TRAJECTORY_FILE_EXTENSION, type IAgentTrajectory, type IObservationResult, type ITrajectoryStep } from '../../../platform/otel/common/atif/atifTypes';
+import {
+	TRAJECTORY_FILE_EXTENSION,
+	type IAgentTrajectory,
+	type IObservationResult,
+	type ITrajectoryStep,
+} from '../../../platform/otel/common/atif/atifTypes';
 import { convertTraceToAtif } from '../../../platform/otel/node/atif/otelToAtifConverter';
-import { IOTelSqliteStore, type OTelSqliteStore, type SessionRow } from '../../../platform/otel/node/sqlite/otelSqliteStore';
+import { IOTelSqliteStore, type OTelSqliteStore } from '../../../platform/otel/node/sqlite/otelSqliteStore';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IExtensionContribution } from '../../common/contributions';
 
-const exportTrajectoriesCommand = 'github.copilot.chat.debug.exportATIFTrajectories';
+const exportCommand = 'github.copilot.chat.debug.exportATIFTrajectories';
 
 /**
- * Command contribution for exporting agent trajectories from the OTel SQLite store.
- * Replaces the legacy TrajectoryExportCommands that read from TrajectoryLogger.
+ * Export agent trajectories in ATIF format from the OTel SQLite store.
  *
- * Same command IDs (backward compatible with eval harness).
+ * Behavior:
+ * - **Programmatic** (eval harness): called with `saveDir` URI → exports the most recent
+ *   (active) session's trajectory + subagents to that folder.
+ * - **Interactive** (command palette): exports the most recent session, prompts for folder.
+ *
+ * File naming:
+ * - Main trajectory: `trajectory.json`
+ * - Subagent trajectories: `<sanitized-session-id>.trajectory.json`
+ *   (or the path from subagent_trajectory_ref if available)
  */
 export class AtifExportCommands extends Disposable implements IExtensionContribution {
 	readonly id = 'atifExportCommands';
@@ -33,203 +45,128 @@ export class AtifExportCommands extends Disposable implements IExtensionContribu
 		super();
 		this._sqliteStore = sqliteStore;
 		this._fsService = fileSystemService;
-		this._registerCommands();
-	}
-
-	private _registerCommands(): void {
-		this._register(vscode.commands.registerCommand(exportTrajectoriesCommand, async (savePath?: string, options?: { agentOnly?: boolean }) => {
-			await this._exportTrajectories(savePath, options);
+		this._register(vscode.commands.registerCommand(exportCommand, async (saveDir?: vscode.Uri | string) => {
+			await this._export(typeof saveDir === 'string' ? vscode.Uri.file(saveDir) : saveDir);
 		}));
 	}
 
-	private async _exportTrajectories(savePath?: string, options?: { agentOnly?: boolean }): Promise<void> {
-		const sessions = this._sqliteStore.getSessions();
+	private async _export(saveDir?: vscode.Uri): Promise<void> {
+		// Find the most recent session (same as "active session" in eval harness)
+		const sessions = this._sqliteStore.getSessions(1);
 		if (sessions.length === 0) {
-			if (!savePath) {
+			if (!saveDir) {
 				vscode.window.showInformationMessage('No agent sessions found to export.');
 			}
 			return;
 		}
+		const session = sessions[0];
 
-		// When called programmatically (with savePath), export all sessions.
-		// When called interactively, let the user pick a session.
-		let selectedSession: SessionRow | undefined;
-		if (!savePath) {
-			const items = sessions.map(s => ({
-				label: `${s.agent_name ?? 'agent'} — ${s.model ?? 'unknown model'}`,
-				description: `${s.tool_calls} tool calls, ${s.llm_calls} LLM calls`,
-				detail: `${new Date(s.started_at).toLocaleString()} · ${Math.round(s.duration_ms / 1000)}s · ${s.total_input_tokens + s.total_output_tokens} tokens`,
-				session: s,
-			}));
-
-			const picked = await vscode.window.showQuickPick(items, {
-				placeHolder: 'Select a session to export as ATIF trajectory',
-				title: 'Export Agent Trajectory',
-			});
-
-			if (!picked) {
-				return; // User cancelled
-			}
-			selectedSession = picked.session;
-		}
-
-		// Get trace IDs for the selected session (or all sessions if programmatic)
-		const traceIds = selectedSession
-			? this._sqliteStore.getTraceIds(selectedSession.session_id)
-			: this._sqliteStore.getTraceIds();
-
+		// Get traces for this session
+		const traceIds = this._sqliteStore.getTraceIds(session.session_id);
 		if (traceIds.length === 0) {
 			return;
 		}
 
 		// Convert traces to ATIF
 		let mainTrajectory: IAgentTrajectory | undefined;
-		const allSubagents = new Map<string, IAgentTrajectory>();
+		const subagents = new Map<string, IAgentTrajectory>();
 
 		for (const traceId of traceIds) {
-			const { main, subagents } = convertTraceToAtif(this._sqliteStore, traceId);
-			if (main && !mainTrajectory) {
-				mainTrajectory = main;
-			} else if (main) {
-				allSubagents.set(main.session_id, main);
+			const result = convertTraceToAtif(this._sqliteStore, traceId);
+			if (result.main && !mainTrajectory) {
+				mainTrajectory = result.main;
+			} else if (result.main) {
+				subagents.set(result.main.session_id, result.main);
 			}
-			for (const [id, sub] of subagents) {
-				allSubagents.set(id, sub);
+			for (const [id, sub] of result.subagents) {
+				subagents.set(id, sub);
 			}
 		}
 
 		if (!mainTrajectory) {
-			if (!savePath) {
+			if (!saveDir) {
 				vscode.window.showInformationMessage('No agent trajectories found to export.');
 			}
 			return;
 		}
 
-		// Build trajectories map
-		const trajectories = new Map<string, IAgentTrajectory>();
-		trajectories.set(mainTrajectory.session_id, mainTrajectory);
-		if (!options?.agentOnly) {
-			for (const [id, sub] of allSubagents) {
-				trajectories.set(id, sub);
-			}
-		} else {
-			// agentOnly: include main + referenced subagents only
-			const collected = this._collectTrajectoryWithSubagents(mainTrajectory, allSubagents);
-			for (const [id, sub] of collected) {
-				trajectories.set(id, sub);
-			}
-		}
-
-		const saveDir = savePath
-			? vscode.Uri.file(savePath)
-			: await this._promptForFolder('Select Folder to Export Trajectories');
-
+		// Prompt for folder if not provided
 		if (!saveDir) {
-			return;
+			const dialogResult = await vscode.window.showOpenDialog({
+				canSelectFiles: false,
+				canSelectFolders: true,
+				canSelectMany: false,
+				title: 'Export Agent Trajectory (ATIF)',
+				defaultUri: vscode.Uri.file(os.homedir()),
+			});
+			saveDir = dialogResult?.[0];
+			if (!saveDir) {
+				return;
+			}
 		}
+
+		// Collect referenced subagent paths for filename resolution
+		const refPaths = this._collectSubagentPaths(mainTrajectory);
 
 		try {
-			const pathMapping = this._buildTrajectoryPathMapping(trajectories);
-			await this._writeTrajectoriesToFolder(trajectories, saveDir, pathMapping);
+			// Write main trajectory as trajectory.json
+			await this._writeTrajectory(saveDir, 'trajectory.json', mainTrajectory);
 
-			if (!savePath) {
-				const revealAction = 'Reveal in Explorer';
-				const result = await vscode.window.showInformationMessage(
-					`Successfully exported ${trajectories.size} trajectories to ${saveDir.fsPath}`,
-					revealAction
-				);
-				if (result === revealAction) {
-					await vscode.commands.executeCommand('revealFileInOS', saveDir);
-				}
+			// Write subagent trajectories
+			for (const [sessionId, sub] of subagents) {
+				const filename = refPaths.get(sessionId)
+					?? `${this._sanitize(sessionId)}${TRAJECTORY_FILE_EXTENSION}`;
+				await this._writeTrajectory(saveDir, filename, sub);
+			}
+
+			if (!saveDir) {
+				return;
+			}
+
+			const totalFiles = 1 + subagents.size;
+			const subMsg = subagents.size > 0
+				? ` (+ ${subagents.size} subagent ${subagents.size === 1 ? 'trajectory' : 'trajectories'})`
+				: '';
+
+			const revealAction = 'Reveal in Explorer';
+			const result = await vscode.window.showInformationMessage(
+				`Exported ${totalFiles} ATIF trajectory file${totalFiles > 1 ? 's' : ''}${subMsg} to ${saveDir.fsPath}`,
+				revealAction,
+			);
+			if (result === revealAction) {
+				await vscode.commands.executeCommand('revealFileInOS', saveDir);
 			}
 		} catch (error) {
-			vscode.window.showErrorMessage(`Failed to export trajectories: ${error instanceof Error ? error.message : String(error)}`);
+			vscode.window.showErrorMessage(
+				`Failed to export trajectories: ${error instanceof Error ? error.message : String(error)}`,
+			);
 		}
 	}
 
-	private _buildTrajectoryPathMapping(trajectories: Map<string, IAgentTrajectory>): Map<string, string> {
-		const mapping = new Map<string, string>();
-		for (const trajectory of trajectories.values()) {
-			const steps: ITrajectoryStep[] = Array.isArray(trajectory?.steps) ? trajectory.steps : [];
-			for (const step of steps) {
-				const results: IObservationResult[] = Array.isArray(step.observation?.results) ? step.observation.results : [];
-				for (const r of results) {
-					for (const ref of r.subagent_trajectory_ref ?? []) {
-						if (ref.session_id && ref.trajectory_path && !mapping.has(ref.session_id)) {
-							mapping.set(ref.session_id, ref.trajectory_path);
-						}
+	private async _writeTrajectory(dir: vscode.Uri, filename: string, trajectory: IAgentTrajectory): Promise<void> {
+		const fileUri = vscode.Uri.joinPath(dir, filename);
+		const content = JSON.stringify(trajectory, null, 2);
+		await this._fsService.writeFile(fileUri, Buffer.from(content, 'utf8'));
+	}
+
+	/** Collect subagent_trajectory_ref paths from a trajectory for filename resolution. */
+	private _collectSubagentPaths(trajectory: IAgentTrajectory): Map<string, string> {
+		const paths = new Map<string, string>();
+		const steps: ITrajectoryStep[] = Array.isArray(trajectory?.steps) ? trajectory.steps : [];
+		for (const step of steps) {
+			const results: IObservationResult[] = Array.isArray(step.observation?.results) ? step.observation.results : [];
+			for (const r of results) {
+				for (const ref of r.subagent_trajectory_ref ?? []) {
+					if (ref.session_id && ref.trajectory_path) {
+						paths.set(ref.session_id, ref.trajectory_path);
 					}
 				}
 			}
 		}
-		return mapping;
+		return paths;
 	}
 
-	private _getTrajectoryFilename(sessionId: string, pathMapping: Map<string, string>): string {
-		const referencedPath = pathMapping.get(sessionId);
-		const rawFilename = referencedPath
-			? this._sanitizeFilename(referencedPath)
-			: this._sanitizeFilename(sessionId);
-		return rawFilename.endsWith(TRAJECTORY_FILE_EXTENSION)
-			? rawFilename
-			: `${rawFilename}${TRAJECTORY_FILE_EXTENSION}`;
-	}
-
-	private async _writeTrajectoriesToFolder(
-		trajectories: Map<string, IAgentTrajectory>,
-		saveDir: vscode.Uri,
-		pathMapping: Map<string, string>
-	): Promise<void> {
-		for (const [sessionId, trajectory] of trajectories) {
-			const filename = this._getTrajectoryFilename(sessionId, pathMapping);
-			const fileUri = vscode.Uri.joinPath(saveDir, filename);
-			const content = JSON.stringify(trajectory, null, 2);
-			await this._fsService.writeFile(fileUri, Buffer.from(content, 'utf8'));
-		}
-	}
-
-	private async _promptForFolder(title: string): Promise<vscode.Uri | undefined> {
-		const dialogResult = await vscode.window.showOpenDialog({
-			canSelectFiles: false,
-			canSelectFolders: true,
-			canSelectMany: false,
-			title,
-			defaultUri: vscode.Uri.file(os.homedir())
-		});
-		return dialogResult?.[0];
-	}
-
-	private _collectTrajectoryWithSubagents(
-		mainTrajectory: IAgentTrajectory,
-		allSubagents: Map<string, IAgentTrajectory>
-	): Map<string, IAgentTrajectory> {
-		const result = new Map<string, IAgentTrajectory>();
-		const visited = new Set<string>();
-
-		const collect = (trajectory: IAgentTrajectory) => {
-			if (visited.has(trajectory.session_id)) { return; }
-			visited.add(trajectory.session_id);
-			result.set(trajectory.session_id, trajectory);
-
-			const steps: ITrajectoryStep[] = Array.isArray(trajectory?.steps) ? trajectory.steps : [];
-			for (const step of steps) {
-				const results: IObservationResult[] = Array.isArray(step.observation?.results) ? step.observation.results : [];
-				for (const r of results) {
-					for (const ref of r.subagent_trajectory_ref ?? []) {
-						const subTrajectory = allSubagents.get(ref.session_id);
-						if (subTrajectory) {
-							collect(subTrajectory);
-						}
-					}
-				}
-			}
-		};
-
-		collect(mainTrajectory);
-		return result;
-	}
-
-	private _sanitizeFilename(name: string): string {
-		return name.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_');
+	private _sanitize(name: string): string {
+		return name.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_').substring(0, 100);
 	}
 }
