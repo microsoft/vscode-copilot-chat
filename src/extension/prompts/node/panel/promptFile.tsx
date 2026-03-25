@@ -82,9 +82,24 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 			if (fileUri.scheme === 'copilot-skill' && fileUri.path.includes('/troubleshoot/') && bodyContent.includes('{{CURRENT_SESSION_LOG}}')) {
 				const chatSessionId = getCurrentCapturingToken()?.chatSessionId;
 				if (chatSessionId) {
-					const logDir = this.chatDebugFileLoggerService.debugLogsDir;
-					if (logDir) {
-						const sessionLogDir = joinPath(logDir, chatSessionId);
+					// 1. Check registered target (follow-up requests in a troubleshoot session)
+					let sessionLogDir = this.chatDebugFileLoggerService.getTroubleshootTarget(chatSessionId);
+					// 2. Consume pending target (first request in a new troubleshoot session)
+					if (!sessionLogDir) {
+						const pending = this.chatDebugFileLoggerService.consumePendingTroubleshootTarget();
+						if (pending) {
+							this.chatDebugFileLoggerService.registerTroubleshootTarget(chatSessionId, pending);
+							sessionLogDir = pending;
+						}
+					}
+					// 3. Fall back to current session's own log dir
+					if (!sessionLogDir) {
+						const logDir = this.chatDebugFileLoggerService.debugLogsDir;
+						if (logDir) {
+							sessionLogDir = joinPath(logDir, chatSessionId);
+						}
+					}
+					if (sessionLogDir) {
 						bodyContent = bodyContent.replaceAll('{{CURRENT_SESSION_LOG}}', () => this.promptPathRepresentationService.getFilePath(sessionLogDir));
 					}
 				}

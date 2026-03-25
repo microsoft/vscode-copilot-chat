@@ -347,6 +347,66 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		return this.getSessionDir(sessionId);
 	}
 
+	// ── Troubleshoot target tracking ──
+
+	private _pendingTroubleshootTarget: URI | undefined;
+	private readonly _troubleshootTargets = new Map<string, URI>();
+
+	private static readonly DEFAULT_MAX_SESSION_LIST = 20;
+
+	async listSessionDirsOnDisk(maxResults?: number): Promise<readonly { sessionId: string; mtime: number }[]> {
+		const dir = this._getDebugLogsDir();
+		if (!dir) {
+			return [];
+		}
+
+		const limit = maxResults ?? ChatDebugFileLoggerService.DEFAULT_MAX_SESSION_LIST;
+
+		try {
+			const entries = await this._fileSystemService.readDirectory(dir);
+			const sessionDirs = entries.filter(([, type]) => type === 2 /* FileType.Directory */);
+
+			const stats = await Promise.all(
+				sessionDirs.map(async ([name]) => {
+					const entryUri = URI.joinPath(dir, name);
+					try {
+						const stat = await this._fileSystemService.stat(entryUri);
+						return { sessionId: name, mtime: stat.mtime };
+					} catch {
+						return { sessionId: name, mtime: 0 };
+					}
+				}),
+			);
+
+			stats.sort((a, b) => b.mtime - a.mtime);
+			return stats.slice(0, limit);
+		} catch {
+			return [];
+		}
+	}
+
+	setPendingTroubleshootTarget(targetLogDir: URI): void {
+		this._pendingTroubleshootTarget = targetLogDir;
+	}
+
+	hasPendingTroubleshootTarget(): boolean {
+		return this._pendingTroubleshootTarget !== undefined;
+	}
+
+	consumePendingTroubleshootTarget(): URI | undefined {
+		const target = this._pendingTroubleshootTarget;
+		this._pendingTroubleshootTarget = undefined;
+		return target;
+	}
+
+	registerTroubleshootTarget(sessionId: string, targetLogDir: URI): void {
+		this._troubleshootTargets.set(sessionId, targetLogDir);
+	}
+
+	getTroubleshootTarget(sessionId: string): URI | undefined {
+		return this._troubleshootTargets.get(sessionId);
+	}
+
 	// ── OTel span handling ──
 
 	private _onSpanCompleted(span: ICompletedSpanData): void {

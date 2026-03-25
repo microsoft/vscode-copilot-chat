@@ -737,6 +737,12 @@ suite('ReadFile', () => {
 				isDebugLogUri: () => false,
 				getSessionDirForResource: () => expectedLogDir,
 				debugLogsDir: dirname(expectedLogDir),
+				listSessionDirsOnDisk: async () => [],
+				setPendingTroubleshootTarget: () => { },
+				hasPendingTroubleshootTarget: () => false,
+				consumePendingTroubleshootTarget: () => undefined,
+				registerTroubleshootTarget: () => { },
+				getTroubleshootTarget: () => undefined,
 			} satisfies IChatDebugFileLoggerService);
 
 			const testAccessor = services.createTestingAccessor();
@@ -809,6 +815,12 @@ suite('ReadFile', () => {
 				isDebugLogUri: () => false,
 				getSessionDirForResource: () => URI.file('/should/not/appear'),
 				debugLogsDir: URI.file('/should/not/appear'),
+				listSessionDirsOnDisk: async () => [],
+				setPendingTroubleshootTarget: () => { },
+				hasPendingTroubleshootTarget: () => false,
+				consumePendingTroubleshootTarget: () => undefined,
+				registerTroubleshootTarget: () => { },
+				getTroubleshootTarget: () => undefined,
 			} satisfies IChatDebugFileLoggerService);
 
 			const testAccessor = services.createTestingAccessor();

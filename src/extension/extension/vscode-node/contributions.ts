@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptFileContribution } from '../../agents/vscode-node/promptFileContrib';
+import { TroubleshootSessionPickerContribution } from '../../agents/vscode-node/troubleshootSessionPicker';
 import { AuthenticationContrib } from '../../authentication/vscode-node/authentication.contribution';
 import { BYOKContrib } from '../../byok/vscode-node/byokContribution';
 import { ChatDebugFileLoggerContribution } from '../../chat/vscode-node/chatDebugFileLoggerService';
@@ -127,6 +128,7 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(McpSetupCommands),
 	asContributionFactory(LanguageModelProxyContrib),
 	asContributionFactory(PromptFileContribution),
+	asContributionFactory(TroubleshootSessionPickerContribution),
 	newWorkspaceContribution,
 	asContributionFactory(TrajectoryExportCommands),
 	asContributionFactory(OTelChatDebugLogProviderContribution),

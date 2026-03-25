@@ -90,6 +90,44 @@ export interface IChatDebugFileLoggerService {
 	 * session directory, or `undefined` if the session is unknown.
 	 */
 	getSessionDirForResource(sessionResource: URI): URI | undefined;
+
+	/**
+	 * List session directories on disk (not just active sessions).
+	 * Returns entries sorted by modification time (most recent first),
+	 * capped at {@link maxResults} entries (default 20).
+	 */
+	listSessionDirsOnDisk(maxResults?: number): Promise<readonly { sessionId: string; mtime: number }[]>;
+
+	/**
+	 * Set a pending troubleshoot target. Called by the session picker
+	 * before opening a new chat session. The target is consumed by
+	 * {@link consumePendingTroubleshootTarget} on the first placeholder
+	 * resolution in the new session.
+	 */
+	setPendingTroubleshootTarget(targetLogDir: URI): void;
+
+	/**
+	 * Check whether a pending troubleshoot target exists without consuming it.
+	 */
+	hasPendingTroubleshootTarget(): boolean;
+
+	/**
+	 * Consume and return the pending troubleshoot target, if any.
+	 * This is a one-shot operation — the pending target is cleared after consumption.
+	 */
+	consumePendingTroubleshootTarget(): URI | undefined;
+
+	/**
+	 * Register a troubleshoot target for a specific session.
+	 * Called after consuming the pending target, so follow-up requests
+	 * in the same session continue to resolve to the target.
+	 */
+	registerTroubleshootTarget(sessionId: string, targetLogDir: URI): void;
+
+	/**
+	 * Get the registered troubleshoot target for a session, if any.
+	 */
+	getTroubleshootTarget(sessionId: string): URI | undefined;
 }
 
 /**
@@ -106,5 +144,11 @@ export class NullChatDebugFileLoggerService implements IChatDebugFileLoggerServi
 	getActiveSessionIds(): string[] { return []; }
 	isDebugLogUri(): boolean { return false; }
 	getSessionDirForResource(): URI | undefined { return undefined; }
+	async listSessionDirsOnDisk(): Promise<readonly { sessionId: string; mtime: number }[]> { return []; }
+	setPendingTroubleshootTarget(): void { }
+	hasPendingTroubleshootTarget(): boolean { return false; }
+	consumePendingTroubleshootTarget(): URI | undefined { return undefined; }
+	registerTroubleshootTarget(): void { }
+	getTroubleshootTarget(): URI | undefined { return undefined; }
 	readonly debugLogsDir: URI | undefined = undefined;
 }
