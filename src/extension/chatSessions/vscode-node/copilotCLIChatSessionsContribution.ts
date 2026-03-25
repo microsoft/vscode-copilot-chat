@@ -47,7 +47,6 @@ import { CopilotCLIPromptResolver } from '../copilotcli/node/copilotcliPromptRes
 import { builtinSlashSCommands, CopilotCLICommand, copilotCLICommands, ICopilotCLISession } from '../copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
 import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
-import { ChatSessionRepositoryTracker } from './chatSessionRepositoryTracker';
 import { ICopilotCLIChatSessionItemProvider } from './copilotCLIChatSessions';
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
 import { ICopilotCLITerminalIntegration, TerminalOpenLocation } from './copilotCLITerminalIntegration';
@@ -1090,7 +1089,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		private readonly promptResolver: CopilotCLIPromptResolver,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
 		private readonly cloudSessionProvider: CopilotCloudSessionsProvider | undefined,
-		private readonly repositoryTracker: ChatSessionRepositoryTracker,
 		@IGitService private readonly gitService: IGitService,
 		@ICopilotCLIModels private readonly copilotCLIModels: ICopilotCLIModels,
 		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
@@ -1320,12 +1318,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// that have auto-commit disabled. We will also create the baseline checkpoint before
 			// handling the first request of the session.
 			await this.copilotCLIWorktreeCheckpointService.handleRequest(session.object.sessionId);
-
-			// For the Sessions app, we set up a tracker to track repository changes. The repository
-			// tracker is used to provide updated changes while the session is still in progress.
-			if (vscode.workspace.isAgentSessionsWorkspace) {
-				await this.repositoryTracker.trackRepositoryChanges(session.object.sessionId);
-			}
 
 			sdkSessionId = session.object.sessionId;
 			const modeInstructions = this.createModeInstructions(request);

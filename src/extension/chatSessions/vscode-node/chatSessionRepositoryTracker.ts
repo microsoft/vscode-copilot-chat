@@ -30,7 +30,26 @@ export class ChatSessionRepositoryTracker extends Disposable {
 		}
 	}
 
-	async trackRepositoryChanges(sessionId: string): Promise<void> {
+	private async onDidChangeWorkspaceFolders(e: vscode.WorkspaceFoldersChangeEvent): Promise<void> {
+		this.logService.trace(`[ChatSessionRepositoryTracker][onDidChangeWorkspaceFolders] Workspace folders changed. Added: ${e.added.map(f => f.uri.fsPath).join(', ')}, Removed: ${e.removed.map(f => f.uri.fsPath).join(', ')}`);
+
+		// Add trackers for added workspace folders
+		for (const added of e.added) {
+			const sessionId = await this.worktreeService.getSessionIdForWorktree(added.uri);
+			if (!sessionId) {
+				continue;
+			}
+
+			await this.trackRepositoryChanges(sessionId);
+		}
+
+		// Dispose trackers for removed workspace folders
+		for (const removed of e.removed) {
+			this.disposeTracker(removed.uri.fsPath);
+		}
+	}
+
+	private async trackRepositoryChanges(sessionId: string): Promise<void> {
 		this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] Tracking repository changes for session ${sessionId}.`);
 
 		// Only track repository changes in the sessions app
@@ -56,6 +75,10 @@ export class ChatSessionRepositoryTracker extends Disposable {
 
 		if (this.trackers.has(worktreePath)) {
 			const trackedRepositoryState = this.trackerRepositoryStates.get(worktreePath);
+
+			// If the repository state is the same as the one we are already tracking,
+			// do nothing. But if a new repository state is detected, which can happen
+			// when the repository is reopened, we need to replace the tracker.
 			if (trackedRepositoryState === worktreeRepositoryState) {
 				this.logService.trace(`[ChatSessionRepositoryTracker][trackRepositoryChanges] Already tracking repository changes for session ${sessionId} and worktree ${worktreePath}.`);
 				return;
@@ -93,25 +116,6 @@ export class ChatSessionRepositoryTracker extends Disposable {
 
 		this.trackers.set(worktreePath, disposables);
 		this.trackerRepositoryStates.set(worktreePath, worktreeRepositoryState);
-	}
-
-	private async onDidChangeWorkspaceFolders(e: vscode.WorkspaceFoldersChangeEvent): Promise<void> {
-		this.logService.trace(`[ChatSessionRepositoryTracker][onDidChangeWorkspaceFolders] Workspace folders changed. Added: ${e.added.map(f => f.uri.fsPath).join(', ')}, Removed: ${e.removed.map(f => f.uri.fsPath).join(', ')}`);
-
-		// Add trackers for added workspace folders
-		for (const added of e.added) {
-			const sessionId = await this.worktreeService.getSessionIdForWorktree(added.uri);
-			if (!sessionId) {
-				continue;
-			}
-
-			await this.trackRepositoryChanges(sessionId);
-		}
-
-		// Dispose trackers for removed workspace folders
-		for (const removed of e.removed) {
-			this.disposeTracker(removed.uri.fsPath);
-		}
 	}
 
 	private disposeTracker(worktreePath: string): void {
