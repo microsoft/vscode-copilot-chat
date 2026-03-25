@@ -163,6 +163,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	public readonly onDidCommitChatSessionItem: Event<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }> = this._onDidCommitChatSessionItem.event;
 
 	private static readonly _PR_DETECTION_RECHECK_INTERVAL = 60_000; // ms before re-checking a session that had no PR
+	private static readonly _PR_MERGE_RECHECK_INTERVAL = 10 * 60_000; // ms before re-checking merge status for a known PR
 	private readonly _prDetectionDelayer = this._register(new ThrottledDelayer<void>(2000));
 	private readonly _prDetectionPendingSessions = new Map<string, { branchName: string; repositoryPath: string }>();
 	/** Sessions where a PR was found and persisted — permanently skip further detection. */
@@ -393,9 +394,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	}
 
 	/**
-	 * Determines whether a session is a candidate for async PR detection.
-	 * Skips sessions that are not completed, not v2 worktrees, already have a
-	 * PR URL, have no file changes, or have already been checked.
+	 * Determines whether a session is a candidate for async PR detection or
+	 * merge-status re-check. Sessions without a PR URL use the standard recheck
+	 * interval; sessions with an unmerged PR use a much longer interval to
+	 * avoid burning through the GitHub API rate limit.
 	 */
 	private shouldDetectPullRequest(
 		sessionId: string,
@@ -421,11 +423,16 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			return false;
 		}
 
+		// Use a longer cooldown for merge-status re-checks on known PRs.
+		const recheckInterval = worktreeProperties.pullRequestUrl
+			? CopilotCLIChatSessionItemProvider._PR_MERGE_RECHECK_INTERVAL
+			: CopilotCLIChatSessionItemProvider._PR_DETECTION_RECHECK_INTERVAL;
+
 		// Allow re-checking after a cooldown so PRs created after session completion are detected.
 		const lastChecked = this._prDetectionLastChecked.get(sessionId);
 		if (lastChecked !== undefined) {
 			const elapsed = Date.now() - lastChecked;
-			if (elapsed < CopilotCLIChatSessionItemProvider._PR_DETECTION_RECHECK_INTERVAL) {
+			if (elapsed < recheckInterval) {
 				return false;
 			}
 		}
