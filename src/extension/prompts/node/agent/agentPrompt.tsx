@@ -20,6 +20,7 @@ import { ITabsAndEditorsService } from '../../../../platform/tabs/common/tabsAnd
 import { ITasksService } from '../../../../platform/tasks/common/tasksService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { getPerfTracer } from '../../../../util/common/performance';
 import { isDefined, isString } from '../../../../util/vs/base/common/types';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -97,8 +98,11 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		if (!customizations) {
 			throw new Error('AgentPrompt requires customizations to be provided. Use PromptRegistry.resolveAllCustomizations() to resolve them.');
 		}
+		const trace = getPerfTracer('code/chat/ext')?.findTraceByCorrelation('requestId', this.props.promptContext.requestId);
+		trace?.mark('willGetSystemPrompt');
 		performance.mark('code/chat/ext/willGetSystemPrompt');
 		const instructions = await this.getSystemPrompt(customizations);
+		trace?.mark('didGetSystemPrompt');
 		performance.mark('code/chat/ext/didGetSystemPrompt');
 		const CopilotIdentityRules = customizations.CopilotIdentityRulesClass;
 		const SafetyRules = customizations.SafetyRulesClass;
@@ -210,6 +214,8 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	}
 
 	private async getOrCreateGlobalAgentContext(endpoint: IChatEndpoint): Promise<PromptPieceChild[]> {
+		const trace = getPerfTracer('code/chat/ext')?.findTraceByCorrelation('requestId', this.props.promptContext.requestId);
+		trace?.mark('willGetGlobalAgentContext');
 		performance.mark('code/chat/ext/willGetGlobalAgentContext');
 		const globalContext = await this.getOrCreateGlobalAgentContextContent(endpoint);
 		const isNewChat = this.props.promptContext.history?.length === 0;
@@ -218,6 +224,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		const result = globalContext ?
 			renderedMessageToTsxChildren(globalContext, !!this.props.enableCacheBreakpoints) :
 			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} availableTools={this.props.promptContext.tools?.availableTools} isNewChat={isNewChat} sessionResource={sessionResource} />;
+		trace?.mark('didGetGlobalAgentContext');
 		performance.mark('code/chat/ext/didGetGlobalAgentContext');
 		return result;
 	}

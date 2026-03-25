@@ -10,6 +10,7 @@ import { IInteractionService } from '../../../platform/chat/common/interactionSe
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { createPerfTracer } from '../../../util/common/performance';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observableInternal';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
@@ -53,6 +54,7 @@ export class ChatAgentService implements IChatAgentService {
 
 class ChatAgents implements IDisposable {
 	private readonly _disposables = new DisposableStore();
+	private readonly _perfTracer = createPerfTracer('code/chat/ext');
 
 	private additionalWelcomeMessage: vscode.MarkdownString | undefined;
 
@@ -70,6 +72,7 @@ class ChatAgents implements IDisposable {
 	) { }
 
 	dispose() {
+		this._perfTracer.dispose();
 		this._disposables.dispose();
 	}
 
@@ -196,7 +199,9 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 
 	private getChatParticipantHandler(id: string, name: string, defaultIntentIdOrGetter: IntentOrGetter): vscode.ChatExtendedRequestHandler {
 		return async (request, context, stream, token): Promise<vscode.ChatResult> => {
-			performance.mark('code/chat/ext/willHandleParticipant');
+			const trace = this._perfTracer.start({ requestId: request.id });
+			trace.registerCorrelation('requestId', request.id);
+			trace.mark('willHandleParticipant');
 			// If we need to switch to the base model, this function will handle it
 			// Otherwise it just returns the same request passed into it
 			request = await this.switchToBaseModel(request, stream);
@@ -245,7 +250,8 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 				}
 			}
 
-			performance.mark('code/chat/ext/didHandleParticipant');
+			trace.mark('didHandleParticipant');
+			trace.done();
 			return result;
 		};
 	}
