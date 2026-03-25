@@ -94,7 +94,7 @@ export class SearchPanelPrompt extends PromptElement<ISearchPanelPromptProps> {
 \`\`\`
 `;
 	override render(state: void, sizing: PromptSizing): PromptPiece<any, any> | undefined {
-		const { query, history, chatVariables, request } = this.props.promptContext;
+		const { query, history, chatVariables } = this.props.promptContext;
 		return <>
 			<SystemMessage priority={1000}>
 				You are a software engineer with expert knowledge of the codebase the user has open in their workspace.<br />
@@ -105,7 +105,7 @@ export class SearchPanelPrompt extends PromptElement<ISearchPanelPromptProps> {
 				<CopilotIdentityRules />
 				<SafetyRules />
 			</SystemMessage>
-			<HistoryWithInstructions flexGrow={2} historyPriority={400} history={history} passPriority sessionResource={request?.sessionResource}>
+			<HistoryWithInstructions flexGrow={2} historyPriority={400} history={history} passPriority promptContext={this.props.promptContext}>
 				<InstructionMessage priority={1000}>
 					<EditorIntegrationRules />
 					<ResponseTranslationRules />
@@ -138,7 +138,7 @@ export class SearchPanelPrompt extends PromptElement<ISearchPanelPromptProps> {
 			<UserMessage>
 				<SearchChunkResult priority={898} chunkResults={this.props.promptContext.chunkResults} />
 				<ChatToolReferences priority={899} flexGrow={3} promptContext={this.props.promptContext} />
-				<ChatVariablesAndQuery flexGrow={3} chatVariables={chatVariables} priority={900} query={`Here is the user query: ${query}`} sessionResource={request?.sessionResource} />
+				<ChatVariablesAndQuery flexGrow={3} chatVariables={chatVariables} priority={900} query={`Here is the user query: ${query}`} promptContext={this.props.promptContext} />
 			</UserMessage>
 		</>;
 	}

@@ -37,7 +37,7 @@ export class PanelChatBasePrompt extends PromptElement<PanelChatBasePromptProps>
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const { query, history, chatVariables, request } = this.props.promptContext;
+		const { query, history, chatVariables } = this.props.promptContext;
 		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ProjectLabelsChat, this.experimentationService);
 		const operatingSystem = this.envService.OS;
 
@@ -52,7 +52,7 @@ export class PanelChatBasePrompt extends PromptElement<PanelChatBasePromptProps>
 					{/* Only include current date when not running simulations, since if we generate cache entries with the current date, the cache will be invalidated every day */}
 					{!this.envService.isSimulation() && <><br />The current date is {new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}.</>}
 				</SystemMessage>
-				<HistoryWithInstructions flexGrow={1} historyPriority={700} passPriority history={history} currentTurnVars={chatVariables} sessionResource={request?.sessionResource}>
+				<HistoryWithInstructions flexGrow={1} historyPriority={700} passPriority history={history} currentTurnVars={chatVariables} promptContext={this.props.promptContext}>
 					<InstructionMessage priority={1000}>
 						Use Markdown formatting in your answers.<br />
 						<CodeBlockFormattingRules />
@@ -76,7 +76,7 @@ export class PanelChatBasePrompt extends PromptElement<PanelChatBasePromptProps>
 					{useProjectLabels && <ProjectLabels flexGrow={1} priority={600} />}
 					<CustomInstructions flexGrow={1} priority={750} languageId={undefined} chatVariables={chatVariables} />
 					<ChatToolReferences priority={899} flexGrow={2} promptContext={this.props.promptContext} />
-					<ChatVariablesAndQuery flexGrow={3} flexReserve='/3' priority={900} chatVariables={chatVariables} query={query} includeFilepath={true} sessionResource={request?.sessionResource} />
+					<ChatVariablesAndQuery flexGrow={3} flexReserve='/3' priority={900} chatVariables={chatVariables} query={query} includeFilepath={true} promptContext={this.props.promptContext} />
 				</UserMessage>
 			</>
 		);

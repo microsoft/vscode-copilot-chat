@@ -143,14 +143,14 @@ export class NewWorkspacePrompt extends PromptElement<NewWorkspacePromptProps, N
 	}
 
 	override render(state: NewWorkspacePromptState): PromptPiece<any, any> | undefined {
-		const { query, history, chatVariables, request } = this.props.promptContext;
+		const { query, history, chatVariables } = this.props.promptContext;
 		return (
 			<>
 				<SystemMessage priority={1000}>
 					<CopilotIdentityRules />
 					<SafetyRules />
 				</SystemMessage>
-				<ConversationHistory priority={600} history={history.filter((turn) => turn.responseMessage?.name === newId && turn.request.type === 'user')} sessionResource={request?.sessionResource} />
+				<ConversationHistory priority={600} history={history.filter((turn) => turn.responseMessage?.name === newId && turn.request.type === 'user')} promptContext={this.props.promptContext} />
 				{state.intent?.intent === 'File' && <>
 					<InstructionMessage priority={1000}>
 						You are a Visual Studio Code assistant. Your job is to generate the contents of a new file based on the user's query.<br />
@@ -186,7 +186,7 @@ export class NewWorkspacePrompt extends PromptElement<NewWorkspacePromptProps, N
 						<ResponseTranslationRules />
 					</InstructionMessage>
 					<ChatToolReferences priority={899} flexGrow={2} promptContext={this.props.promptContext} embeddedInsideUserMessage={false} />
-					<ChatVariablesAndQuery priority={900} chatVariables={chatVariables} query={state.intent.question} embeddedInsideUserMessage={false} sessionResource={request?.sessionResource} />
+					<ChatVariablesAndQuery priority={900} chatVariables={chatVariables} query={state.intent.question} embeddedInsideUserMessage={false} promptContext={this.props.promptContext} />
 				</>}
 				{state.intent?.intent === 'Project' && !this._metadata && <>
 					<InstructionMessage priority={1000}>
@@ -256,7 +256,7 @@ export class NewWorkspacePrompt extends PromptElement<NewWorkspacePromptProps, N
 						<CustomInstructions languageId={undefined} chatVariables={chatVariables} />
 					</UserMessage>
 					<ChatToolReferences priority={899} flexGrow={2} promptContext={this.props.promptContext} embeddedInsideUserMessage={false} />
-					<ChatVariablesAndQuery priority={900} chatVariables={chatVariables} query={state.intent.question} embeddedInsideUserMessage={false} sessionResource={request?.sessionResource} />
+					<ChatVariablesAndQuery priority={900} chatVariables={chatVariables} query={state.intent.question} embeddedInsideUserMessage={false} promptContext={this.props.promptContext} />
 				</>}
 				{!state.intent && this._metadata && <>
 					<InstructionMessage priority={1000}>
@@ -351,7 +351,7 @@ export class NewWorkspacePrompt extends PromptElement<NewWorkspacePromptProps, N
 						</>}
 					</UserMessage>
 					<ChatToolReferences priority={899} flexGrow={2} promptContext={this.props.promptContext} embeddedInsideUserMessage={false} />
-					<ChatVariablesAndQuery priority={900} chatVariables={chatVariables} query={query} embeddedInsideUserMessage={false} sessionResource={request?.sessionResource} />
+					<ChatVariablesAndQuery priority={900} chatVariables={chatVariables} query={query} embeddedInsideUserMessage={false} promptContext={this.props.promptContext} />
 					{this._metadata && <><meta value={this._metadata} /></>}
 				</>}
 			</>
@@ -391,7 +391,7 @@ async function buildNewWorkspaceMetaPrompt(instantiationService: IInstantiationS
 export class NewWorkspaceMetaPrompt extends PromptElement<NewWorkspaceMetaPromptProps, void> {
 
 	override render(state: void, sizing: PromptSizing): PromptPiece<any, any> | undefined {
-		const { query, history, chatVariables, request } = this.props.promptContext;
+		const { query, history, chatVariables } = this.props.promptContext;
 
 		return <>
 			<SystemMessage priority={1000}>
@@ -404,7 +404,7 @@ export class NewWorkspaceMetaPrompt extends PromptElement<NewWorkspaceMetaPrompt
 				- Responding with a rephrased question that accurately reflects the user's intent.<br />
 				- Using the additional context to resolve ambiguities in the user's query, such as "it" or "that".<br />
 			</SystemMessage>
-			<HistoryWithInstructions historyPriority={500} passPriority history={history || []} sessionResource={request?.sessionResource}>
+			<HistoryWithInstructions historyPriority={500} passPriority history={history || []} promptContext={this.props.promptContext}>
 				<InstructionMessage priority={1000}>
 					- If the user does not specify an application logic or feature, you should assume that the user is new to programming and provide a basic project structure to help with a simple Hello World project.<br />
 					- If the user does not specify "app," "project," or "file" in their query, assume they are asking for a project.
@@ -468,7 +468,7 @@ export class NewWorkspaceMetaPrompt extends PromptElement<NewWorkspaceMetaPrompt
 				<CustomInstructions languageId={undefined} chatVariables={chatVariables} />
 			</UserMessage>
 			<ChatToolReferences priority={899} flexGrow={2} promptContext={this.props.promptContext} embeddedInsideUserMessage={false} />
-			<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={chatVariables} query={query} embeddedInsideUserMessage={false} sessionResource={request?.sessionResource} />
+			<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={chatVariables} query={query} embeddedInsideUserMessage={false} promptContext={this.props.promptContext} />
 		</>;
 	}
 }

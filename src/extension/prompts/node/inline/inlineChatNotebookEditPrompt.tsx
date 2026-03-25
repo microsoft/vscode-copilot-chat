@@ -205,7 +205,7 @@ export class InlineChatNotebookEditPrompt extends PromptElement<InlineChatEditCo
 
 		const tagBasedDocumentSummary = state.tagBasedDocumentSummary;
 
-		const { query, history, chatVariables, request } = promptContext;
+		const { query, history, chatVariables } = promptContext;
 		const jupyterNotebook = state.isJupyterNotebook;
 		const document = context.document;
 		const lang = context.language;
@@ -235,7 +235,7 @@ export class InlineChatNotebookEditPrompt extends PromptElement<InlineChatEditCo
 					{hasCodeWithoutSelection && <>The user includes existing code and marks with {data.placeholderText} where the selected code should go.<br /></>}
 					<LegacySafetyRules />
 				</SystemMessage>
-				<HistoryWithInstructions inline={true} passPriority historyPriority={priorities.history ?? 700} history={history} sessionResource={request?.sessionResource}>
+				<HistoryWithInstructions inline={true} passPriority historyPriority={priorities.history ?? 700} history={history} promptContext={this.props.promptContext}>
 					<InstructionMessage priority={priorities.core}>
 						{jupyterNotebook &&
 							<>
@@ -253,7 +253,7 @@ export class InlineChatNotebookEditPrompt extends PromptElement<InlineChatEditCo
 				<InlineChatNotebookVariables notebookURI={context.document.uri} priority={priorities.runtimeCore} priorities={priorities} query={query} />
 				<UserMessage>
 					<CustomInstructions priority={priorities.context} languageId={lang.languageId} chatVariables={chatVariables} />
-					<UserQuery priority={priorities.core} chatVariables={chatVariables} query={query} sessionResource={request?.sessionResource} /><br />
+					<UserQuery priority={priorities.core} chatVariables={chatVariables} query={query} promptContext={this.props.promptContext} /><br />
 					{(hasCodeWithoutSelection && isMarkdown) && <TextChunk priority={priorities.core} >The modified {data.placeholderText} code without ``` is:</TextChunk>}
 					{(hasCodeWithoutSelection && !isMarkdown) && <TextChunk priority={priorities.core} >The modified {data.placeholderText} code with ``` is:</TextChunk>}
 				</UserMessage>

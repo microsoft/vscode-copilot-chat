@@ -202,7 +202,7 @@ class DocPrompt extends PromptElement<Props> {
 					documentContext={this.props.documentContext}
 					nodeToDocument={this.props.nodeToDocument}
 					endpointInfo={this.props.endpointInfo} />
-				<HistoryWithInstructions inline={true} history={this.props.history} passPriority historyPriority={700} sessionResource={this.props.promptContext.request?.sessionResource}>
+				<HistoryWithInstructions inline={true} history={this.props.history} passPriority historyPriority={700} promptContext={this.props.promptContext}>
 					<InstructionMessage>
 						When user asks you to document something, you must answer in the form of a {language} markdown code block.<br />
 					</InstructionMessage>

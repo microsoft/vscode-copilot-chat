@@ -58,7 +58,7 @@ export class InlineChatGenerateCodePrompt extends PromptElement<InlineChatGenera
 			return <ignoredFiles value={[document.uri]} />;
 		}
 
-		const { query, history, chatVariables, request } = this.props.promptContext;
+		const { query, history, chatVariables } = this.props.promptContext;
 
 		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ProjectLabelsInline, this._experimentationService);
 
@@ -80,7 +80,7 @@ export class InlineChatGenerateCodePrompt extends PromptElement<InlineChatGenera
 					You are a world class expert in programming, and especially good at {languageId}.<br />
 					<LegacySafetyRules />
 				</SystemMessage >
-				<HistoryWithInstructions inline={true} historyPriority={700} history={history} passPriority sessionResource={request?.sessionResource}>
+				<HistoryWithInstructions inline={true} historyPriority={700} history={history} passPriority promptContext={this.props.promptContext}>
 					<InstructionMessage priority={1000}>
 						Source code is always contained in ``` blocks.<br />
 						The user needs help to write some new code.<br />
@@ -105,7 +105,7 @@ export class InlineChatGenerateCodePrompt extends PromptElement<InlineChatGenera
 						createReplyInterpreter={replyInterpreterFn}
 					/>
 					<Tag name='userPrompt'>
-						<UserQuery chatVariables={chatVariables} query={query} sessionResource={request?.sessionResource} /><br />
+						<UserQuery chatVariables={chatVariables} query={query} promptContext={this.props.promptContext} /><br />
 					</Tag>
 					{data.hasContent && <>The code that would fit at {data.placeholderText} with ``` is:</>}
 				</UserMessage>

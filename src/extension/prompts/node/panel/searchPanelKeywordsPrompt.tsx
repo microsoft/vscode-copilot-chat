@@ -26,7 +26,7 @@ export class SearchPanelKeywordsPrompt extends PromptElement<ISearchPanelKeyword
 
 	// todo: get workspace resolver to share TSX prompt so that we can reuse here
 	override render(state: void, sizing: PromptSizing): PromptPiece<any, any> | undefined {
-		const { query, history, chatVariables, request } = this.props.promptContext;
+		const { query, history, chatVariables } = this.props.promptContext;
 		return (
 			<>
 				<SystemMessage priority={1000}>
@@ -38,7 +38,7 @@ export class SearchPanelKeywordsPrompt extends PromptElement<ISearchPanelKeyword
 					<CopilotIdentityRules />
 					<SafetyRules />
 				</SystemMessage>
-				<HistoryWithInstructions flexGrow={2} historyPriority={400} history={history} passPriority sessionResource={request?.sessionResource}>
+				<HistoryWithInstructions flexGrow={2} historyPriority={400} history={history} passPriority promptContext={this.props.promptContext}>
 					<InstructionMessage priority={1000}>
 						# Additional Rules<br />
 						Think step by step:<br />
@@ -79,7 +79,7 @@ export class SearchPanelKeywordsPrompt extends PromptElement<ISearchPanelKeyword
 						<br /><br />
 					</>
 					<ChatToolReferences priority={899} flexGrow={3} promptContext={this.props.promptContext} />
-					<ChatVariablesAndQuery flexGrow={3} chatVariables={chatVariables} priority={900} query={query} sessionResource={request?.sessionResource} />
+					<ChatVariablesAndQuery flexGrow={3} chatVariables={chatVariables} priority={900} query={query} promptContext={this.props.promptContext} />
 				</UserMessage>
 			</>
 		);

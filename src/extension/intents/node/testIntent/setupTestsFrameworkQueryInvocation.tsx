@@ -127,7 +127,7 @@ interface WorkspacePromptProps extends BasePromptElementProps {
 
 class SetupTestsPrompt extends PromptElement<WorkspacePromptProps> {
 	override render(state: void, sizing: PromptSizing): PromptPiece<any, any> | undefined {
-		const { query, chatVariables, request } = this.props.promptContext;
+		const { query, chatVariables } = this.props.promptContext;
 		return <>
 			<SystemMessage priority={1000}>
 				You are a software engineer with expert knowledge around software testing frameworks.<br />
@@ -166,7 +166,7 @@ vite.config.ts
 			<UserMessage flexGrow={2}>
 				<SetupWorkspaceStructure />
 			</UserMessage>
-			<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={chatVariables} query={query} embeddedInsideUserMessage={false} sessionResource={request?.sessionResource} />
+			<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={chatVariables} query={query} embeddedInsideUserMessage={false} promptContext={this.props.promptContext} />
 		</>;
 	}
 }

@@ -12,6 +12,7 @@ import { IPromptPathRepresentationService } from '../../../../platform/prompts/c
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { PromptVariable } from '../../../prompt/common/chatVariablesCollection';
+import { IBuildPromptContext } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { EmbeddedInsideUserMessage } from '../base/promptElement';
 import { Tag } from '../base/tag';
@@ -20,7 +21,7 @@ import { Tag } from '../base/tag';
 export interface PromptFileProps extends BasePromptElementProps, EmbeddedInsideUserMessage {
 	readonly variable: PromptVariable;
 	readonly omitReferences?: boolean;
-	readonly sessionResource: URI | undefined;
+	readonly promptContext: IBuildPromptContext | undefined;
 }
 
 export class PromptFile extends PromptElement<PromptFileProps, void> {
@@ -79,7 +80,7 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 			let bodyContent = content.substring(bodyOffset);
 
 			if (this.customInstructionsService.isSkillFile(fileUri)) {
-				bodyContent = this.promptVariablesService.resolveTemplateVariables(bodyContent, this.props.sessionResource);
+				bodyContent = this.promptVariablesService.resolveTemplateVariables(bodyContent, this.props.promptContext?.request?.sessionResource);
 			}
 
 			return bodyContent;

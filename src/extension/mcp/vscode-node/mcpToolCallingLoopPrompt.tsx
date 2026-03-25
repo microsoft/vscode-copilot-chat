@@ -55,7 +55,7 @@ export class McpToolCallingLoopPrompt extends PromptElement<IMcpToolCallingLoopP
 
 		return (
 			<>
-				<HistoryWithInstructions flexGrow={1} passPriority historyPriority={700} history={history} sessionResource={undefined}>
+				<HistoryWithInstructions flexGrow={1} passPriority historyPriority={700} history={history} promptContext={undefined}>
 					<InstructionMessage>
 						<Tag name='instructions'>
 							You are an expert in reading documentation and extracting relevant results.<br />

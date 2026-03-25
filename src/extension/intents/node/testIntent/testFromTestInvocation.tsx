@@ -18,6 +18,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { IBuildPromptContext } from '../../../prompt/common/intents';
 import { IDocumentContext } from '../../../prompt/node/documentContext';
 import { IIntentInvocation, IResponseProcessorContext, ReplyInterpreter, ReplyInterpreterMetaData } from '../../../prompt/node/intents';
+import { PseudoStopStartResponseProcessor } from '../../../prompt/node/pseudoStartStopConversationCallback';
 import { Test2Impl } from '../../../prompt/node/test2Impl';
 import { CopilotIdentityRules } from '../../../prompts/node/base/copilotIdentity';
 import { InstructionMessage } from '../../../prompts/node/base/instructionMessage';
@@ -33,7 +34,6 @@ import { TestDeps } from './testDeps';
 import { ITestGenInfo, ITestGenInfoStorage } from './testInfoStorage';
 import { TestsIntent } from './testIntent';
 import { formatRequestAndUserQuery } from './testPromptUtil';
-import { PseudoStopStartResponseProcessor } from '../../../prompt/node/pseudoStartStopConversationCallback';
 
 
 /**
@@ -129,7 +129,7 @@ class TestFromTestPrompt extends PromptElement<Props> {
 
 	override async render(_state: void, sizing: PromptSizing) {
 
-		const { history, query, chatVariables, request } = this.props.promptContext;
+		const { history, query, chatVariables } = this.props.promptContext;
 		const { context, testGenInfo, alreadyConsumedChatVariable, } = this.props;
 
 		if (isNotebookCellOrNotebookChatInput(context.document.uri)) {
@@ -174,7 +174,7 @@ class TestFromTestPrompt extends PromptElement<Props> {
 					<CopilotIdentityRules /><br />
 					<SafetyRules />
 				</SystemMessage>
-				<HistoryWithInstructions passPriority history={history} historyPriority={700} sessionResource={request?.sessionResource}>
+				<HistoryWithInstructions passPriority history={history} historyPriority={700} promptContext={this.props.promptContext}>
 					<InstructionMessage priority={1000}>
 						The user has a {context.language.languageId} file opened in a code editor.<br />
 						The user includes some code snippets from the file.<br />
@@ -206,7 +206,7 @@ class TestFromTestPrompt extends PromptElement<Props> {
 							<CodeBlock uri={testGenInfo.uri} languageId={context.language.languageId} code={testedDeclarationExcerpt} />
 						</Tag>}
 					<Tag name='userPrompt' priority={900}>
-						<UserQuery chatVariables={filteredChatVariables} query={requestAndUserQuery} sessionResource={request?.sessionResource} />
+						<UserQuery chatVariables={filteredChatVariables} query={requestAndUserQuery} promptContext={this.props.promptContext} />
 					</Tag>
 				</UserMessage>
 			</>

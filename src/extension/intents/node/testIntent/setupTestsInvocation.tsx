@@ -325,7 +325,7 @@ ${projectNameToken}
 			<UserMessage flexGrow={2}>
 				<SetupWorkspaceStructure />
 			</UserMessage>
-			<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={this.props.promptContext.chatVariables} query={`I want to: ${query}`} embeddedInsideUserMessage={false} sessionResource={this.props.promptContext.request?.sessionResource} />
+			<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={this.props.promptContext.chatVariables} query={`I want to: ${query}`} embeddedInsideUserMessage={false} promptContext={this.props.promptContext} />
 		</>;
 	}
 }

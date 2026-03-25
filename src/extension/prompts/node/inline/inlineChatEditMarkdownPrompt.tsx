@@ -59,7 +59,7 @@ export class InlineChatEditMarkdownPrompt extends PromptElement<InlineChatEditMa
 			SelectionSplitKind.Adjusted
 		);
 
-		const { query, history, chatVariables, request } = this.props.promptContext;
+		const { query, history, chatVariables } = this.props.promptContext;
 
 		// const summarizedDocument = await createPromptingSummarizedDocument(
 		// 	this._parserService,
@@ -91,7 +91,7 @@ export class InlineChatEditMarkdownPrompt extends PromptElement<InlineChatEditMa
 					The user needs help to modify some markdown content.<br />
 					<LegacySafetyRules />
 				</SystemMessage>
-				<HistoryWithInstructions inline={true} historyPriority={700} passPriority history={history} sessionResource={request?.sessionResource}>
+				<HistoryWithInstructions inline={true} historyPriority={700} passPriority history={history} promptContext={this.props.promptContext}>
 					<InstructionMessage priority={1000}>
 						The markdown is always delimited by {MarkdownBlock.FenceSequence}.<br />
 						Your answer must begin and end with {MarkdownBlock.FenceSequence}.<br />
@@ -111,7 +111,7 @@ export class InlineChatEditMarkdownPrompt extends PromptElement<InlineChatEditMa
 						tokenBudget={'usePromptSizingBudget'}
 					/>
 					<Tag name='userPrompt'>
-						<UserQuery chatVariables={chatVariables} query={query} sessionResource={request?.sessionResource} /><br />
+						<UserQuery chatVariables={chatVariables} query={query} promptContext={this.props.promptContext} /><br />
 						The rewritten markdown content that would fit at {data.placeholderText} wrapped with {MarkdownBlock.FenceSequence} is:
 					</Tag>
 				</UserMessage>

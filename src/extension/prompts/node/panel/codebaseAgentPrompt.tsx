@@ -25,11 +25,11 @@ export class CodebaseAgentPrompt extends PromptElement<GenericBasePromptElementP
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const { query, chatVariables, history, toolCallRounds, toolCallResults, request } = this.props.promptContext;
+		const { query, chatVariables, history, toolCallRounds, toolCallResults } = this.props.promptContext;
 		const hasSemanticSearch = await this.workspaceChunkSearch.isAvailable();
 		return (
 			<>
-				<HistoryWithInstructions flexGrow={1} passPriority historyPriority={700} history={history} sessionResource={request?.sessionResource}>
+				<HistoryWithInstructions flexGrow={1} passPriority historyPriority={700} history={history} promptContext={this.props.promptContext}>
 					<InstructionMessage>
 						<Tag name='context'>
 							<WorkspaceFoldersHint />
@@ -62,7 +62,7 @@ export class CodebaseAgentPrompt extends PromptElement<GenericBasePromptElementP
 					</InstructionMessage>
 				</HistoryWithInstructions>
 				<ChatToolCalls priority={899} flexGrow={3} promptContext={this.props.promptContext} toolCallRounds={toolCallRounds} toolCallResults={toolCallResults} toolCallMode={CopilotToolMode.FullContext} />
-				<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={chatVariables} query={`The developer's request is: ${query}\n\nFind all code in the workspace relevant to the following request.`} includeFilepath={true} embeddedInsideUserMessage={false} sessionResource={request?.sessionResource} />
+				<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={chatVariables} query={`The developer's request is: ${query}\n\nFind all code in the workspace relevant to the following request.`} includeFilepath={true} embeddedInsideUserMessage={false} promptContext={this.props.promptContext} />
 			</>
 		);
 	}

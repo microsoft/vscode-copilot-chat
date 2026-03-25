@@ -301,7 +301,7 @@ export class EditCodeUserMessage extends PromptElement<EditCodePromptProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const { query, chatVariables, workingSet, request } = this.props.promptContext;
+		const { query, chatVariables, workingSet } = this.props.promptContext;
 		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ProjectLabelsChat, this.experimentationService);
 		return (
 			<>
@@ -319,7 +319,7 @@ export class EditCodeUserMessage extends PromptElement<EditCodePromptProps> {
 						<NotebookReminderInstructions chatVariables={chatVariables} query={query} />
 						<NewFilesLocationHint />
 					</Tag>
-					{query && <Tag name='prompt'><UserQuery flexGrow={7} priority={900} chatVariables={chatVariables} query={query} sessionResource={request?.sessionResource} /></Tag>}
+					{query && <Tag name='prompt'><UserQuery flexGrow={7} priority={900} chatVariables={chatVariables} query={query} promptContext={this.props.promptContext} /></Tag>}
 					<EditCodeReadonlyInstructions chatVariables={chatVariables} workingSet={workingSet} />
 				</UserMessage>
 			</>

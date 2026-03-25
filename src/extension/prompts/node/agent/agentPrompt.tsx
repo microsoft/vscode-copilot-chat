@@ -27,7 +27,7 @@ import { ChatRequestEditedFileEventKind, Position, Range } from '../../../../vsc
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
 import { ChatVariablesCollection, isCustomizationsIndex } from '../../../prompt/common/chatVariablesCollection';
 import { getGlobalContextCacheKey, GlobalContextMessageMetadata, RenderedUserMessageMetadata, Turn } from '../../../prompt/common/conversation';
-import { InternalToolReference } from '../../../prompt/common/intents';
+import { IBuildPromptContext, InternalToolReference } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { ToolName } from '../../../tools/common/toolNames';
 import { MemoryContextPrompt, MemoryInstructionsPrompt } from '../../../tools/node/memoryContextPrompt';
@@ -291,7 +291,7 @@ export interface AgentUserMessageProps extends BasePromptElementProps, AgentUser
 	readonly chatVariables: ChatVariablesCollection;
 	readonly enableCacheBreakpoints?: boolean;
 	readonly editedFileEvents?: readonly ChatRequestEditedFileEvent[];
-	readonly sessionResource?: URI;
+	readonly promptContext?: IBuildPromptContext;
 	/** When true, indicates this is a stop hook continuation where the stop hook query is rendered as a separate message. */
 	readonly hasStopHookQuery?: boolean;
 	/** Additional context provided by SubagentStart hooks. */
@@ -325,7 +325,7 @@ export function getUserMessagePropsFromAgentProps(agentProps: AgentPromptProps, 
 		editedFileEvents: agentProps.promptContext.editedFileEvents,
 		hasStopHookQuery: agentProps.promptContext.hasStopHookQuery,
 		additionalHookContext: agentProps.promptContext.additionalHookContext,
-		sessionResource: agentProps.promptContext.request?.sessionResource,
+		promptContext: agentProps.promptContext,
 		...customizations,
 	};
 }
@@ -392,7 +392,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<EditedFileEvents editedFileEvents={this.props.editedFileEvents} />
 						<NotebookSummaryChange />
 						{hasTerminalTool && <TerminalStatePromptElement />}
-						{hasTodoTool && <TodoListContextPrompt sessionResource={this.props.sessionResource} />}
+						{hasTodoTool && <TodoListContextPrompt promptContext={this.props.promptContext} />}
 						{this.props.additionalHookContext && <AdditionalHookContextPrompt context={this.props.additionalHookContext} />}
 					</Tag>
 					<CurrentEditorContext endpoint={this.props.endpoint} />
@@ -403,7 +403,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						{this.configurationService.getNonExtensionConfig<boolean>(USE_SKILL_ADHERENCE_PROMPT_SETTING) && <SkillAdherenceReminder chatVariables={this.props.chatVariables} />}
 					</Tag>
 					{query && <Tag name={userQueryTagName} priority={900} flexGrow={7}>
-						<UserQuery chatVariables={this.props.chatVariables} query={query} sessionResource={this.props.sessionResource} />
+						<UserQuery chatVariables={this.props.chatVariables} query={query} promptContext={this.props.promptContext} />
 					</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 				</UserMessage>

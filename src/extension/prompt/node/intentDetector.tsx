@@ -263,7 +263,7 @@ export class IntentDetector implements ChatParticipantDetectionProvider {
 		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 
 		const { messages: currentSelection } = await renderPromptElement(this.instantiationService, endpoint, CurrentSelection, { document });
-		const { messages: conversationHistory } = await renderPromptElement(this.instantiationService, endpoint, ConversationHistory, { history, priority: 1000, sessionResource: undefined }, undefined, undefined).catch(() => ({ messages: [] }));
+		const { messages: conversationHistory } = await renderPromptElement(this.instantiationService, endpoint, ConversationHistory, { history, priority: 1000, promptContext: undefined }, undefined, undefined).catch(() => ({ messages: [] }));
 
 		const { history: historyMessages, fileExcerpt, attachedContext, fileExcerptExceedsBudget } = this.prepareInternalTelemetryContext(getTextPart(currentSelection?.[0]?.content), conversationHistory, chatVariables);
 
@@ -639,7 +639,7 @@ export class GPT4OIntentDetectionPrompt extends IntentDetectionPrompt {
 		const { history, chatVariables, userQuestion } = this.props;
 
 		return (<>
-			<HistoryWithInstructions history={history || []} passPriority historyPriority={800} sessionResource={undefined}>
+			<HistoryWithInstructions history={history || []} passPriority historyPriority={800} promptContext={undefined}>
 				<InstructionMessage>
 					You are a helpful AI programming assistant to a user who is a software engineer, acting on behalf of the Visual Studio Code editor. Your task is to choose one category from the Markdown table of categories below that matches the user's question. Carefully review the user's question, any previous messages, and any provided context such as code snippets. Respond with just the category name. Your chosen category will help Visual Studio Code provide the user with a higher-quality response, and choosing incorrectly will degrade the user's experience of using Visual Studio Code, so you must choose wisely. If you cannot choose just one category, or if none of the categories seem like they would provide the user with a better result, you must always respond with "unknown".<br />
 					<br />
@@ -648,7 +648,7 @@ export class GPT4OIntentDetectionPrompt extends IntentDetectionPrompt {
 					<ParticipantDescriptions participants={this.props.thirdPartyParticipants ? this.props.thirdPartyParticipants : this.props.builtinParticipants} includeDynamicParticipants={!this.props.thirdPartyParticipants} />
 				</InstructionMessage>
 			</HistoryWithInstructions>
-			{<ChatVariablesAndQuery query={userQuestion} chatVariables={chatVariables} priority={900} embeddedInsideUserMessage={false} sessionResource={undefined} />}
+			{<ChatVariablesAndQuery query={userQuestion} chatVariables={chatVariables} priority={900} embeddedInsideUserMessage={false} promptContext={undefined} />}
 		</>
 		);
 	}

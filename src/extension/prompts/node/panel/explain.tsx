@@ -60,7 +60,7 @@ export class ExplainPrompt extends PromptElement<ExplainPromptProps, ExplainProm
 	}
 
 	override render(state: ExplainPromptState, sizing: PromptSizing): PromptPiece<any, any> | undefined {
-		let { query, history, chatVariables, request } = this.props.promptContext;
+		let { query, history, chatVariables } = this.props.promptContext;
 		chatVariables = chatVariables.filter(v => !v.reference.id.startsWith('vscode.implicit'));
 		return (
 			<>
@@ -69,7 +69,7 @@ export class ExplainPrompt extends PromptElement<ExplainPromptProps, ExplainProm
 					<CopilotIdentityRules />
 					<LegacySafetyRules />
 				</SystemMessage>
-				<HistoryWithInstructions inline={this.props.isInlineChat} historyPriority={600} passPriority history={history} sessionResource={request?.sessionResource}>
+				<HistoryWithInstructions inline={this.props.isInlineChat} historyPriority={600} passPriority history={history} promptContext={this.props.promptContext}>
 					<InstructionMessage priority={1000}>
 						<EditorIntegrationRules />
 						<ResponseTranslationRules />
@@ -97,7 +97,7 @@ export class ExplainPrompt extends PromptElement<ExplainPromptProps, ExplainProm
 				<SymbolDefinitions document={this.props.document} range={this.props.selection} priority={800} embeddedInsideUserMessage={false} />
 				{!state.explainingDiagnostic && <SymbolAtCursor document={this.props.document} selection={this.props.selection} priority={800} />}
 				<ChatToolReferences priority={899} flexGrow={2} promptContext={this.props.promptContext} embeddedInsideUserMessage={false} />
-				<ChatVariablesAndQuery priority={900} chatVariables={chatVariables} query={query} embeddedInsideUserMessage={false} sessionResource={request?.sessionResource} />
+				<ChatVariablesAndQuery priority={900} chatVariables={chatVariables} query={query} embeddedInsideUserMessage={false} promptContext={this.props.promptContext} />
 			</>
 		);
 	}

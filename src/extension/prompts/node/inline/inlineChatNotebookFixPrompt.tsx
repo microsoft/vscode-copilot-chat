@@ -85,7 +85,7 @@ export class InlineFixNotebookPrompt extends PromptElement<InlineFixProps, Inlin
 			return <ignoredFiles value={[documentContext.document.uri]} />;
 		}
 
-		const { query, history, chatVariables, request } = this.props.promptContext;
+		const { query, history, chatVariables } = this.props.promptContext;
 		const selection = documentContext.selection;
 
 		// find the diagnostics of interest and the selection of interest surrounding the diagnostics
@@ -126,7 +126,7 @@ export class InlineFixNotebookPrompt extends PromptElement<InlineFixProps, Inlin
 					You are a world class expert in programming, and especially good at {documentContext.language.languageId}.<br />
 					Source code is always contained in ``` blocks.<br />
 				</SystemMessage>
-				<HistoryWithInstructions inline={true} passPriority historyPriority={priorities.history ?? 700} history={history} sessionResource={request?.sessionResource}>
+				<HistoryWithInstructions inline={true} passPriority historyPriority={priorities.history ?? 700} history={history} promptContext={this.props.promptContext}>
 					<InstructionMessage priority={priorities.core}>
 						The user needs help to write some new code.<br />
 						<JupyterNotebookRules />
@@ -192,7 +192,7 @@ export class InlineFixNotebookPrompt extends PromptElement<InlineFixProps, Inlin
 					{/* <Diagnostics documentContext={documentContext} diagnostics={diagnostics} /> */}
 					{/* Describe in a single sentence how you would solve the problem. After that sentence, add an empty line. Then add a code block with the fix. */}
 					Please find a fix for my code so that the result is without any errors.<br />
-					<UserQuery chatVariables={chatVariables} query={query} sessionResource={request?.sessionResource} /><br />
+					<UserQuery chatVariables={chatVariables} query={query} promptContext={this.props.promptContext} /><br />
 				</UserMessage>
 			</>
 		);

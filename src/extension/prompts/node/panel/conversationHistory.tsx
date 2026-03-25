@@ -27,7 +27,7 @@ interface ConversationHistoryProps extends BasePromptElementProps {
 	inline?: boolean;
 	currentTurnVars?: ChatVariablesCollection;
 	omitPromptVariables?: boolean;
-	sessionResource: URI | undefined;
+	promptContext: IBuildPromptContext | undefined;
 }
 
 /**
@@ -61,9 +61,9 @@ export class HistoryWithInstructions extends PromptElement<Omit<ConversationHist
 
 		const after = modelPrefersInstructionsAfterHistory(ep.family);
 		return <>
-			{after ? <ConversationHistory  {...props} passPriority={false} priority={this.props.historyPriority} sessionResource={this.props.sessionResource} /> : undefined}
+			{after ? <ConversationHistory  {...props} passPriority={false} priority={this.props.historyPriority} promptContext={this.props.promptContext} /> : undefined}
 			{...children}
-			{after ? undefined : <ConversationHistory  {...props} passPriority={false} priority={this.props.historyPriority} sessionResource={this.props.sessionResource} />}
+			{after ? undefined : <ConversationHistory  {...props} passPriority={false} priority={this.props.historyPriority} promptContext={this.props.promptContext} />}
 		</>;
 	}
 }
@@ -85,7 +85,7 @@ export class ConversationHistory extends PromptElement<ConversationHistoryProps>
 		turnHistory.forEach((turn, index) => {
 			if (turn.request.type === 'user') {
 				const promptVariables = (turn.promptVariables && !this.props.omitPromptVariables) ? this.removeDuplicateVars(turn.promptVariables, this.props.currentTurnVars, turnHistory.slice(index + 1)) : new ChatVariablesCollection([]);
-				history.push(<ChatVariablesAndQuery priority={900} chatVariables={promptVariables} query={turn.request.message} omitReferences={true} embeddedInsideUserMessage={false} sessionResource={this.props.sessionResource} />);
+				history.push(<ChatVariablesAndQuery priority={900} chatVariables={promptVariables} query={turn.request.message} omitReferences={true} embeddedInsideUserMessage={false} promptContext={this.props.promptContext} />);
 			}
 			if (turn.responseMessage?.type === 'model' && ![TurnStatus.OffTopic, TurnStatus.Filtered].includes(turn.responseStatus)) {
 				history.push(<AssistantMessage name={turn.responseMessage.name}>{turn.responseMessage.message}</AssistantMessage>);
