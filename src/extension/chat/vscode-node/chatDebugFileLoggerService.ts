@@ -44,6 +44,8 @@ interface IActiveLogSession {
 	readonly label?: string;
 	/** Whether this session has received its own OTel spans (vs being auto-created as a parent ref) */
 	hasOwnSpans: boolean;
+	/** Whether models.json has already been written to this session's directory */
+	modelSnapshotWritten: boolean;
 }
 
 /**
@@ -81,6 +83,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	/** Maps spanId → resolved session ID for parent-span inheritance */
 	private readonly _spanSessionIndex = new Map<string, string>();
 	private readonly _pendingCoreEvents: IDebugLogEntry[] = [];
+	private _modelSnapshot: readonly unknown[] | undefined;
 	private _debugLogsDirUri: URI | undefined;
 	private _autoFlushTimer: ReturnType<typeof setInterval> | undefined;
 	private _autoFlushIntervalMs: number;
@@ -199,6 +202,9 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 					for (const entry of this._pendingCoreEvents) {
 						this._bufferEntry(sessionId, { ...entry, sid: sessionId });
 					}
+					if (this._modelSnapshot) {
+						this._enqueueModelSnapshotWrite(existing);
+					}
 				}
 			}
 			return;
@@ -257,6 +263,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			parentSessionId: childInfo?.parentSessionId,
 			label: childInfo?.label,
 			hasOwnSpans,
+			modelSnapshotWritten: false,
 		};
 		this._activeSessions.set(sessionId, session);
 
@@ -265,6 +272,11 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		if (!childInfo && hasOwnSpans) {
 			for (const entry of this._pendingCoreEvents) {
 				this._bufferEntry(sessionId, { ...entry, sid: sessionId });
+			}
+
+			// Write cached model snapshot as models.json in the session directory
+			if (this._modelSnapshot) {
+				this._enqueueModelSnapshotWrite(session);
 			}
 		}
 
@@ -301,8 +313,14 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 
 	async flush(sessionId: string): Promise<void> {
 		const session = this._activeSessions.get(sessionId);
-		if (!session || session.buffer.length === 0) {
+		if (!session) {
 			return;
+		}
+
+		if (session.buffer.length === 0) {
+			// No JSONL entries to flush, but still await any pending async work
+			// (e.g. model snapshot write) enqueued on flushPromise.
+			return session.flushPromise;
 		}
 
 		// Skip flushing for sessions not yet confirmed as main sessions.
@@ -345,6 +363,40 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	getSessionDirForResource(sessionResource: URI): URI | undefined {
 		const sessionId = sessionResourceToId(sessionResource);
 		return this.getSessionDir(sessionId);
+	}
+
+	setModelSnapshot(models: readonly unknown[]): void {
+		this._modelSnapshot = models;
+		// Write to any active parent sessions that started before the model fetch completed
+		for (const [, session] of this._activeSessions) {
+			if (!session.parentSessionId && session.hasOwnSpans) {
+				this._enqueueModelSnapshotWrite(session);
+			}
+		}
+	}
+
+	private _enqueueModelSnapshotWrite(session: IActiveLogSession): void {
+		session.flushPromise = session.flushPromise.then(
+			() => this._writeModelSnapshot(session),
+			() => this._writeModelSnapshot(session),
+		);
+	}
+
+	private async _writeModelSnapshot(session: IActiveLogSession): Promise<void> {
+		if (!this._modelSnapshot || session.modelSnapshotWritten) {
+			return;
+		}
+		session.modelSnapshotWritten = true;
+		try {
+			if (!session.dirEnsured) {
+				await createDirectoryIfNotExists(this._fileSystemService, session.sessionDir);
+				session.dirEnsured = true;
+			}
+			const modelsUri = URI.joinPath(session.sessionDir, 'models.json');
+			await fs.promises.writeFile(modelsUri.fsPath, JSON.stringify(this._modelSnapshot, null, 2), 'utf-8');
+		} catch (err) {
+			this._logService.error('[ChatDebugFileLogger] Failed to write models.json', err);
+		}
 	}
 
 	// ── OTel span handling ──

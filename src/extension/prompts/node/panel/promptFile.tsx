@@ -11,12 +11,12 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { getCurrentCapturingToken } from '../../../../platform/requestLogger/node/requestLogger';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { joinPath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { EmbeddedInsideUserMessage } from '../base/promptElement';
 import { Tag } from '../base/tag';
-import { joinPath } from '../../../../util/vs/base/common/resources';
 
 export interface PromptFileProps extends BasePromptElementProps, EmbeddedInsideUserMessage {
 	readonly variable: PromptVariable;
@@ -80,13 +80,12 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 
 			// Replace session log placeholder for troubleshoot skill
 			if (fileUri.scheme === 'copilot-skill' && fileUri.path.includes('/troubleshoot/') && bodyContent.includes('{{CURRENT_SESSION_LOG}}')) {
-				const chatSessionId = getCurrentCapturingToken()?.chatSessionId;
-				if (chatSessionId) {
-					const logDir = this.chatDebugFileLoggerService.debugLogsDir;
-					if (logDir) {
-						const sessionLogDir = joinPath(logDir, chatSessionId);
-						bodyContent = bodyContent.replaceAll('{{CURRENT_SESSION_LOG}}', () => this.promptPathRepresentationService.getFilePath(sessionLogDir));
-					}
+				const token = getCurrentCapturingToken();
+				const sessionIds = token?.debugTargetSessionIds ?? (token?.chatSessionId ? [token.chatSessionId] : []);
+				const logDir = this.chatDebugFileLoggerService.debugLogsDir;
+				if (sessionIds.length > 0 && logDir) {
+					const sessionLogDirs = sessionIds.map(id => this.promptPathRepresentationService.getFilePath(joinPath(logDir, id)));
+					bodyContent = bodyContent.replaceAll('{{CURRENT_SESSION_LOG}}', () => sessionLogDirs.join(', '));
 				}
 			}
 

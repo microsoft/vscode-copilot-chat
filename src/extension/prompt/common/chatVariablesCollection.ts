@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { URI } from '../../../util/vs/base/common/uri';
 
 export interface PromptVariable {
 	readonly reference: vscode.ChatPromptReference;
@@ -128,3 +129,15 @@ export function isCustomizationsIndex(variable: PromptVariable): variable is Pro
 }
 
 export const CustomizationsIndexId = 'vscode.customizations.index';
+
+/**
+ * URI scheme used by VS Code core for chat session references.
+ */
+export const SessionReferenceScheme = 'vscode-chat-session';
+
+/**
+ * Check if provided variable is a session reference.
+ */
+export function isSessionReference(variable: PromptVariable): variable is PromptVariable & { value: vscode.Uri } {
+	return URI.isUri(variable.value) && variable.value.scheme === SessionReferenceScheme;
+}

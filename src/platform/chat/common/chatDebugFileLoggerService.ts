@@ -90,6 +90,12 @@ export interface IChatDebugFileLoggerService {
 	 * session directory, or `undefined` if the session is unknown.
 	 */
 	getSessionDirForResource(sessionResource: URI): URI | undefined;
+
+	/**
+	 * Cache the latest model list snapshot from the API. The data is written
+	 * as `models.json` into each session directory when a session starts.
+	 */
+	setModelSnapshot(models: readonly unknown[]): void;
 }
 
 /**
@@ -106,5 +112,6 @@ export class NullChatDebugFileLoggerService implements IChatDebugFileLoggerServi
 	getActiveSessionIds(): string[] { return []; }
 	isDebugLogUri(): boolean { return false; }
 	getSessionDirForResource(): URI | undefined { return undefined; }
+	setModelSnapshot(): void { }
 	readonly debugLogsDir: URI | undefined = undefined;
 }
