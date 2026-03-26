@@ -3,17 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Processor } from '../../script/alternativeAction/processor';
 import { IRecordingInformation, ObservableWorkspaceRecordingReplayer } from '../../src/extension/inlineEdits/common/observableWorkspaceRecordingReplayer';
 import { DocumentId } from '../../src/platform/inlineEdits/common/dataTypes/documentId';
 import { IObservableDocument, MutableObservableWorkspace } from '../../src/platform/inlineEdits/common/observableWorkspace';
 import { coalesce } from '../../src/util/vs/base/common/arrays';
-import { Processor } from '../../script/alternativeAction/processor';
 import { IInputRow } from './parseInput';
 
 /**
  * Result of processing a single input row: replayed workspace + oracle edit.
  */
 export interface IProcessedRow {
+	readonly originalRowIndex: number;
 	readonly row: IInputRow;
 	readonly replayer: ObservableWorkspaceRecordingReplayer;
 	readonly workspace: MutableObservableWorkspace;
@@ -31,17 +32,28 @@ export interface IProcessedRow {
 
 /**
  * Parse a suggestedEdit string like `[978, 1021) -> "foo"` into `[start, endEx, text]`.
+ * The text portion is JSON-encoded (from `JSON.stringify`), so we parse it back.
  */
-export function parseSuggestedEdit(suggestedEditStr: string): [number, number, string] | null {
-	const [stringifiedRange, quotedText] = suggestedEditStr.split(' -> ');
-	const match = stringifiedRange.match(/^\[(\d+), (\d+)\)$/);
-	if (match) {
-		const start = parseInt(match[1], 10);
-		const endEx = parseInt(match[2], 10);
-		const text = quotedText.slice(1, -1);
-		return [start, endEx, text];
+export function parseSuggestedEdit(suggestedEditStr: string): [start: number, endEx: number, text: string] | null {
+	const separator = ' -> ';
+	const delimiterIdx = suggestedEditStr.indexOf(separator);
+	if (delimiterIdx === -1) {
+		return null;
 	}
-	return null;
+	const stringifiedRange = suggestedEditStr.substring(0, delimiterIdx);
+	const quotedText = suggestedEditStr.substring(delimiterIdx + separator.length);
+	const match = stringifiedRange.match(/^\[(\d+), (\d+)\)$/);
+	if (!match || !quotedText) {
+		return null;
+	}
+	const start = parseInt(match[1], 10);
+	const endEx = parseInt(match[2], 10);
+	try {
+		const text = JSON.parse(quotedText) as string;
+		return [start, endEx, text];
+	} catch {
+		return null;
+	}
 }
 
 function formatError(e: unknown): string {
@@ -62,7 +74,7 @@ function formatError(e: unknown): string {
 export function processRow(row: IInputRow): IProcessedRow | { error: string } {
 	try {
 		return _processRow(row);
-	} catch (e) {
+	} catch (e: unknown) {
 		return { error: `Unexpected error: ${formatError(e)}` };
 	}
 }
@@ -113,6 +125,7 @@ function _processRow(row: IInputRow): IProcessedRow | { error: string } {
 	const activeFilePath = scoring.edits[0]?.documentUri ?? recording.nextUserEdit?.relativePath ?? 'unknown';
 
 	return {
+		originalRowIndex: row.originalRowIndex,
 		row,
 		replayer,
 		workspace,

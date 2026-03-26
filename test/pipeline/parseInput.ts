@@ -10,6 +10,7 @@ import { IAlternativeAction } from '../../src/extension/inlineEdits/node/nextEdi
  * A single row from the JSON input.
  */
 export interface IInputRow {
+	readonly originalRowIndex: number;
 	readonly suggestionStatus: string;
 	readonly alternativeAction: IAlternativeAction;
 	readonly prompt: unknown[];
@@ -33,7 +34,7 @@ const requiredKeys = [
 /**
  * Parse a JSON array of input entries into structured rows.
  */
-export function parseInputJson(jsonContents: string): {
+function parseInputJson(jsonContents: string): {
 	rows: IInputRow[];
 	errors: { rowIndex: number; error: string }[];
 } {
@@ -69,6 +70,7 @@ export function parseInputJson(jsonContents: string): {
 			}
 
 			rows.push({
+				originalRowIndex: i,
 				suggestionStatus: record['status'],
 				alternativeAction,
 				prompt,
@@ -87,11 +89,13 @@ export function parseInputJson(jsonContents: string): {
 	return { rows, errors };
 }
 
-export async function loadAndParseInput(inputPath: string): Promise<{
+export async function loadAndParseInput(inputPath: string, verbose = false): Promise<{
 	rows: IInputRow[];
 	errors: { rowIndex: number; error: string }[];
 }> {
 	const contents = await fs.readFile(inputPath, 'utf8');
-	console.log(`Read ${contents.length} chars from ${inputPath}`);
+	if (verbose) {
+		console.log(`Read ${contents.length} chars from ${inputPath}`);
+	}
 	return parseInputJson(contents);
 }

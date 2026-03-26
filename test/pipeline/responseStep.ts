@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptingStrategy } from '../../src/platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { splitLines } from '../../src/util/vs/base/common/strings';
 
 export interface IGeneratedResponse {
 	readonly assistant: string;
@@ -34,10 +35,6 @@ export function applyEditsToContent(
 		result = result.substring(0, start) + text + result.substring(endEx);
 	}
 	return result;
-}
-
-function splitLines(content: string): string[] {
-	return content.split(/\r?\n/);
 }
 
 /**
@@ -238,7 +235,7 @@ export function findEditWindowStartLine(
 	}
 
 	// Fallback: try to extract line number from the first edit window line
-	const lineNumMatch = editWindowLines[0].match(/^(\d+)\| /);
+	const lineNumMatch = editWindowLines[0].match(/^(\d+)\|\s?/);
 	if (lineNumMatch) {
 		return parseInt(lineNumMatch[1], 10) - 1; // Convert 1-based to 0-based
 	}
@@ -247,7 +244,7 @@ export function findEditWindowStartLine(
 }
 
 function stripLineNumber(line: string): string {
-	const match = line.match(/^\d+\| /);
+	const match = line.match(/^\d+\|\s?/);
 	if (match) {
 		return line.substring(match[0].length);
 	}
@@ -270,6 +267,8 @@ export function generateResponse(
 	if (!edits || edits.length === 0) {
 		return { error: `No edits available (file: ${filePath})` };
 	}
+
+	// FIXME @ulugbekna: make the match of strategies exhaustive using a switch statement
 
 	if (strategy === PromptingStrategy.PatchBased02 || strategy === PromptingStrategy.PatchBased01 || strategy === PromptingStrategy.PatchBased) {
 		const assistant = formatAsCustomDiffPatch(edits, docContent, filePath);

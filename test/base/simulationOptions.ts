@@ -67,11 +67,11 @@ export class SimulationOptions {
 	public readonly nesUrl: string | undefined;
 	public readonly nesApiKey: string | undefined;
 
-	public readonly input: string | undefined;
-	public readonly inputStrategy: string | undefined;
-	public readonly inputOutput: string | undefined;
-	public readonly inputRowOffset: number;
-	public readonly inputWorkerMode: boolean;
+	public readonly trainInput: string | undefined;
+	public readonly trainStrategy: string | undefined;
+	public readonly trainOutput: string | undefined;
+	public readonly trainRowOffset: number;
+	public readonly trainWorkerMode: boolean;
 
 	public readonly disabledTools: Set<string>;
 
@@ -162,11 +162,11 @@ export class SimulationOptions {
 
 		this.useExperimentalCodeSearchService = boolean(argv['use-experimental-code-search-service'], false);
 
-		this.input = argv['input'];
-		this.inputStrategy = argv['strategy'];
-		this.inputOutput = argv['out'];
-		this.inputRowOffset = typeof argv['row-offset'] === 'number' ? argv['row-offset'] : 0;
-		this.inputWorkerMode = boolean(argv['worker'], false);
+		this.trainInput = argv['train-input'];
+		this.trainStrategy = argv['train-strategy'];
+		this.trainOutput = argv['train-out'];
+		this.trainRowOffset = typeof argv['train-row-offset'] === 'number' ? argv['train-row-offset'] : 0;
+		this.trainWorkerMode = boolean(argv['train-worker'], false);
 
 		this.configFile = argv['config-file'];
 		this.modelConfigFile = argv['model-config-file'];
@@ -223,9 +223,11 @@ export class SimulationOptions {
 			`  --scenario-workspace-folder        If true, runs the stest inline in the scenario's workspace folder`,
 			`  --config-file                      Path to a JSON file containing configuration options`,
 			`  --model-config-file                Path to a JSON file containing model configuration options`,
-			`  --input                            Path to a JSON file with input data`,
-			`  --strategy                         Prompting strategy (e.g. patchBased02, xtab275). Default: patchBased02`,
-			`  --out                              Output path for JSON file. Default: <input-path>_output.json`,
+			`  --train-input                      Path to a JSON file with training data recordings`,
+			`  --train-strategy                   Prompting strategy (e.g. patchBased02, xtab275). Default: patchBased02`,
+			`  --train-out                        Output path for JSON file. Default: <train-input-path>_output.json`,
+			`  --train-row-offset                 Row offset for parallel chunking (internal, used by workers)`,
+			`  --train-worker                     Run as a worker process (internal, used by parallel mode)`,
 			``,
 		].join('\n'));
 	}
