@@ -29,10 +29,12 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 		}
 
 		// Wire span completion to SQLite store for trajectory export.
-		// When dbSpanExporter is enabled, spans flow through the OTel SDK pipeline
-		// via SqliteSpanExporter. Otherwise, fall back to onDidCompleteSpan subscription
-		// (InMemoryOTelService mode — no OTel SDK).
-		if (!this._otelService.config.dbSpanExporter) {
+		// When dbSpanExporter is enabled with the OTel SDK (NodeOTelService), spans
+		// flow through the SqliteSpanExporter pipeline — no fallback needed.
+		// When dbSpanExporter is disabled (default), no spans are stored and no DB is created.
+		// The onDidCompleteSpan fallback only activates in the edge case where
+		// dbSpanExporter is on but OTel SDK failed to initialize.
+		if (this._otelService.config.dbSpanExporter && !this._otelService.config.enabled) {
 			this._register(this._otelService.onDidCompleteSpan(span => {
 				try {
 					this._sqliteStore.insertSpan(span);
