@@ -129,6 +129,8 @@ export const CopilotChatAttr = {
 	DEBUG_LOG_LABEL: 'copilot_chat.debug_log_label',
 	/** Markdown content for standalone content events */
 	MARKDOWN_CONTENT: 'copilot_chat.markdown_content',
+	/** UUID identifying a subagent invocation (set on execute_tool runSubagent and invoke_agent spans) */
+	SUBAGENT_INVOCATION_ID: 'copilot_chat.subagent_invocation_id',
 } as const;
 
 /**

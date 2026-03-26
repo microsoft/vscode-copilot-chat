@@ -147,6 +147,9 @@ export class ToolsService extends BaseToolsService {
 		const chatRequestId = (options as { chatRequestId?: string }).chatRequestId;
 		const subAgentInvocationId = (options as { subAgentInvocationId?: string }).subAgentInvocationId;
 		if (String(name) === 'runSubagent') {
+			if (subAgentInvocationId) {
+				span.setAttribute(CopilotChatAttr.SUBAGENT_INVOCATION_ID, subAgentInvocationId);
+			}
 			const traceCtx = span.getSpanContext();
 			if (traceCtx) {
 				if (chatStreamToolCallId) {
