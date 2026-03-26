@@ -4,12 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { ChatLanguageModelToolReference, ChatPromptReference } from 'vscode';
-import { IChatDebugFileLoggerService, sessionResourceToId } from '../../../platform/chat/common/chatDebugFileLoggerService';
+import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
-import { joinPath } from '../../../util/vs/base/common/resources';
+import { URI } from '../../../util/vs/base/common/uri';
 import { getToolName } from '../../tools/common/toolNames';
 import { IPromptVariablesService } from '../node/promptVariablesService';
-import { URI } from '../../../util/vs/base/common/uri';
 
 /**
  * Known template variables that can be resolved at runtime.
@@ -30,19 +29,15 @@ export class PromptVariablesServiceImpl implements IPromptVariablesService {
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 	) {
 		this._resolvers = new Map<string, VariableResolver>([
-			['CURRENT_SESSION_LOG', sessionResource => {
+			['VSCODE_AGENT_DEBUG_SESSION_LOG_DIR', sessionResource => {
 				if (!sessionResource) {
 					return undefined;
 				}
-				const sessionId = sessionResourceToId(sessionResource);
-				if (!sessionId) {
+				const sessionDir = this.chatDebugFileLoggerService.getSessionDirForResource(sessionResource);
+				if (!sessionDir) {
 					return undefined;
 				}
-				const logDir = this.chatDebugFileLoggerService.debugLogsDir;
-				if (!logDir) {
-					return undefined;
-				}
-				return this.promptPathRepresentationService.getFilePath(joinPath(logDir, sessionId));
+				return this.promptPathRepresentationService.getFilePath(sessionDir);
 			}],
 		]);
 	}

@@ -715,9 +715,9 @@ suite('ReadFile', () => {
 	});
 
 	suite('skill variable resolution', () => {
-		test('replaces {{CURRENT_SESSION_LOG}} placeholder for troubleshoot skill URI', async () => {
+		test('replaces {{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}} placeholder for troubleshoot skill URI', async () => {
 			const skillUri = URI.from({ scheme: 'copilot-skill', path: '/troubleshoot/SKILL.md' });
-			const skillContent = '---\nname: troubleshoot\n---\n\nLog dir: `{{CURRENT_SESSION_LOG}}`\nMore content here.';
+			const skillContent = '---\nname: troubleshoot\n---\n\nLog dir: `{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}`\nMore content here.';
 			const skillDoc = createTextDocumentData(skillUri, skillContent, 'markdown').document;
 
 			const expectedLogDir = URI.file('/mock/storage/debug-logs/session-abc');
@@ -748,7 +748,7 @@ suite('ReadFile', () => {
 				resolvePromptReferencesInPrompt: async (message: string) => ({ message }),
 				resolveToolReferencesInPrompt: async (message: string) => message,
 				resolveTemplateVariables: (content: string, sessionResource: URI | undefined) => {
-					const placeholder = '{{CURRENT_SESSION_LOG}}';
+					const placeholder = '{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}';
 					if (content.includes(placeholder) && sessionResource) {
 						content = content.replaceAll(placeholder, joinPath(dirname(expectedLogDir), sessionResource.toString()).fsPath);
 					}
@@ -774,14 +774,14 @@ suite('ReadFile', () => {
 
 			const text = await toolResultToString(testAccessor, result);
 			expect(text).toContain(promptPathRepresentationService.getFilePath(expectedLogDir));
-			expect(text).not.toContain('{{CURRENT_SESSION_LOG}}');
+			expect(text).not.toContain('{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}');
 
 			testAccessor.dispose();
 		});
 
 		test('leaves placeholder unreplaced when no sessionResource is set', async () => {
 			const skillUri = URI.from({ scheme: 'copilot-skill', path: '/troubleshoot/SKILL.md' });
-			const skillContent = '---\nname: troubleshoot\n---\n\nLog dir: `{{CURRENT_SESSION_LOG}}`';
+			const skillContent = '---\nname: troubleshoot\n---\n\nLog dir: `{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}`';
 			const skillDoc = createTextDocumentData(skillUri, skillContent, 'markdown').document;
 
 			const mockCustomInstructions = new MockCustomInstructionsService();
@@ -804,14 +804,14 @@ suite('ReadFile', () => {
 			);
 
 			const text = await toolResultToString(testAccessor, result);
-			expect(text).toContain('{{CURRENT_SESSION_LOG}}');
+			expect(text).toContain('{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}');
 
 			testAccessor.dispose();
 		});
 
 		test('replaces placeholder for non-troubleshoot skill URIs too', async () => {
 			const otherSkillUri = URI.from({ scheme: 'copilot-skill', path: '/other-skill/SKILL.md' });
-			const content = 'Some content with {{CURRENT_SESSION_LOG}} placeholder';
+			const content = 'Some content with {{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}} placeholder';
 			const doc = createTextDocumentData(otherSkillUri, content, 'markdown').document;
 
 			const expectedLogDir = URI.file('/mock/storage/debug-logs/session-abc');
@@ -842,7 +842,7 @@ suite('ReadFile', () => {
 				resolvePromptReferencesInPrompt: async (message: string) => ({ message }),
 				resolveToolReferencesInPrompt: async (message: string) => message,
 				resolveTemplateVariables: (content: string, sessionResource: URI | undefined) => {
-					const placeholder = '{{CURRENT_SESSION_LOG}}';
+					const placeholder = '{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}';
 					if (content.includes(placeholder) && sessionResource) {
 						content = content.replaceAll(placeholder, joinPath(dirname(expectedLogDir), sessionResourceToId(sessionResource).toString()).fsPath);
 					}
@@ -867,7 +867,7 @@ suite('ReadFile', () => {
 
 			const text = await toolResultToString(testAccessor, result);
 			expect(text).toContain(promptPathRepresentationService.getFilePath(expectedLogDir));
-			expect(text).not.toContain('{{CURRENT_SESSION_LOG}}');
+			expect(text).not.toContain('{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}');
 
 			testAccessor.dispose();
 		});

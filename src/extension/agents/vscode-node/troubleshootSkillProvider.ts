@@ -24,12 +24,12 @@ export class TroubleshootSkillProvider extends BaseSkillProvider {
 		lines.push('');
 
 		// Provide the debug-logs directory path so the agent can find log files.
-		// The {{CURRENT_SESSION_LOG}} placeholder may be resolved earlier during prompt
+		// The {{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}} placeholder may be resolved earlier during prompt
 		// rendering (for example by PromptFile.getBodyContent) or later by the read_file
 		// tool, which has access to the correct session context.
 		const storageUri = this.extensionContext.storageUri;
 		if (storageUri) {
-			lines.push('- Current session log directory: `{{CURRENT_SESSION_LOG}}`');
+			lines.push('- Current session log directory: `{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}`');
 		} else {
 			lines.push('- Debug-logs directory: unavailable in this environment. Abort now and tell the user that troubleshooting is only available if a workspace is open.');
 		}

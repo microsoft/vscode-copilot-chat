@@ -8,14 +8,14 @@ import type { ChatLanguageModelToolReference, ChatPromptReference } from 'vscode
 import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
+import { encodeBase64, VSBuffer } from '../../../../util/vs/base/common/buffer';
+import { Schemas } from '../../../../util/vs/base/common/network';
 import { joinPath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { Uri } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { PromptVariablesServiceImpl } from '../promptVariablesService';
-import { encodeBase64, VSBuffer } from '../../../../util/vs/base/common/buffer';
-import { Schemas } from '../../../../util/vs/base/common/network';
 
 describe('PromptVariablesServiceImpl', () => {
 	let accessor: ITestingServicesAccessor;
@@ -85,7 +85,7 @@ describe('PromptVariablesServiceImpl', () => {
 	}
 
 	describe('resolveTemplateVariables', () => {
-		test('replaces {{CURRENT_SESSION_LOG}} when sessionId and debugLogsDir are available', () => {
+		test('replaces {{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}} when sessionId and debugLogsDir are available', () => {
 			const debugLogsDir = URI.file('/mock/storage/debug-logs');
 			const testingServiceCollection = createExtensionUnitTestingServices();
 			testingServiceCollection.define(IChatDebugFileLoggerService, {
@@ -105,25 +105,25 @@ describe('PromptVariablesServiceImpl', () => {
 			const promptPathRepresentationService = acc.get(IPromptPathRepresentationService);
 
 			const result = svc.resolveTemplateVariables(
-				'Log dir: `{{CURRENT_SESSION_LOG}}`\nMore content.',
+				'Log dir: `{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}`\nMore content.',
 				asSessionResource('session-abc')
 			);
 
 			const expected = promptPathRepresentationService.getFilePath(joinPath(debugLogsDir, 'session-abc'));
 			expect(result).toBe(`Log dir: \`${expected}\`\nMore content.`);
-			expect(result).not.toContain('{{CURRENT_SESSION_LOG}}');
+			expect(result).not.toContain('{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}');
 			acc.dispose();
 		});
 
-		test('leaves {{CURRENT_SESSION_LOG}} when sessionResource is undefined', () => {
-			const content = 'Log dir: `{{CURRENT_SESSION_LOG}}`';
+		test('leaves {{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}} when sessionResource is undefined', () => {
+			const content = 'Log dir: `{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}`';
 			const result = service.resolveTemplateVariables(content, undefined);
 			expect(result).toBe(content);
 		});
 
-		test('leaves {{CURRENT_SESSION_LOG}} when debugLogsDir is undefined', () => {
+		test('leaves {{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}} when debugLogsDir is undefined', () => {
 			// The default mock has no debugLogsDir configured
-			const content = 'Log dir: `{{CURRENT_SESSION_LOG}}`';
+			const content = 'Log dir: `{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}`';
 			const result = service.resolveTemplateVariables(content, asSessionResource('session-abc'));
 			expect(result).toBe(content);
 		});
@@ -154,7 +154,7 @@ describe('PromptVariablesServiceImpl', () => {
 			const promptPathRepresentationService = acc.get(IPromptPathRepresentationService);
 
 			const result = svc.resolveTemplateVariables(
-				'First: {{CURRENT_SESSION_LOG}}, Second: {{CURRENT_SESSION_LOG}}',
+				'First: {{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}, Second: {{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}',
 				asSessionResource('sess')
 			);
 

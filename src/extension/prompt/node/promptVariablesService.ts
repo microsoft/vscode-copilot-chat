@@ -19,7 +19,7 @@ export interface IPromptVariablesService {
 	 * Replace all known `{{VARIABLE}}` template placeholders in {@link content}.
 	 *
 	 * @param content  The raw template string (skill, agent, prompt, or instructions content).
-	 * @param sessionResource  The current chat session resource, used for resolving variables that depend on the session context (e.g. `{{CURRENT_SESSION_LOG}}`).
+	 * @param sessionResource  The current chat session resource, used for resolving variables that depend on the session context (e.g. `{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}`).
 	 * @returns The content with all resolvable placeholders replaced.
 	 */
 	resolveTemplateVariables(content: string, sessionResource: URI | undefined): string;

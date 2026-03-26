@@ -69,6 +69,10 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 				content = await this.promptVariablesService.resolveToolReferencesInPrompt(content, toolReferences);
 			}
 
+			if (this.customInstructionsService.isSkillFile(fileUri)) {
+				content = this.promptVariablesService.resolveTemplateVariables(content, this.props.promptContext?.request?.sessionResource);
+			}
+
 			let bodyOffset = 0;
 			if (content.match(/^---[\s\r\n]/)) {
 				// find the start of the body
@@ -77,11 +81,7 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 					bodyOffset = match.index! + match[0].length;
 				}
 			}
-			let bodyContent = content.substring(bodyOffset);
-
-			if (this.customInstructionsService.isSkillFile(fileUri)) {
-				bodyContent = this.promptVariablesService.resolveTemplateVariables(bodyContent, this.props.promptContext?.request?.sessionResource);
-			}
+			const bodyContent = content.substring(bodyOffset);
 
 			return bodyContent;
 		} catch (e) {
