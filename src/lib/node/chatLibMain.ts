@@ -408,21 +408,45 @@ class OverridableConfigurationService extends DefaultsOnlyConfigurationService {
 
 	override getConfig<T>(key: Config<T>): T {
 		if (this._overrides.has(key.id)) {
-			return this._overrides.get(key.id) as T;
+			const overriddenValue = this._overrides.get(key.id);
+			if (key.validator) {
+				const result = key.validator.validate(overriddenValue);
+				if (result.error) {
+					return super.getConfig(key);
+				}
+				return result.content;
+			}
+			return overriddenValue as T;
 		}
 		return super.getConfig(key);
 	}
 
 	override getExperimentBasedConfig<T extends ExperimentBasedConfigType>(key: ExperimentBasedConfig<T>, experimentationService: IExperimentationService): T {
 		if (this._overrides.has(key.id)) {
-			return this._overrides.get(key.id) as T;
+			const overriddenValue = this._overrides.get(key.id);
+			if (key.validator) {
+				const result = key.validator.validate(overriddenValue);
+				if (result.error) {
+					return super.getExperimentBasedConfig(key, experimentationService);
+				}
+				return result.content;
+			}
+			return overriddenValue as T;
 		}
 		return super.getExperimentBasedConfig(key, experimentationService);
 	}
 
 	override inspectConfig<T>(key: BaseConfig<T>) {
 		if (this._overrides.has(key.id)) {
-			return { defaultValue: this._overrides.get(key.id) as T };
+			const overriddenValue = this._overrides.get(key.id);
+			if (key.validator) {
+				const result = key.validator.validate(overriddenValue);
+				if (result.error) {
+					return super.inspectConfig(key);
+				}
+				return { defaultValue: result.content };
+			}
+			return { defaultValue: overriddenValue as T };
 		}
 		return super.inspectConfig(key);
 	}
