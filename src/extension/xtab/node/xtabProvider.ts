@@ -335,7 +335,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return new NoNextEditReason.GotCancelled('afterLanguageContextAwait');
 		}
 
-		const lintErrors = new LintErrors(activeDocument.id, currentDocument, this.langDiagService);
+		const lintErrors = new LintErrors(activeDocument.id, currentDocument, this.langDiagService, request.xtabEditHistory);
 
 		const promptPieces = new PromptPieces(
 			currentDocument,
@@ -1485,8 +1485,20 @@ export function overrideModelConfig(modelConfig: ModelConfig, overridingConfig: 
 			includeTags: overridingConfig.includeTagsInCurrentFile,
 		},
 		recentlyViewedDocuments: { ...modelConfig.recentlyViewedDocuments, ...overridingConfig.recentlyViewedDocuments },
-		lintOptions: overridingConfig.lintOptions ? { ...modelConfig.lintOptions, ...overridingConfig.lintOptions } : modelConfig.lintOptions,
+		lintOptions: overridingConfig.lintOptions
+			? mergeLintOptions(modelConfig.lintOptions, overridingConfig.lintOptions)
+			: modelConfig.lintOptions,
 	};
+}
+
+const DEFAULT_XTAB_PROVIDER_LINT_OPTIONS: xtabPromptOptions.LintOptions = {
+	...xtabPromptOptions.DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS,
+	maxLineDistance: 10,
+};
+
+function mergeLintOptions(base: xtabPromptOptions.LintOptions | undefined, override: Partial<xtabPromptOptions.LintOptions>): xtabPromptOptions.LintOptions {
+	const resolved = base ?? DEFAULT_XTAB_PROVIDER_LINT_OPTIONS;
+	return { ...resolved, ...override };
 }
 
 export function pickSystemPrompt(promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): string {

@@ -141,8 +141,6 @@ export class DefaultIntentRequestHandler {
 			const capturingToken = new CapturingToken(
 				this.request.prompt,
 				'comment',
-				false,
-				false,
 				this.request.subAgentInvocationId,
 				this.request.subAgentName,
 				// For subagents, use invocation ID as chatSessionId so spans get their own log file

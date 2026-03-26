@@ -556,7 +556,7 @@ export class ClaudeCodeSession extends Disposable {
 			const promptLabel = request.prompt.filter(p => p.type === 'text').at(-1)?.text ?? 'Claude Session Prompt';
 			this.sessionStateService.setCapturingTokenForSession(
 				this.sessionId,
-				new CapturingToken(promptLabel, 'claude', false, false, undefined, undefined, this.sessionId)
+				new CapturingToken(promptLabel, 'claude', undefined, undefined, this.sessionId)
 			);
 
 			// Emit a user_message span event for the debug panel

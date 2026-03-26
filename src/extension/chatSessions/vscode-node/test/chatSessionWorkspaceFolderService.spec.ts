@@ -98,7 +98,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 		logService = new MockLogService();
 		gitService = new MockGitService();
 		metadataStore = new MockMetadataStore();
-		service = new ChatSessionWorkspaceFolderService(gitService, logService, metadataStore);
+		service = new ChatSessionWorkspaceFolderService(gitService, logService, metadataStore, extensionContext);
 	});
 
 	afterEach(() => {

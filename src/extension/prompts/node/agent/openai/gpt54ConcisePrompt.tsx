@@ -4,24 +4,35 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
-import { isGpt54, isGpt54ConcisePromptExp, isGpt54LargePromptExp } from '../../../../../platform/endpoint/common/chatModelCapabilities';
-import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
-import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
+import { IExperimentationService } from '../../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../../tools/common/toolNames';
-import { GPT5CopilotIdentityRule } from '../../base/copilotIdentity';
 import { InstructionMessage } from '../../base/instructionMessage';
 import { ResponseTranslationRules } from '../../base/responseTranslationRules';
-import { Gpt5SafetyRule } from '../../base/safetyRules';
 import { Tag } from '../../base/tag';
 import { MathIntegrationRules } from '../../panel/editorIntegrationRules';
 import { ApplyPatchInstructions, DefaultAgentPromptProps, detectToolCapabilities, getEditingReminder, McpToolInstructions, ReminderInstructionsProps } from '../defaultAgentInstructions';
 import { FileLinkificationInstructions } from '../fileLinkificationInstructions';
-import { CopilotIdentityRulesConstructor, IAgentPrompt, PromptRegistry, ReminderInstructionsConstructor, SafetyRulesConstructor, SystemPrompt } from '../promptRegistry';
-import { Gpt54ConcisePromptExp, Gpt54ConcisePromptExpReminderInstructions } from './gpt54ConcisePrompt';
-import { Gpt54LargePromptExp, Gpt54LargePromptExpReminderInstructions } from './gpt54LargePrompt';
 
-export class Gpt54Prompt extends PromptElement<DefaultAgentPromptProps> {
+export class Gpt54ConcisePromptExp extends PromptElement<DefaultAgentPromptProps> {
+
+	private static isEnabled: boolean | undefined = undefined;
+
+	constructor(
+		props: DefaultAgentPromptProps,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+	) {
+		super(props);
+		Gpt54ConcisePromptExp.isEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.EnableGpt54ConcisePromptExp, this.experimentationService);
+	}
+
 	async render(state: void, sizing: PromptSizing) {
+		const isEnabled = Gpt54ConcisePromptExp.isEnabled;
+		if (!isEnabled) {
+			return undefined;
+		}
+
 		const tools = detectToolCapabilities(this.props.availableTools);
 		return <InstructionMessage>
 			<Tag name='coding_agent_instructions'>
@@ -178,53 +189,19 @@ export class Gpt54Prompt extends PromptElement<DefaultAgentPromptProps> {
 			<Tag name='autonomy_and_persistence'>
 				Persist until the task is fully handled end-to-end within the current turn whenever feasible: do not stop at analysis or partial fixes; carry changes through implementation, verification, and a clear explanation of outcomes unless the user explicitly says otherwise or redirects you.<br />
 			</Tag>
+			<Tag name='search_and_edit_behavior'>
+				- Default to iterative editing: try to search for the minimal necessary contextual information, once you have sufficient context directly make smaller iterative edits to get to the solution.<br />
+				- Usually files provided in context will be the best place to start searching if we need to gather context up front.<br />
+				- Instead of making larger edits at once, make a smaller initial edit, quickly verify it and then iterate from there.<br />
+			</Tag>
+
 			<ResponseTranslationRules />
 			<FileLinkificationInstructions />
 		</InstructionMessage >;
 	}
 }
 
-class Gpt54PromptResolver implements IAgentPrompt {
-	constructor(
-		@IInstantiationService private readonly instantiationService: IInstantiationService,
-	) { }
-
-	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
-		return isGpt54(endpoint);
-	}
-
-	static readonly familyPrefixes = [];
-
-	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
-		if (this.instantiationService.invokeFunction(isGpt54LargePromptExp, endpoint)) {
-			return Gpt54LargePromptExp;
-		}
-		if (this.instantiationService.invokeFunction(isGpt54ConcisePromptExp, endpoint)) {
-			return Gpt54ConcisePromptExp;
-		}
-		return Gpt54Prompt;
-	}
-
-	resolveReminderInstructions(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined {
-		if (this.instantiationService.invokeFunction(isGpt54LargePromptExp, endpoint)) {
-			return Gpt54LargePromptExpReminderInstructions;
-		}
-		if (this.instantiationService.invokeFunction(isGpt54ConcisePromptExp, endpoint)) {
-			return Gpt54ConcisePromptExpReminderInstructions;
-		}
-		return Gpt54ReminderInstructions;
-	}
-
-	resolveCopilotIdentityRules(endpoint: IChatEndpoint): CopilotIdentityRulesConstructor | undefined {
-		return GPT5CopilotIdentityRule;
-	}
-
-	resolveSafetyRules(endpoint: IChatEndpoint): SafetyRulesConstructor | undefined {
-		return Gpt5SafetyRule;
-	}
-}
-
-export class Gpt54ReminderInstructions extends PromptElement<ReminderInstructionsProps> {
+export class Gpt54ConcisePromptExpReminderInstructions extends PromptElement<ReminderInstructionsProps> {
 	async render(state: void, sizing: PromptSizing) {
 		return <>
 			You are an agent—keep going until the user's query is completely resolved before ending your turn. ONLY stop if solved or genuinely blocked.<br />
@@ -238,5 +215,3 @@ export class Gpt54ReminderInstructions extends PromptElement<ReminderInstruction
 		</>;
 	}
 }
-
-PromptRegistry.registerPrompt(Gpt54PromptResolver);

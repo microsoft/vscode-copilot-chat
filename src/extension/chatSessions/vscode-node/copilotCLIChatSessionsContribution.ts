@@ -22,7 +22,7 @@ import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { isUri } from '../../../util/common/types';
-import { DeferredPromise, disposableTimeout, IntervalTimer, SequencerByKey, ThrottledDelayer } from '../../../util/vs/base/common/async';
+import { DeferredPromise, disposableTimeout, IntervalTimer, SequencerByKey } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -167,14 +167,6 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	private readonly _onDidCommitChatSessionItem = this._register(new Emitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>());
 	public readonly onDidCommitChatSessionItem: Event<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }> = this._onDidCommitChatSessionItem.event;
 
-	private static readonly _PR_DETECTION_RECHECK_INTERVAL = 60_000; // ms before re-checking a session that had no PR
-	private static readonly _PR_MERGE_RECHECK_INTERVAL = 10 * 60_000; // ms before re-checking merge status for a known PR
-	private readonly _prDetectionDelayer = this._register(new ThrottledDelayer<void>(2000));
-	private readonly _prDetectionPendingSessions = new Map<string, { branchName: string; repositoryPath: string }>();
-	/** Sessions where a PR was found and persisted — permanently skip further detection. */
-	private readonly _prDetectionDone = new Set<string>();
-	/** Sessions checked without finding a PR — stores the timestamp so we can re-check after a cooldown. */
-	private readonly _prDetectionLastChecked = new Map<string, number>();
 
 	constructor(
 		@ICopilotCLISessionService private readonly copilotcliSessionService: ICopilotCLISessionService,
@@ -283,7 +275,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 					? toGitUri(vscode.Uri.file(change.originalFilePath), 'HEAD')
 					: undefined,
 				change.modifiedFilePath
-					? toGitUri(vscode.Uri.file(change.modifiedFilePath), '')
+					? vscode.Uri.file(change.modifiedFilePath)
 					: undefined,
 				change.statistics.additions,
 				change.statistics.deletions)));
@@ -291,17 +283,6 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 		// Status
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
-
-		// Async PR detection for completed sessions without a pull request URL.
-		// Sessions are collected and checked in a debounced batch to avoid
-		// excessive API calls when the session list refreshes rapidly.
-		if (this.shouldDetectPullRequest(session.id, status, worktreeProperties, changes)) {
-			this._prDetectionPendingSessions.set(session.id, {
-				branchName: worktreeProperties!.branchName,
-				repositoryPath: worktreeProperties!.repositoryPath,
-			});
-			this._prDetectionDelayer.trigger(async () => this.processPendingPrDetections()).catch(() => { /* expected on dispose */ });
-		}
 
 		// Metadata
 		const metadata = worktreeProperties
@@ -348,103 +329,44 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	}
 
 	/**
-	 * Processes all pending PR detection requests in a single batch.
-	 * Called by the debounced delayer after rapid-fire `toChatSessionItem` calls settle.
+	 * Detects a pull request for a session when the user opens it.
+	 * If a PR is found, persists the URL and notifies the UI.
 	 */
-	private async processPendingPrDetections(): Promise<void> {
-		const pending = new Map(this._prDetectionPendingSessions);
-		this._prDetectionPendingSessions.clear();
+	public async detectPullRequestOnSessionOpen(sessionId: string): Promise<void> {
+		try {
+			const worktreeProperties = await this.worktreeManager.getWorktreeProperties(sessionId);
+			if (worktreeProperties?.version !== 2
+				|| worktreeProperties.pullRequestState === 'merged'
+				|| !worktreeProperties.branchName
+				|| !worktreeProperties.repositoryPath) {
+				return;
+			}
 
-		for (const [sessionId, { branchName, repositoryPath }] of pending) {
-			try {
-				const prResult = await detectPullRequestFromGitHubAPI(
-					branchName,
-					repositoryPath,
-					this.gitService,
-					this.octoKitService,
-					this.logService,
-				);
+			const prResult = await detectPullRequestFromGitHubAPI(
+				worktreeProperties.branchName,
+				worktreeProperties.repositoryPath,
+				this.gitService,
+				this.octoKitService,
+				this.logService,
+			);
 
-				if (prResult) {
-					const currentProperties = await this.worktreeManager.getWorktreeProperties(sessionId);
-					if (currentProperties?.version === 2
-						&& (!currentProperties.pullRequestUrl || currentProperties.pullRequestState !== prResult.state)) {
-						const updated: typeof currentProperties = {
-							...currentProperties,
-							pullRequestUrl: prResult.url,
-							pullRequestState: prResult.state,
-							changes: undefined,
-						};
-						await this.worktreeManager.setWorktreeProperties(sessionId, updated);
-						this.notifySessionsChange();
-					}
-
-					// Stop re-checking once the PR is merged.
-					if (prResult.state === 'merged') {
-						this._prDetectionDone.add(sessionId);
-						this._prDetectionLastChecked.delete(sessionId);
-					} else {
-						// PR exists but not yet merged — allow periodic re-checks.
-						this._prDetectionLastChecked.set(sessionId, Date.now());
-					}
-				} else {
-					// No PR yet — record the timestamp so we can re-check after a cooldown.
-					this._prDetectionLastChecked.set(sessionId, Date.now());
+			if (prResult) {
+				const currentProperties = await this.worktreeManager.getWorktreeProperties(sessionId);
+				if (currentProperties?.version === 2
+					&& (currentProperties.pullRequestUrl !== prResult.url || currentProperties.pullRequestState !== prResult.state)) {
+					await this.worktreeManager.setWorktreeProperties(sessionId, {
+						...currentProperties,
+						pullRequestUrl: prResult.url,
+						pullRequestState: prResult.state,
+						changes: undefined,
+					});
+					this.notifySessionsChange();
 				}
-			} catch (error) {
-				// Do not record a timestamp — the session will be retried on the next refresh.
-				this.logService.debug(`[CopilotCLIChatSessionItemProvider] Failed to detect pull request via GitHub API for session ${sessionId}, will retry: ${error instanceof Error ? error.message : String(error)}`);
 			}
+		} catch (error) {
+			this.logService.trace(`[CopilotCLIChatSessionItemProvider] Failed to detect pull request on session open for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
-
-	/**
-	 * Determines whether a session is a candidate for async PR detection or
-	 * merge-status re-check. Sessions without a PR URL use the standard recheck
-	 * interval; sessions with an unmerged PR use a much longer interval to
-	 * avoid burning through the GitHub API rate limit.
-	 */
-	private shouldDetectPullRequest(
-		sessionId: string,
-		status: vscode.ChatSessionStatus,
-		worktreeProperties: Awaited<ReturnType<IChatSessionWorktreeService['getWorktreeProperties']>>,
-		changes: readonly vscode.ChatSessionChangedFile2[],
-	): boolean {
-		if (status !== vscode.ChatSessionStatus.Completed
-			|| worktreeProperties?.version !== 2
-			|| !worktreeProperties.branchName
-			|| !worktreeProperties.repositoryPath
-			|| changes.length === 0) {
-			return false;
-		}
-
-		// Already merged — no need to re-check.
-		if (worktreeProperties.pullRequestState === 'merged') {
-			return false;
-		}
-
-		// Skip sessions where a merged PR was already found.
-		if (this._prDetectionDone.has(sessionId)) {
-			return false;
-		}
-
-		// Use a longer cooldown for merge-status re-checks on known PRs.
-		const recheckInterval = worktreeProperties.pullRequestUrl
-			? CopilotCLIChatSessionItemProvider._PR_MERGE_RECHECK_INTERVAL
-			: CopilotCLIChatSessionItemProvider._PR_DETECTION_RECHECK_INTERVAL;
-
-		// Allow re-checking after a cooldown so PRs created after session completion are detected.
-		const lastChecked = this._prDetectionLastChecked.get(sessionId);
-		if (lastChecked !== undefined) {
-			const elapsed = Date.now() - lastChecked;
-			if (elapsed < recheckInterval) {
-				return false;
-			}
-		}
-
-		return true;
-	}
-
 	public async createCopilotCLITerminal(location: TerminalOpenLocation = 'editor', name?: string, cwd?: string): Promise<void> {
 		// TODO@rebornix should be set by CLI
 		const terminalName = name || process.env.COPILOTCLI_TERMINAL_TITLE || l10n.t('Copilot CLI');
@@ -645,6 +567,10 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	async provideChatSessionContentForExistingSession(resource: Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
 		const copilotcliSessionId = SessionIdForCLI.parse(resource);
 		this._currentSessionId = copilotcliSessionId;
+
+		// Fire-and-forget: detect PR when the user opens a session
+		void this.sessionItemProvider.detectPullRequestOnSessionOpen(copilotcliSessionId);
+
 		const folderRepo = await this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token);
 		const [history, title] = await Promise.all([
 			this.getSessionHistory(copilotcliSessionId, folderRepo, token),
@@ -1551,17 +1477,18 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					// done in the checkpoint so that users can easily see the changes made in
 					// the worktree and also revert back if needed.
 					await this.copilotCLIWorktreeManagerService.handleRequestCompleted(session.sessionId);
-
-					// When isolation is enabled and we are using a git worktree, and the worktree supports
-					// checkpoints, we create a checkpoint for the worktree changes so that users can easily
-					// see the changes made in the worktree and also revert back if needed.
-					await this.copilotCLIWorktreeCheckpointService.handleRequestCompleted(session.sessionId);
 				} else if (workingDirectory) {
 					// When isolation is not enabled, we are operating in the workspace directly,
 					// so we stage all the changes in the workspace directory when the session is
 					// completed
 					await this.workspaceFolderService.handleRequestCompleted(workingDirectory);
 				}
+
+				// Create checkpoint - we create a checkpoint for the worktree changes so that users
+				// can easily see the changes made in the worktree and also revert back if needed. This
+				// is used if worktree isolation is enabled, and auto-commit is disabled or workspace
+				// isolation is enabled.
+				await this.copilotCLIWorktreeCheckpointService.handleRequestCompleted(session.sessionId, request.id);
 			}
 
 			await this.handlePullRequestCreated(session);
@@ -2358,6 +2285,21 @@ export function registerCLIChatCommands(
 		});
 
 		copilotcliSessionItemProvider.notifySessionsChange();
+	}));
+
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.sessions.commitChanges', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
+		const resource = sessionItemOrResource instanceof vscode.Uri
+			? sessionItemOrResource
+			: sessionItemOrResource?.resource;
+
+		if (!resource) {
+			return;
+		}
+
+		await vscode.commands.executeCommand('workbench.action.chat.openSessionWithPrompt.copilotcli', {
+			resource,
+			prompt: builtinSlashSCommands.commit,
+		});
 	}));
 
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
