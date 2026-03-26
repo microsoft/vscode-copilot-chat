@@ -45,6 +45,25 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 			await this._otelService.flush();
 			this._logService.info('[OTel] Flush complete');
 		}));
+
+		// Export the agent-traces.db file to a specified directory.
+		// Used by the eval harness to copy the SQLite DB for ATIF conversion.
+		this._register(vscode.commands.registerCommand('github.copilot.chat.otel.exportTraces', async (savePath?: string) => {
+			const dbPath = this._sqliteStore.dbPath;
+			if (!dbPath) {
+				return;
+			}
+			const destDir = savePath
+				? vscode.Uri.file(savePath)
+				: (await vscode.window.showOpenDialog({ canSelectFiles: false, canSelectFolders: true, canSelectMany: false, title: 'Export Agent Traces DB' }))?.[0];
+			if (!destDir) {
+				return;
+			}
+			const src = vscode.Uri.file(dbPath);
+			const dest = vscode.Uri.joinPath(destDir, 'agent-traces.db');
+			await vscode.workspace.fs.copy(src, dest, { overwrite: true });
+			this._logService.info(`[OTel] Exported agent-traces.db to ${dest.fsPath}`);
+		}));
 	}
 
 	override dispose(): void {
