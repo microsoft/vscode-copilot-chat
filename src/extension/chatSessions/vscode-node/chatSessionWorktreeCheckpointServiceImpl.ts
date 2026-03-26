@@ -67,7 +67,7 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 		// Update session metadata
 		const worktreeProperties = await this.worktreeService.getWorktreeProperties(sessionId);
 		if (!worktreeProperties || typeof worktreeProperties === 'string' || worktreeProperties.version === 1) {
-			this.logService.warn(`[ChatSessionWorktreeCheckpointService][handleRequest] Session ${sessionId} does not use a git worktree, skipping checkpoint metadata update`);
+			this.logService.trace(`[ChatSessionWorktreeCheckpointService][handleRequest] Session ${sessionId} does not use a git worktree, skipping checkpoint metadata update`);
 			return;
 		}
 
