@@ -201,7 +201,7 @@ export function buildMcpServerMappings(tools: ReadonlyMap<LanguageModelToolInfor
 		if (!tool.source || !hasKey(tool.source, { name: true }) || !tool.fullReferenceName) {
 			continue;
 		}
-		const slashIndex = tool.fullReferenceName.indexOf('/');
+		const slashIndex = tool.fullReferenceName.lastIndexOf('/');
 		if (slashIndex > 0) {
 			const serverName = tool.fullReferenceName.substring(0, slashIndex);
 			if (serverName && !mappings.has(serverName)) {
@@ -248,7 +248,7 @@ export function remapCustomAgentTools(
 		}
 		for (let i = 0; i < agent.tools.length; i++) {
 			const tool = agent.tools[i];
-			const slashIndex = tool.indexOf('/'); // Server name cannot be empty, so slash must be at index 1 or greater
+			const slashIndex = tool.lastIndexOf('/'); // Tool names cannot contain '/', so the last slash separates server from tool
 			if (slashIndex < 1) {
 				continue;
 			}
