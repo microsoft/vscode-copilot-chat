@@ -26,7 +26,7 @@ describe('performance', () => {
 	}
 
 	function getMarksForSession(sessionId: string) {
-		return getChatExtMarks().filter(m => m.name.includes(sessionId));
+		return getChatExtMarks().filter(m => m.name.startsWith(`${TEST_PREFIX}${sessionId}/`));
 	}
 
 	describe('markChatExt', () => {
