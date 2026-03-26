@@ -35,6 +35,7 @@ export interface ExternalIngestUpdateIndexResult {
 	readonly checkpoint: string;
 	readonly totalFileCount: number;
 	readonly updatedFileCount: number;
+	readonly searchHint: string | undefined;
 }
 
 /**
@@ -53,7 +54,7 @@ export interface IExternalIngestClient {
 	listFilesets(callTracker: CallTracker, token: CancellationToken): Promise<string[]>;
 	deleteFileset(filesetName: string, callTracker: CallTracker, token: CancellationToken): Promise<void>;
 
-	searchFilesets(filesetName: string, prompt: string, limit: number, callTracker: CallTracker, token: CancellationToken): Promise<SearchFilesetsResponse | undefined>;
+	searchFilesets(filesetName: string, prompt: string, limit: number, callTracker: CallTracker, token: CancellationToken, searchHint?: string): Promise<SearchFilesetsResponse | undefined>;
 
 	/**
 	 * Quickly checks if a file can be ingested based on its path and size.
@@ -207,7 +208,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		if (newCheckpoint === currentCheckpoint) {
 			this.logService.info('ExternalIngestClient::updateIndex(): Checkpoint matches current checkpoint, skipping ingest.');
-			return Result.ok({ checkpoint: newCheckpoint, totalFileCount: mappings.size, updatedFileCount: 0 });
+			return Result.ok({ checkpoint: newCheckpoint, totalFileCount: mappings.size, updatedFileCount: 0, searchHint: undefined });
 		}
 
 		// Retry loop for 409 Conflict: per the external indexing spec, if any ingestion
@@ -284,7 +285,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			codedSymbolRange.end === 0
 		) {
 			this.logService.info('ExternalIngestClient::performIngestion(): Ingest has already run successfully');
-			return Result.ok({ checkpoint: newCheckpoint, totalFileCount: mappings.size, updatedFileCount: 0 });
+			return Result.ok({ checkpoint: newCheckpoint, totalFileCount: mappings.size, updatedFileCount: 0, searchHint: undefined });
 		}
 		this.logService.debug(`ExternalIngestClient::performIngestion(): Got ingest ID: ${ingestId}`);
 
@@ -470,10 +471,12 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		this.logService.info('ExternalIngestClient::performIngestion(): Successfully finalized ingest.');
 		const requestId = resp.headers.get('x-github-request-id');
-		const body = await resp.text();
-		this.logService.debug(`requestId: '${requestId}', body: ${body}`);
+		const body = await resp.json() as { search_hint?: string };
+		this.logService.debug(`requestId: '${requestId}', body: ${JSON.stringify(body)}`);
 
-		return Result.ok({ checkpoint: newCheckpoint, totalFileCount: mappings.size, updatedFileCount: uploaded });
+		const searchHint = typeof body.search_hint === 'string' ? body.search_hint : undefined;
+
+		return Result.ok({ checkpoint: newCheckpoint, totalFileCount: mappings.size, updatedFileCount: uploaded, searchHint });
 	}
 
 	async listFilesets(callTracker: CallTracker, token: CancellationToken): Promise<string[]> {
@@ -525,7 +528,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		this.logService.info(`ExternalIngestClient::deleteFilesetByName(): Deleted: ${fileSetName}`);
 	}
 
-	async searchFilesets(filesetName: string, prompt: string, limit: number, callTracker: CallTracker, token: CancellationToken): Promise<SearchFilesetsResponse | undefined> {
+	async searchFilesets(filesetName: string, prompt: string, limit: number, callTracker: CallTracker, token: CancellationToken, searchHint?: string): Promise<SearchFilesetsResponse | undefined> {
 		const authToken = await this.getAuthToken();
 		if (!authToken) {
 			this.logService.warn('ExternalIngestClient::searchFilesets(): No auth token available');
@@ -534,12 +537,16 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		this.logService.debug(`ExternalIngestClient::searchFilesets(): Searching fileset '${filesetName}' for prompt: '${prompt}'`);
 		const embeddingType = EmbeddingType.metis_1024_I16_Binary;
-		const resp = await this.makeRequest(authToken, 'POST', '/external/embeddings/code/search', {
+		const body: Record<string, unknown> = {
 			prompt,
 			scoping_query: `fileset:${filesetName}`,
 			embedding_model: embeddingType.id,
 			limit,
-		}, {}, callTracker.add('ExternalIngestClient::searchFilesets'), token);
+		};
+		if (searchHint) {
+			body.search_hint = searchHint;
+		}
+		const resp = await this.makeRequest(authToken, 'POST', '/external/embeddings/code/search', body, {}, callTracker.add('ExternalIngestClient::searchFilesets'), token);
 
 		return await resp.json() as SearchFilesetsResponse;
 	}

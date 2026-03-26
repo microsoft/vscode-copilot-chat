@@ -7,8 +7,8 @@ import ingestUtils = require('@github/blackbird-external-ingest-utils');
 import * as l10n from '@vscode/l10n';
 import * as fs from 'node:fs';
 import sql from 'node:sqlite';
-import { Result } from '../../../../util/common/result';
 import { toErrorMessage } from '../../../../util/common/errorMessage';
+import { Result } from '../../../../util/common/result';
 import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { CancelablePromise, createCancelablePromise, Limiter, raceCancellationError, timeout } from '../../../../util/vs/base/common/async';
@@ -96,6 +96,22 @@ export class ExternalIngestIndex extends Disposable {
 
 	private readonly _onDidChangeState = this._register(new Emitter<void>());
 	public readonly onDidChangeState = this._onDidChangeState.event;
+
+	/**
+	 * Short-lived search hint returned by the finalize API. The search hint tells the index to work at a particular
+	 * point in logical time, if that point is in the future the index will wait. If that point is in the past, the index
+	 * will go back in time.
+	 *
+	 * Must be consumed within {@link SEARCH_HINT_LIFETIME_MS} of being set.
+	 */
+	private _searchHint: { readonly value: string; readonly setAt: number } | undefined;
+
+	/**
+	 * Search hint only lasts 5 minutes. After that the index should have fully ingested and synchronized the
+	 * fileset to all the clusters. The hint is only valid for a limited amount of time anyway, and keeping it around
+	 * indefinitely could result in some confusion, for example being able to search a deleted fileset.
+	 */
+	private static readonly SEARCH_HINT_LIFETIME_MS = 300_000;
 
 	private _currentIngestOperation?: {
 		promise: CancelablePromise<Result<true, TriggerIndexingError>>;
@@ -203,6 +219,7 @@ export class ExternalIngestIndex extends Disposable {
 
 		try {
 			await this._client.deleteFileset(filesetName, callTracker, token);
+			this._searchHint = undefined;
 			this.clearCurrentIndexCheckpoint();
 			this._onDidChangeState.fire();
 
@@ -305,6 +322,10 @@ export class ExternalIngestIndex extends Disposable {
 				if (result.isOk()) {
 					this.setCurrentIndexCheckpoint(result.val.checkpoint);
 
+					if (result.val.searchHint) {
+						this._searchHint = { value: result.val.searchHint, setAt: Date.now() };
+					}
+
 					/* __GDPR__
 						"externalIngestIndex.updateIndex.success" : {
 							"owner": "mjbvz",
@@ -370,6 +391,24 @@ export class ExternalIngestIndex extends Disposable {
 		return updatePromise;
 	}
 
+	/**
+	 * Returns the search hint if it is still within its lifetime.
+	 */
+	private getSearchHint(): string | undefined {
+		const hint = this._searchHint;
+		if (!hint) {
+			return undefined;
+		}
+
+		if (Date.now() - hint.setAt > ExternalIngestIndex.SEARCH_HINT_LIFETIME_MS) {
+			this._searchHint = undefined;
+			this._logService.debug('ExternalIngestIndex: Search hint expired, discarding');
+			return undefined;
+		}
+
+		return hint.value;
+	}
+
 	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, inCallTracker: CallTracker, token: CancellationToken): Promise<readonly FileChunkAndScore[] | undefined> {
 		const filesetName = this.getFilesetName();
 		if (!filesetName) {
@@ -387,16 +426,18 @@ export class ExternalIngestIndex extends Disposable {
 				return undefined;
 			}
 
+			const searchHint = this.getSearchHint();
+
 			const searchResult = await raceCancellationError(
 				(async () => {
 					try {
-						return await this._client.searchFilesets(filesetName, resolvedQuery, sizing.maxResultCountHint, callTracker, token);
+						return await this._client.searchFilesets(filesetName, resolvedQuery, sizing.maxResultCountHint, callTracker, token, searchHint);
 					} catch (err) {
 						if (err instanceof ExternalIngestRequestError && err.response.status === 404) {
 							// On the first index or a large workspace, there might be a slight delay on the service
 							// before the index is actually ready. Workaround by retrying just once after a short delay.
 							await raceCancellationError(timeout(2000), token);
-							return await this._client.searchFilesets(filesetName, resolvedQuery, sizing.maxResultCountHint, callTracker, token);
+							return await this._client.searchFilesets(filesetName, resolvedQuery, sizing.maxResultCountHint, callTracker, token, searchHint);
 						}
 						throw err;
 					}
@@ -960,5 +1001,3 @@ export class ExternalIngestIndex extends Disposable {
 		}
 	}
 }
-
-
