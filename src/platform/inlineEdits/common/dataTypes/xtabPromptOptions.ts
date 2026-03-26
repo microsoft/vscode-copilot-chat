@@ -94,6 +94,8 @@ export type LintOptions = {
 	showCode: LintOptionShowCode;
 	maxLints: number;
 	maxLineDistance: number;
+	/** When set, also include linter diagnostics from the N most recently edited/viewed files. */
+	nRecentFiles?: number;
 }
 
 /**
@@ -374,6 +376,7 @@ export const LINT_OPTIONS_VALIDATOR: IValidator<LintOptions> = vObj({
 	'showCode': vRequired(vEnum(LintOptionShowCode.NO, LintOptionShowCode.YES, LintOptionShowCode.YES_WITH_SURROUNDING)),
 	'maxLints': vRequired(vNumber()),
 	'maxLineDistance': vRequired(vNumber()),
+	'nRecentFiles': vUnion(vNumber(), vUndefined()),
 });
 
 export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vObj({

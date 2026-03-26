@@ -335,7 +335,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return new NoNextEditReason.GotCancelled('afterLanguageContextAwait');
 		}
 
-		const lintErrors = new LintErrors(activeDocument.id, currentDocument, this.langDiagService);
+		const lintErrors = new LintErrors(activeDocument.id, currentDocument, this.langDiagService, request.xtabEditHistory);
 
 		const promptPieces = new PromptPieces(
 			currentDocument,
