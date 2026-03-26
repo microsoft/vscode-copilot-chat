@@ -317,6 +317,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			override notifySessionsChange = vi.fn();
 			override untitledSessionIdMapping = new Map<string, string>();
 			override isNewSession = vi.fn((_session: string) => false);
+			override detectPullRequestOnSessionOpen = vi.fn(async () => { });
 		}();
 		cloudProvider = new FakeCloudProvider();
 		summarizer = new class extends mock<ChatSummarizerProvider>() {
