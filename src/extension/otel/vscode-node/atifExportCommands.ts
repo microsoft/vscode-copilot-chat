@@ -12,9 +12,9 @@ import {
 	type IObservationResult,
 	type ITrajectoryStep,
 } from '../../../platform/otel/common/atif/atifTypes';
+import { decodeSessionId } from '../../../platform/otel/common/sessionUtils';
 import { convertTraceToAtif } from '../../../platform/otel/node/atif/otelToAtifConverter';
 import { IOTelSqliteStore, type OTelSqliteStore } from '../../../platform/otel/node/sqlite/otelSqliteStore';
-import { decodeSessionId } from '../../../platform/otel/common/sessionUtils';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IExtensionContribution } from '../../common/contributions';
 
@@ -52,7 +52,8 @@ export class AtifExportCommands extends Disposable implements IExtensionContribu
 	}
 
 	private async _export(saveDir?: vscode.Uri): Promise<void> {
-		// Get the active chat session resource (same API as memory tool in tools.ts)
+		// Get the active chat session — works in both interactive and eval harness
+		// (eval harness opens chat via workbench.action.chat.open, so the panel is active)
 		const sessionResource = vscode.window.activeChatPanelSessionResource;
 		if (!sessionResource) {
 			if (!saveDir) {

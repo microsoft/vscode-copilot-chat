@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IOTelService, type ICompletedSpanData, type ISpanEventData } from '../../../platform/otel/common/otelService';
+import { decodeSessionId } from '../../../platform/otel/common/sessionUtils';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -25,7 +26,6 @@ import {
 	wrapInResourceSpans,
 	type ChatDebugLogExport,
 } from './otlpFormatConversion';
-import { decodeSessionId } from '../../../platform/otel/common/sessionUtils';
 
 let nextCoreEventId = 1;
 
