@@ -172,6 +172,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		@ICopilotCLISessionService private readonly copilotcliSessionService: ICopilotCLISessionService,
 		@ICopilotCLISessionTracker private readonly sessionTracker: ICopilotCLISessionTracker,
 		@ICopilotCLITerminalIntegration private readonly terminalIntegration: ICopilotCLITerminalIntegration,
+		@IChatSessionMetadataStore private readonly chatSessionMetadataStore: IChatSessionMetadataStore,
 		@IChatSessionWorktreeService private readonly worktreeManager: IChatSessionWorktreeService,
 		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService,
 		@IChatSessionWorkspaceFolderService private readonly workspaceFolderService: IChatSessionWorkspaceFolderService,
@@ -285,8 +286,11 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
 
 		// Metadata
-		const metadata = worktreeProperties
-			? {
+		let metadata: { readonly [key: string]: unknown };
+
+		if (worktreeProperties) {
+			// Worktree
+			metadata = {
 				autoCommit: worktreeProperties.autoCommit !== false,
 				baseCommit: worktreeProperties?.baseCommit,
 				baseBranchProtected: worktreeProperties.version === 2
@@ -311,11 +315,17 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 				lastCheckpointRef: worktreeProperties.version === 2
 					? worktreeProperties.lastCheckpointRef
 					: undefined
-			} satisfies { readonly [key: string]: unknown }
-			: {
-				isolationMode: IsolationMode.Workspace,
-				workingDirectoryPath: workingDirectory?.fsPath
 			} satisfies { readonly [key: string]: unknown };
+		} else {
+			// Workspace
+			const sessionRequestDetails = await this.chatSessionMetadataStore.getRequestDetails(session.id);
+
+			metadata = {
+				isolationMode: IsolationMode.Workspace,
+				workingDirectoryPath: workingDirectory?.fsPath,
+				lastCheckpointRef: sessionRequestDetails.at(-1)?.checkpointRef
+			} satisfies { readonly [key: string]: unknown };
+		}
 
 		return {
 			resource,
