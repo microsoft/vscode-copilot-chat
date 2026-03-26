@@ -118,7 +118,7 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 		}
 
 		// Update request metadata with new checkpoint ref
-		this.metadataStore.updateRequestDetails(sessionId, [{ vscodeRequestId: requestId, checkpointRef }]);
+		await this.metadataStore.updateRequestDetails(sessionId, [{ vscodeRequestId: requestId, checkpointRef }]);
 	}
 
 	async getWorktreeCheckpointSupport(sessionId: string): Promise<boolean> {
