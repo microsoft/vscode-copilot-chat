@@ -52,6 +52,7 @@ export type CopilotCLICommand = 'compact';
 export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact'] as const;
 
 export const builtinSlashSCommands = {
+	commit: '/commit',
 	createPr: '/create-pr',
 	createDraftPr: '/create-draft-pr',
 	updatePr: '/update-pr',
