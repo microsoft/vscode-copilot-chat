@@ -14,10 +14,14 @@ function _getNativePolyfill(): IMonacoPerformanceMarks {
 		mark: (name, markOptions) => performance.mark(name, markOptions),
 		getMarks: () => performance.getEntries().filter(e => e.entryType === 'mark').map(e => ({ name: e.name, startTime: e.startTime })),
 		clearMarks: prefix => {
+			const toRemove = new Set<string>();
 			for (const entry of performance.getEntries()) {
 				if (entry.entryType === 'mark' && entry.name.startsWith(prefix)) {
-					performance.clearMarks(entry.name);
+					toRemove.add(entry.name);
 				}
+			}
+			for (const name of toRemove) {
+				performance.clearMarks(name);
 			}
 		},
 	};
