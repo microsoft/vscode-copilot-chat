@@ -195,8 +195,6 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 			const capturingToken = new CapturingToken(
 				'categorization',
 				undefined,
-				false,
-				false,
 				undefined,
 				undefined,
 				undefined,
