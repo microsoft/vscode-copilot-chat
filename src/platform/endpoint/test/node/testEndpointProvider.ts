@@ -14,7 +14,6 @@ import { SequencerByKey } from '../../../../util/vs/base/common/async';
 import { Event } from '../../../../util/vs/base/common/event';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
-import { IChatDebugFileLoggerService } from '../../../chat/common/chatDebugFileLoggerService';
 import { CHAT_MODEL, IConfigurationService } from '../../../configuration/common/configurationService';
 import { LEGACY_EMBEDDING_MODEL_ID } from '../../../embeddings/common/embeddingsComputer';
 import { IEnvService } from '../../../env/common/envService';
@@ -76,7 +75,6 @@ export class TestModelMetadataFetcher extends ModelMetadataFetcher {
 		@ILogService _logService: ILogService,
 		@IRequestLogger _requestLogger: IRequestLogger,
 		@IInstantiationService _instantiationService: IInstantiationService,
-		@IChatDebugFileLoggerService _chatDebugFileLoggerService: IChatDebugFileLoggerService,
 	) {
 		super(
 			_isModelLab,
@@ -88,7 +86,6 @@ export class TestModelMetadataFetcher extends ModelMetadataFetcher {
 			_authService,
 			_logService,
 			_instantiationService,
-			_chatDebugFileLoggerService,
 		);
 
 		this.cache = new SQLiteCache<ModelMetadataRequest, IChatModelInformation[]>('modelMetadata', TestingCacheSalts.modelMetadata, info);

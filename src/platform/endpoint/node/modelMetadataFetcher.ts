@@ -12,7 +12,6 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { IChatDebugFileLoggerService } from '../../chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
 import { GitHubOutageStatus, IOctoKitService } from '../../github/common/githubService';
@@ -90,7 +89,6 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-		@IChatDebugFileLoggerService private readonly _chatDebugFileLoggerService: IChatDebugFileLoggerService,
 	) {
 		super();
 		this._register(this._authService.onDidAuthenticationChange(() => {
@@ -261,7 +259,6 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 
 			const data: IModelAPIResponse[] = (await response.json()).data;
 			this._requestLogger.logModelListCall(requestId, requestMetadata, data);
-			this._chatDebugFileLoggerService.setModelSnapshot(data);
 			for (let model of data) {
 				model = await this._hydrateResolvedModel(model);
 				const isCompletionModel = isCompletionModelInformation(model);
