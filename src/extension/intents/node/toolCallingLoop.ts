@@ -1096,8 +1096,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const context = this.createPromptContext(availableTools, outputStream);
 		const isContinuation = context.isContinuation || false;
 		markChatExt(this.options.conversation.sessionId, ChatExtPerfMark.WillBuildPrompt);
-		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
-		markChatExt(this.options.conversation.sessionId, ChatExtPerfMark.DidBuildPrompt);
+		let buildPromptResult: IBuildPromptResult;
+		try {
+			buildPromptResult = await this.buildPrompt2(context, outputStream, token);
+		} finally {
+			markChatExt(this.options.conversation.sessionId, ChatExtPerfMark.DidBuildPrompt);
+		}
 		this.throwIfCancelled(token);
 		this.turn.addReferences(buildPromptResult.references);
 		// Possible the tool call resulted in new tools getting added.
