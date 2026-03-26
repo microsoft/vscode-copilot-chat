@@ -263,12 +263,12 @@ export class XtabNextCursorPredictor {
 	private determineLintOptions(): xtabPromptOptions.LintOptions | undefined {
 		const localLintOptions = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionLintOptions);
 		if (localLintOptions) {
-			return { ...xtabPromptOptions.DEFAULT_LINT_OPTIONS_VALUES, ...localLintOptions };
+			return { ...DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS, ...localLintOptions };
 		}
 
 		const expLintOptions = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionLintOptionsString, this.expService);
 		if (expLintOptions) {
-			return parseLintOptionString(expLintOptions);
+			return parseLintOptionString(expLintOptions, DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS);
 		}
 
 		return DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS;

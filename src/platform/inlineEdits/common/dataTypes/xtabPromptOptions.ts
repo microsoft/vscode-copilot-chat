@@ -367,16 +367,16 @@ export interface ModelConfiguration {
 	includePostScript?: boolean;
 	currentFile?: Partial<CurrentFileOptions>;
 	recentlyViewedDocuments?: Partial<RecentlyViewedDocumentsOptions>;
-	lintOptions: LintOptions | undefined;
+	lintOptions: Partial<LintOptions> | undefined;
 	supportsNextCursorLinePrediction?: boolean;
 }
 
-export const LINT_OPTIONS_VALIDATOR: IValidator<LintOptions> = vObj({
-	'tagName': vRequired(vString()),
-	'warnings': vRequired(vEnum(LintOptionWarning.YES, LintOptionWarning.NO, LintOptionWarning.YES_IF_NO_ERRORS)),
-	'showCode': vRequired(vEnum(LintOptionShowCode.NO, LintOptionShowCode.YES, LintOptionShowCode.YES_WITH_SURROUNDING)),
-	'maxLints': vRequired(vNumber()),
-	'maxLineDistance': vRequired(vNumber()),
+export const LINT_OPTIONS_VALIDATOR: IValidator<Partial<LintOptions>> = vObj({
+	'tagName': vString(),
+	'warnings': vEnum(LintOptionWarning.YES, LintOptionWarning.NO, LintOptionWarning.YES_IF_NO_ERRORS),
+	'showCode': vEnum(LintOptionShowCode.NO, LintOptionShowCode.YES, LintOptionShowCode.YES_WITH_SURROUNDING),
+	'maxLints': vNumber(),
+	'maxLineDistance': vNumber(),
 	'nRecentFiles': vNumber(),
 });
 
@@ -391,11 +391,7 @@ export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vOb
 	'supportsNextCursorLinePrediction': vUnion(vBoolean(), vUndefined()),
 });
 
-export const DEFAULT_LINT_OPTIONS_VALUES: Pick<LintOptions, 'nRecentFiles'> = {
-	nRecentFiles: 0,
-};
-
-export function parseLintOptionString(optionString: string): LintOptions | undefined {
+export function parseLintOptionString(optionString: string, defaults: LintOptions): LintOptions {
 	try {
 		const parsed = JSON.parse(optionString);
 
@@ -404,7 +400,7 @@ export function parseLintOptionString(optionString: string): LintOptions | undef
 			throw new Error(`Lint options validation failed: ${lintValidation.error.message}`);
 		}
 
-		return { ...DEFAULT_LINT_OPTIONS_VALUES, ...lintValidation.content };
+		return { ...defaults, ...lintValidation.content };
 	} catch (e) {
 		throw new Error(`Failed to parse lint options string: ${e}`);
 	}

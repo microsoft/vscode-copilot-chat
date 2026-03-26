@@ -1475,7 +1475,9 @@ export function overrideModelConfig(modelConfig: ModelConfig, overridingConfig: 
 			includeTags: overridingConfig.includeTagsInCurrentFile,
 		},
 		recentlyViewedDocuments: { ...modelConfig.recentlyViewedDocuments, ...overridingConfig.recentlyViewedDocuments },
-		lintOptions: overridingConfig.lintOptions ? { ...modelConfig.lintOptions, ...overridingConfig.lintOptions } : modelConfig.lintOptions,
+		lintOptions: overridingConfig.lintOptions
+			? { ...(modelConfig.lintOptions ?? {}), ...overridingConfig.lintOptions } as xtabPromptOptions.LintOptions
+			: modelConfig.lintOptions,
 	};
 }
 
