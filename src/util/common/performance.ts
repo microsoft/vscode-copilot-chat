@@ -76,6 +76,8 @@ export const ChatExtPerfMark = {
 	DidFetch: 'didFetch',
 } as const;
 
+export type ChatExtPerfMarkName = typeof ChatExtPerfMark[keyof typeof ChatExtPerfMark];
+
 /**
  * Emits a performance mark scoped to a chat session:
  * `code/chat/ext/<sessionId>/<name>`
@@ -83,7 +85,7 @@ export const ChatExtPerfMark = {
  * Marks persist in the extension host process until explicitly cleared
  * via {@link clearChatExtMarks}.
  */
-export function markChatExt(sessionId: string | undefined, name: string): void {
+export function markChatExt(sessionId: string | undefined, name: ChatExtPerfMarkName): void {
 	if (sessionId) {
 		perf.mark(`${chatExtPrefix}${sessionId}/${name}`);
 	}
@@ -96,13 +98,26 @@ export function clearChatExtMarks(sessionId: string): void {
 	perf.clearMarks(`${chatExtPrefix}${sessionId}/`);
 }
 
+export const ChatExtGlobalPerfMark = {
+	/** Extension activation starts */
+	WillActivate: 'willActivate',
+	/** Extension activation completes */
+	DidActivate: 'didActivate',
+	/** Waiting for Copilot token starts */
+	WillWaitForCopilotToken: 'willWaitForCopilotToken',
+	/** Copilot token received */
+	DidWaitForCopilotToken: 'didWaitForCopilotToken',
+} as const;
+
+export type ChatExtGlobalPerfMarkName = typeof ChatExtGlobalPerfMark[keyof typeof ChatExtGlobalPerfMark];
+
 /**
  * Emits a global (non-session-scoped) performance mark:
  * `code/chat/ext/<name>`
  *
  * Used for one-time activation marks like `willActivate` / `didActivate`.
  */
-export function markChatExtGlobal(name: string): void {
+export function markChatExtGlobal(name: ChatExtGlobalPerfMarkName): void {
 	perf.mark(`${chatExtPrefix}${name}`);
 }
 
