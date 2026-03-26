@@ -275,6 +275,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 		settingOtlpEndpoint: otelSettings.get<string>('otlpEndpoint'),
 		settingCaptureContent: otelSettings.get<boolean>('captureContent'),
 		settingOutfile: otelSettings.get<string>('outfile') || undefined,
+		settingDbSpanExporter: otelSettings.get<boolean>('dbSpanExporter'),
 		extensionVersion: extensionContext.extension.packageJSON.version ?? '0.0.0',
 		sessionId: env.sessionId,
 	});
@@ -288,7 +289,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 			else if (level === 'warn') { console.warn(msg); }
 			else { console.info(msg); }
 		};
-		builder.define(IOTelService, new NodeOTelService(otelConfig, logFn));
+		builder.define(IOTelService, new NodeOTelService(otelConfig, logFn, otelConfig.dbSpanExporter ? otelSqliteStore : undefined));
 	} else {
 		builder.define(IOTelService, new InMemoryOTelService(otelConfig));
 	}

@@ -12,6 +12,7 @@ export interface OTelConfig {
 	readonly otlpProtocol: 'grpc' | 'http';
 	readonly captureContent: boolean;
 	readonly fileExporterPath?: string;
+	readonly dbSpanExporter: boolean;
 	readonly logLevel: 'trace' | 'debug' | 'info' | 'warn' | 'error';
 	readonly httpInstrumentation: boolean;
 	readonly serviceName: string;
@@ -66,6 +67,7 @@ export interface OTelConfigInput {
 	settingOtlpEndpoint?: string;
 	settingCaptureContent?: boolean;
 	settingOutfile?: string;
+	settingDbSpanExporter?: boolean;
 	extensionVersion: string;
 	sessionId: string;
 	vscodeTelemetryLevel?: string;
@@ -86,10 +88,15 @@ export function resolveOTelConfig(input: OTelConfigInput): OTelConfig {
 		return createDisabledConfig(input);
 	}
 
-	// Determine if enabled: env > setting > default(false)
-	const enabled = envBool(env['COPILOT_OTEL_ENABLED'])
+	// SQLite DB span exporter: setting > default(false)
+	const dbSpanExporter = input.settingDbSpanExporter ?? false;
+
+	// Determine if enabled: env > setting > dbSpanExporter > default(false)
+	// When dbSpanExporter is on, OTel must be enabled for the SDK pipeline to work.
+	const enabled = (envBool(env['COPILOT_OTEL_ENABLED'])
 		?? input.settingEnabled
-		?? (!!env['OTEL_EXPORTER_OTLP_ENDPOINT']);
+		?? (!!env['OTEL_EXPORTER_OTLP_ENDPOINT']))
+		|| dbSpanExporter;
 
 	if (!enabled) {
 		return createDisabledConfig(input);
@@ -147,6 +154,7 @@ export function resolveOTelConfig(input: OTelConfigInput): OTelConfig {
 		otlpProtocol: protocol,
 		captureContent,
 		fileExporterPath,
+		dbSpanExporter,
 		logLevel,
 		httpInstrumentation,
 		serviceName,
@@ -163,6 +171,7 @@ function createDisabledConfig(input: OTelConfigInput): OTelConfig {
 		otlpEndpoint: '',
 		otlpProtocol: 'http' as const,
 		captureContent: false,
+		dbSpanExporter: false,
 		logLevel: 'info' as const,
 		httpInstrumentation: false,
 		serviceName: 'copilot-chat',

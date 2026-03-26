@@ -28,14 +28,19 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 			this._logService.trace('[OTel] Instrumentation disabled');
 		}
 
-		// Wire span completion to SQLite store for ATIF trajectory export
-		this._register(this._otelService.onDidCompleteSpan(span => {
-			try {
-				this._sqliteStore.insertSpan(span);
-			} catch (err) {
-				this._logService.error('[OTel] Failed to insert span into SQLite store:', String(err));
-			}
-		}));
+		// Wire span completion to SQLite store for ATIF trajectory export.
+		// When dbSpanExporter is enabled, spans flow through the OTel SDK pipeline
+		// via SqliteSpanExporter. Otherwise, fall back to onDidCompleteSpan subscription
+		// (InMemoryOTelService mode — no OTel SDK).
+		if (!this._otelService.config.dbSpanExporter) {
+			this._register(this._otelService.onDidCompleteSpan(span => {
+				try {
+					this._sqliteStore.insertSpan(span);
+				} catch (err) {
+					this._logService.error('[OTel] Failed to insert span into SQLite store:', String(err));
+				}
+			}));
+		}
 
 		this._register(vscode.commands.registerCommand('github.copilot.chat.otel.flush', async () => {
 			if (!this._otelService.config.enabled) {

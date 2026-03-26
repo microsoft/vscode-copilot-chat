@@ -696,6 +696,7 @@ export namespace ConfigKey {
 		export const OTelOtlpEndpoint = defineSetting<string>('chat.otel.otlpEndpoint', ConfigType.Simple, 'http://localhost:4318');
 		export const OTelCaptureContent = defineSetting<boolean>('chat.otel.captureContent', ConfigType.Simple, false);
 		export const OTelOutfile = defineSetting<string>('chat.otel.outfile', ConfigType.Simple, '');
+		export const OTelDbSpanExporter = defineSetting<boolean>('chat.otel.dbSpanExporter', ConfigType.Simple, false);
 	}
 
 	/**

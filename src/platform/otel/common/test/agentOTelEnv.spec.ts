@@ -14,6 +14,7 @@ function makeConfig(overrides: Partial<OTelConfig> = {}): OTelConfig {
 		otlpEndpoint: 'http://localhost:4318',
 		otlpProtocol: 'http',
 		captureContent: false,
+		dbSpanExporter: false,
 		logLevel: 'info',
 		httpInstrumentation: false,
 		serviceName: 'copilot-chat',
