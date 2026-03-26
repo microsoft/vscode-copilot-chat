@@ -750,7 +750,7 @@ suite('ReadFile', () => {
 				resolveTemplateVariables: (content: string, sessionResource: URI | undefined) => {
 					const placeholder = '{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}';
 					if (content.includes(placeholder) && sessionResource) {
-						content = content.replaceAll(placeholder, joinPath(dirname(expectedLogDir), sessionResource.toString()).fsPath);
+						content = content.replaceAll(placeholder, joinPath(dirname(expectedLogDir), sessionResourceToId(sessionResource)).fsPath);
 					}
 					return content;
 				},
