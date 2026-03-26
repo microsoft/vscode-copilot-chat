@@ -298,7 +298,7 @@ export class RemoteAgentContribution implements IDisposable {
 				}, agentData ? { type: RequestType.RemoteAgentChat, slug: agentData.slug } : { type: RequestType.RemoteAgentChat });
 
 				// This flattens the docs agent's variables and ignores other variable values for now
-				const resolved = await this.promptVariablesService.resolveVariablesInPrompt(request.prompt, request.references);
+				const resolved = await this.promptVariablesService.resolvePromptReferencesInPrompt(request.prompt, request.references);
 
 				// Collect copilot skills and references to be sent in the request
 				const copilotReferences = [];

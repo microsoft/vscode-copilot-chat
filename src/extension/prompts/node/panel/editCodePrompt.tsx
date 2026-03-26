@@ -319,7 +319,7 @@ export class EditCodeUserMessage extends PromptElement<EditCodePromptProps> {
 						<NotebookReminderInstructions chatVariables={chatVariables} query={query} />
 						<NewFilesLocationHint />
 					</Tag>
-					{query && <Tag name='prompt'><UserQuery flexGrow={7} priority={900} chatVariables={chatVariables} query={query} /></Tag>}
+					{query && <Tag name='prompt'><UserQuery flexGrow={7} priority={900} chatVariables={chatVariables} query={query} promptContext={this.props.promptContext} /></Tag>}
 					<EditCodeReadonlyInstructions chatVariables={chatVariables} workingSet={workingSet} />
 				</UserMessage>
 			</>

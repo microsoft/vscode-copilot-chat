@@ -52,7 +52,7 @@ export class ExecutionSubagentPrompt extends PromptElement<ExecutionSubagentProm
 					&lt;/final_answer&gt;<br />
 				</SystemMessage>
 				<UserMessage priority={800}>
-					<TerminalStatePromptElement sessionId={conversation?.sessionId} />
+					<TerminalStatePromptElement />
 				</UserMessage>
 				<UserMessage priority={900}>{executionInstruction}</UserMessage>
 				<ChatToolCalls

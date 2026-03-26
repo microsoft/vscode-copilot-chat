@@ -38,7 +38,7 @@ export class SearchPanelKeywordsPrompt extends PromptElement<ISearchPanelKeyword
 					<CopilotIdentityRules />
 					<SafetyRules />
 				</SystemMessage>
-				<HistoryWithInstructions flexGrow={2} historyPriority={400} history={history} passPriority>
+				<HistoryWithInstructions flexGrow={2} historyPriority={400} history={history} passPriority promptContext={this.props.promptContext}>
 					<InstructionMessage priority={1000}>
 						# Additional Rules<br />
 						Think step by step:<br />
@@ -79,7 +79,7 @@ export class SearchPanelKeywordsPrompt extends PromptElement<ISearchPanelKeyword
 						<br /><br />
 					</>
 					<ChatToolReferences priority={899} flexGrow={3} promptContext={this.props.promptContext} />
-					<ChatVariablesAndQuery flexGrow={3} chatVariables={chatVariables} priority={900} query={query} />
+					<ChatVariablesAndQuery flexGrow={3} chatVariables={chatVariables} priority={900} query={query} promptContext={this.props.promptContext} />
 				</UserMessage>
 			</>
 		);

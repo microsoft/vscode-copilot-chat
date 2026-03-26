@@ -96,7 +96,7 @@ export class InlineChatNotebookGeneratePrompt extends PromptElement<InlineChatEd
 					The user needs help to write some new code.<br />
 					<LegacySafetyRules />
 				</SystemMessage>
-				<HistoryWithInstructions inline={true} historyPriority={priorities.history ?? 700} passPriority history={history}>
+				<HistoryWithInstructions inline={true} historyPriority={priorities.history ?? 700} passPriority history={history} promptContext={this.props.promptContext}>
 					<InstructionMessage priority={priorities.core}>
 						{jupyterNotebook &&
 							<>
@@ -119,7 +119,7 @@ export class InlineChatNotebookGeneratePrompt extends PromptElement<InlineChatEd
 				<InlineChatNotebookGenerateSelection documentContext={this.props.documentContext} hasContent={hasContent} code={code} priority={priorities.core} tagBasedDocumentSummary={tagBasedDocumentSummary} />
 				<InlineChatNotebookVariables notebookURI={this.props.documentContext.document.uri} priorities={priorities} query={query} />
 				<UserMessage priority={priorities.core}>
-					<UserQuery chatVariables={chatVariables} query={query} /><br />
+					<UserQuery chatVariables={chatVariables} query={query} promptContext={this.props.promptContext} /><br />
 					{(hasContent && extractCodeBlock) && <>The code that would fit at $PLACEHOLDER$ with ``` is:</>}
 					{(hasContent && !extractCodeBlock) && <>The code that would fit at $PLACEHOLDER$ without ``` is:</>}
 				</UserMessage>

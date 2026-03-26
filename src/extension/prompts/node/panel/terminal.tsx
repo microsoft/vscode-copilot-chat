@@ -83,7 +83,7 @@ cd foo
 export class TerminalPrompt extends PromptElement<TerminalPromptProps, TerminalPromptState> {
 
 	override render(state: TerminalPromptState): PromptPiece<any, any> | undefined {
-		const { query, history, chatVariables, } = this.props.promptContext;
+		const { query, history, chatVariables } = this.props.promptContext;
 		return (
 			<>
 				<SystemMessage priority={1000}>
@@ -91,7 +91,7 @@ export class TerminalPrompt extends PromptElement<TerminalPromptProps, TerminalP
 					<CopilotIdentityRules />
 					<LegacySafetyRules />
 				</SystemMessage>
-				<HistoryWithInstructions flexGrow={1} historyPriority={600} passPriority history={history}>
+				<HistoryWithInstructions flexGrow={1} historyPriority={600} passPriority history={history} promptContext={this.props.promptContext}>
 					<InstructionMessage priority={1000}>
 						<EditorIntegrationRules />
 						<ResponseTranslationRules />
@@ -138,7 +138,7 @@ export class TerminalPrompt extends PromptElement<TerminalPromptProps, TerminalP
 				</UserMessage >
 				<TerminalLastCommand priority={801} />
 				<ChatToolReferences priority={899} flexGrow={2} promptContext={this.props.promptContext} embeddedInsideUserMessage={false} />
-				<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={chatVariables} query={query} embeddedInsideUserMessage={false} />
+				<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={chatVariables} query={query} embeddedInsideUserMessage={false} promptContext={this.props.promptContext} />
 			</>
 		);
 	}

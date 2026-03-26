@@ -5,22 +5,23 @@
 
 import { BasePromptElementProps, PromptElement, PromptReference, PromptSizing } from '@vscode/prompt-tsx';
 import type { ChatLanguageModelToolReference } from 'vscode';
-import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
+import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
-import { getCurrentCapturingToken } from '../../../../platform/requestLogger/node/requestLogger';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { PromptVariable } from '../../../prompt/common/chatVariablesCollection';
+import { IBuildPromptContext } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { EmbeddedInsideUserMessage } from '../base/promptElement';
 import { Tag } from '../base/tag';
-import { joinPath } from '../../../../util/vs/base/common/resources';
+
 
 export interface PromptFileProps extends BasePromptElementProps, EmbeddedInsideUserMessage {
 	readonly variable: PromptVariable;
 	readonly omitReferences?: boolean;
+	readonly promptContext: IBuildPromptContext | undefined;
 }
 
 export class PromptFile extends PromptElement<PromptFileProps, void> {
@@ -32,7 +33,7 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@IChatDebugFileLoggerService private readonly chatDebugFileLoggerService: IChatDebugFileLoggerService,
+		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
 	) {
 		super(props);
 	}
@@ -68,6 +69,10 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 				content = await this.promptVariablesService.resolveToolReferencesInPrompt(content, toolReferences);
 			}
 
+			if (this.customInstructionsService.isSkillFile(fileUri)) {
+				content = this.promptVariablesService.resolveTemplateVariables(content, this.props.promptContext?.request?.sessionResource);
+			}
+
 			let bodyOffset = 0;
 			if (content.match(/^---[\s\r\n]/)) {
 				// find the start of the body
@@ -76,19 +81,7 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 					bodyOffset = match.index! + match[0].length;
 				}
 			}
-			let bodyContent = content.substring(bodyOffset);
-
-			// Replace session log placeholder for troubleshoot skill
-			if (fileUri.scheme === 'copilot-skill' && fileUri.path.includes('/troubleshoot/') && bodyContent.includes('{{CURRENT_SESSION_LOG}}')) {
-				const chatSessionId = getCurrentCapturingToken()?.chatSessionId;
-				if (chatSessionId) {
-					const logDir = this.chatDebugFileLoggerService.debugLogsDir;
-					if (logDir) {
-						const sessionLogDir = joinPath(logDir, chatSessionId);
-						bodyContent = bodyContent.replaceAll('{{CURRENT_SESSION_LOG}}', () => this.promptPathRepresentationService.getFilePath(sessionLogDir));
-					}
-				}
-			}
+			const bodyContent = content.substring(bodyOffset);
 
 			return bodyContent;
 		} catch (e) {

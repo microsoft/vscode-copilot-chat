@@ -53,7 +53,7 @@ export class InlineChatGenerateMarkdownPrompt extends PromptElement<InlineChatGe
 			return <ignoredFiles value={[this.props.documentContext.document.uri]} />;
 		}
 
-		const { query, history, chatVariables, } = this.props.promptContext;
+		const { query, history, chatVariables } = this.props.promptContext;
 
 		const data = await this._instantiationService.invokeFunction(
 			SummarizedDocumentData.create,
@@ -80,7 +80,7 @@ export class InlineChatGenerateMarkdownPrompt extends PromptElement<InlineChatGe
 					You are a world class markdown editor, very well versed in programming.<br />
 					<LegacySafetyRules />
 				</SystemMessage>
-				<HistoryWithInstructions inline={true} historyPriority={700} passPriority history={history}>
+				<HistoryWithInstructions inline={true} historyPriority={700} passPriority history={history} promptContext={this.props.promptContext}>
 					<InstructionMessage priority={1000}>
 						The user needs help to write some new markdown.<br />
 						The markdown is always delimited by {MarkdownBlock.FenceSequence}.<br />
@@ -103,7 +103,7 @@ export class InlineChatGenerateMarkdownPrompt extends PromptElement<InlineChatGe
 						createReplyInterpreter={replyInterpreterFn}
 					/>
 					<Tag name='userPrompt'>
-						<UserQuery chatVariables={chatVariables} query={query} /><br />
+						<UserQuery chatVariables={chatVariables} query={query} promptContext={this.props.promptContext} /><br />
 					</Tag>
 					{data.hasContent && <>Remember to start and end your answer with {MarkdownBlock.FenceSequence}. The markdown that would fit at {data.placeholderText} is:</>}
 				</UserMessage>

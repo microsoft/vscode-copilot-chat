@@ -40,7 +40,7 @@ export class WorkspaceMetaPrompt extends PromptElement<WorkspaceMetaPromptProps,
 				You are a coding assistant who help the user answer questions about code in their workspace by providing a list of relevant keywords they can search for to answer the question.<br />
 				The user will provide you with potentially relevant information from the workspace. This information may be incomplete.<br />
 			</SystemMessage>
-			<HistoryWithInstructions historyPriority={500} passPriority history={this.props.history || []}>
+			<HistoryWithInstructions historyPriority={500} passPriority history={this.props.history || []} promptContext={undefined}>
 				<InstructionMessage priority={1000}>
 					Respond in Markdown. First under a `# Question` header, output a rephrased version of the user's question that resolves all pronouns and ambiguous words like 'this' to the specific nouns they stand for.<br />
 					Then under a `# Keywords` header, output a short markdown list of up to 8 relevant keywords that the user can search for to answer the question. You may include variations after each keyword.<br />
@@ -80,7 +80,7 @@ export class WorkspaceMetaPrompt extends PromptElement<WorkspaceMetaPromptProps,
 				}
 			</UserMessage>
 
-			<ChatVariablesAndQuery flexGrow={2} priority={1000} chatVariables={this.props.chatVariables} query={this.props.query} embeddedInsideUserMessage={false} />
+			<ChatVariablesAndQuery flexGrow={2} priority={1000} chatVariables={this.props.chatVariables} query={this.props.query} embeddedInsideUserMessage={false} promptContext={undefined} />
 		</>;
 	}
 }

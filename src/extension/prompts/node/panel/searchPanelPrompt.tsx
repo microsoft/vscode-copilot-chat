@@ -105,7 +105,7 @@ export class SearchPanelPrompt extends PromptElement<ISearchPanelPromptProps> {
 				<CopilotIdentityRules />
 				<SafetyRules />
 			</SystemMessage>
-			<HistoryWithInstructions flexGrow={2} historyPriority={400} history={history} passPriority>
+			<HistoryWithInstructions flexGrow={2} historyPriority={400} history={history} passPriority promptContext={this.props.promptContext}>
 				<InstructionMessage priority={1000}>
 					<EditorIntegrationRules />
 					<ResponseTranslationRules />
@@ -138,7 +138,7 @@ export class SearchPanelPrompt extends PromptElement<ISearchPanelPromptProps> {
 			<UserMessage>
 				<SearchChunkResult priority={898} chunkResults={this.props.promptContext.chunkResults} />
 				<ChatToolReferences priority={899} flexGrow={3} promptContext={this.props.promptContext} />
-				<ChatVariablesAndQuery flexGrow={3} chatVariables={chatVariables} priority={900} query={`Here is the user query: ${query}`} />
+				<ChatVariablesAndQuery flexGrow={3} chatVariables={chatVariables} priority={900} query={`Here is the user query: ${query}`} promptContext={this.props.promptContext} />
 			</UserMessage>
 		</>;
 	}

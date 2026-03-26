@@ -31,7 +31,7 @@ import { DiagnosticSeverity } from '../../../../util/vs/workbench/api/common/ext
 import { ChatReferenceBinaryData, ChatReferenceDiagnostic, LanguageModelToolResult2, Range, Uri } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
 import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile, isPromptFile, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
-import { InternalToolReference } from '../../../prompt/common/intents';
+import { IBuildPromptContext, InternalToolReference } from '../../../prompt/common/intents';
 import { ToolName } from '../../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../../tools/common/toolSchemaNormalizer';
 import { IToolsService } from '../../../tools/common/toolsService';
@@ -95,6 +95,7 @@ export class ChatVariables extends PromptElement<ChatVariablesProps, void> {
 export interface QueryProps extends BasePromptElementProps {
 	readonly chatVariables: ChatVariablesCollection;
 	readonly query: string;
+	readonly promptContext: IBuildPromptContext | undefined;
 }
 
 export class UserQuery extends PromptElement<QueryProps, void> {
@@ -109,7 +110,7 @@ export class UserQuery extends PromptElement<QueryProps, void> {
 		const promptFileIds: PromptFileSlashCommandId[] = [];
 		for (const v of this.props.chatVariables) {
 			if (isPromptFile(v)) {
-				promptFiles.push(<PromptFile variable={v} omitReferences={false} />);
+				promptFiles.push(<PromptFile variable={v} omitReferences={false} promptContext={this.props.promptContext} />);
 				promptFileIds.push(getPromptFileSlashCommandId(v));
 			}
 		}
@@ -184,6 +185,8 @@ export interface ChatVariablesAndQueryProps extends BasePromptElementProps, Embe
 	 * If true, file attachment contents are omitted and only the file names/paths are included.
 	 */
 	readonly omitFileContents?: boolean;
+
+	readonly promptContext: IBuildPromptContext | undefined;
 }
 
 export class ChatVariablesAndQuery extends PromptElement<ChatVariablesAndQueryProps, void> {
@@ -202,7 +205,7 @@ export class ChatVariablesAndQuery extends PromptElement<ChatVariablesAndQueryPr
 			if (!elements.length) {
 				return (
 					<Tag name='prompt'>
-						<UserQuery chatVariables={chatVariables} query={this.props.query} priority={this.props.priority} />
+						<UserQuery chatVariables={chatVariables} query={this.props.query} priority={this.props.priority} promptContext={this.props.promptContext} />
 					</Tag>
 				);
 			}
@@ -211,14 +214,14 @@ export class ChatVariablesAndQuery extends PromptElement<ChatVariablesAndQueryPr
 					{elements}
 				</Tag>}
 				<Tag name='prompt'>
-					<UserQuery chatVariables={chatVariables} query={this.props.query} priority={this.props.priority} />
+					<UserQuery chatVariables={chatVariables} query={this.props.query} priority={this.props.priority} promptContext={this.props.promptContext} />
 				</Tag>
 			</>);
 		}
 
 		return (<>
 			{...elements.map(element => asUserMessage(element, this.props.priority && this.props.priority - 1))}
-			{asUserMessage(<UserQuery chatVariables={chatVariables} query={this.props.query} />, this.props.priority)}
+			{asUserMessage(<UserQuery chatVariables={chatVariables} query={this.props.query} promptContext={this.props.promptContext} />, this.props.priority)}
 		</>);
 	}
 }

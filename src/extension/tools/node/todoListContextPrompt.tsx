@@ -4,11 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { BasePromptElementProps, PromptElement } from '@vscode/prompt-tsx';
+import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ITodoListContextProvider } from '../../prompt/node/todoListContextProvider';
 import { Tag } from '../../prompts/node/base/tag';
 
 export interface TodoListContextPromptProps extends BasePromptElementProps {
-	sessionResource?: string;
+	promptContext?: IBuildPromptContext;
 }
 
 /**
@@ -16,14 +17,14 @@ export interface TodoListContextPromptProps extends BasePromptElementProps {
  */
 export class TodoListContextPrompt extends PromptElement<TodoListContextPromptProps> {
 	constructor(
-		props: any,
+		props: TodoListContextPromptProps,
 		@ITodoListContextProvider private readonly todoListContextProvider: ITodoListContextProvider,
 	) {
 		super(props);
 	}
 
 	async render() {
-		const sessionResource = this.props.sessionResource;
+		const sessionResource = this.props.promptContext?.request?.sessionResource;
 		if (!sessionResource) {
 			return null;
 		}

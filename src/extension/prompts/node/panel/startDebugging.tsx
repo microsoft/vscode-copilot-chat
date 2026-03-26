@@ -351,7 +351,7 @@ export class StartDebuggingPrompt extends PromptElement<StartDebuggingPromptProp
 					<CopilotIdentityRules />
 					<SafetyRules />
 				</SystemMessage>
-				<HistoryWithInstructions historyPriority={600} passPriority history={this.props.history}>
+				<HistoryWithInstructions historyPriority={600} passPriority history={this.props.history} promptContext={undefined}>
 					<InstructionMessage priority={1000}>
 						{style === OutputStyle.Readable && <>
 							The user cannot see the context you are given, so you must not mention it. If you want to refer to it, you must include it in your reply.<br />

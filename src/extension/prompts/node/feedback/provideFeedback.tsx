@@ -68,7 +68,7 @@ export class ProvideFeedbackPrompt extends PromptElement<ProvideFeedbackPromptPr
 							<SymbolDefinitions document={input.document} range={input.selection} priority={800} />
 						))
 					}
-					{this.props.chatVariables && this.props.query && <ChatVariablesAndQuery flexGrow={3} priority={900} chatVariables={this.props.chatVariables} query={this.props.query} />}
+					{this.props.chatVariables && this.props.query && <ChatVariablesAndQuery flexGrow={3} priority={900} chatVariables={this.props.chatVariables} query={this.props.query} promptContext={undefined} />}
 				</UserMessage>
 			</>
 		);

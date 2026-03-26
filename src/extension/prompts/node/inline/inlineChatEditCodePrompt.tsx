@@ -69,7 +69,7 @@ export class InlineChatEditCodePrompt extends PromptElement<InlineChatEditCodePr
 		if (isIgnored) {
 			return <ignoredFiles value={[document.uri]} />;
 		}
-		const { query, history, chatVariables, } = this.props.promptContext;
+		const { query, history, chatVariables } = this.props.promptContext;
 
 		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ProjectLabelsInline, this._experimentationService);
 
@@ -91,7 +91,7 @@ export class InlineChatEditCodePrompt extends PromptElement<InlineChatEditCodePr
 					You are a world class expert in programming, and especially good at {languageId}.<br />
 					<LegacySafetyRules />
 				</SystemMessage>
-				<HistoryWithInstructions inline={true} historyPriority={700} passPriority history={history}>
+				<HistoryWithInstructions inline={true} historyPriority={700} passPriority history={history} promptContext={this.props.promptContext}>
 					<InstructionMessage priority={1000}>
 						Source code is always contained in ``` blocks.<br />
 						The user needs help to modify some code.<br />
@@ -113,7 +113,7 @@ export class InlineChatEditCodePrompt extends PromptElement<InlineChatEditCodePr
 						createReplyInterpreter={replyInterpreterFactory}
 					/>
 					<Tag name='userPrompt'>
-						<UserQuery chatVariables={chatVariables} query={query} /><br />
+						<UserQuery chatVariables={chatVariables} query={query} promptContext={this.props.promptContext} /><br />
 					</Tag>
 					{data.hasCodeWithoutSelection && <>The modified {data.placeholderText} code with ``` is:</>}
 				</UserMessage>

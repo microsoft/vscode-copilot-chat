@@ -154,7 +154,7 @@ class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
 						<NotebookReminderInstructions chatVariables={chatVariables} query={query} />
 						<NewFilesLocationHint />
 					</Tag>
-					<Tag name='prompt'><UserQuery flexGrow={7} priority={900} chatVariables={chatVariables} query={query} /></Tag>
+					<Tag name='prompt'><UserQuery flexGrow={7} priority={900} chatVariables={chatVariables} query={query} promptContext={this.props.promptContext} /></Tag>
 				</UserMessage>
 			</>
 		);

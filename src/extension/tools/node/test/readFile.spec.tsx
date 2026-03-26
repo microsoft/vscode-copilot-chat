@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { afterAll, beforeAll, expect, suite, test } from 'vitest';
-import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
+import { IChatDebugFileLoggerService, sessionResourceToId } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
@@ -15,11 +15,12 @@ import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspa
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
-import { dirname } from '../../../../util/vs/base/common/resources';
+import { dirname, joinPath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { MarkdownString } from '../../../../vscodeTypes';
+import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { ToolName } from '../../common/toolNames';
 import { IToolsService } from '../../common/toolsService';
@@ -713,19 +714,23 @@ suite('ReadFile', () => {
 		});
 	});
 
-	suite('troubleshoot skill session log replacement', () => {
-		test('replaces {{CURRENT_SESSION_LOG}} placeholder for troubleshoot skill URI', async () => {
+	suite('skill variable resolution', () => {
+		test('replaces {{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}} placeholder for troubleshoot skill URI', async () => {
 			const skillUri = URI.from({ scheme: 'copilot-skill', path: '/troubleshoot/SKILL.md' });
-			const skillContent = '---\nname: troubleshoot\n---\n\nLog dir: `{{CURRENT_SESSION_LOG}}`\nMore content here.';
+			const skillContent = '---\nname: troubleshoot\n---\n\nLog dir: `{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}`\nMore content here.';
 			const skillDoc = createTextDocumentData(skillUri, skillContent, 'markdown').document;
 
 			const expectedLogDir = URI.file('/mock/storage/debug-logs/session-abc');
+
+			const mockCustomInstructions = new MockCustomInstructionsService();
+			mockCustomInstructions.setSkillFiles([skillUri]);
 
 			const services = createExtensionUnitTestingServices();
 			services.define(IWorkspaceService, new SyncDescriptor(
 				TestWorkspaceService,
 				[[URI.file('/workspace')], [skillDoc]]
 			));
+			services.define(ICustomInstructionsService, mockCustomInstructions);
 			services.define(IChatDebugFileLoggerService, {
 				_serviceBrand: undefined,
 				startSession: async () => { },
@@ -738,10 +743,22 @@ suite('ReadFile', () => {
 				getSessionDirForResource: () => expectedLogDir,
 				debugLogsDir: dirname(expectedLogDir),
 			} satisfies IChatDebugFileLoggerService);
+			services.define(IPromptVariablesService, {
+				_serviceBrand: undefined,
+				resolvePromptReferencesInPrompt: async (message: string) => ({ message }),
+				resolveToolReferencesInPrompt: async (message: string) => message,
+				resolveTemplateVariables: (content: string, sessionResource: URI | undefined) => {
+					const placeholder = '{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}';
+					if (content.includes(placeholder) && sessionResource) {
+						content = content.replaceAll(placeholder, joinPath(dirname(expectedLogDir), sessionResourceToId(sessionResource)).fsPath);
+					}
+					return content;
+				},
+			} satisfies IPromptVariablesService);
 
 			const testAccessor = services.createTestingAccessor();
-			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
 			const promptPathRepresentationService = testAccessor.get(IPromptPathRepresentationService);
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
 
 			// Set up prompt context with a sessionResource
 			await readFileTool.resolveInput(
@@ -757,21 +774,25 @@ suite('ReadFile', () => {
 
 			const text = await toolResultToString(testAccessor, result);
 			expect(text).toContain(promptPathRepresentationService.getFilePath(expectedLogDir));
-			expect(text).not.toContain('{{CURRENT_SESSION_LOG}}');
+			expect(text).not.toContain('{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}');
 
 			testAccessor.dispose();
 		});
 
 		test('leaves placeholder unreplaced when no sessionResource is set', async () => {
 			const skillUri = URI.from({ scheme: 'copilot-skill', path: '/troubleshoot/SKILL.md' });
-			const skillContent = '---\nname: troubleshoot\n---\n\nLog dir: `{{CURRENT_SESSION_LOG}}`';
+			const skillContent = '---\nname: troubleshoot\n---\n\nLog dir: `{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}`';
 			const skillDoc = createTextDocumentData(skillUri, skillContent, 'markdown').document;
+
+			const mockCustomInstructions = new MockCustomInstructionsService();
+			mockCustomInstructions.setSkillFiles([skillUri]);
 
 			const services = createExtensionUnitTestingServices();
 			services.define(IWorkspaceService, new SyncDescriptor(
 				TestWorkspaceService,
 				[[URI.file('/workspace')], [skillDoc]]
 			));
+			services.define(ICustomInstructionsService, mockCustomInstructions);
 
 			const testAccessor = services.createTestingAccessor();
 			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
@@ -783,21 +804,27 @@ suite('ReadFile', () => {
 			);
 
 			const text = await toolResultToString(testAccessor, result);
-			expect(text).toContain('{{CURRENT_SESSION_LOG}}');
+			expect(text).toContain('{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}');
 
 			testAccessor.dispose();
 		});
 
-		test('does not replace placeholder for non-troubleshoot skill URIs', async () => {
+		test('replaces placeholder for non-troubleshoot skill URIs too', async () => {
 			const otherSkillUri = URI.from({ scheme: 'copilot-skill', path: '/other-skill/SKILL.md' });
-			const content = 'Some content with {{CURRENT_SESSION_LOG}} placeholder';
+			const content = 'Some content with {{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}} placeholder';
 			const doc = createTextDocumentData(otherSkillUri, content, 'markdown').document;
+
+			const expectedLogDir = URI.file('/mock/storage/debug-logs/session-abc');
+
+			const mockCustomInstructions = new MockCustomInstructionsService();
+			mockCustomInstructions.setSkillFiles([otherSkillUri]);
 
 			const services = createExtensionUnitTestingServices();
 			services.define(IWorkspaceService, new SyncDescriptor(
 				TestWorkspaceService,
 				[[URI.file('/workspace')], [doc]]
 			));
+			services.define(ICustomInstructionsService, mockCustomInstructions);
 			services.define(IChatDebugFileLoggerService, {
 				_serviceBrand: undefined,
 				startSession: async () => { },
@@ -807,11 +834,24 @@ suite('ReadFile', () => {
 				getSessionDir: () => undefined,
 				getActiveSessionIds: () => [],
 				isDebugLogUri: () => false,
-				getSessionDirForResource: () => URI.file('/should/not/appear'),
-				debugLogsDir: URI.file('/should/not/appear'),
+				getSessionDirForResource: () => expectedLogDir,
+				debugLogsDir: dirname(expectedLogDir),
 			} satisfies IChatDebugFileLoggerService);
+			services.define(IPromptVariablesService, {
+				_serviceBrand: undefined,
+				resolvePromptReferencesInPrompt: async (message: string) => ({ message }),
+				resolveToolReferencesInPrompt: async (message: string) => message,
+				resolveTemplateVariables: (content: string, sessionResource: URI | undefined) => {
+					const placeholder = '{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}';
+					if (content.includes(placeholder) && sessionResource) {
+						content = content.replaceAll(placeholder, joinPath(dirname(expectedLogDir), sessionResourceToId(sessionResource).toString()).fsPath);
+					}
+					return content;
+				},
+			} satisfies IPromptVariablesService);
 
 			const testAccessor = services.createTestingAccessor();
+			const promptPathRepresentationService = testAccessor.get(IPromptPathRepresentationService);
 			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
 
 			await readFileTool.resolveInput(
@@ -826,8 +866,8 @@ suite('ReadFile', () => {
 			);
 
 			const text = await toolResultToString(testAccessor, result);
-			expect(text).toContain('{{CURRENT_SESSION_LOG}}');
-			expect(text).not.toContain('/should/not/appear');
+			expect(text).toContain(promptPathRepresentationService.getFilePath(expectedLogDir));
+			expect(text).not.toContain('{{VSCODE_AGENT_DEBUG_SESSION_LOG_DIR}}');
 
 			testAccessor.dispose();
 		});

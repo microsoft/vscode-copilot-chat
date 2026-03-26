@@ -122,7 +122,7 @@ export class NewNotebookPlanningPrompt extends PromptElement<NewNotebookPlanning
 
 				<ChatToolReferences priority={899} flexGrow={2} promptContext={this.props.promptContext} embeddedInsideUserMessage={false} />
 				{this.props.promptContext.chatVariables && Object.keys(this.props.promptContext.chatVariables).length > 0 ? (
-					<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={this.props.promptContext.chatVariables} query={this.props.promptContext.query} embeddedInsideUserMessage={false} />
+					<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={this.props.promptContext.chatVariables} query={this.props.promptContext.query} embeddedInsideUserMessage={false} promptContext={this.props.promptContext} />
 				) : (
 					<UserMessage priority={900}>
 						{this.props.promptContext.query}

@@ -33,7 +33,7 @@ export class PanelChatFixPrompt extends PromptElement<PanelChatFixPromptProps> {
 
 	render(state: void, sizing: PromptSizing) {
 		const documentContext = this.props.documentContext;
-		const { history, chatVariables, } = this.props.promptContext;
+		const { history, chatVariables } = this.props.promptContext;
 		const query = this.props.promptContext.query || 'There is a problem in this code. Rewrite the code to show it with the bug fixed.';
 		const getDiagnostics = ({ document, selection }: IDocumentContext) => findDiagnosticForSelectionAndPrompt(this.languageDiagnosticsService, document.uri, selection, query);
 		return (
@@ -47,7 +47,7 @@ export class PanelChatFixPrompt extends PromptElement<PanelChatFixPromptProps> {
 					<br />
 					<Capabilities location={ChatLocation.Panel} />
 				</SystemMessage>
-				<HistoryWithInstructions flexGrow={1} passPriority historyPriority={700} history={history}>
+				<HistoryWithInstructions flexGrow={1} passPriority historyPriority={700} history={history} promptContext={this.props.promptContext}>
 					<InstructionMessage priority={1000}>
 						First think step-by-step - describe your plan for what to build in pseudocode, written out in great detail.<br />
 						Then output the code in a single code block.<br />
@@ -81,7 +81,7 @@ export class PanelChatFixPrompt extends PromptElement<PanelChatFixPromptProps> {
 				{/* todo@connor4312/roblou: is this the right thing to do here? */}
 				{<ChatToolCalls priority={899} flexGrow={2} promptContext={this.props.promptContext} toolCallRounds={this.props.promptContext.toolCallRounds} toolCallResults={this.props.promptContext.toolCallResults} />}
 				{<ChatToolReferences priority={899} flexGrow={2} promptContext={this.props.promptContext} embeddedInsideUserMessage={false} />}
-				<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={chatVariables} query={query} embeddedInsideUserMessage={false} />
+				<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={chatVariables} query={query} embeddedInsideUserMessage={false} promptContext={this.props.promptContext} />
 			</>
 		);
 	}

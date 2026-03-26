@@ -190,7 +190,7 @@ export class NewNotebookToolPromptContent extends PromptElement<NewNotebookToolP
 				<NewFilesLocationHint />
 				<CustomInstructions flexGrow={6} priority={750} languageId={undefined} chatVariables={this.props.promptContext.chatVariables} />
 				<ChatToolReferences flexGrow={4} priority={898} promptContext={this.props.promptContext} />
-				<ChatVariablesAndQuery flexGrow={3} priority={898} chatVariables={this.props.promptContext.chatVariables} query={this.props.originalCreateNotebookQuery} />
+				<ChatVariablesAndQuery flexGrow={3} priority={898} chatVariables={this.props.promptContext.chatVariables} query={this.props.originalCreateNotebookQuery} promptContext={this.props.promptContext} />
 				{hasEditTools && <>Use the `{`${ToolName.EditFile}`}` tool to first create an empty notebook file with the file path,<br />
 					And then use the `{`${ToolName.EditNotebook}`}` tool to generate the notebook of the notebook by editing the empty notebook.<br /></>}
 				{hasCreateTool && <>Use the `{`${ToolName.CreateFile}`}` tool to first create an empty notebook file with the file path,<br />

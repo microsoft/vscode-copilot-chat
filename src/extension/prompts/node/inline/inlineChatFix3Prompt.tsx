@@ -79,7 +79,7 @@ export class InlineFix3Prompt extends PromptElement<InlineFixProps> {
 			projectedDocument = new ProjectedDocument(document.getText(), StringEdit.empty, document.languageId);
 		}
 
-		const { query, history, chatVariables, } = this.props.promptContext;
+		const { query, history, chatVariables } = this.props.promptContext;
 		const { useWorkspaceChunksFromDiagnostics, useWorkspaceChunksFromSelection } = this.props.features;
 
 		const adjustedSelection = projectedDocument.projectRange(selection);
@@ -109,7 +109,7 @@ export class InlineFix3Prompt extends PromptElement<InlineFixProps> {
 					The user expects you to propose a fix for one or more problems in that file.<br />
 					<LegacySafetyRules />
 				</SystemMessage>
-				<HistoryWithInstructions inline={true} historyPriority={700} passPriority history={history}>
+				<HistoryWithInstructions inline={true} historyPriority={700} passPriority history={history} promptContext={this.props.promptContext}>
 					<InstructionMessage priority={1000}>
 						For the response always follow these instructions:<br />
 						Describe in a single sentence how you would solve the problem. After that sentence, add an empty line. Then provide code changes or a terminal command to run.<br />
@@ -161,7 +161,7 @@ export class InlineFix3Prompt extends PromptElement<InlineFixProps> {
 						<TextChunk /*priority={700}*/>
 							Please find a fix for my code so that the result is without any errors.
 						</TextChunk>
-						<UserQuery chatVariables={chatVariables} query={query} /><br />
+						<UserQuery chatVariables={chatVariables} query={query} promptContext={this.props.promptContext} /><br />
 					</Tag>
 				</UserMessage>
 			</>

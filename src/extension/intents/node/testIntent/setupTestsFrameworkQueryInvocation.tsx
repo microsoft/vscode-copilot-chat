@@ -166,7 +166,7 @@ vite.config.ts
 			<UserMessage flexGrow={2}>
 				<SetupWorkspaceStructure />
 			</UserMessage>
-			<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={chatVariables} query={query} embeddedInsideUserMessage={false} />
+			<ChatVariablesAndQuery flexGrow={2} priority={900} chatVariables={chatVariables} query={query} embeddedInsideUserMessage={false} promptContext={this.props.promptContext} />
 		</>;
 	}
 }

@@ -5,7 +5,6 @@
 import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptReference } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
-import { IChatDebugFileLoggerService, sessionResourceToId } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
@@ -21,11 +20,12 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { getCachedSha256Hash } from '../../../util/common/crypto';
 import { clamp } from '../../../util/vs/base/common/numbers';
-import { dirname, extUriBiasedIgnorePathCase, joinPath } from '../../../util/vs/base/common/resources';
+import { dirname, extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult, Location, MarkdownString, Range } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
+import { IPromptVariablesService } from '../../prompt/node/promptVariablesService';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { BinaryFileHexdump, hexdumpIfBinary } from '../../prompts/node/panel/binaryFileHexdump';
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
@@ -127,7 +127,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
-		@IChatDebugFileLoggerService private readonly chatDebugFileLoggerService: IChatDebugFileLoggerService,
+		@IPromptVariablesService private readonly promptVariablesService: IPromptVariablesService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ReadFileParams>, token: vscode.CancellationToken) {
@@ -329,17 +329,12 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 
 		const snapshot = TextDocumentSnapshot.create(await this.workspaceService.openTextDocument(uri));
 
-		// Replace the session log placeholder for the troubleshoot skill
-		if (uri.scheme === 'copilot-skill' && uri.path.includes('/troubleshoot/')) {
+		// Skills: resolve known variables in skill files
+		if (this.customInstructionsService.isSkillFile(uri)) {
 			const sessionResource = this._promptContext?.request?.sessionResource;
-			if (sessionResource) {
-				const chatSessionId = sessionResourceToId(sessionResource);
-				const logDir = this.chatDebugFileLoggerService.debugLogsDir;
-				if (logDir) {
-					const sessionLogDir = joinPath(logDir, chatSessionId);
-					const replaced = snapshot.getText().replaceAll('{{CURRENT_SESSION_LOG}}', () => this.promptPathRepresentationService.getFilePath(sessionLogDir));
-					return TextDocumentSnapshot.fromNewText(replaced, snapshot);
-				}
+			const replaced = this.promptVariablesService.resolveTemplateVariables(snapshot.getText(), sessionResource);
+			if (replaced !== snapshot.getText()) {
+				return TextDocumentSnapshot.fromNewText(replaced, snapshot);
 			}
 		}
 

@@ -295,7 +295,7 @@ class Prompt extends PromptElement<Props> {
 
 	override async render(state: void, sizing: PromptSizing) {
 
-		const { history, query, chatVariables, } = this.props.promptContext;
+		const { history, query, chatVariables } = this.props.promptContext;
 		const { context, testExampleFile, testFileToWriteTo, location, alreadyConsumedChatVariable } = this.props;
 
 		// get testable node
@@ -363,7 +363,7 @@ class Prompt extends PromptElement<Props> {
 					<CopilotIdentityRules /><br />
 					<SafetyRules />
 				</SystemMessage>
-				<HistoryWithInstructions history={history} passPriority historyPriority={700}>
+				<HistoryWithInstructions history={history} passPriority historyPriority={700} promptContext={this.props.promptContext}>
 					<InstructionMessage priority={1000}>
 						{location === ChatLocation.Editor
 							? <>

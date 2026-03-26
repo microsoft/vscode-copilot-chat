@@ -32,7 +32,7 @@ export class SearchPrompt extends PromptElement<SearchPromptProps> {
 					<CopilotIdentityRules />
 					<SafetyRules />
 				</SystemMessage>
-				<HistoryWithInstructions historyPriority={600} passPriority history={history} >
+				<HistoryWithInstructions historyPriority={600} passPriority history={history} promptContext={this.props.promptContext}>
 					<InstructionMessage priority={1000}>
 
 						<EditorIntegrationRules />
