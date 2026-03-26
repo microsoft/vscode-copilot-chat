@@ -47,9 +47,9 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 		}));
 
 		// Export the agent-traces.db file.
-		// Programmatic (eval harness): called with savePath string → copies DB to that path directly.
+		// Programmatic (eval harness): called with savePath URI or string → copies DB there.
 		// Interactive (command palette): shows save dialog with default filename.
-		this._register(vscode.commands.registerCommand('github.copilot.chat.otel.exportTraces', async (savePath?: string) => {
+		this._register(vscode.commands.registerCommand('github.copilot.chat.otel.exportAgentTracesDB', async (savePath?: vscode.Uri | string) => {
 			const dbPath = this._sqliteStore.dbPath;
 			if (!dbPath) {
 				return;
@@ -58,8 +58,8 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 			let dest: vscode.Uri;
 
 			if (savePath) {
-				// Programmatic: savePath is a directory — append default filename
-				dest = vscode.Uri.joinPath(vscode.Uri.file(savePath), 'agent-traces.db');
+				const saveUri = typeof savePath === 'string' ? vscode.Uri.file(savePath) : savePath;
+				dest = vscode.Uri.joinPath(saveUri, 'agent-traces.db');
 			} else {
 				// Interactive: show save dialog with default filename
 				const result = await vscode.window.showSaveDialog({
