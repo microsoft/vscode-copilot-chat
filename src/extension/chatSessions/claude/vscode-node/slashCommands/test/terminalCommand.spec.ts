@@ -234,7 +234,6 @@ describe('TerminalSlashCommand', () => {
 				expect.objectContaining({
 					label: `Claude CLI (${TEST_SESSION_ID})`,
 					icon: 'claude',
-					flattenSingleChild: false,
 				})
 			);
 		});

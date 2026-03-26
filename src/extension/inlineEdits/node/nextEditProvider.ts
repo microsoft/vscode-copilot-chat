@@ -1258,7 +1258,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		// Start the provider call - this runs in the background and populates the cache
 		const label = `NES | spec | ${basename(doc.id.toUri().fsPath)} (v${doc.version.get()})`;
 
-		const capturingToken = new CapturingToken(label, undefined, false, true);
+		const capturingToken = new CapturingToken(label, undefined);
 
 		void this._requestLogger.captureInvocation(capturingToken, async () => {
 			try {
