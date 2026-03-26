@@ -283,7 +283,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 					? toGitUri(vscode.Uri.file(change.originalFilePath), 'HEAD')
 					: undefined,
 				change.modifiedFilePath
-					? toGitUri(vscode.Uri.file(change.modifiedFilePath), '')
+					? vscode.Uri.file(change.modifiedFilePath)
 					: undefined,
 				change.statistics.additions,
 				change.statistics.deletions)));
@@ -1551,17 +1551,18 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					// done in the checkpoint so that users can easily see the changes made in
 					// the worktree and also revert back if needed.
 					await this.copilotCLIWorktreeManagerService.handleRequestCompleted(session.sessionId);
-
-					// When isolation is enabled and we are using a git worktree, and the worktree supports
-					// checkpoints, we create a checkpoint for the worktree changes so that users can easily
-					// see the changes made in the worktree and also revert back if needed.
-					await this.copilotCLIWorktreeCheckpointService.handleRequestCompleted(session.sessionId);
 				} else if (workingDirectory) {
 					// When isolation is not enabled, we are operating in the workspace directly,
 					// so we stage all the changes in the workspace directory when the session is
 					// completed
 					await this.workspaceFolderService.handleRequestCompleted(workingDirectory);
 				}
+
+				// Create checkpoint - we create a checkpoint for the worktree changes so that users
+				// can easily see the changes made in the worktree and also revert back if needed. This
+				// is used if worktree isolation is enabled, and auto-commit is disabled or workspace
+				// isolation is enabled.
+				await this.copilotCLIWorktreeCheckpointService.handleRequestCompleted(session.sessionId, request.id);
 			}
 
 			await this.handlePullRequestCreated(session);

@@ -43,6 +43,9 @@ export interface RequestDetails {
 
 	/** Mode instructions for this request (excluding toolReferences). */
 	modeInstructions?: StoredModeInstructions;
+
+	/** Checkpoint reference for this request. */
+	checkpointRef?: string;
 }
 
 export interface ChatSessionMetadataFile {
