@@ -49,3 +49,27 @@ export class FileLinkificationInstructions extends PromptElement<{}> {
 		</Tag>;
 	}
 }
+
+/**
+ * Condensed variant of FileLinkificationInstructions used by optimized Claude 4.6 prompt configurations.
+ * Removes usage examples, section headers, and redundant path rules while preserving core formatting requirements.
+ */
+export class FileLinkificationInstructionsOptimized extends PromptElement<{}> {
+	render() {
+		return <Tag name='fileLinkification'>
+			Convert file references to markdown links using workspace-relative paths and 1-based line numbers. NEVER wrap file references in backticks.<br />
+			<br />
+			Formats: [path/file.ts](path/file.ts), [file.ts](file.ts#L10), [file.ts](file.ts#L10-L12)<br />
+			<br />
+			Rules:<br />
+			- Without line numbers, display text must match target path<br />
+			- Use '/' only. Strip drive letters and external folders<br />
+			- Do not use file:// or vscode:// schemes<br />
+			- Encode spaces only in target (My%20File.md)<br />
+			- Non-contiguous lines require separate links. NEVER use comma-separated references like #L10-L12, L20<br />
+			- Only link to files that exist in the workspace<br />
+			<br />
+			FORBIDDEN: inline code for file names (`file.ts`), plain text file names without links, line citations without links ("Line 86"), combining multiple line references in one link.<br />
+		</Tag>;
+	}
+}

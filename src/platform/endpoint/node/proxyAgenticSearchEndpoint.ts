@@ -3,14 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { RequestType } from '@vscode/copilot-api';
+import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
-import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
+import { IChatWebSocketManager } from '../../networking/node/chatWebSocketManager';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
@@ -22,6 +23,7 @@ import { ChatEndpoint } from './chatEndpoint';
 export class ProxyAgenticSearchEndpoint extends ChatEndpoint {
 
 	constructor(
+		modelName: string,
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcherService: IFetcherService,
@@ -32,12 +34,14 @@ export class ProxyAgenticSearchEndpoint extends ChatEndpoint {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
+		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
 		@ILogService logService: ILogService,
 	) {
-		const model = configurationService.getConfig(ConfigKey.Advanced.AgenticProxySearchModelName);
+		const model = modelName;
 		const modelInfo: IChatModelInformation = {
 			id: model,
 			name: model,
+			vendor: model,
 			version: 'unknown',
 			model_picker_enabled: false,
 			is_chat_default: false,
@@ -48,7 +52,7 @@ export class ProxyAgenticSearchEndpoint extends ChatEndpoint {
 				tokenizer: TokenizerType.O200K,
 				supports: { streaming: true, parallel_tool_calls: true, tool_calls: true, vision: false },
 				limits: {
-					max_prompt_tokens: 128000,
+					max_prompt_tokens: 260000,
 					max_output_tokens: 16000,
 				}
 			}
@@ -61,11 +65,12 @@ export class ProxyAgenticSearchEndpoint extends ChatEndpoint {
 			instantiationService,
 			configurationService,
 			experimentationService,
+			chatWebSocketService,
 			logService
 		);
 	}
 
-	override get urlOrRequestMetadata() {
+	override get urlOrRequestMetadata(): RequestMetadata {
 		return { type: RequestType.ProxyChatCompletions };
 	}
 }

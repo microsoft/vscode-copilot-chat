@@ -103,25 +103,28 @@ export class ChatVariablesCollection {
 }
 
 /**
- * Check if provided variable is a "prompt instruction".
- */
-export function isPromptInstruction(variable: PromptVariable): boolean {
-	return variable.reference.id.startsWith('vscode.prompt.instructions');
-}
-
-/**
- * Check if provided variable is a "prompt instruction text" (index file).
- */
-export function isPromptInstructionText(variable: PromptVariable): variable is PromptVariable & { value: string } {
-	return variable.reference.id === 'vscode.prompt.instructions.text';
-}
-
-
-/**
  * Check if provided variable is a "prompt file".
  */
-export function isPromptFile(variable: PromptVariable): boolean {
+export function isPromptFile(variable: PromptVariable): variable is PromptVariable & { value: vscode.Uri } {
 	return variable.reference.id.startsWith(PromptFileIdPrefix);
 }
 
 export const PromptFileIdPrefix = 'vscode.prompt.file';
+
+/**
+ * Check if provided variable is an "instruction file".
+ */
+export function isInstructionFile(variable: PromptVariable): variable is PromptVariable & { value: vscode.Uri } {
+	return variable.reference.id.startsWith(InstructionFileIdPrefix);
+}
+
+export const InstructionFileIdPrefix = 'vscode.instructions.file';
+
+/**
+ * Check if provided variable is the workspace "customizations index" file.
+ */
+export function isCustomizationsIndex(variable: PromptVariable): variable is PromptVariable & { value: string } {
+	return variable.reference.id === CustomizationsIndexId;
+}
+
+export const CustomizationsIndexId = 'vscode.customizations.index';

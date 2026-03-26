@@ -16,11 +16,10 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IFileSystemService } from '../../../filesystem/common/fileSystemService';
 import { FileType } from '../../../filesystem/common/fileTypes';
-import { CodeSearchResult } from '../../../remoteCodeSearch/common/remoteCodeSearch';
 import { ISearchService } from '../../../search/common/searchService';
 import { createPlatformServices, TestingServiceCollection } from '../../../test/node/services';
 import { IWorkspaceService, NullWorkspaceService } from '../../../workspace/common/workspaceService';
-import { ExternalIngestClient, ExternalIngestFile, IExternalIngestClient } from '../../node/codeSearch/externalIngestClient';
+import { ExternalIngestClient, ExternalIngestFile, ExternalIngestUpdateIndexResult, IExternalIngestClient } from '../../node/codeSearch/externalIngestClient';
 import { ExternalIngestIndex } from '../../node/codeSearch/externalIngestIndex';
 
 const emptyProgressCb: (message: string) => void = () => { };
@@ -41,11 +40,11 @@ function createMockExternalIngestClient(options?: {
 			return Array.from(ingestedFiles.values());
 		},
 		searchCalls,
-		async updateIndex(_filesetName: string, _currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, _callTracker: CallTracker, _token: CancellationToken, _onProgress?: (message: string) => void): Promise<Result<{ checkpoint: string }, Error>> {
+		async updateIndex(_filesetName: string, _currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, _callTracker: CallTracker, _token: CancellationToken, _onProgress?: (message: string) => void): Promise<Result<ExternalIngestUpdateIndexResult, Error>> {
 			for await (const file of allFiles) {
 				ingestedFiles.set(file.uri, file);
 			}
-			return Result.ok({ checkpoint: 'mock-checkpoint' });
+			return Result.ok({ checkpoint: 'mock-checkpoint', totalFileCount: ingestedFiles.size, updatedFileCount: ingestedFiles.size });
 		},
 		async listFilesets(_callTracker: CallTracker, _token: CancellationToken): Promise<string[]> {
 			return [];
@@ -53,9 +52,9 @@ function createMockExternalIngestClient(options?: {
 		async deleteFileset(_filesetName: string, _callTracker: CallTracker, _token: CancellationToken): Promise<void> {
 			// no-op
 		},
-		async searchFilesets(filesetName: string, _rootUri: URI, prompt: string, _limit: number, _callTracker: CallTracker, _token: CancellationToken): Promise<CodeSearchResult> {
+		async searchFilesets(filesetName: string, prompt: string, _limit: number, _callTracker: CallTracker, _token: CancellationToken): Promise<undefined> {
 			searchCalls.push({ filesetName, prompt });
-			return { chunks: [], outOfSync: false };
+			return undefined;
 		},
 		canIngestPathAndSize(filePath: string, size: number): boolean {
 			return options?.canIngestPathAndSize?.(filePath, size) ?? true;
@@ -223,55 +222,65 @@ suite('ExternalIngestIndex', () => {
 		return { files, mockFs, mockClient, index };
 	}
 
-	test('shouldIndexFile returns true by default', async () => {
+	test('shouldIndexFile returns true by default for file in workspace', async () => {
+		const workspace = URI.file('/workspace');
+		testingServiceCollection.set(IWorkspaceService, new MockWorkspaceService([workspace]));
 		const accessor = disposables.add(testingServiceCollection.createTestingAccessor());
 		const instantiationService = accessor.get(IInstantiationService);
 
 		const index = disposables.add(createExternalIngestIndex(instantiationService));
-
-		const workspace = URI.file('/workspace');
 		const file = URI.joinPath(workspace, 'src', 'file.ts');
 		assert.strictEqual(await index.shouldTrackFile(file, CancellationToken.None), true);
 	});
 
 	test('shouldIndexFile returns false for files under code search roots', async () => {
+		const workspace = URI.file('/workspace');
+		const codeSearchRoot = URI.file('/other');
+		testingServiceCollection.set(IWorkspaceService, new MockWorkspaceService([workspace, codeSearchRoot]));
 		const accessor = disposables.add(testingServiceCollection.createTestingAccessor());
 		const instantiationService = accessor.get(IInstantiationService);
 
 		const mockClient = createMockExternalIngestClient();
 		const index = disposables.add(instantiationService.createInstance(ExternalIngestIndex, mockClient));
 
-		const other = URI.file('/other');
-		const fileNotUnderCodeSearch = URI.joinPath(other, 'src', 'file.ts');
+		index.updateCodeSearchRoots([codeSearchRoot]);
+
+		const fileUnderCodeSearch = URI.joinPath(codeSearchRoot, 'src', 'file.ts');
+		assert.strictEqual(await index.shouldTrackFile(fileUnderCodeSearch, CancellationToken.None), false);
+
+		const fileNotUnderCodeSearch = URI.joinPath(workspace, 'src', 'file.ts');
 		assert.strictEqual(await index.shouldTrackFile(fileNotUnderCodeSearch, CancellationToken.None), true);
 	});
 
 	test('shouldIndexFile handles nested paths correctly', async () => {
+		const workspace = URI.file('/workspace');
+		const codeSearchRoot = URI.joinPath(workspace, 'repo');
+		testingServiceCollection.set(IWorkspaceService, new MockWorkspaceService([workspace]));
 		const accessor = disposables.add(testingServiceCollection.createTestingAccessor());
 		const instantiationService = accessor.get(IInstantiationService);
 
 		const mockClient = createMockExternalIngestClient();
 		const index = disposables.add(instantiationService.createInstance(ExternalIngestIndex, mockClient));
 
-		const codeSearchRoot = URI.file('/repo');
 		index.updateCodeSearchRoots([codeSearchRoot]);
 
 		assert.strictEqual(await index.shouldTrackFile(URI.joinPath(codeSearchRoot, 'file.ts'), CancellationToken.None), false);
 		assert.strictEqual(await index.shouldTrackFile(URI.joinPath(codeSearchRoot, 'src', 'nested', 'file.ts'), CancellationToken.None), false);
 
-		assert.strictEqual(await index.shouldTrackFile(URI.file('/repo2/file.ts'), CancellationToken.None), true);
-		assert.strictEqual(await index.shouldTrackFile(URI.file('/other/repo/file.ts'), CancellationToken.None), true);
+		assert.strictEqual(await index.shouldTrackFile(URI.joinPath(workspace, 'file.ts'), CancellationToken.None), true);
+		assert.strictEqual(await index.shouldTrackFile(URI.joinPath(workspace, 'repo2', 'file.ts'), CancellationToken.None), true);
 	});
 
 	test('updateCodeSearchRoots clears previous roots', async () => {
+		const root1 = URI.file('/repo1');
+		const root2 = URI.file('/repo2');
+		testingServiceCollection.set(IWorkspaceService, new MockWorkspaceService([root1, root2]));
 		const accessor = disposables.add(testingServiceCollection.createTestingAccessor());
 		const instantiationService = accessor.get(IInstantiationService);
 
 		const mockClient = createMockExternalIngestClient();
 		const index = disposables.add(instantiationService.createInstance(ExternalIngestIndex, mockClient));
 
-		const root1 = URI.file('/repo1');
-		const root2 = URI.file('/repo2');
 		const file1 = URI.joinPath(root1, 'file.ts');
 		const file2 = URI.joinPath(root2, 'file.ts');
 
@@ -285,6 +294,7 @@ suite('ExternalIngestIndex', () => {
 	});
 
 	test('can mock ExternalIngestClient to test file ingestion', async () => {
+		testingServiceCollection.set(IWorkspaceService, new MockWorkspaceService([URI.file('/workspace')]));
 		const accessor = disposables.add(testingServiceCollection.createTestingAccessor());
 		const instantiationService = accessor.get(IInstantiationService);
 
@@ -305,6 +315,7 @@ suite('ExternalIngestIndex', () => {
 
 		testingServiceCollection.set(IFileSystemService, mockFs);
 		testingServiceCollection.set(ISearchService, mockFs);
+		testingServiceCollection.set(IWorkspaceService, new MockWorkspaceService([URI.file('/workspace')]));
 		const customAccessor = disposables.add(testingServiceCollection.createTestingAccessor());
 		const customInstantiationService = customAccessor.get(IInstantiationService);
 		disposables.add(customInstantiationService.createInstance(ExternalIngestIndex, mockClient));

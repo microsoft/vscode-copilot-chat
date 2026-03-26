@@ -169,6 +169,50 @@ type RecentCodeSnippet = {
 };
 
 /**
+ * Select focal ranges prioritizing the most recent (earliest in array order),
+ * capping the total line span to prevent wide-scatter edits from blowing up
+ * the initial page coverage in {@link clipAroundFocalRanges}.
+ *
+ * Focal ranges from {@link historyEntriesToCodeSnippet} are ordered most-recent-first.
+ * When edits are spread across a file (e.g., line 10 + line 90), including all
+ * ranges would cause the initial focal span to cover the entire document. This
+ * function greedily includes ranges until a line span cap is reached.
+ *
+ * @param focalRanges  Character-offset ranges ordered most-recent-first.
+ * @param getLineNumber Maps a character offset to a 1-based line number.
+ * @param maxSpanLines  Maximum allowed line span for the combined focal range.
+ */
+export function selectFocalRangesWithinSpanCap(
+	focalRanges: readonly OffsetRange[],
+	getLineNumber: (offset: number) => number,
+	maxSpanLines: number,
+): readonly OffsetRange[] {
+	if (focalRanges.length <= 1) {
+		return focalRanges;
+	}
+
+	const selected: OffsetRange[] = [focalRanges[0]];
+	let startLine = getLineNumber(focalRanges[0].start);
+	let endLine = getLineNumber(Math.max(focalRanges[0].start, focalRanges[0].endExclusive - 1));
+
+	for (let i = 1; i < focalRanges.length; i++) {
+		const range = focalRanges[i];
+		const rangeStartLine = getLineNumber(range.start);
+		const rangeEndLine = getLineNumber(Math.max(range.start, range.endExclusive - 1));
+		const candidateStart = Math.min(startLine, rangeStartLine);
+		const candidateEnd = Math.max(endLine, rangeEndLine);
+		if (candidateEnd - candidateStart > maxSpanLines) {
+			break;
+		}
+		selected.push(range);
+		startLine = candidateStart;
+		endLine = candidateEnd;
+	}
+
+	return selected;
+}
+
+/**
  * Convert a single history entry to a code snippet.
  * When `clippingStrategy` is `AroundEditRange` or `Proportional`, edit entries get `focalRanges`
  * derived from the edit's replacement ranges in the post-edit document.
@@ -311,8 +355,54 @@ function clipFullDocument(
 }
 
 /**
+ * Compute the token cost of the focal pages for a file — the minimum tokens
+ * needed to include just the pages that contain the focal ranges.
+ *
+ * Returns `undefined` when there are no usable focal ranges.
+ */
+export function computeFocalPageCost(
+	content: StringText,
+	focalRanges: readonly OffsetRange[],
+	pageSize: number,
+	computeTokens: (s: string) => number,
+): number | undefined {
+	const contentTransform = content.getTransformer();
+	const maxFocalSpanLines = pageSize * 3;
+	const capped = selectFocalRangesWithinSpanCap(
+		focalRanges,
+		offset => contentTransform.getPosition(offset).lineNumber,
+		maxFocalSpanLines,
+	);
+
+	if (capped.length === 0) {
+		return undefined;
+	}
+
+	const startOffset = Math.min(...capped.map(r => r.start));
+	const endOffset = Math.max(...capped.map(r => r.endExclusive - 1));
+	const startLine = contentTransform.getPosition(startOffset).lineNumber;
+	const endLine = contentTransform.getPosition(endOffset).lineNumber;
+
+	const lines = content.getLines();
+	const firstPageIdx = Math.floor((startLine - 1) / pageSize);
+	const lastPageIdxIncl = Math.floor((endLine - 1) / pageSize);
+
+	let cost = 0;
+	for (let p = firstPageIdx; p <= lastPageIdxIncl; p++) {
+		const start = p * pageSize;
+		const end = Math.min(start + pageSize, lines.length);
+		cost += countTokensForLines(lines.slice(start, end), computeTokens);
+	}
+	return cost;
+}
+
+/**
  * Clip a file around its focal ranges (visible ranges or edit locations)
  * by expanding pages outward until budget is exhausted.
+ *
+ * The focal range span is capped to avoid blowing up the initial page
+ * coverage when edits are spread across the file. Newer focal ranges
+ * (earlier in the array) are prioritized over older ones.
  *
  * @returns The remaining token budget after clipping, or `undefined` if nothing fit into the budget.
  */
@@ -325,9 +415,27 @@ function clipAroundFocalRanges(
 	includeLineNumbers: xtabPromptOptions.IncludeLineNumbersOption,
 	result: { snippets: string[]; docsInPrompt: Set<DocumentId> },
 ): number | undefined {
-	const startOffset = Math.min(...document.focalRanges.map(range => range.start));
-	const endOffset = Math.max(...document.focalRanges.map(range => range.endExclusive - 1));
+	if (tokenBudget <= 0) {
+		return undefined;
+	}
+
 	const contentTransform = document.content.getTransformer();
+
+	// Limit focal range span so that wide-scatter edits don't consume
+	// the entire budget on the initial pages alone.
+	const maxFocalSpanLines = pageSize * 3;
+	const focalRanges = selectFocalRangesWithinSpanCap(
+		document.focalRanges,
+		offset => contentTransform.getPosition(offset).lineNumber,
+		maxFocalSpanLines,
+	);
+
+	if (focalRanges.length === 0) {
+		return tokenBudget;
+	}
+
+	const startOffset = Math.min(...focalRanges.map(range => range.start));
+	const endOffset = Math.max(...focalRanges.map(range => range.endExclusive - 1));
 	const startPos = contentTransform.getPosition(startOffset);
 	const endPos = contentTransform.getPosition(endOffset);
 
@@ -342,6 +450,12 @@ function clipAroundFocalRanges(
 
 	if (budgetLeft === tokenBudget) {
 		return undefined; // nothing fit — signal caller to stop
+	}
+
+	// If the focal pages alone exceed the budget (negative budgetLeft from
+	// expandRangeToPageRange), skip this file rather than silently overshooting.
+	if (budgetLeft < 0) {
+		return undefined;
 	}
 
 	const startLineOffset = firstPageIdx * pageSize;
@@ -421,8 +535,12 @@ function buildCodeSnippetsGreedy(
 }
 
 /**
- * Proportional budget allocation: distribute tokens across files based on edit location count,
- * then clip each file centered on its focal ranges.
+ * Two-pass proportional budget allocation:
+ * 1. Compute the minimum focal page cost for each file and determine which files
+ *    can be included within the total budget. When files must be dropped, the
+ *    oldest (last in the most-recent-first input order) are dropped first.
+ * 2. Distribute the remaining budget proportionally (by edit-entry-count weight)
+ *    across included files for page expansion around their focal ranges.
  */
 function buildCodeSnippetsWithProportionalBudget(
 	recentlyViewedCodeSnippets: RecentCodeSnippet[],
@@ -443,27 +561,42 @@ function buildCodeSnippetsWithProportionalBudget(
 		return { snippets: [], docsInPrompt: new Set() };
 	}
 
-	// Compute weights per file based on edit entry count
-	const weights = recentlyViewedCodeSnippets.map(f => f.editEntryCount ?? 1);
+	// --- Pass 1: compute minimum focal costs ---
+	const focalCosts = recentlyViewedCodeSnippets.map(file =>
+		file.focalRanges !== undefined && file.focalRanges.length > 0
+			? computeFocalPageCost(file.content, file.focalRanges, pageSize, computeTokens) ?? 0
+			: 0
+	);
+
+	// Determine which files to include. Input is ordered most-recent-first,
+	// so we drop from the end (oldest) when focal minimums exceed the budget.
+	let includedCount = recentlyViewedCodeSnippets.length;
+	let sumFocalCosts = focalCosts.reduce((a, b) => a + b, 0);
+	while (includedCount > 0 && sumFocalCosts > totalBudget) {
+		includedCount--;
+		sumFocalCosts -= focalCosts[includedCount];
+	}
+
+	if (includedCount === 0) {
+		return { snippets: [], docsInPrompt: new Set() };
+	}
+
+	// --- Pass 2: distribute expansion budget proportionally ---
+	const expansionBudget = totalBudget - sumFocalCosts;
+
+	const weights = recentlyViewedCodeSnippets.slice(0, includedCount).map(f => f.editEntryCount ?? 1);
 	const totalWeight = weights.reduce((sum, w) => sum + w, 0);
 
-	// Per-file minimum: enough for at least 1 page
-	const minPerFile = Math.floor(totalBudget / (recentlyViewedCodeSnippets.length * 4));
-	// Per-file maximum: no more than 60% of total budget
-	const maxPerFile = Math.floor(totalBudget * 0.6);
-
-	// Pre-compute per-file budgets
-	const fileBudgets = weights.map(w => {
-		const raw = Math.floor(totalBudget * (w / totalWeight));
-		return Math.max(minPerFile, Math.min(maxPerFile, raw));
-	});
+	// Per-file expansion shares, proportional to edit-entry weight
+	const expansionShares = weights.map(w => Math.floor(expansionBudget * (w / totalWeight)));
 
 	let unspentBudget = 0;
 
-	for (let i = 0; i < recentlyViewedCodeSnippets.length; i++) {
+	for (let i = 0; i < includedCount; i++) {
 		const file = recentlyViewedCodeSnippets[i];
 		const lines = file.content.getLines();
-		const effectiveBudget = fileBudgets[i] + unspentBudget;
+		// Each file's budget = guaranteed focal cost + proportional expansion share + carry-forward
+		const effectiveBudget = focalCosts[i] + expansionShares[i] + unspentBudget;
 
 		if (file.focalRanges !== undefined && file.focalRanges.length > 0) {
 			const budgetLeft = clipAroundFocalRanges(

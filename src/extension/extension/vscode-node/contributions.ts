@@ -6,6 +6,7 @@
 import { PromptFileContribution } from '../../agents/vscode-node/promptFileContrib';
 import { AuthenticationContrib } from '../../authentication/vscode-node/authentication.contribution';
 import { BYOKContrib } from '../../byok/vscode-node/byokContribution';
+import { ChatDebugFileLoggerContribution } from '../../chat/vscode-node/chatDebugFileLoggerService';
 import { ChatQuotaContribution } from '../../chat/vscode-node/chatQuota.contribution';
 import { ChatSessionContextContribution } from '../../chatSessionContext/vscode-node/chatSessionContextProvider';
 import { ChatSessionsContrib } from '../../chatSessions/vscode-node/chatSessions';
@@ -29,7 +30,6 @@ import { GitHubMcpContrib } from '../../githubMcp/vscode-node/githubMcp.contribu
 import { IgnoredFileProviderContribution } from '../../ignore/vscode-node/ignoreProvider';
 import { JointCompletionsProviderContribution } from '../../inlineEdits/vscode-node/jointInlineCompletionProvider';
 import { FixTestFailureContribution } from '../../intents/vscode-node/fixTestFailureContributions';
-import { TestGenLensContribution } from '../../intents/vscode-node/testGenLens';
 import { ExtensionStateCommandContribution } from '../../log/vscode-node/extensionStateCommand';
 import { FetcherTelemetryContribution, LoggingActionsContrib } from '../../log/vscode-node/loggingActions';
 import { RequestLogTree } from '../../log/vscode-node/requestLogTree';
@@ -37,6 +37,7 @@ import { McpSetupCommands } from '../../mcp/vscode-node/commands';
 import { NotebookFollowCommands } from '../../notebook/vscode-node/followActions';
 import { CopilotDebugCommandContribution } from '../../onboardDebug/vscode-node/copilotDebugCommandContribution';
 import { OnboardTerminalTestsContribution } from '../../onboardDebug/vscode-node/onboardTerminalTestsContribution';
+import { OTelContrib } from '../../otel/vscode-node/otelContrib';
 import { PowerStateLogger } from '../../power/vscode-node/powerStateLogger';
 import { DebugCommandsContribution } from '../../prompt/vscode-node/debugCommands';
 import { RenameSuggestionsContrib } from '../../prompt/vscode-node/renameSuggestions';
@@ -47,6 +48,7 @@ import { SettingsSchemaFeature } from '../../settingsSchema/vscode-node/settings
 import { SurveyCommandContribution } from '../../survey/vscode-node/surveyCommands';
 import { SetupTestsContribution } from '../../testing/vscode/setupTestContributions';
 import { ToolsContribution } from '../../tools/vscode-node/tools';
+import { OTelChatDebugLogProviderContribution } from '../../trajectory/vscode-node/otelChatDebugLogProvider';
 import { TrajectoryExportCommands } from '../../trajectory/vscode-node/trajectoryExportCommands';
 import { InlineCompletionContribution } from '../../typescriptContext/vscode-node/languageContextService';
 import { NesRenameContribution } from '../../typescriptContext/vscode-node/nesRenameService';
@@ -100,6 +102,7 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	workspaceIndexingContribution,
 	asContributionFactory(ChatSessionsContrib),
 	asContributionFactory(GitHubMcpContrib),
+	asContributionFactory(OTelContrib),
 ];
 
 /**
@@ -110,7 +113,6 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 */
 export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(ConfigurationMigrationContribution),
-	asContributionFactory(TestGenLensContribution),
 	asContributionFactory(RequestLogTree),
 	asContributionFactory(OnboardTerminalTestsContribution),
 	asContributionFactory(ToolsContribution),
@@ -127,4 +129,6 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(PromptFileContribution),
 	newWorkspaceContribution,
 	asContributionFactory(TrajectoryExportCommands),
+	asContributionFactory(OTelChatDebugLogProviderContribution),
+	asContributionFactory(ChatDebugFileLoggerContribution),
 ];

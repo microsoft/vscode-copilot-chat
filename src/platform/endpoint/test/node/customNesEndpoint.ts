@@ -12,6 +12,7 @@ import { IEnvService } from '../../../env/common/envService';
 import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { IEndpointBody } from '../../../networking/common/networking';
+import { IChatWebSocketManager } from '../../../networking/node/chatWebSocketManager';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
@@ -33,10 +34,12 @@ export class CustomNesEndpoint extends ChatEndpoint {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
+		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
 		@ILogService logService: ILogService
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: CHAT_MODEL.CUSTOM_NES,
+			vendor: 'Custom NES',
 			name: 'custom-nes',
 			model_picker_enabled: false,
 			is_chat_default: false,
@@ -68,6 +71,7 @@ export class CustomNesEndpoint extends ChatEndpoint {
 			instantiationService,
 			configurationService,
 			experimentationService,
+			chatWebSocketService,
 			logService
 		);
 	}

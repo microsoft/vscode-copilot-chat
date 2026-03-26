@@ -12,7 +12,9 @@ import { ISessionTranscriptService } from '../../../platform/chat/common/session
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ChatEndpointFamily, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ProxyAgenticSearchEndpoint } from '../../../platform/endpoint/node/proxyAgenticSearchEndpoint';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -47,12 +49,14 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 		@IToolsService private readonly toolsService: IToolsService,
 		@IAuthenticationChatUpgradeService authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService telemetryService: ITelemetryService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
 		@IChatHookService chatHookService: IChatHookService,
 		@ISessionTranscriptService sessionTranscriptService: ISessionTranscriptService,
+		@IFileSystemService fileSystemService: IFileSystemService,
+		@IOTelService otelService: IOTelService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService, fileSystemService, otelService);
 	}
 
 	protected override createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined): IBuildPromptContext {
@@ -69,14 +73,19 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 		return context;
 	}
 
+	private static readonly DEFAULT_AGENTIC_PROXY_MODEL = 'agentic-search-v3';
+
 	/**
 	 * Get the endpoint to use for the search subagent
 	 */
 	private async getEndpoint() {
 		const modelName = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentModel, this._experimentationService) as ChatEndpointFamily | undefined;
-		const useAgenticProxy = this.configurationService.getConfig(ConfigKey.Advanced.SearchSubagentUseAgenticProxy);
+		const useAgenticProxy = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentUseAgenticProxy, this._experimentationService);
+
 		if (useAgenticProxy) {
-			return this.instantiationService.createInstance(ProxyAgenticSearchEndpoint);
+			// Use agentic proxy with SearchSubagentModel or default to 'agentic-search-v3'
+			const agenticProxyModel = modelName || SearchSubagentToolCallingLoop.DEFAULT_AGENTIC_PROXY_MODEL;
+			return this.instantiationService.createInstance(ProxyAgenticSearchEndpoint, agenticProxyModel);
 		}
 
 		if (modelName) {
@@ -126,13 +135,15 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 		return allTools.filter(tool => allowedSearchTools.has(tool.name as ToolName));
 	}
 
-	protected async fetch({ messages, finishedCb, requestOptions }: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
+	protected async fetch({ messages, finishedCb, requestOptions, enableThinking, reasoningEffort }: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
 		const endpoint = await this.getEndpoint();
 		return endpoint.makeChatRequest2({
 			debugName: SearchSubagentToolCallingLoop.ID,
 			messages,
 			finishedCb,
 			location: this.options.location,
+			enableThinking,
+			reasoningEffort,
 			requestOptions: {
 				...requestOptions,
 				temperature: 0
@@ -142,8 +153,10 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 			telemetryProperties: {
 				messageId: randomUUID(),
 				messageSource: 'chat.editAgent',
-				subType: 'subagent/search'
+				subType: 'subagent/search',
+				conversationId: this.options.conversation.sessionId
 			},
+			requestKindOptions: { kind: 'subagent' }
 		}, token);
 	}
 }

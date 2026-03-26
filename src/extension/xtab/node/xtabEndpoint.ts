@@ -12,6 +12,7 @@ import { IChatModelInformation } from '../../../platform/endpoint/common/endpoin
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
@@ -24,6 +25,7 @@ export class XtabEndpoint extends ChatEndpoint {
 	private static chatModelInfo: IChatModelInformation = {
 		id: CHAT_MODEL.XTAB_4O_MINI_FINETUNED,
 		name: 'xtab-4o-mini-finetuned',
+		vendor: 'xtab',
 		model_picker_enabled: false,
 		is_chat_default: false,
 		is_chat_fallback: false,
@@ -60,6 +62,7 @@ export class XtabEndpoint extends ChatEndpoint {
 		@ITokenizerProvider _tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService _instantiationService: IInstantiationService,
 		@IExperimentationService _experimentationService: IExperimentationService,
+		@IChatWebSocketManager _chatWebSocketService: IChatWebSocketManager,
 		@ILogService _logService: ILogService
 	) {
 		const chatModelInfo = _configuredModelName ? { ...XtabEndpoint.chatModelInfo, id: _configuredModelName } : XtabEndpoint.chatModelInfo;
@@ -71,6 +74,7 @@ export class XtabEndpoint extends ChatEndpoint {
 			_instantiationService,
 			_configService,
 			_experimentationService,
+			_chatWebSocketService,
 			_logService
 		);
 	}

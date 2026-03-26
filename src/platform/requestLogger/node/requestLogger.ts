@@ -168,6 +168,7 @@ export interface IRequestLogger {
 
 	onDidChangeRequests: Event<void>;
 	getRequests(): LoggedInfo[];
+	getRequestById(id: string): LoggedInfo | undefined;
 
 	enableWorkspaceEditTracing(): void;
 	disableWorkspaceEditTracing(): void;
@@ -214,10 +215,28 @@ export interface ILoggedChatMLCancelationRequest extends ILoggedChatMLRequest {
 export interface IMarkdownContentRequest {
 	type: LoggedRequestKind.MarkdownContentRequest;
 	startTimeMs: number;
-	icon: ThemeIcon | undefined;
+	icon: ThemeIcon | undefined | (() => ThemeIcon | undefined);
 	debugName: string;
-	markdownContent: string;
+	markdownContent: string | (() => string);
 	isConversationRequest?: boolean;
+	/**
+	 * When set, the log tree and virtual document will refresh when this event fires.
+	 * Used for "live" entries that update over time (e.g. in-progress NES requests).
+	 */
+	onDidChange?: Event<void>;
+	/**
+	 * When set, determines whether this entry should be visible in the log tree.
+	 * Used for live entries that may become hidden (e.g. skipped/cancelled NES requests).
+	 */
+	isVisible?: () => boolean;
+}
+
+export function resolveMarkdownContent(entry: IMarkdownContentRequest): string {
+	return typeof entry.markdownContent === 'function' ? entry.markdownContent() : entry.markdownContent;
+}
+
+export function resolveMarkdownIcon(entry: IMarkdownContentRequest): ThemeIcon | undefined {
+	return typeof entry.icon === 'function' ? entry.icon() : entry.icon;
 }
 
 export type LoggedRequest = (
@@ -303,6 +322,7 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 	public abstract addPromptTrace(elementName: string, endpoint: IChatEndpointInfo, result: RenderPromptResult, trace: HTMLTracer): void;
 	public abstract addEntry(entry: LoggedRequest): void;
 	public abstract getRequests(): LoggedInfo[];
+	public abstract getRequestById(id: string): LoggedInfo | undefined;
 	abstract onDidChangeRequests: Event<void>;
 
 	public enableWorkspaceEditTracing(): void {

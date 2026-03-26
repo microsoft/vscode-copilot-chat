@@ -152,7 +152,7 @@ export class GithubRepoTool implements ICopilotTool<GithubRepoToolParams> {
 		}
 
 		const checkIndexReady = async (): Promise<Result<boolean, PrepareError>> => {
-			const state = await raceCancellationError(this._githubCodeSearch.getRemoteIndexState({ silent: true }, githubRepoId, token), token);
+			const state = await raceCancellationError(this._githubCodeSearch.getRemoteIndexState({ silent: true }, githubRepoId, new TelemetryCorrelationId('GitHubRepoTool'), token), token);
 			if (!state.isOk()) {
 				if (state.err.type === 'not-authorized') {
 					return Result.error<PrepareError>({
@@ -221,7 +221,7 @@ class GithubChunkSearchResults extends PromptElement<GithubChunkSearchResultsPro
 
 	override render(_state: void, _sizing: PromptSizing, _progress?: vscode.Progress<vscode.ChatResponsePart>, _token?: vscode.CancellationToken): Promise<PromptPiece | undefined> | PromptPiece | undefined {
 		return <WorkspaceChunkList
-			result={{ chunks: this.props.chunks, isFullWorkspace: false }}
+			result={{ chunks: this.props.chunks }}
 			referencesOut={this.props.referencesOut}
 			absolutePaths={true}
 			isToolCall={true} />;

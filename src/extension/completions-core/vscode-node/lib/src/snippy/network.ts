@@ -52,6 +52,7 @@ export async function call<Res, Req = unknown>(
 	let res: InstanceType<typeof Response>;
 	try {
 		res = await instantiationService.invokeFunction(acc => acc.get(ICompletionsFetcherService).fetch(getEndpointUrl(acc, token, 'origin-tracker', endpoint), {
+			callSite: 'snippy-network',
 			method: config.method,
 			body: config.method === 'POST' ? JSON.stringify(config.body) : undefined,
 			headers: {

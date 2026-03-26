@@ -117,10 +117,6 @@ export const enum EditTestStrategy {
 	 */
 	Edits,
 	/**
-	 * Tests Edits2 (with edit tool)
-	 */
-	Edits2,
-	/**
 	 * We will test an inline interaction.
 	 */
 	Inline,

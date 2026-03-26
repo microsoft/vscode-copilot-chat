@@ -55,6 +55,7 @@ import { LlmNESTelemetryBuilder, NextEditProviderTelemetryBuilder, TelemetrySend
 import { INextEditResult } from '../../extension/inlineEdits/node/nextEditResult';
 import { IPowerService, NullPowerService } from '../../extension/power/common/powerService';
 import { ChatMLFetcherImpl } from '../../extension/prompt/node/chatMLFetcher';
+import { ISimilarFilesContextService } from '../../extension/xtab/common/similarFilesContextService';
 import { XtabProvider } from '../../extension/xtab/node/xtabProvider';
 import { IAuthenticationService } from '../../platform/authentication/common/authentication';
 import { ICopilotTokenManager } from '../../platform/authentication/common/copilotTokenManager';
@@ -95,8 +96,12 @@ import { TestLanguageDiagnosticsService } from '../../platform/languages/common/
 import { ConsoleLog, ILogService, LogLevel as InternalLogLevel, LogServiceImpl } from '../../platform/log/common/logService';
 import { ICompletionsFetchService } from '../../platform/nesFetch/common/completionsFetchService';
 import { CompletionsFetchService } from '../../platform/nesFetch/node/completionsFetchServiceImpl';
-import { FetchOptions, IAbortController, IFetcherService, PaginationOptions } from '../../platform/networking/common/fetcherService';
+import { FetchOptions, HeadersImpl, IAbortController, IFetcherService, PaginationOptions, WebSocketConnection, WebSocketConnectOptions } from '../../platform/networking/common/fetcherService';
 import { IFetcher } from '../../platform/networking/common/networking';
+import { IChatWebSocketManager, NullChatWebSocketManager } from '../../platform/networking/node/chatWebSocketManager';
+import { NoopOTelService } from '../../platform/otel/common/noopOtelService';
+import { resolveOTelConfig } from '../../platform/otel/common/otelConfig';
+import { IOTelService } from '../../platform/otel/common/otelService';
 import { IProxyModelsService } from '../../platform/proxyModels/common/proxyModelsService';
 import { ProxyModelsService } from '../../platform/proxyModels/node/proxyModelsService';
 import { NullRequestLogger } from '../../platform/requestLogger/node/nullRequestLogger';
@@ -238,7 +243,7 @@ class NESProvider extends Disposable implements INESProvider<NESResult> {
 		this._debugRecorder = this._register(new DebugRecorder(this._options.workspace));
 
 		this._nextEditProvider = instantiationService.createInstance(NextEditProvider, this._options.workspace, statelessNextEditProvider, historyContextProvider, xtabHistoryTracker, this._debugRecorder);
-		this._telemetrySender = this._register(instantiationService.createInstance(TelemetrySender));
+		this._telemetrySender = this._register(instantiationService.createInstance(TelemetrySender, this._options.workspace));
 	}
 
 	getId(): string {
@@ -368,6 +373,8 @@ function setupServices(options: INESProviderOptions) {
 	builder.define(ICopilotTokenManager, copilotTokenManager);
 	builder.define(IPowerService, new SyncDescriptor(NullPowerService));
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
+	builder.define(IChatWebSocketManager, new SyncDescriptor(NullChatWebSocketManager));
+	builder.define(IOTelService, new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'chatlib' })));
 	builder.define(IChatQuotaService, new SyncDescriptor(ChatQuotaService));
 	builder.define(IInteractionService, new SyncDescriptor(InteractionService));
 	builder.define(IRequestLogger, new SyncDescriptor(NullRequestLogger));
@@ -383,7 +390,26 @@ function setupServices(options: INESProviderOptions) {
 	builder.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
 	builder.define(IUndesiredModelsManager, options.undesiredModelsManager || new SyncDescriptor(NullUndesiredModelsManager));
 	builder.define(ITerminalService, options.terminalService || new SyncDescriptor(NullTerminalService));
+	builder.define(ISimilarFilesContextService, new SyncDescriptor(NullSimilarFilesContextService));
+	builder.define(IEndpointProvider, new NullEndpointProvider());
 	return builder.seal();
+}
+
+class NullSimilarFilesContextService implements ISimilarFilesContextService {
+	declare readonly _serviceBrand: undefined;
+
+	async compute(): Promise<undefined> {
+		return undefined;
+	}
+}
+
+class NullEndpointProvider implements IEndpointProvider {
+	declare readonly _serviceBrand: undefined;
+	readonly onDidModelsRefresh = VsEvent.None;
+	async getAllCompletionModels(): Promise<[]> { return []; }
+	async getAllChatEndpoints(): Promise<[]> { return []; }
+	async getChatEndpoint(): Promise<never> { throw new Error('not implemented'); }
+	async getEmbeddingsEndpoint(): Promise<never> { throw new Error('not implemented'); }
 }
 
 export class SimpleExperimentationService extends Disposable implements IExperimentationService {
@@ -450,6 +476,8 @@ export class SimpleExperimentationService extends Disposable implements IExperim
 class SingleFetcherService implements IFetcherService {
 
 	declare readonly _serviceBrand: undefined;
+	readonly onDidFetch = VsEvent.None;
+	readonly onDidCompleteFetch = VsEvent.None;
 
 	constructor(
 		private readonly _fetcher: IFetcher,
@@ -465,6 +493,9 @@ class SingleFetcherService implements IFetcherService {
 
 	fetch(url: string, options: FetchOptions) {
 		return this._fetcher.fetch(url, options);
+	}
+	createWebSocket(url: string, options?: WebSocketConnectOptions): WebSocketConnection {
+		return { webSocket: new WebSocket(url, options), responseHeaders: new HeadersImpl({}), responseStatusCode: undefined, responseStatusText: undefined };
 	}
 	disconnectAll(): Promise<unknown> {
 		return this._fetcher.disconnectAll();

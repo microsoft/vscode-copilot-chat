@@ -6,9 +6,10 @@
 import * as http from 'http';
 import * as https from 'https';
 import { Readable } from 'stream';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IEnvService } from '../../env/common/envService';
 import { collectSingleLineErrorMessage } from '../../log/common/logService';
-import { FetchOptions, IAbortController, IHeaders, PaginationOptions, Response } from '../common/fetcherService';
+import { FetchOptions, HeadersImpl, IAbortController, IHeaders, PaginationOptions, ReportFetchEvent, Response, safeGetHostname } from '../common/fetcherService';
 import { IFetcher, userAgentLibraryHeader } from '../common/networking';
 
 export class NodeFetcher implements IFetcher {
@@ -17,7 +18,7 @@ export class NodeFetcher implements IFetcher {
 
 	constructor(
 		private readonly _envService: IEnvService,
-
+		private readonly _reportEvent: ReportFetchEvent = () => { },
 		private readonly _userAgentLibraryUpdate?: (original: string) => string,
 	) {
 	}
@@ -52,10 +53,16 @@ export class NodeFetcher implements IFetcher {
 			throw new Error(`Illegal arguments! 'signal' must be an instance of AbortSignal!`);
 		}
 
+		const internalId = generateUuid();
+		const hostname = safeGetHostname(url);
 		try {
-			return await this._fetch(url, method, headers, body, signal);
+			const response = await this._fetch(url, method, headers, body, signal, internalId, hostname);
+			this._reportEvent({ internalId, timestamp: Date.now(), outcome: 'success', phase: 'requestResponse', fetcher: NodeFetcher.ID, hostname, statusCode: response.status });
+			return response;
 		} catch (e) {
 			e.fetcherId = NodeFetcher.ID;
+			const outcome = e && !isAbortError(e) ? 'error' as const : 'cancel' as const;
+			this._reportEvent({ internalId, timestamp: Date.now(), outcome, phase: 'requestResponse', fetcher: NodeFetcher.ID, hostname, reason: e });
 			throw e;
 		}
 	}
@@ -86,7 +93,7 @@ export class NodeFetcher implements IFetcher {
 		return items;
 	}
 
-	private _fetch(url: string, method: 'GET' | 'POST' | 'PUT', headers: { [name: string]: string }, body: string | undefined, signal: AbortSignal): Promise<Response> {
+	private _fetch(url: string, method: 'GET' | 'POST' | 'PUT', headers: { [name: string]: string }, body: string | undefined, signal: AbortSignal, internalId: string, hostname: string): Promise<Response> {
 		return new Promise((resolve, reject) => {
 			const module = url.startsWith('https:') ? https : http;
 			const req = module.request(url, { method, headers }, res => {
@@ -103,7 +110,10 @@ export class NodeFetcher implements IFetcher {
 					res.statusMessage || '',
 					nodeFetcherResponse.headers,
 					nodeFetcherResponse.body(),
-					NodeFetcher.ID
+					NodeFetcher.ID,
+					this._reportEvent,
+					internalId,
+					hostname,
 				));
 			});
 			req.setTimeout(60 * 1000); // time out after 60s of receiving no data
@@ -156,25 +166,7 @@ class NodeFetcherResponse {
 		readonly res: http.IncomingMessage,
 		readonly signal: AbortSignal
 	) {
-		this.headers = new class implements IHeaders {
-			get(name: string): string | null {
-				const result = res.headers[name];
-				return Array.isArray(result) ? result[0] : result ?? null;
-			}
-			[Symbol.iterator](): Iterator<[string, string], any, undefined> {
-				const keys = Object.keys(res.headers);
-				let index = 0;
-				return {
-					next: (): IteratorResult<[string, string]> => {
-						if (index >= keys.length) {
-							return { done: true, value: undefined };
-						}
-						const key = keys[index++];
-						return { done: false, value: [key, this.get(key)!] };
-					}
-				};
-			}
-		};
+		this.headers = new HeadersImpl(res.headers);
 	}
 
 	public text(): Promise<string> {

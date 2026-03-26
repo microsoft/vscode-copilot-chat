@@ -48,6 +48,7 @@ export class SnippyFetchService {
 		const signal = abortController.signal;
 		const headers = await this.getHeaders();
 		const options = {
+			callSite: 'snippy-match',
 			method: 'POST',
 			headers,
 			json: requestBody,

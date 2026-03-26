@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
-import { IHeaders, Response } from '../../networking/common/fetcherService';
+import { IHeaders, ReportFetchEvent, Response } from '../../networking/common/fetcherService';
 
 
 export function createFakeResponse(statusCode: number, response: any = 'body') {
@@ -17,14 +17,17 @@ export function createFakeResponse(statusCode: number, response: any = 'body') {
 	);
 }
 
-export function createFakeStreamResponse(body: string | string[] | { chunk: string; shouldCancelStream: boolean }[], cts?: CancellationTokenSource): Response {
+export function createFakeStreamResponse(body: string | string[] | { chunk: string; shouldCancelStream: boolean }[], cts?: CancellationTokenSource, reportEvent: ReportFetchEvent = () => { }): Response {
 	const chunks = Array.isArray(body) ? body : [body];
 	return new Response(
 		200,
 		'Success',
 		new FakeHeaders(),
 		toStream(chunks, cts),
-		'test-stub'
+		'test-stub',
+		reportEvent,
+		'test',
+		'test',
 	);
 }
 

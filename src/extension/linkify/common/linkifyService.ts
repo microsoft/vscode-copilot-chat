@@ -14,6 +14,7 @@ import { FilePathLinkifier } from './filePathLinkifier';
 import { LinkifiedText } from './linkifiedText';
 import { Linkifier } from './linkifier';
 import { ModelFilePathLinkifier } from './modelFilePathLinkifier';
+import { StatCache } from './statCache';
 
 /**
  * A stateful linkifier.
@@ -83,13 +84,10 @@ export class LinkifyService implements ILinkifyService {
 	private readonly globalLinkifiers = new Set<IContributedLinkifierFactory>();
 
 	constructor(
-		@IFileSystemService fileSystem: IFileSystemService,
-		@IWorkspaceService workspaceService: IWorkspaceService,
+		@IFileSystemService private readonly fileSystem: IFileSystemService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IEnvService private readonly envService: IEnvService,
 	) {
-		// Model-generated links first (anchors), fallback legacy path linkifier afterwards
-		this.registerGlobalLinkifier({ create: () => new ModelFilePathLinkifier(fileSystem, workspaceService) });
-		this.registerGlobalLinkifier({ create: () => new FilePathLinkifier(fileSystem, workspaceService) });
 	}
 
 	registerGlobalLinkifier(linkifier: IContributedLinkifierFactory): IDisposable {
@@ -105,6 +103,15 @@ export class LinkifyService implements ILinkifyService {
 		context: LinkifierContext,
 		additionalLinkifiers?: readonly IContributedLinkifierFactory[],
 	): ILinkifier {
-		return new Linkifier(context, this.envService.uriScheme, [...(additionalLinkifiers || []), ...this.globalLinkifiers].map(x => x.create()));
+		// Model and file path linkifiers share a stat cache per linkifier instance
+		// so that filesystem lookups are not duplicated across them.
+		const statCache = new StatCache(this.fileSystem);
+		const builtInLinkifiers: IContributedLinkifier[] = [
+			new ModelFilePathLinkifier(this.workspaceService, statCache),
+			new FilePathLinkifier(this.workspaceService, statCache),
+		];
+		const additional = (additionalLinkifiers || []).map(x => x.create());
+		const global = [...this.globalLinkifiers].map(x => x.create());
+		return new Linkifier(context, this.envService.uriScheme, [...additional, ...builtInLinkifiers, ...global]);
 	}
 }

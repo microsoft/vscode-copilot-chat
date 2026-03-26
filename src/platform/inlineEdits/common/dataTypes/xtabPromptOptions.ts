@@ -33,6 +33,16 @@ export type RecentlyViewedDocumentsOptions = {
 	readonly clippingStrategy: RecentFileClippingStrategy;
 }
 
+export namespace RecentlyViewedDocumentsOptions {
+	export const VALIDATOR: IValidator<Partial<RecentlyViewedDocumentsOptions>> = vObj({
+		'nDocuments': vNumber(),
+		'maxTokens': vNumber(),
+		'includeViewedFiles': vBoolean(),
+		'includeLineNumbers': vEnum(IncludeLineNumbersOption.WithSpaceAfter, IncludeLineNumbersOption.WithoutSpace, IncludeLineNumbersOption.None),
+		'clippingStrategy': vEnum(RecentFileClippingStrategy.TopToBottom, RecentFileClippingStrategy.AroundEditRange, RecentFileClippingStrategy.Proportional),
+	});
+}
+
 export type LanguageContextLanguages = { [languageId: string]: boolean };
 
 export type LanguageContextOptions = {
@@ -58,6 +68,16 @@ export type CurrentFileOptions = {
 	readonly prioritizeAboveCursor: boolean;
 }
 
+export namespace CurrentFileOptions {
+	export const VALIDATOR: IValidator<Partial<CurrentFileOptions>> = vObj({
+		'maxTokens': vNumber(),
+		'includeTags': vBoolean(),
+		'includeLineNumbers': vEnum(IncludeLineNumbersOption.WithSpaceAfter, IncludeLineNumbersOption.WithoutSpace, IncludeLineNumbersOption.None),
+		'includeCursorTag': vBoolean(),
+		'prioritizeAboveCursor': vBoolean(),
+	});
+}
+
 export enum LintOptionWarning {
 	YES = 'yes',
 	NO = 'no',
@@ -74,12 +94,43 @@ export type LintOptions = {
 	showCode: LintOptionShowCode;
 	maxLints: number;
 	maxLineDistance: number;
+	/** When set to a value > 0, also include linter diagnostics from the N most recently edited/viewed files. */
+	nRecentFiles: number;
 }
 
+/**
+ * The raw user-facing aggressiveness setting. Includes `Default` to distinguish
+ * "user didn't change" from "user explicitly chose medium".
+ */
+export enum AggressivenessSetting {
+	Default = 'auto',
+	Low = 'low',
+	Medium = 'medium',
+	High = 'high',
+}
+
+/**
+ * The resolved aggressiveness level used in prompts and edit-intent filtering.
+ * Does not include `Default` — that is resolved before reaching this type.
+ */
 export enum AggressivenessLevel {
 	Low = 'low',
 	Medium = 'medium',
 	High = 'high',
+}
+
+export namespace AggressivenessSetting {
+	export const VALIDATOR = vEnum(AggressivenessSetting.Default, AggressivenessSetting.Low, AggressivenessSetting.Medium, AggressivenessSetting.High);
+
+	/** Resolves a non-default setting value to an AggressivenessLevel. Returns undefined for Default. */
+	export function toLevel(setting: AggressivenessSetting): AggressivenessLevel | undefined {
+		switch (setting) {
+			case AggressivenessSetting.Low: return AggressivenessLevel.Low;
+			case AggressivenessSetting.Medium: return AggressivenessLevel.Medium;
+			case AggressivenessSetting.High: return AggressivenessLevel.High;
+			case AggressivenessSetting.Default: return undefined;
+		}
+	}
 }
 
 /**
@@ -195,6 +246,7 @@ export enum PromptingStrategy {
 	Xtab275Aggressiveness = 'xtab275Aggressiveness',
 	PatchBased = 'patchBased',
 	PatchBased01 = 'patchBased01',
+	PatchBased02 = 'patchBased02',
 	/**
 	 * Xtab275-based strategy with edit intent tag parsing.
 	 * Response format: <|edit_intent|>low|medium|high|no_edit<|/edit_intent|>
@@ -241,8 +293,8 @@ export namespace ResponseFormat {
 			case PromptingStrategy.Xtab275Aggressiveness:
 				return ResponseFormat.EditWindowOnly;
 			case PromptingStrategy.PatchBased:
-				return ResponseFormat.CustomDiffPatch;
 			case PromptingStrategy.PatchBased01:
+			case PromptingStrategy.PatchBased02:
 				return ResponseFormat.CustomDiffPatch;
 			case PromptingStrategy.Xtab275EditIntent:
 				return ResponseFormat.EditWindowWithEditIntent;
@@ -292,6 +344,15 @@ export const DEFAULT_OPTIONS: PromptOptions = {
 	includePostScript: true,
 };
 
+export const DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS: LintOptions = {
+	maxLineDistance: 1000,
+	maxLints: 5,
+	showCode: LintOptionShowCode.YES_WITH_SURROUNDING,
+	tagName: 'linter',
+	warnings: LintOptionWarning.YES_IF_NO_ERRORS,
+	nRecentFiles: 0,
+};
+
 // TODO: consider a better per language setting/experiment approach
 export const LANGUAGE_CONTEXT_ENABLED_LANGUAGES: LanguageContextLanguages = {
 	'prompt': true,
@@ -303,25 +364,34 @@ export interface ModelConfiguration {
 	modelName: string;
 	promptingStrategy: PromptingStrategy | undefined /* default */;
 	includeTagsInCurrentFile: boolean;
-	lintOptions: LintOptions | undefined;
+	includePostScript?: boolean;
+	currentFile?: Partial<CurrentFileOptions>;
+	recentlyViewedDocuments?: Partial<RecentlyViewedDocumentsOptions>;
+	lintOptions: Partial<LintOptions> | undefined;
+	supportsNextCursorLinePrediction?: boolean;
 }
 
-export const LINT_OPTIONS_VALIDATOR: IValidator<LintOptions> = vObj({
-	'tagName': vRequired(vString()),
-	'warnings': vRequired(vEnum(LintOptionWarning.YES, LintOptionWarning.NO, LintOptionWarning.YES_IF_NO_ERRORS)),
-	'showCode': vRequired(vEnum(LintOptionShowCode.NO, LintOptionShowCode.YES, LintOptionShowCode.YES_WITH_SURROUNDING)),
-	'maxLints': vRequired(vNumber()),
-	'maxLineDistance': vRequired(vNumber()),
+export const LINT_OPTIONS_VALIDATOR: IValidator<Partial<LintOptions>> = vObj({
+	'tagName': vString(),
+	'warnings': vEnum(LintOptionWarning.YES, LintOptionWarning.NO, LintOptionWarning.YES_IF_NO_ERRORS),
+	'showCode': vEnum(LintOptionShowCode.NO, LintOptionShowCode.YES, LintOptionShowCode.YES_WITH_SURROUNDING),
+	'maxLints': vNumber(),
+	'maxLineDistance': vNumber(),
+	'nRecentFiles': vNumber(),
 });
 
 export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vObj({
 	'modelName': vRequired(vString()),
 	'promptingStrategy': vUnion(vEnum(...Object.values(PromptingStrategy)), vUndefined()),
 	'includeTagsInCurrentFile': vRequired(vBoolean()),
+	'includePostScript': vUnion(vBoolean(), vUndefined()),
+	'currentFile': vUnion(CurrentFileOptions.VALIDATOR, vUndefined()),
+	'recentlyViewedDocuments': vUnion(RecentlyViewedDocumentsOptions.VALIDATOR, vUndefined()),
 	'lintOptions': vUnion(LINT_OPTIONS_VALIDATOR, vUndefined()),
+	'supportsNextCursorLinePrediction': vUnion(vBoolean(), vUndefined()),
 });
 
-export function parseLintOptionString(optionString: string): LintOptions | undefined {
+export function parseLintOptionString(optionString: string, defaults: LintOptions): LintOptions {
 	try {
 		const parsed = JSON.parse(optionString);
 
@@ -330,7 +400,7 @@ export function parseLintOptionString(optionString: string): LintOptions | undef
 			throw new Error(`Lint options validation failed: ${lintValidation.error.message}`);
 		}
 
-		return lintValidation.content;
+		return { ...defaults, ...lintValidation.content };
 	} catch (e) {
 		throw new Error(`Failed to parse lint options string: ${e}`);
 	}
@@ -474,4 +544,23 @@ export enum SpeculativeRequestsEnablement {
 
 export namespace SpeculativeRequestsEnablement {
 	export const VALIDATOR = vEnum(SpeculativeRequestsEnablement.On, SpeculativeRequestsEnablement.Off);
+}
+
+export enum SpeculativeRequestsCursorPlacement {
+	AfterEditApplied = 'afterEditApplied',
+	AfterEditWindow = 'afterEditWindow',
+}
+
+export namespace SpeculativeRequestsCursorPlacement {
+	export const VALIDATOR = vEnum(SpeculativeRequestsCursorPlacement.AfterEditApplied, SpeculativeRequestsCursorPlacement.AfterEditWindow);
+}
+
+export enum SpeculativeRequestsAutoExpandEditWindowLines {
+	Off = 'off',
+	Smart = 'smart',
+	Always = 'always',
+}
+
+export namespace SpeculativeRequestsAutoExpandEditWindowLines {
+	export const VALIDATOR = vEnum(SpeculativeRequestsAutoExpandEditWindowLines.Off, SpeculativeRequestsAutoExpandEditWindowLines.Smart, SpeculativeRequestsAutoExpandEditWindowLines.Always);
 }

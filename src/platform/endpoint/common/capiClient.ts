@@ -3,10 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CAPIClient, FetchOptions, RequestMetadata } from '@vscode/copilot-api';
+import { CAPIClient, MakeRequestOptions, RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { IEnvService } from '../../env/common/envService';
-import { IFetcherService } from '../../networking/common/fetcherService';
+import { IFetcherService, NO_FETCH_TELEMETRY } from '../../networking/common/fetcherService';
 import { LICENSE_AGREEMENT } from './licenseAgreement';
 
 /**
@@ -29,6 +29,7 @@ export abstract class BaseCAPIClientService extends CAPIClient implements ICAPIC
 	) {
 		super({
 			machineId: envService.machineId,
+			deviceId: envService.devDeviceId,
 			sessionId: envService.sessionId,
 			vscodeVersion: envService.vscodeVersion,
 			buildType: envService.getBuildType(),
@@ -37,13 +38,22 @@ export abstract class BaseCAPIClientService extends CAPIClient implements ICAPIC
 		}, LICENSE_AGREEMENT, fetcherService, hmac, integrationId);
 	}
 
-	override makeRequest<T>(request: FetchOptions, requestMetadata: RequestMetadata): Promise<T> {
+	override makeRequest<T>(request: MakeRequestOptions, requestMetadata: RequestMetadata): Promise<T> {
 		// Inject AB Exp Context header if available
 		if (this.abExpContext) {
 			if (!request.headers) {
 				request.headers = {};
 			}
 			request.headers['VScode-ABExpContext'] = this.abExpContext;
+		}
+		// Expected high request volume events that we don't need to collect fetch telemetry for
+		if (
+			requestMetadata.type === RequestType.Telemetry ||
+			requestMetadata.type === RequestType.ChatCompletions ||
+			requestMetadata.type === RequestType.ChatMessages ||
+			requestMetadata.type === RequestType.ChatResponses
+		) {
+			request.callSite = NO_FETCH_TELEMETRY;
 		}
 		return super.makeRequest<T>(request, requestMetadata);
 	}

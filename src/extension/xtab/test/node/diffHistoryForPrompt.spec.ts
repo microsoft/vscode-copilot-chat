@@ -9,7 +9,7 @@ import { Edits, RootedEdit } from '../../../../platform/inlineEdits/common/dataT
 import { LanguageId } from '../../../../platform/inlineEdits/common/dataTypes/languageId';
 import { DiffHistoryOptions } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditDocument } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
-import { IXtabHistoryEditEntry } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
+import { IXtabHistoryEditEntry, IXtabHistoryEntry } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { LineEdit } from '../../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit, StringReplacement } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
@@ -45,6 +45,24 @@ function createHistoryEntry(docId: DocumentId, baseContent: string, replacements
 }
 
 describe('getEditDiffHistory', () => {
+
+	function computeTokens(s: string): number {
+		// for testing purposes, we'll say each character is a token
+		return Math.ceil(s.length / 4);
+	}
+
+	function runGetEditDiffHistory(activeDoc: StatelessNextEditDocument, xtabHistory: readonly IXtabHistoryEntry[], docsInPrompt: Set<DocumentId>, computeTokens: (s: string) => number, options: DiffHistoryOptions): string {
+		const res = getEditDiffHistory(activeDoc, xtabHistory, docsInPrompt, computeTokens, options);
+		const lines = [
+			res.nDiffs + ' diffs',
+			'-------------',
+			res.totalTokens + ' tokens',
+			'-------------',
+			res.promptPiece,
+		];
+		return lines.join('\n');
+	}
+
 	it('coalesces adjacent line replacements into one hunk', () => {
 		const docId = DocumentId.create('file:///workspace/src/a.ts');
 		const activeDoc = createActiveDocument(docId, new StringText('aaa\nbbb\nccc'));
@@ -54,10 +72,14 @@ describe('getEditDiffHistory', () => {
 			new StringReplacement(new OffsetRange(4, 7), 'BBB'),
 		]);
 
-		const diff = getEditDiffHistory(activeDoc, [historyEntry], new Set(), () => 0, diffHistoryOptions);
+		const result = runGetEditDiffHistory(activeDoc, [historyEntry], new Set(), computeTokens, diffHistoryOptions);
 
-		expect(diff).toMatchInlineSnapshot(`
-			"--- /workspace/src/a.ts
+		expect(result).toMatchInlineSnapshot(`
+			"1 diffs
+			-------------
+			21 tokens
+			-------------
+			--- /workspace/src/a.ts
 			+++ /workspace/src/a.ts
 			@@ -0,2 +0,2 @@
 			-aaa
@@ -77,10 +99,14 @@ describe('getEditDiffHistory', () => {
 			new StringReplacement(new OffsetRange(8, 11), 'CCC'),
 		]);
 
-		const diff = getEditDiffHistory(activeDoc, [historyEntry], new Set(), () => 0, diffHistoryOptions);
+		const result = runGetEditDiffHistory(activeDoc, [historyEntry], new Set(), computeTokens, diffHistoryOptions);
 
-		expect(diff).toMatchInlineSnapshot(`
-			"--- /workspace/src/a.ts
+		expect(result).toMatchInlineSnapshot(`
+			"1 diffs
+			-------------
+			25 tokens
+			-------------
+			--- /workspace/src/a.ts
 			+++ /workspace/src/a.ts
 			@@ -0,1 +0,1 @@
 			-aaa
@@ -105,10 +131,14 @@ describe('getEditDiffHistory', () => {
 			]),
 		];
 
-		const diff = getEditDiffHistory(activeDoc, historyEntries, new Set(), () => 0, diffHistoryOptions);
+		const result = runGetEditDiffHistory(activeDoc, historyEntries, new Set(), computeTokens, diffHistoryOptions);
 
-		expect(diff).toMatchInlineSnapshot(`
-			"--- /Users/john/myProject/src/a.ts
+		expect(result).toMatchInlineSnapshot(`
+			"2 diffs
+			-------------
+			48 tokens
+			-------------
+			--- /Users/john/myProject/src/a.ts
 			+++ /Users/john/myProject/src/a.ts
 			@@ -0,1 +0,1 @@
 			-aaa

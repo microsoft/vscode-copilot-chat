@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionModelInfo, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, window, workspace } from 'vscode';
+import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionModelInfo, InlineCompletionProviderOption, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, Uri, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -27,7 +27,7 @@ import { findCell, findNotebook, isNotebookCell } from '../../../util/common/not
 import { assert } from '../../../util/vs/base/common/assert';
 import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
-import { BugIndicatingError } from '../../../util/vs/base/common/errors';
+import { BugIndicatingError, onUnexpectedError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { clamp } from '../../../util/vs/base/common/numbers';
@@ -47,9 +47,10 @@ import { LogContextRecorder } from './components/logContextRecorder';
 import { DiagnosticsNextEditResult } from './features/diagnosticsInlineEditProvider';
 import { InlineEditModel } from './inlineEditModel';
 import { learnMoreCommandId, learnMoreLink } from './inlineEditProviderFeature';
-import { isInlineSuggestion } from './isInlineSuggestion';
+import { toInlineSuggestion } from './isInlineSuggestion';
 import { InlineEditLogger } from './parts/inlineEditLogger';
 import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
+import { raceAndAll } from './raceAndAll';
 import { toExternalRange } from './utils/translations';
 
 const learnMoreAction: Command = {
@@ -128,8 +129,24 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 	public setCurrentModelId: ((modelId: string) => Thenable<void>) | undefined;
 	//#endregion
 
+	//#region Provider options (Eagerness)
+	private static readonly _aggressivenessOptionId = 'eagerness';
+
+	providerOptions: readonly InlineCompletionProviderOption[] | undefined;
+
+	private readonly _onDidChangeProviderOptions = this._register(new Emitter<void>());
+	readonly onDidChangeProviderOptions = this._onDidChangeProviderOptions.event;
+
+	setProviderOptionValue = async (optionId: string, valueId: string): Promise<void> => {
+		if (optionId === InlineCompletionProviderImpl._aggressivenessOptionId) {
+			await this._configurationService.setConfig(ConfigKey.Advanced.InlineEditsAggressiveness, valueId);
+		}
+	};
+	//#endregion
+
 	private readonly _displayNextEditorNES: boolean;
 	private readonly _renameSymbolSuggestions: IObservable<boolean>;
+	private readonly _inlineCompletionsAdvanced: IObservable<boolean>;
 
 	constructor(
 		private readonly model: InlineEditModel,
@@ -154,6 +171,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		this._logger = this._logService.createSubLogger(['NES', 'Provider']);
 		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, this._expService);
 		this._renameSymbolSuggestions = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Advanced.InlineEditsRenameSymbolSuggestions, this._expService);
+		this._inlineCompletionsAdvanced = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsInlineCompletionsAdvanced, this._expService);
 
 		this.setCurrentModelId = (modelId: string) => this._modelService.setCurrentModelId(modelId);
 
@@ -162,6 +180,25 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		this._register(autorun(reader => {
 			this.modelInfo = this._isModelPickerEnabled.read(reader) ? modelListUpdatedObs.read(reader) : undefined;
 			this._onDidChangeModelInfo.fire();
+		}));
+
+		// Provider options: eagerness
+		const aggressivenessObs = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Advanced.InlineEditsAggressiveness, this._expService);
+
+		this._register(autorun(reader => {
+			const current = aggressivenessObs.read(reader);
+			this.providerOptions = [{
+				id: InlineCompletionProviderImpl._aggressivenessOptionId,
+				label: l10n.t('Eagerness'),
+				values: [
+					{ id: 'auto', label: l10n.t('Auto') },
+					{ id: 'low', label: l10n.t('Low') },
+					{ id: 'medium', label: l10n.t('Medium') },
+					{ id: 'high', label: l10n.t('High') },
+				],
+				currentValueId: current,
+			}];
+			this._onDidChangeProviderOptions.fire();
 		}));
 
 	}
@@ -184,7 +221,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 	): Promise<NesCompletionList | undefined> {
 		const label = `NES | ${basename(document.uri.fsPath)} (v${document.version})`;
 
-		const capturingToken = new CapturingToken(label, undefined, true, true);
+		const capturingToken = new CapturingToken(label, undefined);
 
 		assert(context.changeHint === undefined || NesChangeHint.is(context.changeHint), 'Expected changeHint to be of type TriggerNes or undefined');
 		const changeHint = context.changeHint as NesChangeHint | undefined;
@@ -236,6 +273,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		const documentVersion = (isNotebookCell(document.uri) ? findNotebook(document.uri, workspace.notebookDocuments)?.version : undefined) || document.version;
 		const logContext = new InlineEditRequestLogContext(doc.id.uri, documentVersion, context);
 		logContext.recordingBookmark = this.model.debugRecorder.createBookmark();
+		this.logger.addLive(logContext);
 
 		const telemetryBuilder = new NextEditProviderTelemetryBuilder(this._gitExtensionService, this._notebookService, this._workspaceService, this.model.nextEditProvider.ID, doc, this.model.debugRecorder, logContext.recordingBookmark);
 		telemetryBuilder.setOpportunityId(context.requestUuid);
@@ -251,7 +289,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 				this.model.nextEditProvider.getNextEdit(doc.id, context, logContext, token, telemetryBuilder.nesBuilder).then(r => ({ kind: 'llm' as const, val: r })),
 				(this.model.diagnosticsBasedProvider?.runUntilNextEdit(doc.id, context, logContext, 50, requestCancellationTokenSource.token, telemetryBuilder.diagnosticsBuilder)
 					?? raceCancellation(new Promise<undefined>(() => { }), requestCancellationTokenSource.token)).then(r => ({ kind: 'diagnostics' as const, val: r }))
-			]);
+			], onUnexpectedError);
 
 			const [llmSuggestion, diagnosticsSuggestion] = await first;
 
@@ -301,7 +339,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			}
 
 			// Determine which suggestion to use
-			if (suggestion.kind === 'diagnostics' && suggestion.val) {
+			if (suggestion.kind === 'diagnostics' && suggestion.val && suggestion.val.result) {
 				suggestionInfo = new DiagnosticsCompletionInfo(suggestion.val, doc.id, document, context.requestUuid);
 			} else if (suggestion.kind === 'llm') {
 				suggestionInfo = new LlmCompletionInfo(suggestion.val, doc.id, document, context.requestUuid);
@@ -315,12 +353,14 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
 				const positionToJumpOneBased = suggestionInfo.suggestion.result.jumpToPosition;
 				const jumpToPosition = new Position(positionToJumpOneBased.lineNumber - 1, positionToJumpOneBased.column - 1);
+				const targetDocumentId = suggestionInfo.suggestion.result.targetDocumentId;
 				const jumpToPositionCompletionItem: NesCompletionItem = {
 					insertText: undefined as unknown as string,
 					info: suggestionInfo,
 					wasShown: false,
 					telemetryBuilder,
 					jumpToPosition,
+					...(targetDocumentId ? { uri: Uri.parse(targetDocumentId.uri) } : {}),
 					correlationId
 				};
 				return new NesCompletionList(context.requestUuid, jumpToPositionCompletionItem, [], telemetryBuilder);
@@ -338,7 +378,21 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			let isInlineCompletion: boolean = false;
 			let completionItem: Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined;
 
-			const documents = doc.fromOffsetRange(result.edit.replaceRange);
+			// When the edit targets a different document, resolve the range against the target document
+			const targetDocumentId = isLlmCompletionInfo(suggestionInfo) ? suggestionInfo.suggestion.result?.targetDocumentId : undefined;
+			let resolveDoc = doc;
+			if (targetDocumentId && targetDocumentId !== doc.id) {
+				const targetTextDoc = this._workspaceService.textDocuments.find(d => d.uri.toString() === targetDocumentId.uri);
+				const targetObsDoc = targetTextDoc ? this.model.workspace.getDocumentByTextDocument(targetTextDoc) : undefined;
+				if (targetObsDoc) {
+					resolveDoc = targetObsDoc;
+				} else {
+					logger.trace('no next edit suggestion: cross-file target document not found in workspace');
+					this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
+					return emptyList;
+				}
+			}
+			const documents = resolveDoc.fromOffsetRange(result.edit.replaceRange);
 			const [targetDocument, range] = documents.length ? documents[0] : [undefined, undefined];
 
 			addNotebookTelemetry(document, position, result.edit.newText, documents, telemetryBuilder);
@@ -348,15 +402,8 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 				logger.trace('no next edit suggestion');
 			} else if (hasNotebookCellMarker(document, result.edit.newText)) {
 				logger.trace('no next edit suggestion, edits contain Notebook Cell Markers');
-			} else if (targetDocument === document) {
-				// nes is for this same document.
-				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
-				isInlineCompletion = allowInlineCompletions && isInlineSuggestion(position, document, range, result.edit.newText);
-				completionItem = serveAsCompletionsProvider && !isInlineCompletion ?
-					undefined :
-					this.createCompletionItem(doc, document, position, range, result);
-			} else if (this._displayNextEditorNES) {
-				// nes is for a different document.
+			} else if (isNotebookCell(targetDocument.uri) && this._displayNextEditorNES && targetDocument !== document) {
+				// NES is for a different notebook cell
 				completionItem = serveAsCompletionsProvider ?
 					undefined :
 					this.createNextEditorEditCompletionItem(position, {
@@ -364,6 +411,20 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 						insertText: result.edit.newText,
 						range
 					});
+			} else if (targetDocument === document) { // NES is for the active document
+				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
+				const inlineSuggestion = allowInlineCompletions ? toInlineSuggestion(position, document, range, result.edit.newText, this._inlineCompletionsAdvanced.get()) : undefined;
+				isInlineCompletion = !!inlineSuggestion;
+				completionItem = serveAsCompletionsProvider && !isInlineCompletion ?
+					undefined :
+					this.createCompletionItem(doc, document, inlineSuggestion?.range ?? range, result, inlineSuggestion?.newText);
+			} else { // NES is not for the active doc but a different one
+				completionItem = serveAsCompletionsProvider ? undefined : {
+					range,
+					insertText: result.edit.newText,
+					command: result.action,
+					uri: targetDocument.uri,
+				};
 			}
 
 			if (!completionItem) {
@@ -398,7 +459,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 				telemetryBuilder,
 				action: learnMoreAction,
 				isInlineEdit: !isInlineCompletion,
-				showInlineEditMenu: !serveAsCompletionsProvider,
+				showInlineEditMenu: !(unification && isInlineCompletion),
 				wasShown: false,
 				supportsRename,
 				correlationId,
@@ -417,6 +478,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 
 			throw e;
 		} finally {
+			logContext.markCompleted();
 			requestCancellationTokenSource.dispose();
 			this.logger.add(logContext);
 		}
@@ -456,9 +518,9 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 	private createCompletionItem(
 		doc: IVSCodeObservableDocument,
 		document: TextDocument,
-		position: Position,
 		range: Range,
 		result: NonNullable<(NextEditResult | DiagnosticsNextEditResult)['result']>,
+		insertTextOverride?: string,
 	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined {
 
 		if (!result.edit) {
@@ -475,7 +537,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 
 		return {
 			range,
-			insertText: result.edit.newText,
+			insertText: insertTextOverride ?? result.edit.newText,
 			displayLocation,
 			command: result.action,
 		};
@@ -666,54 +728,6 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			this.model.diagnosticsBasedProvider?.handleIgnored(info.documentId, info.suggestion, supersededBySuggestion);
 		}
 	}
-}
-
-/**
- * Runs multiple promises concurrently and provides two results:
- * 1. `first`: Resolves as soon as the first promise resolves, with a tuple where only the first resolved value is set, others are undefined..
- * 2. `all`: Resolves when all promises resolve, with a tuple of all results.
- * @param promises Tuple of promises to race
- */
-export function raceAndAll<T extends readonly unknown[]>(
-	promises: {
-		[K in keyof T]: Promise<T[K]>;
-	}
-): {
-	first: Promise<{
-		[K in keyof T]: T[K] | undefined;
-	}>;
-	all: Promise<T>;
-} {
-	let settled = false;
-
-	const first = new Promise<{
-		[K in keyof T]: T[K] | undefined;
-	}>((resolve, reject) => {
-		promises.forEach((promise, index) => {
-			promise.then(result => {
-				if (settled) {
-					return;
-				}
-				settled = true;
-				const output = Array(promises.length).fill(undefined) as unknown[];
-				output[index] = result;
-				resolve(output as {
-					[K in keyof T]: T[K] | undefined;
-				});
-			}, error => {
-				settled = true;
-				console.error(error);
-				const output = Array(promises.length).fill(undefined) as unknown[];
-				resolve(output as {
-					[K in keyof T]: T[K] | undefined;
-				});
-			});
-		});
-	});
-
-	const all = Promise.all(promises) as Promise<T>;
-
-	return { first, all };
 }
 
 function hasNotebookCellMarker(document: TextDocument, newText: string) {

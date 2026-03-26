@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CCAEnabledResult, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService, PermissiveAuthRequiredError } from '../../../../platform/github/common/githubService';
+import { CCAEnabledResult, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, GitHubOutageStatus, IOctoKitService, PermissiveAuthRequiredError } from '../../../../platform/github/common/githubService';
 
 /**
  * Mock implementation of IOctoKitService for testing
@@ -18,6 +18,7 @@ export class MockOctoKitService implements IOctoKitService {
 
 	getCurrentAuthedUser = async () => ({ login: 'testuser', name: 'Test User', avatar_url: '' });
 	getCopilotPullRequestsForUser = async () => [];
+	getGitHubOutageStatus = async (): Promise<GitHubOutageStatus> => GitHubOutageStatus.None;
 	getCopilotSessionsForPR = async () => [];
 	getSessionLogs = async () => '';
 	getSessionInfo = async () => undefined;
@@ -30,6 +31,7 @@ export class MockOctoKitService implements IOctoKitService {
 	getPullRequestFromGlobalId = async () => null;
 	getPullRequestFiles = async () => [];
 	closePullRequest = async () => false;
+	findPullRequestByHeadBranch = async () => undefined;
 	getOpenPullRequestsForUser = async () => [];
 	getFileContent = async () => '';
 	getUserRepositories = async () => [];

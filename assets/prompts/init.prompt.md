@@ -21,9 +21,12 @@ Bootstrap workspace instructions (`.github/copilot-instructions.md` or `AGENTS.m
    - Potential pitfalls or common development environment issues
    - Key files/directories that exemplify patterns
 
+   Also inventory existing documentation (`docs/**/*.md`, `CONTRIBUTING.md`, `ARCHITECTURE.md`, etc.) to identify topics that should be linked, not duplicated.
+
 3. **Generate or merge**
    - New file: Use template from workspace-instructions.md, include only relevant sections
    - Existing file: Preserve valuable content, update outdated sections, remove duplication
+   - Follow the **Link, don't embed** principle from workspace-instructions.md
 
 4. **Iterate**
    - Ask for feedback on unclear or incomplete sections

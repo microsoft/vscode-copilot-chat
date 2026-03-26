@@ -24,8 +24,6 @@ function executeEditTest(
 function forEditsAndAgent(callback: (strategy: EditTestStrategyPanel, variant: string | undefined, model: string | undefined, configurations: Configuration<any>[] | undefined) => void): void {
 	callback(EditTestStrategy.Edits, '', undefined, undefined);
 	callback(EditTestStrategy.Edits, '-claude', CHAT_MODEL.CLAUDE_SONNET, undefined);
-	// callback(EditTestStrategy.Edits2, '-edits2', undefined);
-	// callback(EditTestStrategy.Edits2, '-edits2-claude', CHAT_MODEL.CLAUDE_SONNET);
 	// callback(EditTestStrategy.Agent, '-agent', undefined);
 }
 

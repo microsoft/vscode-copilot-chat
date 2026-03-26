@@ -7,6 +7,7 @@ import * as l10n from '@vscode/l10n';
 import { shouldInclude } from '../../../../util/common/glob';
 import { Result } from '../../../../util/common/result';
 import { CallTracker, TelemetryCorrelationId } from '../../../../util/common/telemetryCorrelationId';
+import { TokenizerType } from '../../../../util/common/tokenizer';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { raceCancellationError, raceTimeout } from '../../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
@@ -41,7 +42,9 @@ import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../workspace/common/workspaceService';
 import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId } from '../../common/workspaceChunkSearch';
 import { EmbeddingsChunkSearch } from '../embeddingsChunkSearch';
+import { TfidfChunkSearch } from '../tfidfChunkSearch';
 import { TfIdfWithSemanticChunkSearch } from '../tfidfWithSemanticChunkSearch';
+import { WorkspaceChunkEmbeddingsIndex } from '../workspaceChunkEmbeddingsIndex';
 import { IWorkspaceFileIndex } from '../workspaceFileIndex';
 import { AdoCodeSearchRepo, BuildIndexTriggerReason, CodeSearchRepo, CodeSearchRepoStatus, GithubCodeSearchRepo, TriggerIndexingError, TriggerRemoteIndexingError } from './codeSearchRepo';
 import { ExternalIngestClient } from './externalIngestClient';
@@ -122,7 +125,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	private readonly _workspaceDiffTracker: Lazy<CodeSearchWorkspaceDiffTracker>;
 
 	private readonly _embeddingsChunkSearch: EmbeddingsChunkSearch;
-	private readonly _tfIdfChunkSearch: TfIdfWithSemanticChunkSearch;
+	private readonly _tfIdfSemanticChunkSearch: TfIdfWithSemanticChunkSearch;
 
 	private readonly _onDidChangeIndexState = this._register(new Emitter<void>());
 	public readonly onDidChangeIndexState = this._onDidChangeIndexState.event;
@@ -132,22 +135,21 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	private readonly _codeSearchRepos = new ResourceMap<{ readonly repo: CodeSearchRepo; readonly disposables: IDisposable }>();
 
 	private readonly _onDidFinishInitialization = this._register(new Emitter<void>());
-	public readonly onDidFinishInitialization = this._onDidFinishInitialization.event;
+	private readonly onDidFinishInitialization = this._onDidFinishInitialization.event;
 
 	private readonly _onDidAddOrUpdateCodeSearchRepo = this._register(new Emitter<RepoEntry>());
-	public readonly onDidAddOrUpdateCodeSearchRepo = this._onDidAddOrUpdateCodeSearchRepo.event;
+	private readonly onDidAddOrUpdateCodeSearchRepo = this._onDidAddOrUpdateCodeSearchRepo.event;
 
 	private readonly _onDidRemoveCodeSearchRepo = this._register(new Emitter<RepoEntry>());
-	public readonly onDidRemoveCodeSearchRepo = this._onDidRemoveCodeSearchRepo.event;
+	private readonly onDidRemoveCodeSearchRepo = this._onDidRemoveCodeSearchRepo.event;
 
 	private readonly _repoTracker: CodeSearchRepoTracker;
 
+	private readonly _embeddingsIndex: WorkspaceChunkEmbeddingsIndex;
 	private readonly _externalIngestIndex: Lazy<ExternalIngestIndex>;
 
 	constructor(
 		private readonly _embeddingType: EmbeddingType,
-		embeddingsChunkSearch: EmbeddingsChunkSearch,
-		tfIdfChunkSearch: TfIdfWithSemanticChunkSearch,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IAdoCodeSearchService private readonly _adoCodeSearchService: IAdoCodeSearchService,
 		@IAuthenticationChatUpgradeService private readonly _authUpgradeService: IAuthenticationChatUpgradeService,
@@ -164,8 +166,10 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	) {
 		super();
 
-		this._embeddingsChunkSearch = embeddingsChunkSearch;
-		this._tfIdfChunkSearch = tfIdfChunkSearch;
+		this._embeddingsIndex = this._register(instantiationService.createInstance(WorkspaceChunkEmbeddingsIndex, this._embeddingType));
+		this._embeddingsChunkSearch = this._register(instantiationService.createInstance(EmbeddingsChunkSearch, this._embeddingsIndex));
+		const tfIdfChunkSearch = this._register(instantiationService.createInstance(TfidfChunkSearch, { tokenizer: TokenizerType.O200K })); // TODO mjbvz: remove hardcoding
+		this._tfIdfSemanticChunkSearch = this._register(instantiationService.createInstance(TfIdfWithSemanticChunkSearch, tfIdfChunkSearch, this._embeddingsIndex));
 
 		this._repoTracker = this._register(instantiationService.createInstance(CodeSearchRepoTracker));
 		this._externalIngestIndex = new Lazy(() => {
@@ -185,14 +189,14 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 		// When the authentication state changes, update repos
 		this._register(this._authenticationService.onDidAuthenticationChange(() => {
-			this.updateRepoStatuses();
+			this.updateRepoStatuses(undefined, new TelemetryCorrelationId('CodeSearchChunkSearch::onDidAuthenticationChange'));
 		}));
 
 		this._register(Event.any(
 			this._authenticationService.onDidAdoAuthenticationChange,
 			this._adoCodeSearchService.onDidChangeIndexState
 		)(() => {
-			this.updateRepoStatuses('ado');
+			this.updateRepoStatuses('ado', new TelemetryCorrelationId('CodeSearchChunkSearch::onDidAdoChange'));
 		}));
 
 		this._register(Event.any(
@@ -377,7 +381,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			if (allRepos.some(repo => repo.status === CodeSearchRepoStatus.CouldNotCheckIndexStatus || repo.status === CodeSearchRepoStatus.NotAuthorized)) {
 				if (await raceCancellationError(this._authUpgradeService.shouldRequestPermissiveSessionUpgrade(), token)) { // Needs more thought
 					if (await raceCancellationError(this._authUpgradeService.shouldRequestPermissiveSessionUpgrade(), token)) {
-						await raceCancellationError(this.updateRepoStatuses(), token);
+						await raceCancellationError(this.updateRepoStatuses(undefined, new TelemetryCorrelationId('CodeSearchChunkSearch::doIsAvailableCheck')), token);
 						allRepos = Array.from(this._codeSearchRepos.values(), entry => entry.repo);
 					}
 				}
@@ -565,7 +569,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			});
 
 			let codeSearchResults: CodeSearchResult | undefined;
-			let externalIngestResults: readonly FileChunkAndScore[] = [];
+			let externalIngestResults: readonly FileChunkAndScore[] | undefined = undefined;
 			let localResults: DiffSearchResult | undefined;
 			try {
 				// Await code search and external ingest in parallel
@@ -574,7 +578,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 					raceCancellationError(externalIngestOperation, token),
 				]);
 
-				if (codeSearchResults || externalIngestResults.length > 0) {
+				if (codeSearchResults || (externalIngestResults && externalIngestResults.length > 0)) {
 					localResults = await raceCancellationError(localSearchOperation, token);
 				} else {
 					// No need to do local search if both searches failed
@@ -604,16 +608,16 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				diffSearchStrategy: localResults?.strategyId ?? 'none',
 			}, {
 				chunkCount: codeSearchResults?.chunks.length ?? 0,
-				externalIngestChunkCount: externalIngestResults.length,
+				externalIngestChunkCount: externalIngestResults?.length ?? 0,
 				locallyChangedFileCount: diffArray.length,
 				codeSearchOutOfSync: codeSearchResults?.outOfSync ? 1 : 0,
 				embeddingsRecomputedFileCount: localResults?.embeddingsComputeInfo?.recomputedFileCount ?? 0,
 			});
 
-			this._logService.trace(`CodeSearchChunkSearch.searchWorkspace: codeSearchResults: ${codeSearchResults?.chunks.length}, externalIngestResults: ${externalIngestResults.length}, localResults: ${localResults?.chunks.length}`);
+			this._logService.trace(`CodeSearchChunkSearch.searchWorkspace: codeSearchResults: ${codeSearchResults?.chunks.length}, externalIngestResults: ${externalIngestResults?.length}, localResults: ${localResults?.chunks.length}`);
 
 			// If neither code search nor external ingest returned results, bail
-			if (!codeSearchResults && externalIngestResults.length === 0) {
+			if (!codeSearchResults && (!externalIngestResults || externalIngestResults.length === 0)) {
 				return;
 			}
 
@@ -623,7 +627,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				...(codeSearchResults?.chunks ?? [])
 					.filter(x => !localResults || shouldInclude(x.chunk.file, { exclude: diffFilePattern })),
 				// External ingest results (excluding diffed files if we have local results)
-				...externalIngestResults
+				...(externalIngestResults ?? [])
 					.filter(x => !localResults || shouldInclude(x.chunk.file, { exclude: diffFilePattern })),
 				// Local diff results
 				...(localResults?.chunks ?? [])
@@ -696,8 +700,8 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		const outdatedFiles = await raceCancellationError(this.getLocalDiff(), token);
 		if (outdatedFiles.length > this.maxEmbeddingsDiffSize) {
 			// Too many files, only do tfidf search
-			const result = await this._tfIdfChunkSearch.searchSubsetOfFiles(sizing, query, diffArray, subSearchOptions, innerTelemetryInfo, token);
-			return { ...result, strategyId: this._tfIdfChunkSearch.id };
+			const result = await this._tfIdfSemanticChunkSearch.searchSubsetOfFiles(sizing, query, diffArray, subSearchOptions, innerTelemetryInfo, token);
+			return { ...result, strategyId: this._tfIdfSemanticChunkSearch.id };
 		}
 
 		// Kick off embeddings search of diff
@@ -711,8 +715,8 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		}
 
 		// Start tfidf too but keep embeddings search running in parallel
-		const tfIdfSearch = this._tfIdfChunkSearch.searchSubsetOfFiles(sizing, query, diffArray, subSearchOptions, innerTelemetryInfo, token)
-			.then((result): DiffSearchResult => ({ ...result, strategyId: this._tfIdfChunkSearch.id }));
+		const tfIdfSearch = this._tfIdfSemanticChunkSearch.searchSubsetOfFiles(sizing, query, diffArray, subSearchOptions, innerTelemetryInfo, token)
+			.then((result): DiffSearchResult => ({ ...result, strategyId: this._tfIdfSemanticChunkSearch.id }));
 
 		return Promise.race([embeddingsSearch, tfIdfSearch]);
 	}
@@ -781,6 +785,24 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		const existing = this._codeSearchRepos.get(repo.rootUri);
 		if (existing) {
 			return;
+		}
+
+		// Skip repos that aren't relevant to the workspace (e.g. worktrees at external paths)
+		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
+		const isRelevantToWorkspace = workspaceFolders.some(folder =>
+			isEqualOrParent(repo.rootUri, folder) || isEqualOrParent(folder, repo.rootUri));
+		if (!isRelevantToWorkspace) {
+			this._logService.trace(`CodeSearchChunkSearch.openGitRepo(${repo.rootUri}): skipping, not relevant to workspace`);
+			return;
+		}
+
+		// Skip if another repo already covers this remote (e.g. git worktrees sharing the same remote)
+		const remoteKey = remoteInfo.repoId.toString();
+		for (const entry of this._codeSearchRepos.values()) {
+			if (entry.repo.remoteInfo?.repoId.toString() === remoteKey) {
+				this._logService.trace(`CodeSearchChunkSearch.openGitRepo(${repo.rootUri}): skipping, remote already covered by ${entry.repo.repoInfo.rootUri}`);
+				return;
+			}
 		}
 
 		if (remoteInfo.repoId.type === 'github') {
@@ -914,10 +936,10 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		return error ?? Result.ok(true);
 	}
 
-	private async updateRepoStatuses(onlyReposOfType?: 'github' | 'ado'): Promise<void> {
+	private async updateRepoStatuses(onlyReposOfType: 'github' | 'ado' | undefined, telemetryInfo: TelemetryCorrelationId): Promise<void> {
 		await Promise.all(Array.from(this._codeSearchRepos.values(), entry => {
 			if (!onlyReposOfType || entry.repo.remoteInfo?.repoId.type === onlyReposOfType) {
-				return entry.repo.refreshStatusFromEndpoint(true, CancellationToken.None).catch(() => { });
+				return entry.repo.refreshStatusFromEndpoint(true, telemetryInfo.addCaller('CodeSearchChunkSearch::updateRepoStatuses'), CancellationToken.None).catch(() => { });
 			}
 		}));
 	}

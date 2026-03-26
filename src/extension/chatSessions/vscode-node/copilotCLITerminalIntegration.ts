@@ -4,18 +4,23 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { promises as fs } from 'fs';
-import { Terminal, TerminalLocation, TerminalOptions, TerminalProfile, ThemeIcon, ViewColumn, window, workspace } from 'vscode';
+import { Terminal, TerminalLocation, TerminalOptions, TerminalProfile, ThemeIcon, Uri, ViewColumn, window, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
+import { deriveCopilotCliOTelEnv } from '../../../platform/otel/common/agentOTelEnv';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
 import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { PythonTerminalService } from './copilotCLIPythonTerminalService';
+import { CopilotCLITerminalLinkProvider, SessionDirResolver } from './copilotCLITerminalLinkProvider';
 
 //@ts-ignore
 import powershellScript from './copilotCLIShim.ps1';
@@ -29,6 +34,14 @@ export type TerminalOpenLocation = 'panel' | 'editor' | 'editorBeside';
 export interface ICopilotCLITerminalIntegration extends Disposable {
 	readonly _serviceBrand: undefined;
 	openTerminal(name: string, cliArgs?: string[], cwd?: string, location?: TerminalOpenLocation): Promise<Terminal | undefined>;
+	/**
+	 * Sets the session-state directory used to resolve relative CLI paths.
+	 */
+	setTerminalSessionDir(terminal: Terminal, sessionDir: Uri): void;
+	/**
+	 * Sets a resolver used when no session directory is set on a terminal.
+	 */
+	setSessionDirResolver(resolver: SessionDirResolver): void;
 }
 
 type IShellInfo = {
@@ -48,16 +61,24 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 	private shellScriptPath: string | undefined;
 	private powershellScriptPath: string | undefined;
 	private readonly pythonTerminalService: PythonTerminalService;
+	private readonly _linkProvider: CopilotCLITerminalLinkProvider | undefined;
 	constructor(
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@ITerminalService private readonly terminalService: ITerminalService,
 		@IEnvService private readonly envService: IEnvService,
 		@ILogService logService: ILogService,
-		@ITelemetryService private readonly telemetryService: ITelemetryService
+		@ITelemetryService private readonly telemetryService: ITelemetryService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@IWorkspaceService workspaceService: IWorkspaceService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		super();
 		this.pythonTerminalService = new PythonTerminalService(logService);
+		if (configurationService.getConfig(ConfigKey.Advanced.CLITerminalLinks)) {
+			this._linkProvider = new CopilotCLITerminalLinkProvider(logService, workspaceService);
+			this._register(window.registerTerminalLinkProvider(this._linkProvider));
+		}
 		this.initialization = this.initialize();
 	}
 
@@ -99,8 +120,10 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				return;
 			}
 			this.sendTerminalOpenTelemetry('new', shellInfo.shell, 'newFromTerminalProfile', 'panel');
+			const options = await getCommonTerminalOptions('GitHub Copilot CLI', this._authenticationService, this._otelService, 'panel');
 			return new TerminalProfile({
-				name: 'GitHub Copilot CLI',
+				...options,
+				titleTemplate: '${sequence}',
 				shellPath: shellInfo.shellPath,
 				shellArgs: shellInfo.shellArgs,
 				iconPath: shellInfo.iconPath,
@@ -108,6 +131,14 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		};
 		this._register(window.registerTerminalProfileProvider('copilot-cli', { provideTerminalProfile }));
 
+	}
+
+	public setTerminalSessionDir(terminal: Terminal, sessionDir: Uri): void {
+		this._linkProvider?.setSessionDir(terminal, sessionDir);
+	}
+
+	public setSessionDirResolver(resolver: SessionDirResolver): void {
+		this._linkProvider?.setSessionDirResolver(resolver);
 	}
 
 	public async openTerminal(name: string, cliArgs: string[] = [], cwd?: string, location: TerminalOpenLocation = 'editor'): Promise<Terminal | undefined> {
@@ -124,7 +155,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			this.initialization
 		]);
 
-		const options = await getCommonTerminalOptions(name, this._authenticationService, location);
+		const options = await getCommonTerminalOptions(name, this._authenticationService, this._otelService, location);
 		options.cwd = cwd;
 		if (shellPathAndArgs) {
 			options.iconPath = shellPathAndArgs.iconPath ?? options.iconPath;
@@ -134,6 +165,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			const terminal = await this.pythonTerminalService.createTerminal(options);
 			if (terminal) {
 				this._register(terminal);
+				this._linkProvider?.registerTerminal(terminal);
 				const command = this.buildCommandForPythonTerminal(shellPathAndArgs?.copilotCommand, cliArgs, shellPathAndArgs);
 				await this.sendCommandToTerminal(terminal, command, true, shellPathAndArgs);
 				this.sendTerminalOpenTelemetry(sessionType, shellPathAndArgs.shell, 'pythonTerminal', location);
@@ -143,6 +175,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 
 		if (!shellPathAndArgs) {
 			const terminal = this._register(this.terminalService.createTerminal(options));
+			this._linkProvider?.registerTerminal(terminal);
 			cliArgs.shift(); // Remove --clear as we can't run it without a shell integration
 			const command = this.buildCommandForTerminal(terminal, COPILOT_CLI_COMMAND, cliArgs);
 			await this.sendCommandToTerminal(terminal, command, false, shellPathAndArgs);
@@ -156,6 +189,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			options.shellPath = shellPathAndArgs.shellPath;
 			options.shellArgs = shellPathAndArgs.shellArgs;
 			const terminal = this._register(this.terminalService.createTerminal(options));
+			this._linkProvider?.registerTerminal(terminal);
 			terminal.show();
 			this.sendTerminalOpenTelemetry(sessionType, shellPathAndArgs.shell, 'shellArgsTerminal', location);
 			return terminal;
@@ -341,9 +375,10 @@ function quoteArgsForShell(shellScript: string, args: string[]): string {
 	return args.length ? `${escapeArg(shellScript)} ${escapedArgs.join(' ')}` : escapeArg(shellScript);
 }
 
-async function getCommonTerminalOptions(name: string, authenticationService: IAuthenticationService, location: TerminalOpenLocation = 'editor'): Promise<TerminalOptions> {
+async function getCommonTerminalOptions(name: string, authenticationService: IAuthenticationService, otelService: IOTelService, location: TerminalOpenLocation = 'editor'): Promise<TerminalOptions> {
 	const options: TerminalOptions = {
 		name,
+		titleTemplate: '${sequence}',
 		iconPath: new ThemeIcon('terminal'),
 		hideFromUser: false
 	};
@@ -358,7 +393,13 @@ async function getCommonTerminalOptions(name: string, authenticationService: IAu
 			// Old Token name for GitHub integrations (deprecate once the new variable has been adopted widely)
 			GH_TOKEN: session.accessToken,
 			// New Token name for Copilot
-			COPILOT_GITHUB_TOKEN: session.accessToken
+			COPILOT_GITHUB_TOKEN: session.accessToken,
+			// Forward OTel config so the CLI binary exports traces/metrics to the same endpoint.
+			// Pass an empty env so all vars are explicitly included in TerminalOptions.env,
+			// regardless of process.env state (which may have stale values from the
+			// in-process background agent). TerminalOptions.env overlays the inherited
+			// process.env, so explicit entries here take precedence.
+			...(otelService.config.enabled ? deriveCopilotCliOTelEnv(otelService.config, {}) : {}),
 		};
 	}
 	return options;

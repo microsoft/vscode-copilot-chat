@@ -6,8 +6,9 @@
 import { Raw } from '@vscode/prompt-tsx';
 import type { InlineCompletionContext } from 'vscode';
 import * as yaml from 'yaml';
-import * as errors from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
+import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { ThemeIcon } from '../../../util/vs/base/common/themables';
 import { SerializedLineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { SerializedEdit } from './dataTypes/editUtils';
@@ -19,6 +20,10 @@ import { ISerializedNextEditRequest, StatelessNextEditRequest } from './stateles
 import { stringifyChatMessages } from './utils/stringifyChatMessages';
 import { Icon, now } from './utils/utils';
 import { HistoryContext } from './workspaceEditTracker/historyContextProvider';
+
+export interface MarkdownLoggable {
+	toMarkdown(): string;
+}
 
 export class InlineEditRequestLogContext {
 
@@ -35,6 +40,22 @@ export class InlineEditRequestLogContext {
 		return this._isVisible;
 	}
 
+	private _isCompleted: boolean = false;
+
+	/** Mark this request as completed (no longer in progress). */
+	markCompleted(): void {
+		this._isCompleted = true;
+		this.fireDidChange();
+	}
+
+	private readonly _onDidChange = new Emitter<void>();
+	/** Fires when state changes, allowing live log entries to refresh their content. */
+	public readonly onDidChange: Event<void> = this._onDidChange.event;
+
+	protected fireDidChange(): void {
+		this._onDidChange.fire();
+	}
+
 	constructor(
 		public readonly filePath: string,
 		public readonly version: number,
@@ -46,6 +67,10 @@ export class InlineEditRequestLogContext {
 	toLogDocument(): string {
 		const lines: string[] = [];
 		lines.push('# ' + this.getMarkdownTitle() + ` (Request #${this.requestId})`);
+
+		if (!this._isCompleted) {
+			lines.push('\n⏳ **In progress…**\n');
+		}
 
 		lines.push('💡 Tip: double-click anywhere to open this file as text to copy-paste content into an issue.\n');
 
@@ -111,7 +136,7 @@ export class InlineEditRequestLogContext {
 		if (this.error) {
 			lines.push(`## Error ${fromCacheStatus}`);
 			lines.push('```');
-			lines.push(errors.toString(errors.fromUnknown(this.error)));
+			lines.push(ErrorUtils.toString(ErrorUtils.fromUnknown(this.error)));
 			lines.push('```');
 		}
 
@@ -135,6 +160,13 @@ export class InlineEditRequestLogContext {
 
 		if (this._isAccepted !== undefined) {
 			lines.push(`## Accepted : ${this._isAccepted ? 'Yes' : 'No'}`);
+		}
+
+		if (this._rebaseFailure) {
+			lines.push('## Rebase Failure');
+			lines.push('<details><summary>Click to view</summary>\n');
+			lines.push(this._rebaseFailure.toMarkdown());
+			lines.push('\n</details>\n');
 		}
 
 		if (this._logs.length > 0) {
@@ -183,7 +215,7 @@ export class InlineEditRequestLogContext {
 		if (this.error) {
 			lines.push(`## Error:`);
 			lines.push('```');
-			lines.push(errors.toString(errors.fromUnknown(this.error)));
+			lines.push(ErrorUtils.toString(ErrorUtils.fromUnknown(this.error)));
 			lines.push('```');
 		}
 
@@ -208,6 +240,7 @@ export class InlineEditRequestLogContext {
 	setRequestInput(nextEditRequest: StatelessNextEditRequest): void {
 		this._isVisible = true;
 		this._nextEditRequest = nextEditRequest;
+		this.fireDidChange();
 	}
 
 	private _resultEdit: RootedLineEdit | string | undefined = undefined;
@@ -215,6 +248,7 @@ export class InlineEditRequestLogContext {
 	setResult(resultEditOrPatchString: RootedLineEdit | string) {
 		this._isVisible = true;
 		this._resultEdit = resultEditOrPatchString;
+		this.fireDidChange();
 	}
 
 	protected _diagnosticsResultEdit: RootedLineEdit | undefined = undefined;
@@ -222,6 +256,7 @@ export class InlineEditRequestLogContext {
 	setDiagnosticsResult(resultEdit: RootedLineEdit) {
 		this._isVisible = true;
 		this._diagnosticsResultEdit = resultEdit;
+		this.fireDidChange();
 	}
 
 	private _nesTypePicked: 'llm' | 'diagnostics' | undefined;
@@ -275,12 +310,14 @@ export class InlineEditRequestLogContext {
 
 		this._isVisible = true;
 		this._icon = Icon.database;
+		this.fireDidChange();
 	}
 
 	private _endpointInfo: { url: string; modelName: string } | undefined;
 
 	public setEndpointInfo(url: string, modelName: string): void {
 		this._endpointInfo = { url, modelName };
+		this.fireDidChange();
 	}
 
 	public get endpointInfo(): { url: string; modelName: string } | undefined {
@@ -290,6 +327,7 @@ export class InlineEditRequestLogContext {
 	private _headerRequestId: string | undefined = undefined;
 	public setHeaderRequestId(headerRequestId: string): void {
 		this._headerRequestId = headerRequestId;
+		this.fireDidChange();
 	}
 	get headerRequestId(): string | undefined {
 		return this._headerRequestId;
@@ -308,6 +346,7 @@ export class InlineEditRequestLogContext {
 		} else {
 			this._prompt = stringifyChatMessages(prompt);
 		}
+		this.fireDidChange();
 	}
 
 	private _icon: Icon.t | undefined;
@@ -319,16 +358,19 @@ export class InlineEditRequestLogContext {
 	public setIsSkipped() {
 		this._isVisible = false;
 		this._icon = Icon.skipped;
+		this.fireDidChange();
 	}
 
 	public markAsFromCache() {
 		this._isVisible = true;
 		this._icon = Icon.database;
+		this.fireDidChange();
 	}
 
 	public markAsNoSuggestions() {
 		this._isVisible = true;
 		this._icon = Icon.circleSlash;
+		this.fireDidChange();
 	}
 
 	private error: unknown | undefined = undefined;
@@ -343,6 +385,7 @@ export class InlineEditRequestLogContext {
 		} else {
 			this._icon = Icon.error;
 		}
+		this.fireDidChange();
 	}
 
 	/**
@@ -352,6 +395,7 @@ export class InlineEditRequestLogContext {
 	setResponse(v: string): void {
 		this._isVisible = true;
 		this.response = v;
+		this.fireDidChange();
 	}
 
 	private fullResponsePromise: Promise<string | undefined> | undefined = undefined;
@@ -368,21 +412,25 @@ export class InlineEditRequestLogContext {
 	private providerStartTime: number | undefined = undefined;
 	setProviderStartTime(): void {
 		this.providerStartTime = Date.now();
+		this.fireDidChange();
 	}
 
 	private providerEndTime: number | undefined = undefined;
 	setProviderEndTime(): void {
 		this.providerEndTime = Date.now();
+		this.fireDidChange();
 	}
 
 	private fetchStartTime: number | undefined = undefined;
 	setFetchStartTime(): void {
 		this.fetchStartTime = Date.now();
+		this.fireDidChange();
 	}
 
 	private fetchEndTime: number | undefined = undefined;
 	setFetchEndTime(): void {
 		this.fetchEndTime = Date.now();
+		this.fireDidChange();
 	}
 
 	/**
@@ -398,6 +446,7 @@ export class InlineEditRequestLogContext {
 		this._isVisible = true;
 		this._responseResults = v;
 		this._icon ??= Icon.lightbulbFull;
+		this.fireDidChange();
 	}
 
 	getDebugName(): string {
@@ -418,6 +467,7 @@ export class InlineEditRequestLogContext {
 	private _trace: string[] = [];
 	trace(msg: string): void {
 		this._trace.push(msg);
+		this.fireDidChange();
 	}
 
 	private _renderTraceDiagram(): string[] {
@@ -561,6 +611,13 @@ export class InlineEditRequestLogContext {
 	private _logs: string[] = [];
 	addLog(content: string): void {
 		this._logs.push(content.replace('\n', '\\n').replace('\t', '\\t').replace('`', '\`') + '\n');
+		this.fireDidChange();
+	}
+
+	private _rebaseFailure: MarkdownLoggable | undefined;
+
+	setRebaseFailure(failure: MarkdownLoggable): void {
+		this._rebaseFailure = failure;
 	}
 
 

@@ -2,7 +2,6 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import * as l10n from '@vscode/l10n';
 import type { Disposable, LanguageModelChatInformation, LanguageModelDataPart, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart } from 'vscode';
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
@@ -87,27 +86,6 @@ export function isNoAuthConfig(config: BYOKModelConfig): config is BYOKNoAuthMod
 	return !('apiKey' in config) && !('deploymentUrl' in config);
 }
 
-export function chatModelInfoToProviderMetadata(chatModelInfo: IChatModelInformation): LanguageModelChatInformation {
-	const outputTokens = chatModelInfo.capabilities.limits?.max_output_tokens ?? 4096;
-	const inputTokens = chatModelInfo.capabilities.limits?.max_prompt_tokens ?? ((chatModelInfo.capabilities.limits?.max_context_window_tokens || 64000) - outputTokens);
-	return {
-		id: chatModelInfo.id,
-		family: chatModelInfo.capabilities.family,
-		tooltip: l10n.t('{0} is contributed via the {1} provider.', chatModelInfo.name, chatModelInfo.capabilities.family),
-		version: '1.0.0',
-		maxOutputTokens: outputTokens,
-		maxInputTokens: inputTokens,
-		name: chatModelInfo.name,
-		isUserSelectable: true,
-		multiplierNumeric: 0,
-		capabilities: {
-			toolCalling: chatModelInfo.capabilities.supports.tool_calls,
-			imageInput: chatModelInfo.capabilities.supports.vision,
-		},
-		requiresAuthorization: true
-	};
-}
-
 export function resolveModelInfo(modelId: string, providerName: string, knownModels: BYOKKnownModels | undefined, modelCapabilities?: BYOKModelCapabilities): IChatModelInformation {
 	// Model Capabilities are something the user has decided on so those take precedence, then we rely on known model info, then defaults.
 	let knownModelInfo = modelCapabilities;
@@ -119,6 +97,7 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 	const modelInfo: IChatModelInformation = {
 		id: modelId,
 		name: modelName,
+		vendor: providerName,
 		version: '1.0.0',
 		capabilities: {
 			type: 'chat',

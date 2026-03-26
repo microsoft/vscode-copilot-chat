@@ -18,7 +18,7 @@ name: "Prompt Name"          # Optional, defaults to filename
 argument-hint: "Task..."     # Optional: hint shown in chat input
 agent: "agent"               # Optional: ask, agent, plan, or custom agent
 model: "GPT-5 (copilot)"     # Optional: selected model, or fallback array
-tools: ["search", "web"]    # Optional: built-in, tool sets, MCP (<server>/*), extension
+tools: [search, web]    # Optional: built-in, tool sets, MCP (<server>/*), extension
 ---
 ```
 

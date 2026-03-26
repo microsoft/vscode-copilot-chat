@@ -6,8 +6,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { LintOptions, LintOptionShowCode, LintOptionWarning } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { IXtabHistoryEntry } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { TestLanguageDiagnosticsService } from '../../../../platform/languages/common/testLanguageDiagnosticsService';
 import { Position } from '../../../../util/vs/editor/common/core/position';
+import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
 import { ensureDependenciesAreSet } from '../../../../util/vs/editor/common/core/text/positionToOffset';
 import { DiagnosticSeverity, Range } from '../../../../vscodeTypes';
@@ -26,6 +28,7 @@ describe('LintErrors', () => {
 		showCode: LintOptionShowCode.NO,
 		maxLints: 5,
 		maxLineDistance: 10,
+		nRecentFiles: 0,
 	};
 
 	function createDocument(lines: string[], cursorLine: number, cursorColumn: number): CurrentDocument {
@@ -601,6 +604,7 @@ describe('LintErrors', () => {
 				showCode: LintOptionShowCode.NO,
 				maxLints: 10,
 				maxLineDistance: 20,
+				nRecentFiles: 0,
 			};
 
 			const lintErrors = createLintErrors(document);
@@ -647,6 +651,7 @@ describe('LintErrors', () => {
 				showCode: LintOptionShowCode.YES_WITH_SURROUNDING,
 				maxLints: 10,
 				maxLineDistance: 20,
+				nRecentFiles: 0,
 			};
 
 			const lintErrors = createLintErrors(document);
@@ -666,6 +671,50 @@ describe('LintErrors', () => {
 <|/linter diagnostics|>`;
 
 			expect(result).toBe(expected);
+		});
+
+		it('should handle stale diagnostic referencing lines beyond document length', () => {
+			const document = createDocument(['line1', 'line2'], 1, 1);
+			// Diagnostic references line 10 which doesn't exist in a 2-line document
+			diagnosticsService.setDiagnostics(fileUri, [
+				{
+					message: 'Stale diagnostic',
+					range: new Range(10, 0, 10, 5),
+					severity: DiagnosticSeverity.Error
+				}
+			]);
+
+			const optionsWithCode: LintOptions = {
+				...defaultLintOptions,
+				showCode: LintOptionShowCode.YES
+			};
+
+			const lintErrors = createLintErrors(document);
+
+			// Should not throw, should gracefully handle stale diagnostic
+			const result = lintErrors.getFormattedLintErrors(optionsWithCode);
+			expect(result).toContain('Stale diagnostic');
+		});
+
+		it('should handle stale diagnostic with YES_WITH_SURROUNDING beyond document length', () => {
+			const document = createDocument(['line1', 'line2'], 1, 1);
+			diagnosticsService.setDiagnostics(fileUri, [
+				{
+					message: 'Stale diagnostic',
+					range: new Range(10, 0, 10, 5),
+					severity: DiagnosticSeverity.Error
+				}
+			]);
+
+			const optionsWithSurrounding: LintOptions = {
+				...defaultLintOptions,
+				showCode: LintOptionShowCode.YES_WITH_SURROUNDING
+			};
+
+			const lintErrors = createLintErrors(document);
+
+			const result = lintErrors.getFormattedLintErrors(optionsWithSurrounding);
+			expect(result).toContain('Stale diagnostic');
 		});
 	});
 
@@ -957,6 +1006,256 @@ describe('LintErrors', () => {
 			// Non-error severities should be treated as warnings
 			expect(result).toContain('warning: Information message');
 			expect(result).toContain('warning: Hint message');
+		});
+	});
+
+	describe('nRecentFiles', () => {
+		const otherFileId = DocumentId.create('file:///test/other.ts');
+		const otherFileUri = otherFileId.toUri();
+		const thirdFileId = DocumentId.create('file:///test/third.ts');
+		const thirdFileUri = thirdFileId.toUri();
+
+		function createHistoryEntry(docId: DocumentId): IXtabHistoryEntry {
+			return {
+				kind: 'visibleRanges',
+				docId,
+				visibleRanges: [new OffsetRange(0, 100)],
+				documentContent: new StringText(''),
+			};
+		}
+
+		function createLintErrorsWithHistory(document: CurrentDocument, history: readonly IXtabHistoryEntry[]): LintErrors {
+			return new LintErrors(
+				documentId,
+				document,
+				diagnosticsService,
+				history,
+			);
+		}
+
+		it('should include diagnostics from recent files when nRecentFiles is set', () => {
+			const document = createDocument(['const x = 1;', 'const y = 2;'], 1, 1);
+			diagnosticsService.setDiagnostics(fileUri, [
+				{ message: 'Current file error', range: new Range(0, 0, 0, 12), severity: DiagnosticSeverity.Error }
+			]);
+			diagnosticsService.setDiagnostics(otherFileUri, [
+				{ message: 'Other file error', range: new Range(0, 0, 0, 10), severity: DiagnosticSeverity.Error }
+			]);
+
+			const history: IXtabHistoryEntry[] = [createHistoryEntry(otherFileId)];
+			const lintErrors = createLintErrorsWithHistory(document, history);
+
+			const result = lintErrors.getFormattedLintErrors({ ...defaultLintOptions, nRecentFiles: 1 });
+			expect(result).toContain('Current file error');
+			expect(result).toContain('Other file error');
+		});
+
+		it('should not include recent file diagnostics when nRecentFiles is undefined', () => {
+			const document = createDocument(['const x = 1;', 'const y = 2;'], 1, 1);
+			diagnosticsService.setDiagnostics(fileUri, [
+				{ message: 'Current file error', range: new Range(0, 0, 0, 12), severity: DiagnosticSeverity.Error }
+			]);
+			diagnosticsService.setDiagnostics(otherFileUri, [
+				{ message: 'Other file error', range: new Range(0, 0, 0, 10), severity: DiagnosticSeverity.Error }
+			]);
+
+			const history: IXtabHistoryEntry[] = [createHistoryEntry(otherFileId)];
+			const lintErrors = createLintErrorsWithHistory(document, history);
+
+			const result = lintErrors.getFormattedLintErrors(defaultLintOptions);
+			expect(result).toContain('Current file error');
+			expect(result).not.toContain('Other file error');
+		});
+
+		it('should not include recent file diagnostics when nRecentFiles is 0', () => {
+			const document = createDocument(['const x = 1;', 'const y = 2;'], 1, 1);
+			diagnosticsService.setDiagnostics(otherFileUri, [
+				{ message: 'Other file error', range: new Range(0, 0, 0, 10), severity: DiagnosticSeverity.Error }
+			]);
+
+			const history: IXtabHistoryEntry[] = [createHistoryEntry(otherFileId)];
+			const lintErrors = createLintErrorsWithHistory(document, history);
+
+			const result = lintErrors.getFormattedLintErrors({ ...defaultLintOptions, nRecentFiles: 0 });
+			expect(result).not.toContain('Other file error');
+		});
+
+		it('should exclude the current file from recent files', () => {
+			const document = createDocument(['const x = 1;', 'const y = 2;'], 1, 1);
+			diagnosticsService.setDiagnostics(fileUri, [
+				{ message: 'Current file error', range: new Range(0, 0, 0, 12), severity: DiagnosticSeverity.Error }
+			]);
+
+			// History contains the current document itself
+			const history: IXtabHistoryEntry[] = [createHistoryEntry(documentId)];
+			const lintErrors = createLintErrorsWithHistory(document, history);
+
+			const result = lintErrors.getFormattedLintErrors({ ...defaultLintOptions, nRecentFiles: 1 });
+			// Should only contain the error once (from current file processing, not from recent files)
+			const errorCount = (result.match(/Current file error/g) || []).length;
+			expect(errorCount).toBe(1);
+		});
+
+		it('should respect nRecentFiles limit', () => {
+			const document = createDocument(['const x = 1;', 'const y = 2;'], 1, 1);
+			diagnosticsService.setDiagnostics(otherFileUri, [
+				{ message: 'Other file error', range: new Range(0, 0, 0, 10), severity: DiagnosticSeverity.Error }
+			]);
+			diagnosticsService.setDiagnostics(thirdFileUri, [
+				{ message: 'Third file error', range: new Range(0, 0, 0, 10), severity: DiagnosticSeverity.Error }
+			]);
+
+			// History: third file most recent, other file least recent
+			const history: IXtabHistoryEntry[] = [
+				createHistoryEntry(otherFileId),
+				createHistoryEntry(thirdFileId),
+			];
+			const lintErrors = createLintErrorsWithHistory(document, history);
+
+			// Only request 1 recent file - should pick the most recent (third file)
+			const result = lintErrors.getFormattedLintErrors({ ...defaultLintOptions, nRecentFiles: 1 });
+			expect(result).toContain('Third file error');
+			expect(result).not.toContain('Other file error');
+		});
+
+		it('should order recent file diagnostics by file recency', () => {
+			const document = createDocument(['const x = 1;', 'const y = 2;'], 1, 1);
+			diagnosticsService.setDiagnostics(fileUri, []);
+			diagnosticsService.setDiagnostics(otherFileUri, [
+				{ message: 'Other file error', range: new Range(0, 0, 0, 10), severity: DiagnosticSeverity.Error }
+			]);
+			diagnosticsService.setDiagnostics(thirdFileUri, [
+				{ message: 'Third file error', range: new Range(0, 0, 0, 10), severity: DiagnosticSeverity.Error }
+			]);
+
+			// History: other file first (least recent), third file last (most recent)
+			const history: IXtabHistoryEntry[] = [
+				createHistoryEntry(otherFileId),
+				createHistoryEntry(thirdFileId),
+			];
+			const lintErrors = createLintErrorsWithHistory(document, history);
+
+			const result = lintErrors.getFormattedLintErrors({ ...defaultLintOptions, nRecentFiles: 2 });
+			const thirdIdx = result.indexOf('Third file error');
+			const otherIdx = result.indexOf('Other file error');
+			// Most recent file (third) should appear before least recent (other)
+			expect(thirdIdx).toBeLessThan(otherIdx);
+		});
+
+		it('should place current file diagnostics before recent file diagnostics', () => {
+			const document = createDocument(['const x = 1;', 'const y = 2;'], 1, 1);
+			diagnosticsService.setDiagnostics(fileUri, [
+				{ message: 'Current file error', range: new Range(0, 0, 0, 12), severity: DiagnosticSeverity.Error }
+			]);
+			diagnosticsService.setDiagnostics(otherFileUri, [
+				{ message: 'Other file error', range: new Range(0, 0, 0, 10), severity: DiagnosticSeverity.Error }
+			]);
+
+			const history: IXtabHistoryEntry[] = [createHistoryEntry(otherFileId)];
+			const lintErrors = createLintErrorsWithHistory(document, history);
+
+			const result = lintErrors.getFormattedLintErrors({ ...defaultLintOptions, nRecentFiles: 1 });
+			const currentIdx = result.indexOf('Current file error');
+			const otherIdx = result.indexOf('Other file error');
+			expect(currentIdx).toBeLessThan(otherIdx);
+		});
+
+		it('should respect maxLints across current and recent files', () => {
+			const document = createDocument(['const x = 1;', 'const y = 2;', 'const z = 3;'], 2, 1);
+			diagnosticsService.setDiagnostics(fileUri, [
+				{ message: 'Current error 1', range: new Range(0, 0, 0, 12), severity: DiagnosticSeverity.Error },
+				{ message: 'Current error 2', range: new Range(1, 0, 1, 12), severity: DiagnosticSeverity.Error },
+			]);
+			diagnosticsService.setDiagnostics(otherFileUri, [
+				{ message: 'Other error 1', range: new Range(0, 0, 0, 10), severity: DiagnosticSeverity.Error },
+				{ message: 'Other error 2', range: new Range(1, 0, 1, 10), severity: DiagnosticSeverity.Error },
+			]);
+
+			const history: IXtabHistoryEntry[] = [createHistoryEntry(otherFileId)];
+			const lintErrors = createLintErrorsWithHistory(document, history);
+
+			const result = lintErrors.getFormattedLintErrors({ ...defaultLintOptions, maxLints: 3, nRecentFiles: 1 });
+			// Should have 2 current + 1 recent = 3 total (maxLints)
+			expect(result).toContain('Current error 1');
+			expect(result).toContain('Current error 2');
+			expect(result).toContain('Other error 1');
+			expect(result).not.toContain('Other error 2');
+		});
+
+		it('should apply severity filter to recent file diagnostics', () => {
+			const document = createDocument(['const x = 1;'], 1, 1);
+			diagnosticsService.setDiagnostics(otherFileUri, [
+				{ message: 'Other error', range: new Range(0, 0, 0, 10), severity: DiagnosticSeverity.Error },
+				{ message: 'Other warning', range: new Range(1, 0, 1, 10), severity: DiagnosticSeverity.Warning },
+			]);
+
+			const history: IXtabHistoryEntry[] = [createHistoryEntry(otherFileId)];
+			const lintErrors = createLintErrorsWithHistory(document, history);
+
+			const result = lintErrors.getFormattedLintErrors({
+				...defaultLintOptions,
+				warnings: LintOptionWarning.NO,
+				nRecentFiles: 1,
+			});
+			expect(result).toContain('Other error');
+			expect(result).not.toContain('Other warning');
+		});
+
+		it('should deduplicate documents in history', () => {
+			const document = createDocument(['const x = 1;'], 1, 1);
+			diagnosticsService.setDiagnostics(otherFileUri, [
+				{ message: 'Other error', range: new Range(0, 0, 0, 10), severity: DiagnosticSeverity.Error },
+			]);
+
+			// Same document appears twice in history
+			const history: IXtabHistoryEntry[] = [
+				createHistoryEntry(otherFileId),
+				createHistoryEntry(otherFileId),
+			];
+			const lintErrors = createLintErrorsWithHistory(document, history);
+
+			const result = lintErrors.getFormattedLintErrors({ ...defaultLintOptions, nRecentFiles: 2 });
+			// Should only include the diagnostic once
+			const errorCount = (result.match(/Other error/g) || []).length;
+			expect(errorCount).toBe(1);
+		});
+
+		it('should work when no xtab history is provided', () => {
+			const document = createDocument(['const x = 1;'], 1, 1);
+			diagnosticsService.setDiagnostics(fileUri, [
+				{ message: 'Current file error', range: new Range(0, 0, 0, 12), severity: DiagnosticSeverity.Error }
+			]);
+
+			// No history passed (backward compat)
+			const lintErrors = createLintErrors(document);
+			const result = lintErrors.getFormattedLintErrors({ ...defaultLintOptions, nRecentFiles: 5 });
+			expect(result).toContain('Current file error');
+		});
+
+		it('should not show code context for recent file diagnostics', () => {
+			const document = createDocument(['current line 0', 'current line 1', 'current line 2'], 2, 1);
+			diagnosticsService.setDiagnostics(fileUri, [
+				{ message: 'Current error', range: new Range(0, 0, 0, 14), severity: DiagnosticSeverity.Error }
+			]);
+			diagnosticsService.setDiagnostics(otherFileUri, [
+				{ message: 'Other error', range: new Range(0, 0, 0, 10), severity: DiagnosticSeverity.Error }
+			]);
+
+			const history: IXtabHistoryEntry[] = [createHistoryEntry(otherFileId)];
+			const lintErrors = createLintErrorsWithHistory(document, history);
+
+			const result = lintErrors.getFormattedLintErrors({
+				...defaultLintOptions,
+				showCode: LintOptionShowCode.YES_WITH_SURROUNDING,
+				nRecentFiles: 1,
+			});
+			// Current file diagnostic should have code context
+			expect(result).toContain('current line 0');
+			// Recent file diagnostic should NOT show current file lines as code context
+			expect(result).toContain('Other error');
+			// Only one occurrence of current file content (from the current file diagnostic, not from recent)
+			const currentLineCount = (result.match(/current line 0/g) || []).length;
+			expect(currentLineCount).toBe(1);
 		});
 	});
 });

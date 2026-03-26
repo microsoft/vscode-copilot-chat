@@ -15,10 +15,10 @@ Custom personas with specific tools, instructions, and behaviors. Use for orches
 ---
 description: "<required>"    # For agent picker and subagent discovery
 name: "Agent Name"           # Optional, defaults to filename
-tools: ["search", "web"]     # Optional: aliases, MCP (<server>/*), extension tools
+tools: [search, web]         # Optional: aliases, MCP (<server>/*), extension tools
 model: "Claude Sonnet 4"     # Optional, uses picker default; supports array for fallback
 argument-hint: "Task..."     # Optional, input guidance
-agents: ["Agent1", "Agent2"] # Optional, restrict allowed subagents by name (omit = all, [] = none)
+agents: [agent1, agent2]     # Optional, restrict allowed subagents by name (omit = all, [] = none)
 user-invocable: true         # Optional, show in agent picker (default: true)
 disable-model-invocation: false  # Optional, prevent subagent invocation (default: false)
 handoffs: [...]              # Optional, transitions to other agents
@@ -59,10 +59,10 @@ Sources: built-in aliases, specific tools, MCP servers (`<server>/*`), extension
 ### Common Patterns
 
 ```yaml
-tools: ["read", "search"]           # Read-only research
-tools: ["myserver/*"]               # MCP server only
-tools: ["read", "edit", "search"]   # No terminal access
-tools: []                            # Conversational only
+tools: [read, search]             # Read-only research
+tools: [myserver/*]               # MCP server only
+tools: [read, edit, search]       # No terminal access
+tools: []                         # Conversational only
 ```
 
 To discover available tools, check your current tool list or use `#tool:` syntax in the body to reference specific tools.
@@ -72,7 +72,7 @@ To discover available tools, check your current tool list or use `#tool:` syntax
 ```markdown
 ---
 description: "{Use when... trigger phrases for subagent discovery}"
-tools: ["{minimal set of tool aliases}"]
+tools: [{minimal set of tool aliases}]
 user-invocable: false
 ---
 You are a specialist at {specific task}. Your job is to {clear purpose}.

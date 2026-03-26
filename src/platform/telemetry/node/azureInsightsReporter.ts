@@ -12,7 +12,7 @@ import type { TelemetrySender } from 'vscode';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IEnvService } from '../../env/common/envService';
-import { TelemetryProperties } from '../common/telemetry';
+import { createTrackingIdGetter, TelemetryProperties } from '../common/telemetry';
 
 export function wrapEventNameForPrefixRemoval(eventName: string): string {
 	return `wrapped-telemetry-event-name-${eventName}-wrapped-telemetry-event-name`;
@@ -27,9 +27,11 @@ export function unwrapEventNameFromPrefix(eventName: string): string {
 
 export class AzureInsightReporter implements TelemetrySender {
 	private readonly client: appInsights.TelemetryClient;
-	constructor(capiClientService: ICAPIClientService, envService: IEnvService, private readonly tokenStore: ICopilotTokenStore, private readonly namespace: string, key: string) {
+	private readonly getTrackingId: () => string | undefined;
+	constructor(capiClientService: ICAPIClientService, envService: IEnvService, tokenStore: ICopilotTokenStore, private readonly namespace: string, key: string) {
 		this.client = createAppInsightsClient(capiClientService, envService, key);
 		configureReporter(capiClientService, envService, this.client);
+		this.getTrackingId = createTrackingIdGetter(tokenStore);
 	}
 
 	private separateData(data: Record<string, any>): { properties: Record<string, any>; measurements: Record<string, number> } {
@@ -52,7 +54,7 @@ export class AzureInsightReporter implements TelemetrySender {
 
 	sendEventData(eventName: string, data?: Record<string, any> | undefined): void {
 		const { properties, measurements } = this.separateData(data || {});
-		const trackingId = this.tokenStore.copilotToken?.getTokenValue('tid');
+		const trackingId = this.getTrackingId();
 		this.client.trackEvent({
 			name: this.massageEventName(eventName),
 			properties,

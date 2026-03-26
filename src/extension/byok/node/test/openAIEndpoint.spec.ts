@@ -50,6 +50,7 @@ describe('OpenAIEndpoint - Reasoning Properties', () => {
 		modelMetadata = {
 			id: 'test-model',
 			name: 'Test Model',
+			vendor: 'Test Vendor',
 			version: '1.0',
 			model_picker_enabled: true,
 			is_chat_default: false,
@@ -140,7 +141,6 @@ describe('OpenAIEndpoint - Reasoning Properties', () => {
 
 	describe('Responses API mode (useResponsesApi = true)', () => {
 		it('should preserve reasoning object when thinking is supported', () => {
-			accessor.get(IConfigurationService).setConfig(ConfigKey.ResponsesApiReasoningEffort, 'medium');
 			accessor.get(IConfigurationService).setConfig(ConfigKey.ResponsesApiReasoningSummary, 'detailed');
 			const endpoint = instaService.createInstance(OpenAIEndpoint,
 				modelMetadata,
@@ -170,7 +170,6 @@ describe('OpenAIEndpoint - Reasoning Properties', () => {
 				}
 			};
 
-			accessor.get(IConfigurationService).setConfig(ConfigKey.ResponsesApiReasoningEffort, 'medium');
 			accessor.get(IConfigurationService).setConfig(ConfigKey.ResponsesApiReasoningSummary, 'detailed');
 			const endpoint = instaService.createInstance(OpenAIEndpoint,
 				modelWithoutThinking,

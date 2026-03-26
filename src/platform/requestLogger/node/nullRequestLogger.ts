@@ -17,6 +17,9 @@ export class NullRequestLogger extends AbstractRequestLogger {
 	public override getRequests(): ILoggedRequestInfo[] {
 		return [];
 	}
+	public override getRequestById(_id: string): undefined {
+		return undefined;
+	}
 	public override logModelListCall(id: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void {
 
 	}

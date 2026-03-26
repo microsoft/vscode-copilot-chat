@@ -10,6 +10,7 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { CancellationError } from '../../../util/vs/base/common/errors';
+import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Source } from '../../chat/common/chatMLFetcher';
 import type { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
@@ -103,6 +104,7 @@ export interface IEndpointBody {
 	/** Responses API: */
 	input?: readonly any[];
 	truncation?: 'auto' | 'disabled';
+	prompt_cache_key?: string;
 	include?: ['reasoning.encrypted_content'];
 	store?: boolean;
 	text?: {
@@ -155,6 +157,8 @@ export interface IMakeChatRequestOptions {
 	debugName: string;
 	/** The array of chat messages to send */
 	messages: Raw.ChatMessage[];
+	/** Enable WebSocket transport for this request when supported. */
+	useWebSocket?: boolean;
 	ignoreStatefulMarker?: boolean;
 	/** Streaming callback for each response part. */
 	finishedCb: FinishedCallback | undefined;
@@ -162,6 +166,10 @@ export interface IMakeChatRequestOptions {
 	location: ChatLocation;
 	/** Optional source of the chat request */
 	source?: Source;
+	/** Conversation identifier used for request-scoped state (for example WebSocket connection reuse). */
+	conversationId?: string;
+	/** Identifier for a single tool-calling turn within a conversation. */
+	turnId?: string;
 	/** Additional request options */
 	requestOptions?: Omit<OptionalChatRequestParams, 'n'>;
 	/** Indicates if the request was user-initiated */
@@ -176,12 +184,19 @@ export interface IMakeChatRequestOptions {
 	enableRetryOnError?: boolean;
 	/** Which fetcher to use, overrides the default. */
 	useFetcher?: FetcherId;
-	/** Disable extended thinking for this request. Used when resuming from tool call errors where the original thinking blocks are not available. */
-	disableThinking?: boolean;
+	/** Explicitly enable thinking for this request. When not set, thinking is disabled. */
+	enableThinking?: boolean;
+	/** Reasoning effort level for this request (e.g. 'low', 'medium', 'high'). Only used when enableThinking is true or when the model supports reasoning effort. */
+	reasoningEffort?: string;
 	/** Enable retrying once on simple network errors like ECONNRESET. */
 	canRetryOnceWithoutRollback?: boolean;
 	/** Custom metadata to be displayed in the log document */
 	customMetadata?: Record<string, string | number | boolean | undefined>;
+	/**
+	 * Options for the kind of request being made (e.g. subagent). Controls the X-Interaction-Type header.
+	 * See notes on each interface.
+	 */
+	requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions;
 }
 
 export type IChatRequestTelemetryProperties = {
@@ -210,11 +225,13 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly maxOutputTokens: number;
 	/** The model ID- this may change and will be `copilot-base` for the base model. Use `family` to switch behavior based on model type. */
 	readonly model: string;
+	readonly modelProvider: string;
 	readonly apiType?: string;
 	readonly supportsThinkingContentInHistory?: boolean;
 	readonly supportsAdaptiveThinking?: boolean;
 	readonly minThinkingBudget?: number;
 	readonly maxThinkingBudget?: number;
+	readonly supportsReasoningEffort?: string[];
 	readonly supportsToolCalls: boolean;
 	readonly supportsVision: boolean;
 	readonly supportsPrediction: boolean;
@@ -303,22 +320,44 @@ export function createCapiRequestBody(options: ICreateEndpointBodyOptions, model
 	return request;
 }
 
+export interface INetworkRequestOptions {
+	readonly requestType: 'GET' | 'POST';
+	readonly endpointOrUrl: IEndpoint | string | RequestMetadata;
+	readonly secretKey: string;
+	readonly intent: string;
+	readonly requestId: string;
+	readonly body?: IEndpointBody;
+	readonly additionalHeaders?: Record<string, string>;
+	readonly cancelToken?: CancellationToken;
+	readonly useFetcher?: FetcherId;
+	readonly canRetryOnce?: boolean;
+	readonly location?: ChatLocation;
+	readonly requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions;
+}
+
+/**
+ * A background request is one that is not associated with a user request.
+ */
+export interface IBackgroundRequestOptions {
+	readonly kind: 'background';
+}
+
+/**
+ * A subagent request is a request made by a subagent, indicated with a subAgentInvocationId included in the request from VS Code.
+ */
+export interface ISubagentRequestOptions {
+	readonly kind: 'subagent';
+}
+
 function networkRequest(
-	fetcher: IFetcher,
-	telemetryService: ITelemetryService,
-	capiClientService: ICAPIClientService,
-	requestType: 'GET' | 'POST',
-	endpointOrUrl: IEndpoint | string | RequestMetadata,
-	secretKey: string,
-	intent: string,
-	requestId: string,
-	body?: IEndpointBody,
-	additionalHeaders?: Record<string, string>,
-	cancelToken?: CancellationToken,
-	useFetcher?: FetcherId,
-	canRetryOnce: boolean = true,
-	location?: ChatLocation,
+	accessor: ServicesAccessor,
+	options: INetworkRequestOptions,
 ): Promise<Response> {
+	const fetcher = accessor.get(IFetcherService);
+	const telemetryService = accessor.get(ITelemetryService);
+	const capiClientService = accessor.get(ICAPIClientService);
+	const { requestType, endpointOrUrl, secretKey, intent, requestId, body, additionalHeaders, cancelToken, useFetcher, canRetryOnce = true, location } = options;
+
 	// TODO @lramos15 Eventually don't even construct this fake endpoint object.
 	const endpoint = typeof endpointOrUrl === 'string' || 'type' in endpointOrUrl ? {
 		modelMaxPromptTokens: 0,
@@ -331,15 +370,23 @@ function networkRequest(
 		name: '',
 		version: '',
 	} satisfies IEndpoint : endpointOrUrl;
+	const agentInteractionType = options.requestKindOptions?.kind === 'subagent' ?
+		'conversation-subagent' :
+		options.requestKindOptions?.kind === 'background' ?
+			'conversation-background' :
+			intent === 'conversation-agent' ? intent :
+				intent;
+
 	const headers: ReqHeaders = {
 		Authorization: `Bearer ${secretKey}`,
 		'X-Request-Id': requestId,
-		'X-Interaction-Type': intent,
 		'OpenAI-Intent': intent, // Tells CAPI who flighted this request. Helps find buggy features
 		'X-GitHub-Api-Version': '2025-05-01',
 		...additionalHeaders,
 		...(endpoint.getExtraHeaders ? endpoint.getExtraHeaders(location) : {}),
 	};
+	headers['X-Interaction-Type'] = agentInteractionType;
+	headers['X-Agent-Task-Id'] = requestId;
 
 	if (endpoint.interceptBody) {
 		endpoint.interceptBody(body);
@@ -347,6 +394,7 @@ function networkRequest(
 
 	const endpointFetchOptions = endpoint.getEndpointFetchOptions?.();
 	const request: FetchOptions = {
+		callSite: `network-request-${intent}`,
 		method: requestType,
 		headers: headers,
 		json: body,
@@ -397,67 +445,22 @@ export function canRetryOnceNetworkError(reason: any) {
 		'ERR_HTTP2_STREAM_CANCEL',
 		'ERR_HTTP2_GOAWAY_SESSION',
 		'ERR_HTTP2_PROTOCOL_ERROR',
+		'ERR_FAILED',
 	].includes(reason?.code);
 }
 
 export function postRequest(
-	fetcherService: IFetcherService,
-	telemetryService: ITelemetryService,
-	capiClientService: ICAPIClientService,
-	endpointOrUrl: IEndpoint | string | RequestMetadata,
-	secretKey: string,
-	hmac: string | undefined,
-	intent: string,
-	requestId: string,
-	body?: IEndpointBody,
-	additionalHeaders?: Record<string, string>,
-	cancelToken?: CancellationToken,
-	useFetcher?: FetcherId,
-	canRetryOnce: boolean = true,
-	location?: ChatLocation,
+	accessor: ServicesAccessor,
+	options: Omit<INetworkRequestOptions, 'requestType'>,
 ): Promise<Response> {
-	return networkRequest(fetcherService,
-		telemetryService,
-		capiClientService,
-		'POST',
-		endpointOrUrl,
-		secretKey,
-		intent,
-		requestId,
-		body,
-		additionalHeaders,
-		cancelToken,
-		useFetcher,
-		canRetryOnce,
-		location,
-	);
+	return networkRequest(accessor, { ...options, requestType: 'POST' });
 }
 
 export function getRequest(
-	fetcherService: IFetcher,
-	telemetryService: ITelemetryService,
-	capiClientService: ICAPIClientService,
-	endpointOrUrl: IEndpoint | string | RequestMetadata,
-	secretKey: string,
-	hmac: string | undefined,
-	intent: string,
-	requestId: string,
-	body?: IEndpointBody,
-	additionalHeaders?: Record<string, string>,
-	cancelToken?: CancellationToken
+	accessor: ServicesAccessor,
+	options: Omit<INetworkRequestOptions, 'requestType'>,
 ): Promise<Response> {
-	return networkRequest(fetcherService,
-		telemetryService,
-		capiClientService,
-		'GET',
-		endpointOrUrl,
-		secretKey,
-		intent,
-		requestId,
-		body,
-		additionalHeaders,
-		cancelToken
-	);
+	return networkRequest(accessor, { ...options, requestType: 'GET' });
 }
 
 export const IHeaderContributors = createServiceIdentifier<HeaderContributors>('headerContributors');

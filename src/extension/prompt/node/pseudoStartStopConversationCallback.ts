@@ -236,5 +236,10 @@ function tryParsePartialToolInput(raw: string | undefined): unknown {
 		return raw;
 	}
 
-	return parsePartialJson(raw);
+	try {
+		// Certain patterns, especially partially-generated unicode escape sequences, cause this to throw.
+		return parsePartialJson(raw);
+	} catch {
+		return undefined;
+	}
 }

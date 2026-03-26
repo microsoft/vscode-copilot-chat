@@ -314,6 +314,20 @@ export class ChatRequestTurn implements vscode.ChatRequestTurn {
 	) { }
 }
 
+export class ChatRequestTurn2 implements vscode.ChatRequestTurn2 {
+	constructor(
+		readonly prompt: string,
+		readonly command: string | undefined,
+		readonly references: vscode.ChatPromptReference[],
+		readonly participant: string,
+		readonly toolReferences: readonly vscode.ChatLanguageModelToolReference[],
+		readonly editedFileEvents: vscode.ChatRequestEditedFileEvent[] | undefined,
+		readonly id: string | undefined,
+		readonly modelId: string | undefined,
+		readonly modeInstructions2: vscode.ChatRequestModeInstructions | undefined,
+	) { }
+}
+
 export class ChatResponseTurn implements vscode.ChatResponseTurn {
 
 	constructor(
@@ -580,10 +594,10 @@ export class ChatToolInvocationPart {
 
 	constructor(toolName: string,
 		toolCallId: string,
-		isError?: boolean) {
+		isError?: boolean | string) {
 		this.toolName = toolName;
 		this.toolCallId = toolCallId;
-		this.isError = isError;
+		this.isError = typeof isError === 'string' ? true : isError;
 	}
 }
 
@@ -613,7 +627,8 @@ export class ChatResponseTurn2 implements vscode.ChatResponseTurn2 {
 export enum ChatSessionStatus {
 	Failed = 0,
 	Completed = 1,
-	InProgress = 2
+	InProgress = 2,
+	NeedsInput = 3
 }
 
 export class LanguageModelError extends Error {

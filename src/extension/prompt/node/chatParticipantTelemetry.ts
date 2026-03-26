@@ -13,15 +13,16 @@ import { ILanguageDiagnosticsService } from '../../../platform/languages/common/
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData as PlatformTelemetryData } from '../../../platform/telemetry/common/telemetryData';
+import { getCachedSha256Hash } from '../../../util/common/crypto';
 import { isNotebookCellOrNotebookChatInput } from '../../../util/common/notebooks';
+import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { isBYOKModel } from '../../byok/node/openAIEndpoint';
-import { Intent } from '../../common/constants';
+import { Intent, agentsToCommands } from '../../common/constants';
 import { DiagnosticsTelemetryData, findDiagnosticsTelemetry } from '../../inlineChat/node/diagnosticsTelemetry';
 import { InteractionOutcome } from '../../inlineChat/node/promptCraftingTypes';
 import { AgentIntent } from '../../intents/node/agentIntent';
 import { EditCodeIntent } from '../../intents/node/editCodeIntent';
-import { EditCode2Intent } from '../../intents/node/editCodeIntent2';
 import { DocumentToAstSelectionData } from '../../prompts/node/inline/inlineChatEditCodePrompt';
 import { getCustomInstructionTelemetry } from '../../prompts/node/panel/customInstructions';
 import { PATCH_PREFIX } from '../../tools/node/applyPatch/parseApplyPatch';
@@ -147,6 +148,7 @@ type RequestPanelTelemetryProperties = RequestTelemetryProperties & {
 	mode: string;
 	parentRequestId: string | undefined;
 	vscodeRequestId: string | undefined;
+	slashCommand: string;
 };
 
 type RequestTelemetryMeasurements = {
@@ -204,6 +206,32 @@ type RequestInlineTelemetryMeasurements = RequestTelemetryMeasurements & {
 };
 
 //#endregion
+
+const builtinSlashCommands = new Set(
+	Object.values(agentsToCommands).flatMap(commands => commands ? Object.keys(commands) : [])
+);
+
+function getSlashCommandForTelemetry(request: vscode.ChatRequest): string {
+	const command = request.command;
+	if (!command) {
+		return '';
+	}
+
+	// Built-in slash commands (explain, fix, tests, etc.) are safe to send as plain text
+	if (builtinSlashCommands.has(command)) {
+		return command;
+	}
+
+	// Built-in skills (copilot-skill:// URIs) are safe to send as plain text
+	for (const ref of request.references) {
+		if (URI.isUri(ref.value) && ref.value.scheme === 'copilot-skill') {
+			return command;
+		}
+	}
+
+	// User-defined prompt file slash commands may contain PII — hash them
+	return getCachedSha256Hash(command);
+}
 
 export class ChatTelemetryBuilder {
 
@@ -385,7 +413,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			responseType === ChatFetchResponseType.OffTopic ? true : false,
 			this._documentContext?.document,
 			this._userTelemetry,
-			this._getModeName(),
+			this._getModeNameForTelemetry(),
 		);
 
 		if (responseType === ChatFetchResponseType.OffTopic) {
@@ -409,7 +437,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 				this.telemetryMessageId, // That's the message id of the user message
 				this._documentContext?.document,
 				this._userTelemetry.extendedBy({ replyType: interactionOutcome.kind }),
-				this._getModeName()
+				this._getModeNameForTelemetry()
 			);
 		}
 
@@ -433,16 +461,12 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		}
 	}
 
-	protected _getModeName(): string {
-		return this._request.modeInstructions2 ? (this._request.modeInstructions2.name.toLowerCase() === 'plan' ? 'plan' : 'custom') :
+	protected _getModeNameForTelemetry(): string {
+		return this._request.modeInstructions2 ? (this._request.modeInstructions2.isBuiltin ? this._request.modeInstructions2.name.toLowerCase() : 'custom') :
 			this._intent.id === AgentIntent.ID ? 'agent' :
-				(this._intent.id === EditCodeIntent.ID || this._intent.id === EditCode2Intent.ID) ? 'edit' :
+				(this._intent.id === EditCodeIntent.ID) ? 'edit' :
 					(this._intent.id === Intent.InlineChat) ? 'inlineChatIntent' :
 						'ask';
-	}
-
-	protected _getModeNameWithSubagent(): string {
-		return this._request.subAgentName ?? this._getModeName();
 	}
 
 	public sendToolCallingTelemetry(toolCallRounds: IToolCallRound[], availableTools: readonly vscode.LanguageModelToolInformation[], responseType: ChatFetchResponseType | 'cancelled' | 'maxToolCalls'): void {
@@ -689,7 +713,8 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for an Auto model" },
 				"mode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat mode used for this request (e.g., ask, edit, agent, custom)." },
 				"parentRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The parent request id if this request is from a subagent." },
-				"vscodeRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The VS Code chat request id, for joining with VS Code telemetry events." }
+				"vscodeRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The VS Code chat request id, for joining with VS Code telemetry events." },
+				"slashCommand": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The slash command used by the user, if any (e.g. troubleshoot, explain). Empty if no slash command was used." }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('panel.request', {
@@ -706,9 +731,10 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			apiType: this._endpoint.apiType,
 			isParticipantDetected: String(this._request.isParticipantDetected),
 			toolCounts: JSON.stringify(toolCounts),
-			mode: this._getModeNameWithSubagent(),
+			mode: this._getModeNameForTelemetry(),
 			parentRequestId: this._request.parentRequestId,
-			vscodeRequestId: this._request.id
+			vscodeRequestId: this._request.id,
+			slashCommand: getSlashCommandForTelemetry(this._request)
 		} satisfies RequestPanelTelemetryProperties, {
 			turn: this._conversation.turns.length,
 			round: roundIndex,
@@ -731,7 +757,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			isAuto: isAutoModel(this._endpoint)
 		} satisfies RequestPanelTelemetryMeasurements);
 
-		const modeName = this._getModeName();
+		const modeName = this._getModeNameForTelemetry();
 		sendUserActionTelemetry(
 			this._telemetryService,
 			undefined,
@@ -746,6 +772,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 				toolCounts: JSON.stringify(toolCounts),
 				mode: modeName,
 				codeBlocks: JSON.stringify(codeBlocks),
+				vscodeRequestId: this._request.id,
 			},
 			{
 				isAgent: this._intent.id === AgentIntent.ID ? 1 : 0,

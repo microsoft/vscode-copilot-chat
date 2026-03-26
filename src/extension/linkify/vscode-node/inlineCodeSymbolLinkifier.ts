@@ -35,21 +35,38 @@ export class InlineCodeSymbolLinkifier implements IContributedLinkifier {
 			return;
 		}
 
-		const out: LinkifiedPart[] = [];
+		// Collect all inline code matches first
+		const matches = [...text.matchAll(inlineCodeRegexp)];
+		if (!matches.length) {
+			return;
+		}
 
+		// Resolve unique symbol texts in parallel, then map results back to each match
+		const uniqueSymbols = [...new Set(matches.map(m => m[1]))];
+		const resolvedMap = new Map<string, readonly vscode.Location[] | undefined>();
+		const results = await Promise.all(
+			uniqueSymbols.map(sym => this.tryResolveSymbol(sym, context, token))
+		);
+		for (let i = 0; i < uniqueSymbols.length; i++) {
+			resolvedMap.set(uniqueSymbols[i], results[i]);
+		}
+
+		if (token.isCancellationRequested) {
+			throw new CancellationError();
+		}
+
+		// Build output using resolution results
+		const out: LinkifiedPart[] = [];
 		let endLastMatch = 0;
-		for (const match of text.matchAll(inlineCodeRegexp)) {
+		for (let i = 0; i < matches.length; i++) {
+			const match = matches[i];
 			const prefix = text.slice(endLastMatch, match.index);
 			if (prefix) {
 				out.push(prefix);
 			}
 
 			const symbolText = match[1];
-
-			const loc = await this.tryResolveSymbol(symbolText, context, token);
-			if (token.isCancellationRequested) {
-				throw new CancellationError();
-			}
+			const loc = resolvedMap.get(symbolText);
 
 			if (loc?.length) {
 				const info: SymbolInformation = {
@@ -60,7 +77,7 @@ export class InlineCodeSymbolLinkifier implements IContributedLinkifier {
 				};
 
 				out.push(new LinkifySymbolAnchor(info, async (token) => {
-					const dest = await resolveSymbolFromReferences(loc.map(loc => ({ uri: loc.uri, pos: loc.range.start })), symbolText, token);
+					const dest = await resolveSymbolFromReferences(loc.map(l => ({ uri: l.uri, pos: l.range.start })), symbolText, token);
 					if (dest) {
 						const selectionRange = dest.loc.targetSelectionRange ?? dest.loc.targetRange;
 						info.location = new vscode.Location(dest.loc.targetUri, collapseRangeToStart(selectionRange));

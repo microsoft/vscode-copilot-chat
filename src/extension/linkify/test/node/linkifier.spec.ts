@@ -311,6 +311,19 @@ suite('Stateful Linkifier', () => {
 		]);
 	});
 
+	test(`Should de-linkify Windows absolute paths with drive letters`, async () => {
+		const linkifier = createTestLinkifierService().createLinkifier(emptyContext);
+
+		const parts: string[] = [
+			'[text](c:\\src\\file.ts)',
+		];
+
+		const result = await runLinkifier(linkifier, parts);
+		assertPartsEqual(result, [
+			'text'
+		]);
+	});
+
 	test(`Should not unlinkify text inside of code blocks`, async () => {
 		const linkifier = createTestLinkifierService().createLinkifier(emptyContext);
 

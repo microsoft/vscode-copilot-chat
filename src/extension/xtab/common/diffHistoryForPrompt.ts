@@ -11,18 +11,25 @@ import { IXtabHistoryEditEntry, IXtabHistoryEntry } from '../../../platform/inli
 import { groupAdjacentBy, pushMany } from '../../../util/vs/base/common/arrays';
 import { toUniquePath } from './promptCraftingUtils';
 
+export interface EditDiffHistoryResult {
+	readonly promptPiece: string;
+	readonly nDiffs: number;
+	readonly totalTokens: number;
+}
+
 export function getEditDiffHistory(
 	activeDoc: StatelessNextEditDocument,
 	xtabHistory: readonly IXtabHistoryEntry[],
 	docsInPrompt: Set<DocumentId>,
 	computeTokens: (s: string) => number,
 	{ onlyForDocsInPrompt, maxTokens, nEntries, useRelativePaths }: DiffHistoryOptions,
-) {
+): EditDiffHistoryResult {
 	const workspacePath = useRelativePaths ? activeDoc.workspaceRoot?.path : undefined;
 
 	const reversedHistory = xtabHistory.slice().reverse();
 
 	let tokenBudget = maxTokens;
+	let totalTokensConsumed = 0;
 
 	const allDiffs: string[] = [];
 
@@ -52,6 +59,7 @@ export function getEditDiffHistory(
 		if (tokenBudget < 0) {
 			break;
 		} else {
+			totalTokensConsumed += tokenCount;
 			allDiffs.push(docDiff);
 		}
 	}
@@ -65,7 +73,7 @@ export function getEditDiffHistory(
 		promptPiece += '\n';
 	}
 
-	return promptPiece;
+	return { promptPiece, nDiffs: allDiffs.length, totalTokens: totalTokensConsumed };
 }
 
 function generateDocDiff(entry: IXtabHistoryEditEntry, workspacePath: string | undefined): string | null {

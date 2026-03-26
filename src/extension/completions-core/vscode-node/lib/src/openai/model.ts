@@ -10,6 +10,7 @@ import { Disposable } from '../../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { getUserSelectedModelConfiguration } from '../../../extension/src/modelPickerUserSelection';
 import { TokenizerName } from '../../../prompt/src/tokenization';
+import { Emitter, Event } from '../util/event';
 import { onCopilotToken } from '../auth/copilotTokenNotifier';
 import { ConfigKey, getConfig } from '../config';
 import { ICompletionsFeaturesService } from '../experiments/featuresService';
@@ -20,6 +21,7 @@ import { CompletionHeaders } from './fetch';
 export const ICompletionsModelManagerService = createServiceIdentifier<ICompletionsModelManagerService>('ICompletionsModelManagerService');
 export interface ICompletionsModelManagerService {
 	readonly _serviceBrand: undefined;
+	readonly onDidChangeModels: Event<void>;
 	getGenericCompletionModels(): ModelItem[];
 	getDefaultModelId(): string;
 	getTokenizerForModel(modelId: string): TokenizerName;
@@ -32,6 +34,8 @@ export class AvailableModelsManager extends Disposable implements ICompletionsMo
 	fetchedModelData: ICompletionModelInformation[] = [];
 	customModels: string[] = [];
 	editorPreviewFeaturesDisabled: boolean = false;
+	private readonly _onDidChangeModels = this._register(new Emitter<void>());
+	readonly onDidChangeModels = this._onDidChangeModels.event;
 
 	constructor(
 		shouldFetch: boolean = true,
@@ -76,6 +80,7 @@ export class AvailableModelsManager extends Disposable implements ICompletionsMo
 		const fetchedData = await this._endpointProvider.getAllCompletionModels(true);
 		if (fetchedData) {
 			this.fetchedModelData = fetchedData;
+			this._onDidChangeModels.fire();
 		}
 	}
 

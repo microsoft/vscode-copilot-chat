@@ -9,8 +9,7 @@ import { distinct } from '../../../util/vs/base/common/arrays';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { packageJson } from '../../env/common/packagejson';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { AbstractConfigurationService, BaseConfig, Config, ConfigKey, ConfigValueValidators, CopilotConfigPrefix, ExperimentBasedConfig, ExperimentBasedConfigType, globalConfigRegistry, InspectConfigResult } from '../common/configurationService';
-import { IEnvService } from '../../env/common/envService';
+import { AbstractConfigurationService, BaseConfig, Config, CopilotConfigPrefix, ExperimentBasedConfig, ExperimentBasedConfigType, globalConfigRegistry, InspectConfigResult } from '../common/configurationService';
 
 // Helper to avoid JSON.stringify quoting strings
 function stringOrStringify(value: any) {
@@ -25,7 +24,6 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 
 	constructor(
 		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
-		@IEnvService private readonly _envService: IEnvService,
 	) {
 		super(copilotTokenStore);
 		this.config = vscode.workspace.getConfiguration(CopilotConfigPrefix);
@@ -48,46 +46,6 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 				}
 			});
 		});
-	}
-
-	protected override _setUserInfo(userInfo: { isInternal: boolean; isTeamMember: boolean; teamMemberUsername?: string }): void {
-		const oldIsTeamMember = this._isTeamMember;
-		super._setUserInfo(userInfo);
-		const teamMemberChanged = oldIsTeamMember !== this._isTeamMember;
-		if (teamMemberChanged && this._isTeamMember) {
-			const maxDuration = 14 * 24 * 60 * 60 * 1000; // 14 days in milliseconds
-			const now = Date.now();
-			// check that the team specific settings are not expired or defined too long in the future (> 14 days)
-			for (const config of globalConfigRegistry.configs.values()) {
-				if (config.fullyQualifiedId === ConfigKey.TeamInternal.InternalWelcomeHintEnabled.fullyQualifiedId) {
-					// add exemption for the welcomePageHint setting
-					continue;
-				}
-				if (ConfigValueValidators.isCustomTeamDefaultValue(config.defaultValue)) {
-					const expirationDate = new Date(config.defaultValue.expirationDate);
-					if (expirationDate.getTime() < now) {
-						// the team default value has expired, log an error message
-						this._handleExpirationWarning(
-							`The team default value for setting ${config.id} has expired. The expiration date was ${config.defaultValue.expirationDate}. Please reach out to ${config.defaultValue.owner} to update the value.`
-						);
-					}
-					if (expirationDate.getTime() > now + maxDuration) {
-						// the team default value is defined too long in the future (> 14 days), log a warning message
-						this._handleExpirationWarning(
-							`The team default value for setting ${config.id} is defined too long in the future (> 14 days). The expiration date is ${config.defaultValue.expirationDate}. Please reach out to ${config.defaultValue.owner} to update the value.`
-						);
-					}
-				}
-			}
-		}
-	}
-
-	private _handleExpirationWarning(msg: string) {
-		console.error(msg);
-		if (!this._envService.isProduction()) {
-			// prompt the user to update the value
-			vscode.window.showErrorMessage(msg);
-		}
 	}
 
 	getConfig<T>(key: Config<T>, scope?: vscode.ConfigurationScope): T {
@@ -114,32 +72,18 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 				configuredValue = advancedConfig?.[key.advancedSubKey];
 			}
 		} else {
-			const hasCustomDefaultValue = (
-				ConfigValueValidators.isCustomInternalDefaultValue(key.defaultValue)
-				|| ConfigValueValidators.isCustomTeamDefaultValue(key.defaultValue)
-			);
-			const userIsInternalOrTeamMember = (this._isInternal || this._isTeamMember);
-			if (key.isPublic && hasCustomDefaultValue && userIsInternalOrTeamMember) {
-				// The setting is public, but it has a different default value for team
-				// or internal users, so the (public) default value used by vscode is not the same.
-				// We need to really check if the user or workspace configured the setting
+			if (key.oldId && key.oldId.startsWith('chat.advanced')) {
+				// Migrated advanced settings were not registered before
+				// So when not configured the default value from config API is undefined
+				// and the default value is obtained from the registered Config<T>.
+				// Therefore, to get the same behavior as before
+				// we need to check if the migrated setting is configured
+				// and take only the configured value and let the default value be obtained from the registered Config<T>.
 				if (this.isConfigured(key, scope)) {
 					configuredValue = config.get<T>(key.id) ?? (key.oldId ? config.get<T>(key.oldId) : undefined);
 				}
 			} else {
-				if (key.oldId && key.oldId.startsWith('chat.advanced')) {
-					// Migrated advanced settings were not registered before
-					// So when not configured the default value from config API is undefined
-					// and the default value is obtained from the registered Config<T>.
-					// Therefore, to get the same behavior as before
-					// we need to check if the migrated setting is configured
-					// and take only the configured value and let the default value be obtained from the registered Config<T>.
-					if (this.isConfigured(key, scope)) {
-						configuredValue = config.get<T>(key.id) ?? (key.oldId ? config.get<T>(key.oldId) : undefined);
-					}
-				} else {
-					configuredValue = config.get<T>(key.id) ?? (key.oldId ? config.get<T>(key.oldId) : undefined);
-				}
+				configuredValue = config.get<T>(key.id) ?? (key.oldId ? config.get<T>(key.oldId) : undefined);
 			}
 		}
 
@@ -376,5 +320,10 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 				return false;
 			}
 		});
+	}
+
+	protected override getDefaultValueForConfig<T>(key: BaseConfig<T>): T | undefined {
+		const inspect = this.config.inspect<T>(key.id) ?? (key.oldId ? this.config.inspect<T>(key.oldId) : undefined);
+		return inspect?.defaultValue;
 	}
 }

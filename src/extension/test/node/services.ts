@@ -5,6 +5,7 @@
 
 import { ToolGroupingCache } from '../../../extension/tools/common/virtualTools/virtualToolGroupCache';
 import { IToolGroupingCache, IToolGroupingService } from '../../../extension/tools/common/virtualTools/virtualToolTypes';
+import { IChatDebugFileLoggerService, NullChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { IChatHookService } from '../../../platform/chat/common/chatHookService';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { ISessionTranscriptService, NullSessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
@@ -14,6 +15,7 @@ import { DiffServiceImpl } from '../../../platform/diff/node/diffServiceImpl';
 import { EmbeddingType, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { RemoteEmbeddingsComputer } from '../../../platform/embeddings/common/remoteEmbeddingsComputer';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
 import { IModelConfig } from '../../../platform/endpoint/test/node/openaiCompatibleEndpoint';
 import { TestEndpointProvider } from '../../../platform/endpoint/test/node/testEndpointProvider';
 import { IGitCommitMessageService, NoopGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
@@ -22,11 +24,14 @@ import { IGitExtensionService } from '../../../platform/git/common/gitExtensionS
 import { IGitService } from '../../../platform/git/common/gitService';
 import { NullGitDiffService } from '../../../platform/git/common/nullGitDiffService';
 import { NullGitExtensionService } from '../../../platform/git/common/nullGitExtensionService';
+import { GithubApiFetcherService, IGithubApiFetcherService } from '../../../platform/github/common/githubApiFetcherService';
 import { IInlineEditsModelService, IUndesiredModelsManager } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { InlineEditsModelService, UndesiredModels } from '../../../platform/inlineEdits/node/inlineEditsModelService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IMcpService, NullMcpService } from '../../../platform/mcp/common/mcpService';
 import { EditLogService, IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IMultiFileEditInternalTelemetryService, MultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
+import { IChatWebSocketManager, NullChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { AlternativeNotebookContentEditGenerator, IAlternativeNotebookContentEditGenerator } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
@@ -45,15 +50,15 @@ import { IGithubAvailableEmbeddingTypesService, MockGithubAvailableEmbeddingType
 import { IWorkspaceChunkSearchService, NullWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
-import { IClaudeToolPermissionService } from '../../agents/claude/common/claudeToolPermissionService';
-import { IClaudeCodeModels } from '../../agents/claude/node/claudeCodeModels';
-import { IClaudeCodeSdkService } from '../../agents/claude/node/claudeCodeSdkService';
-import { ClaudeSessionStateService, IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
-import { MockClaudeCodeModels } from '../../agents/claude/node/test/mockClaudeCodeModels';
-import { MockClaudeCodeSdkService } from '../../agents/claude/node/test/mockClaudeCodeSdkService';
-import { MockClaudeToolPermissionService } from '../../agents/claude/node/test/mockClaudeToolPermissionService';
 import { ILanguageModelServer } from '../../agents/node/langModelServer';
 import { MockLanguageModelServer } from '../../agents/node/test/mockLanguageModelServer';
+import { IClaudeToolPermissionService } from '../../chatSessions/claude/common/claudeToolPermissionService';
+import { IClaudeCodeModels } from '../../chatSessions/claude/node/claudeCodeModels';
+import { IClaudeCodeSdkService } from '../../chatSessions/claude/node/claudeCodeSdkService';
+import { ClaudeSessionStateService, IClaudeSessionStateService } from '../../chatSessions/claude/node/claudeSessionStateService';
+import { MockClaudeCodeModels } from '../../chatSessions/claude/node/test/mockClaudeCodeModels';
+import { MockClaudeCodeSdkService } from '../../chatSessions/claude/node/test/mockClaudeCodeSdkService';
+import { MockClaudeToolPermissionService } from '../../chatSessions/claude/node/test/mockClaudeToolPermissionService';
 import { CommandServiceImpl, ICommandService } from '../../commands/node/commandService';
 import { IPromptWorkspaceLabels, PromptWorkspaceLabels } from '../../context/node/resolvers/promptWorkspaceLabels';
 import { ILinkifyService, LinkifyService } from '../../linkify/common/linkifyService';
@@ -74,6 +79,7 @@ import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupin
 import '../../tools/node/allTools';
 import { TestToolsService } from '../../tools/node/test/testToolsService';
 import { TestToolEmbeddingsComputer } from '../../tools/test/node/virtualTools/testVirtualTools';
+import { ISimilarFilesContextService } from '../../xtab/common/similarFilesContextService';
 
 export interface ISimulationModelConfig {
 	chatModel?: string;
@@ -98,6 +104,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 			modelConfig?.customModelConfigs,
 		])
 	);
+	testingServiceCollection.define(IGithubApiFetcherService, new SyncDescriptor(GithubApiFetcherService));
 	testingServiceCollection.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));
 	testingServiceCollection.define(ITestProvider, new NullTestProvider());
 	testingServiceCollection.define(ILogService, new SyncDescriptor(TestLogService));
@@ -114,6 +121,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IClaudeToolPermissionService, new SyncDescriptor(MockClaudeToolPermissionService));
 	testingServiceCollection.define(IClaudeCodeModels, new SyncDescriptor(MockClaudeCodeModels));
 	testingServiceCollection.define(IClaudeSessionStateService, new SyncDescriptor(ClaudeSessionStateService));
+	testingServiceCollection.define(IMcpService, new SyncDescriptor(NullMcpService));
 	testingServiceCollection.define(IEditLogService, new SyncDescriptor(EditLogService));
 	testingServiceCollection.define(IProxyModelsService, new SyncDescriptor(NullProxyModelsService));
 	testingServiceCollection.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
@@ -146,7 +154,19 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IPromptWorkspaceLabels, new SyncDescriptor(PromptWorkspaceLabels));
 	testingServiceCollection.define(IChatHookService, new SyncDescriptor(NullChatHookService));
 	testingServiceCollection.define(ISessionTranscriptService, new SyncDescriptor(NullSessionTranscriptService));
+	testingServiceCollection.define(IChatDebugFileLoggerService, new SyncDescriptor(NullChatDebugFileLoggerService));
+	testingServiceCollection.define(IChatWebSocketManager, new SyncDescriptor(NullChatWebSocketManager));
+	testingServiceCollection.define(ISimilarFilesContextService, new SyncDescriptor(NullSimilarFilesContextService));
+	testingServiceCollection.define(IAutomodeService, new SyncDescriptor(NullAutomodeService));
 	return testingServiceCollection;
+}
+
+class NullSimilarFilesContextService implements ISimilarFilesContextService {
+	declare readonly _serviceBrand: undefined;
+
+	async compute(): Promise<undefined> {
+		return undefined;
+	}
 }
 
 class NullChatHookService implements IChatHookService {
@@ -165,4 +185,14 @@ class NullChatHookService implements IChatHookService {
 	async executePostToolUseHook(): Promise<undefined> {
 		return undefined;
 	}
+}
+
+class NullAutomodeService implements IAutomodeService {
+	declare readonly _serviceBrand: undefined;
+
+	async resolveAutoModeEndpoint(): Promise<never> {
+		throw new Error('Not implemented');
+	}
+
+	invalidateRouterCache(): void { }
 }

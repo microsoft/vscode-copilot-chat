@@ -129,6 +129,7 @@ type MainProcessEventHandle = {
 	cancellationListener: IDisposable;
 	resolve: () => void;
 	reject: (reason?: string) => void;
+	stderrChunks: string[];
 };
 
 // change to configure logging, e.g., to `console.debug`
@@ -153,8 +154,11 @@ class MainProcessEventHandler {
 
 		ipcRenderer.on('stderr-data', (_event, { id, data }) => {
 			console.warn(`stderr-data (ID ${id}): ${data.toString()}`);
-			// const handle = this.getHandleOrThrow(id);
-			// handle.emitter.emitOne(data);
+			const handle = this.idMap.get(id);
+			if (!handle) {
+				return;
+			}
+			handle.stderrChunks.push(data.toString());
 		});
 
 		ipcRenderer.on('process-exit', (_event, { id, code }) => {
@@ -165,7 +169,8 @@ class MainProcessEventHandler {
 			if (code === 0) {
 				handle.resolve();
 			} else {
-				handle.reject(`Process exited with code ${code}`);
+				const stderr = handle.stderrChunks.join('');
+				handle.reject(stderr || `Process exited with code ${code}`);
 			}
 		});
 	}
@@ -180,7 +185,7 @@ class MainProcessEventHandler {
 					ipcRenderer.send('kill-process', { id });
 				});
 
-				idMap.set(id, { emitter, cancellationListener, resolve, reject });
+				idMap.set(id, { emitter, cancellationListener, resolve, reject, stderrChunks: [] });
 				ipcRenderer.send('spawn-process', { id, processArgs });
 			});
 		});

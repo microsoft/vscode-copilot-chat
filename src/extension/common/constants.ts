@@ -24,7 +24,6 @@ export const enum Intent {
 	Editor = 'editor',
 	Doc = 'doc',
 	Edit = 'edit',
-	Edit2 = 'edit2',
 	Agent = 'editAgent',
 	Generate = 'generate',
 	SearchPanel = 'searchPanel',

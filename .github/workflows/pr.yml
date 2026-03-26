@@ -16,7 +16,7 @@ permissions:
 jobs:
   check-test-cache:
     name: Check test cache
-    runs-on: [ self-hosted, 1ES.Pool=1es-vscode-ubuntu-22.04-x64 ]
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -55,7 +55,7 @@ jobs:
 
   check-telemetry:
     name: Check telemetry events
-    runs-on: [ self-hosted, 1ES.Pool=1es-vscode-ubuntu-22.04-x64 ]
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -71,7 +71,7 @@ jobs:
 
   linux-tests:
     name: Test (Linux)
-    runs-on: [ self-hosted, 1ES.Pool=1es-vscode-ubuntu-22.04-x64 ]
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -121,6 +121,9 @@ jobs:
           mkdir -p .build/build_cache
           tar -czf .build/build_cache/cache.tgz --files-from .build/build_cache_list.txt
 
+      - name: Ensure proposed API types are up to date
+        run: npm run vscode-dts:check
+
       - name: TypeScript type checking
         run: npm run typecheck
 
@@ -161,7 +164,7 @@ jobs:
 
   windows-tests:
     name: Test (Windows)
-    runs-on: [ self-hosted, 1ES.Pool=1es-vscode-windows-2022-x64 ]
+    runs-on: windows-2022
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6

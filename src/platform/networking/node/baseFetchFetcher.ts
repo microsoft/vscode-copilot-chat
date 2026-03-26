@@ -4,9 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IEnvService } from '../../env/common/envService';
 import { collectSingleLineErrorMessage } from '../../log/common/logService';
-import { FetcherId, FetchOptions, IAbortController, PaginationOptions, Response } from '../common/fetcherService';
+import { FetcherId, FetchOptions, IAbortController, isAbortError, PaginationOptions, ReportFetchEvent, Response, safeGetHostname } from '../common/fetcherService';
 import { IFetcher, userAgentLibraryHeader } from '../common/networking';
 
 export abstract class BaseFetchFetcher implements IFetcher {
@@ -14,8 +15,9 @@ export abstract class BaseFetchFetcher implements IFetcher {
 	constructor(
 		private readonly _fetchImpl: typeof fetch | typeof import('electron').net.fetch,
 		private readonly _envService: IEnvService,
-		private readonly userAgentLibraryUpdate: ((original: string) => string) | undefined,
 		private readonly _fetcherId: FetcherId,
+		private readonly _reportEvent: ReportFetchEvent,
+		private readonly userAgentLibraryUpdate?: (original: string) => string,
 	) {
 	}
 
@@ -47,10 +49,16 @@ export abstract class BaseFetchFetcher implements IFetcher {
 			throw new Error(`Illegal arguments! 'signal' must be an instance of AbortSignal!`);
 		}
 
+		const internalId = generateUuid();
+		const hostname = safeGetHostname(url);
 		try {
-			return await this._fetch(url, method, headers, body, signal);
+			const response = await this._fetch(url, method, headers, body, signal, internalId, hostname);
+			this._reportEvent({ internalId, timestamp: Date.now(), outcome: 'success', phase: 'requestResponse', fetcher: this._fetcherId, hostname, statusCode: response.status });
+			return response;
 		} catch (e) {
 			e.fetcherId = this._fetcherId;
+			const outcome = e && !isAbortError(e) ? 'error' as const : 'cancel' as const;
+			this._reportEvent({ internalId, timestamp: Date.now(), outcome, phase: 'requestResponse', fetcher: this._fetcherId, hostname, reason: e });
 			throw e;
 		}
 	}
@@ -81,14 +89,17 @@ export abstract class BaseFetchFetcher implements IFetcher {
 		return items;
 	}
 
-	private async _fetch(url: string, method: 'GET' | 'POST' | 'PUT', headers: { [name: string]: string }, body: string | undefined, signal: AbortSignal): Promise<Response> {
+	private async _fetch(url: string, method: 'GET' | 'POST' | 'PUT', headers: { [name: string]: string }, body: string | undefined, signal: AbortSignal, internalId: string, hostname: string): Promise<Response> {
 		const resp = await this._fetchImpl(url, { method, headers, body, signal });
 		return new Response(
 			resp.status,
 			resp.statusText,
 			resp.headers,
 			resp.body,
-			this._fetcherId
+			this._fetcherId,
+			this._reportEvent,
+			internalId,
+			hostname,
 		);
 	}
 

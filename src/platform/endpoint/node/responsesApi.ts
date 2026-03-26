@@ -18,7 +18,7 @@ import { ConfigKey, IConfigurationService } from '../../configuration/common/con
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
-import { ChatCompletion, FinishedCompletionReason, modelsWithoutResponsesContextManagement, openAIContextManagementCompactionType, OpenAIContextManagementResponse, TokenLogProb, rawMessageToCAPI } from '../../networking/common/openai';
+import { ChatCompletion, FinishedCompletionReason, modelsWithoutResponsesContextManagement, openAIContextManagementCompactionType, OpenAIContextManagementResponse, rawMessageToCAPI, TokenLogProb } from '../../networking/common/openai';
 import { sendEngineMessagesTelemetry } from '../../networking/node/chatStream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -71,10 +71,9 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	body.truncation = configService.getConfig(ConfigKey.Advanced.UseResponsesApiTruncation) ?
 		'auto' :
 		'disabled';
-	const effortConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningEffort, expService);
 	const summaryConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningSummary, expService);
 	const shouldDisableReasoningSummary = endpoint.family === 'gpt-5.3-codex-spark-preview';
-	const effort = effortConfig === 'default' ? 'medium' : effortConfig;
+	const effort = options.reasoningEffort;
 	const summary = summaryConfig === 'off' || shouldDisableReasoningSummary ? undefined : summaryConfig;
 	if (effort || summary) {
 		body.reasoning = {
@@ -84,6 +83,11 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	}
 
 	body.include = ['reasoning.encrypted_content'];
+
+	const promptCacheKeyEnabled = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiPromptCacheKeyEnabled, expService);
+	if (promptCacheKeyEnabled && options.conversationId) {
+		body.prompt_cache_key = `${options.conversationId}:${endpoint.family}`;
+	}
 
 	return body;
 }
@@ -431,17 +435,7 @@ export async function processResponseFromChatEndpoint(instantiationService: IIns
 				logService.trace(`SSE: ${ev.data}`);
 				const completion = processor.push({ type: ev.type, ...JSON.parse(ev.data) }, finishCallback);
 				if (completion) {
-					const telemetryMessage = rawMessageToCAPI(completion.message);
-					let telemetryDataWithUsage = telemetryData;
-					if (completion.usage) {
-						telemetryDataWithUsage = telemetryData.extendedBy({}, {
-							promptTokens: completion.usage.prompt_tokens,
-							completionTokens: completion.usage.completion_tokens,
-							totalTokens: completion.usage.total_tokens,
-						});
-					}
-
-					sendEngineMessagesTelemetry(telemetryService, [telemetryMessage], telemetryDataWithUsage, true, logService);
+					sendCompletionOutputTelemetry(telemetryService, logService, completion, telemetryData);
 					feed.emitOne(completion);
 				}
 			} catch (e) {
@@ -455,6 +449,19 @@ export async function processResponseFromChatEndpoint(instantiationService: IIns
 	}, async () => {
 		await response.body.destroy();
 	});
+}
+
+export function sendCompletionOutputTelemetry(telemetryService: ITelemetryService, logService: ILogService, completion: ChatCompletion, telemetryData: TelemetryData): void {
+	const telemetryMessage = rawMessageToCAPI(completion.message);
+	let telemetryDataWithUsage = telemetryData;
+	if (completion.usage) {
+		telemetryDataWithUsage = telemetryData.extendedBy({}, {
+			promptTokens: completion.usage.prompt_tokens,
+			completionTokens: completion.usage.completion_tokens,
+			totalTokens: completion.usage.total_tokens,
+		});
+	}
+	sendEngineMessagesTelemetry(telemetryService, [telemetryMessage], telemetryDataWithUsage, true, logService);
 }
 
 interface CapiResponsesTextDeltaEvent extends Omit<OpenAI.Responses.ResponseTextDeltaEvent, 'logprobs'> {

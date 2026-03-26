@@ -54,14 +54,7 @@ export class SymbolLinkifier implements IContributedLinkifier {
 				// noop
 			}
 
-			let resolvedUri: Uri | undefined;
-			for (const workspaceFolder of workspaceFolders) {
-				const uri = Uri.joinPath(workspaceFolder, symbolPath);
-				if (await this.exists(uri)) {
-					resolvedUri = uri;
-					break;
-				}
-			}
+			const resolvedUri = await this.resolveInWorkspace(symbolPath, workspaceFolders);
 
 			if (resolvedUri) {
 				const info: SymbolInformation = {
@@ -109,6 +102,12 @@ export class SymbolLinkifier implements IContributedLinkifier {
 		}
 
 		return { parts: out };
+	}
+
+	private async resolveInWorkspace(symbolPath: string, workspaceFolders: readonly Uri[]): Promise<Uri | undefined> {
+		const candidates = workspaceFolders.map(folder => Uri.joinPath(folder, symbolPath));
+		const results = await Promise.all(candidates.map(uri => this.exists(uri).then(exists => exists ? uri : undefined)));
+		return results.find((uri): uri is Uri => uri !== undefined);
 	}
 
 	private async exists(uri: Uri) {

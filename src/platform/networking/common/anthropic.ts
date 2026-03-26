@@ -25,6 +25,7 @@ export interface AnthropicMessagesTool {
 		required?: string[];
 	};
 	defer_loading?: boolean;
+	cache_control?: { type: 'ephemeral' };
 }
 
 export interface ToolReference {
@@ -67,6 +68,21 @@ export interface ToolSearchUsage {
  *
  * TODO: @bhavyaus Replace these hardcoded strings with constants from ToolName enum
  */
+
+export const TOOL_SEARCH_TOOL_NAME = 'tool_search_tool_regex';
+export const TOOL_SEARCH_TOOL_TYPE = 'tool_search_tool_regex_20251119';
+
+/** Name for the custom client-side embeddings-based tool search tool. Must not use copilot_/vscode_ prefix — those are reserved for static package.json declarations and will be rejected by vscode.lm.registerToolDefinition. */
+export const CUSTOM_TOOL_SEARCH_NAME = 'tool_search';
+
+/** Model ID prefixes that support tool search tools. Used by isAnthropicToolSearchEnabled() and the tool registration's model selector. */
+export const TOOL_SEARCH_SUPPORTED_MODELS = [
+	'claude-sonnet-4.5',
+	'claude-sonnet-4.6',
+	'claude-opus-4.5',
+	'claude-opus-4.6',
+] as const;
+
 export const nonDeferredToolNames = new Set([
 	// Read/navigate
 	'read_file',
@@ -90,16 +106,19 @@ export const nonDeferredToolNames = new Set([
 	// Subagent tools
 	'runSubagent',
 	'search_subagent',
+	'execution_subagent',
 	// Testing
 	'runTests',
 	// Misc
 	'ask_questions',
 	'switch_agent',
-	'memory'
+	'memory',
+	'task_complete',
+	// Custom tool search (must always be available so the model can search for deferred tools)
+	CUSTOM_TOOL_SEARCH_NAME,
+	'view_image',
+	'fetch_webpage'
 ]);
-
-export const TOOL_SEARCH_TOOL_NAME = 'tool_search_tool_regex';
-export const TOOL_SEARCH_TOOL_TYPE = 'tool_search_tool_regex_20251119';
 
 /**
  * Context management types for Anthropic Messages API
@@ -153,6 +172,7 @@ export interface ContextManagementResponse {
 /**
  * Context editing is supported by:
  * - Claude Haiku 4.5 (claude-haiku-4-5-* or claude-haiku-4.5-*)
+ * - Claude Sonnet 4.6 (claude-sonnet-4-6-* or claude-sonnet-4.6-*)
  * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
  * - Claude Sonnet 4 (claude-sonnet-4-*)
  * - Claude Opus 4.6 (claude-opus-4-6-* or claude-opus-4.6-*)
@@ -165,29 +185,18 @@ export interface ContextManagementResponse {
 export function modelSupportsContextEditing(modelId: string): boolean {
 	// Normalize: lowercase and replace dots with dashes so "4.5" matches "4-5"
 	const normalized = modelId.toLowerCase().replace(/\./g, '-');
+	// The 1M context variant doesn't need context editing
+	if (normalized.includes('1m')) {
+		return false;
+	}
 	return normalized.startsWith('claude-haiku-4-5') ||
+		normalized.startsWith('claude-sonnet-4-6') ||
 		normalized.startsWith('claude-sonnet-4-5') ||
 		normalized.startsWith('claude-sonnet-4') ||
 		normalized.startsWith('claude-opus-4-6') ||
 		normalized.startsWith('claude-opus-4-5') ||
 		normalized.startsWith('claude-opus-4-1') ||
 		normalized.startsWith('claude-opus-4');
-}
-
-/**
- * Tool search is supported by:
- * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
- * - Claude Opus 4.6 (claude-opus-4-6-* or claude-opus-4.6-*)
- * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
- * @param modelId The model ID to check
- * @returns true if the model supports tool search
- */
-export function modelSupportsToolSearch(modelId: string): boolean {
-	// Normalize: lowercase and replace dots with dashes so "4.5" matches "4-5"
-	const normalized = modelId.toLowerCase().replace(/\./g, '-');
-	return normalized.startsWith('claude-sonnet-4-5') ||
-		normalized.startsWith('claude-opus-4-6') ||
-		normalized.startsWith('claude-opus-4-5');
 }
 
 /**
@@ -211,6 +220,7 @@ export function modelSupportsInterleavedThinking(modelId: string): boolean {
 /**
  * Memory is supported by:
  * - Claude Haiku 4.5 (claude-haiku-4-5-* or claude-haiku-4.5-*)
+ * - Claude Sonnet 4.6 (claude-sonnet-4-6-* or claude-sonnet-4.6-*)
  * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
  * - Claude Sonnet 4 (claude-sonnet-4-*)
  * - Claude Opus 4.6 (claude-opus-4-6-* or claude-opus-4.6-*)
@@ -223,6 +233,7 @@ export function modelSupportsInterleavedThinking(modelId: string): boolean {
 export function modelSupportsMemory(modelId: string): boolean {
 	const normalized = modelId.toLowerCase().replace(/\./g, '-');
 	return normalized.startsWith('claude-haiku-4-5') ||
+		normalized.startsWith('claude-sonnet-4-6') ||
 		normalized.startsWith('claude-sonnet-4-5') ||
 		normalized.startsWith('claude-sonnet-4') ||
 		normalized.startsWith('claude-opus-4-6') ||
@@ -237,11 +248,27 @@ export function isAnthropicToolSearchEnabled(
 ): boolean {
 
 	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
-	if (!modelSupportsToolSearch(effectiveModelId)) {
+	if (!TOOL_SEARCH_SUPPORTED_MODELS.some(prefix => effectiveModelId.toLowerCase().startsWith(prefix))) {
 		return false;
 	}
 
 	return configurationService.getConfig(ConfigKey.AnthropicToolSearchEnabled);
+}
+
+/**
+ * Returns true when custom client-side embeddings-based tool search should be used
+ * instead of the server-side regex tool search.
+ */
+export function isAnthropicCustomToolSearchEnabled(
+	endpoint: IChatEndpoint | string,
+	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService,
+): boolean {
+	if (!isAnthropicToolSearchEnabled(endpoint, configurationService)) {
+		return false;
+	}
+
+	return configurationService.getExperimentBasedConfig(ConfigKey.AnthropicToolSearchMode, experimentationService) === 'client';
 }
 
 export function isAnthropicContextEditingEnabled(
@@ -254,7 +281,8 @@ export function isAnthropicContextEditingEnabled(
 	if (!modelSupportsContextEditing(effectiveModelId)) {
 		return false;
 	}
-	return configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingEnabled, experimentationService);
+	const mode = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingMode, experimentationService);
+	return mode !== 'off';
 }
 
 export function isAnthropicMemoryToolEnabled(
@@ -269,18 +297,22 @@ export function isAnthropicMemoryToolEnabled(
 	return configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, experimentationService);
 }
 
-export type ContextEditingMode = 'clear-thinking' | 'clear-tooluse' | 'clear-both';
+export type ContextEditingMode = 'off' | 'clear-thinking' | 'clear-tooluse' | 'clear-both';
 
 /**
  * Builds the context_management configuration object for the Messages API request.
  * @param mode The context editing mode
  * @param thinkingEnabled Whether extended thinking is enabled
- * @returns The context_management object to include in the request, or undefined if no edits
+ * @returns The context_management object to include in the request, or undefined if off or no edits
  */
 export function buildContextManagement(
 	mode: ContextEditingMode,
 	thinkingEnabled: boolean
 ): ContextManagement | undefined {
+	if (mode === 'off') {
+		return undefined;
+	}
+
 	const edits: ContextManagementEdit[] = [];
 
 	// Add thinking block clearing for clear-thinking and clear-both modes

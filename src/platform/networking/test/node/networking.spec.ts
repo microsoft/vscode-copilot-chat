@@ -6,11 +6,11 @@
 import { RequestType } from '@vscode/copilot-api';
 import assert from 'assert';
 import { suite, test } from 'vitest';
-import { ICAPIClientService } from '../../../endpoint/common/capiClient';
-import { ITelemetryService } from '../../../telemetry/common/telemetry';
+import { Event } from '../../../../util/vs/base/common/event';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createFakeResponse } from '../../../test/node/fetcher';
 import { createPlatformServices } from '../../../test/node/services';
-import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from '../../common/fetcherService';
+import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response, WebSocketConnection } from '../../common/fetcherService';
 import { postRequest } from '../../common/networking';
 
 suite('Networking test Suite', function () {
@@ -19,6 +19,8 @@ suite('Networking test Suite', function () {
 
 	class StaticFetcherService implements IFetcherService {
 		declare readonly _serviceBrand: undefined;
+		readonly onDidFetch = Event.None;
+		readonly onDidCompleteFetch = Event.None;
 
 		getUserAgentLibrary(): string {
 			return 'test';
@@ -26,6 +28,9 @@ suite('Networking test Suite', function () {
 		fetch(url: string, options: FetchOptions): Promise<Response> {
 			headerBuffer = options.headers;
 			return Promise.resolve(createFakeResponse(200));
+		}
+		createWebSocket(_url: string): WebSocketConnection {
+			throw new Error('Method not implemented.');
 		}
 		disconnectAll(): Promise<unknown> {
 			throw new Error('Method not implemented.');
@@ -57,16 +62,12 @@ suite('Networking test Suite', function () {
 		const testingServiceCollection = createPlatformServices();
 		testingServiceCollection.define(IFetcherService, new StaticFetcherService());
 		const accessor = testingServiceCollection.createTestingAccessor();
-		await postRequest(
-			accessor.get(IFetcherService),
-			accessor.get(ITelemetryService),
-			accessor.get(ICAPIClientService),
-			{ type: RequestType.Models },
-			'',
-			'',
-			'test',
-			'id'
-		);
+		await accessor.get(IInstantiationService).invokeFunction(postRequest, {
+			endpointOrUrl: { type: RequestType.Models },
+			secretKey: '',
+			intent: 'test',
+			requestId: 'id',
+		});
 
 		assert.strictEqual(headerBuffer!['VScode-SessionId'], 'test-session');
 		assert.strictEqual(headerBuffer!['VScode-MachineId'], 'test-machine');

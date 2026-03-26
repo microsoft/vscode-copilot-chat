@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { RequestType } from '@vscode/copilot-api';
+import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
@@ -11,6 +11,7 @@ import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
+import { IChatWebSocketManager } from '../../networking/node/chatWebSocketManager';
 import { IProxyModelsService } from '../../proxyModels/common/proxyModelsService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -34,6 +35,7 @@ export class ProxyInstantApplyShortEndpoint extends ChatEndpoint {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
+		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
 		@ILogService logService: ILogService,
 		@IProxyModelsService proxyModelsService: IProxyModelsService,
 	) {
@@ -46,6 +48,7 @@ export class ProxyInstantApplyShortEndpoint extends ChatEndpoint {
 		const modelInfo: IChatModelInformation = {
 			id: model,
 			name: model,
+			vendor: model,
 			version: 'unknown',
 			model_picker_enabled: false,
 			is_chat_default: false,
@@ -69,6 +72,7 @@ export class ProxyInstantApplyShortEndpoint extends ChatEndpoint {
 			instantiationService,
 			configurationService,
 			experimentationService,
+			chatWebSocketService,
 			logService
 		);
 	}
@@ -81,7 +85,7 @@ export class ProxyInstantApplyShortEndpoint extends ChatEndpoint {
 		return headers;
 	}
 
-	override get urlOrRequestMetadata() {
+	override get urlOrRequestMetadata(): RequestMetadata {
 		return { type: RequestType.ProxyChatCompletions };
 	}
 }

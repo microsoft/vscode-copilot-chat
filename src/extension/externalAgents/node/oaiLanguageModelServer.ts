@@ -205,6 +205,7 @@ export class OpenAILanguageModelServer extends Disposable {
 				messages: messagesForLogging,
 				finishedCb: async () => undefined,
 				location: ChatLocation.ResponsesProxy,
+				enableThinking: true,
 				userInitiatedRequest: isUserInitiatedMessage
 			}, tokenSource.token);
 
@@ -336,6 +337,10 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 		return this.base.acquireTokenizer();
 	}
 
+	public get modelProvider(): string {
+		return this.base.modelProvider;
+	}
+
 	public get modelMaxPromptTokens(): number {
 		return this.base.modelMaxPromptTokens;
 	}
@@ -414,6 +419,10 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 
 	public get maxThinkingBudget(): number | undefined {
 		return this.base.maxThinkingBudget;
+	}
+
+	public get supportsReasoningEffort(): string[] | undefined {
+		return this.base.supportsReasoningEffort;
 	}
 
 	public get supportsToolCalls(): boolean {

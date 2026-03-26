@@ -19,7 +19,7 @@ import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { collectErrorMessages, collectSingleLineErrorMessage, ILogService } from '../../../platform/log/common/logService';
 import { outputChannel } from '../../../platform/log/vscode/outputChannelLogTarget';
-import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { FetchEvent, IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IFetcher, userAgentLibraryHeader } from '../../../platform/networking/common/networking';
 import { NodeFetcher } from '../../../platform/networking/node/nodeFetcher';
 import { NodeFetchFetcher } from '../../../platform/networking/node/nodeFetchFetcher';
@@ -29,6 +29,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 
 import { shuffle } from '../../../util/vs/base/common/arrays';
 import { timeout } from '../../../util/vs/base/common/async';
+import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { EXTENSION_ID } from '../../common/constants';
@@ -198,7 +199,7 @@ User Settings:
 					if (fetcher.fetcher) {
 						const start = Date.now();
 						try {
-							const response = await Promise.race([fetcher.fetcher.fetch(url, { headers: authHeaders }), timeout(timeoutSeconds * 1000)]);
+							const response = await Promise.race([fetcher.fetcher.fetch(url, { headers: authHeaders, callSite: 'diagnostics-fetcher-probe' }), timeout(timeoutSeconds * 1000)]);
 							if (response) {
 								await appendText(editor, `HTTP ${response.status} (${Date.now() - start} ms)\n`);
 							} else {
@@ -227,7 +228,7 @@ User Settings:
 				await appendText(editor, `Connecting to ${url}: `);
 				const start = Date.now();
 				try {
-					const response = await Promise.race([fetcher.fetch(url, { headers: authHeaders }), timeout(timeoutSeconds * 1000)]);
+					const response = await Promise.race([fetcher.fetch(url, { headers: authHeaders, callSite: 'diagnostics-secondary-probe' }), timeout(timeoutSeconds * 1000)]);
 					if (response) {
 						await appendText(editor, `HTTP ${response.status} (${Date.now() - start} ms)\n`);
 					} else {
@@ -242,11 +243,54 @@ User Settings:
 ## Documentation
 
 In corporate networks: [Troubleshooting firewall settings for GitHub Copilot](https://docs.github.com/en/copilot/troubleshooting-github-copilot/troubleshooting-firewall-settings-for-github-copilot).`);
+
+			return document.getText();
 		};
 		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.collectDiagnostics', collectDiagnostics));
 		// Internal command is not declared in package.json so it can be used from the welcome views while the extension is being activated.
 		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.collectDiagnostics.internal', collectDiagnostics));
 		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.showOutputChannel.internal', () => outputChannel.show()));
+		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.showNodeSystemCertificatesErrors', async () => {
+			const result: Record<string, unknown> = {};
+			try {
+				const certs = tls.getCACertificates('system');
+				result.certificateCount = Array.isArray(certs) ? certs.length : 'unavailable';
+			} catch (err: any) {
+				result.certificateCount = `Error: ${err?.message}`;
+			}
+			if (typeof (tls as any).getSystemCACertificatesErrors === 'function') {
+				try {
+					const errors = (tls as any).getSystemCACertificatesErrors();
+					if (errors && typeof errors === 'object') {
+						const counts = new Map<string, { error: string; count: number; code: number | string }>();
+						for (const [category, entries] of Object.entries(errors)) {
+							if (Array.isArray(entries)) {
+								for (const entry of entries as { errorMessage?: string; errorCode?: number }[]) {
+									const code = entry.errorCode ?? 'missing code';
+									const error = `${category}: ${entry.errorMessage ?? 'missing message'}`;
+									const key = `${error} (${code})`;
+									const existing = counts.get(key);
+									if (existing) {
+										existing.count++;
+									} else {
+										counts.set(key, { error, code, count: 1 });
+									}
+								}
+							}
+						}
+						result.errorSummary = [...counts.values()].sort((a, b) => b.count - a.count);
+					}
+					result.errors = errors;
+				} catch (err: any) {
+					result.errors = `Error: ${err?.message}`;
+				}
+			} else {
+				result.errors = 'tls.getSystemCACertificatesErrors is not available';
+			}
+			const document = await vscode.workspace.openTextDocument({ language: 'json', content: JSON.stringify(result, null, 2) });
+			await vscode.window.showTextDocument(document);
+		}));
+		this._context.subscriptions.push(new NetworkStatus(this.fetcherService, this.configurationService, this.experimentationService));
 	}
 
 	private async getAuthHeaders(isGHEnterprise: boolean, url: string) {
@@ -523,7 +567,7 @@ async function sendRawTelemetry(fetcher: IFetcher, envService: IEnvService, exte
 	const url = 'https://mobile.events.data.microsoft.com/OneCollector/1.0?cors=true&content-type=application/x-json-stream';
 	const product = require(path.join(vscode.env.appRoot, 'product.json'));
 	const vscodeCommitHash: string = product.commit || '';
-	const ariaKey = (extensionContext.extension.packageJSON as { internalLargeStorageAriaKey?: string }).internalLargeStorageAriaKey ?? '';
+	const ariaKey = (extensionContext.extension.packageJSON as { ariaKey?: string }).ariaKey ?? '';
 	const iKey = `o:${ariaKey.split('-')[0]}`;
 	const sdkVer = '1DS-Web-JS-4.3.10';
 	const eventTime = new Date(Date.now() - 10).toISOString();
@@ -570,7 +614,7 @@ async function sendRawTelemetry(fetcher: IFetcher, envService: IEnvService, exte
 		'client-version': sdkVer,
 		'apikey': ariaKey,
 		'upload-time': String(Date.now()),
-		'time-delta-to-apply-millis': String(10),
+		'time-delta-to-apply-millis': 'use-collector-delta',
 		'cache-control': 'no-cache, no-store',
 		'content-type': 'application/x-json-stream',
 		'User-Agent': `GitHubCopilotChat/${envService.getVersion()}`,
@@ -583,6 +627,7 @@ async function sendRawTelemetry(fetcher: IFetcher, envService: IEnvService, exte
 		method: 'POST',
 		headers,
 		body,
+		callSite: 'diagnostics-telemetry-probe',
 	});
 	await response.text();
 	return response;
@@ -606,4 +651,80 @@ function maskByClass(s: string): string {
 		}
 		return '0';
 	});
+}
+
+class NetworkStatus extends Disposable {
+
+	private readonly _statusBarItem: vscode.StatusBarItem;
+	private readonly _events: FetchEvent[] = [];
+	private readonly _fetchSubscription = this._register(new MutableDisposable());
+
+	constructor(private readonly _fetcherService: IFetcherService, private readonly _configurationService: IConfigurationService, private readonly _experimentationService: IExperimentationService) {
+		super();
+		this._statusBarItem = this._register(vscode.window.createStatusBarItem('copilot.networkStatus', vscode.StatusBarAlignment.Right, -1000));
+		this._statusBarItem.name = 'Copilot Network Status';
+		this._register(_configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(ConfigKey.TeamInternal.DebugShowNetworkStatus.fullyQualifiedId)) {
+				this._update();
+			}
+		}));
+		this._update();
+	}
+
+	private _isEnabled(): boolean {
+		return this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.DebugShowNetworkStatus, this._experimentationService);
+	}
+
+	private _onEvent(event: FetchEvent): void {
+		this._events.push(event);
+		const cutoff = Date.now() - 5 * 60 * 1000;
+		while (this._events.length > 0 && this._events[0].timestamp < cutoff) {
+			this._events.shift();
+		}
+		this._update();
+	}
+
+	private _update(): void {
+		const enabled = this._isEnabled();
+		if (enabled && !this._fetchSubscription.value) {
+			this._fetchSubscription.value = this._fetcherService.onDidFetch(e => this._onEvent(e));
+		} else if (!enabled) {
+			this._fetchSubscription.value = undefined;
+			this._events.length = 0;
+			this._statusBarItem.hide();
+			return;
+		}
+		const latestById = new Map<string, FetchEvent>();
+		for (const e of this._events) {
+			latestById.set(e.internalId, e);
+		}
+		const latest = [...latestById.values()];
+		const errors = latest.filter(e => e.outcome === 'error');
+		this._statusBarItem.text = `Copilot Network: ${errors.length} errors / ${latest.length} total`;
+
+		const byHostname = new Map<string, { total: number; errors: number; cancellations: number }>();
+		for (const e of latest) {
+			let entry = byHostname.get(e.hostname);
+			if (!entry) {
+				entry = { total: 0, errors: 0, cancellations: 0 };
+				byHostname.set(e.hostname, entry);
+			}
+			entry.total++;
+			if (e.outcome === 'error') {
+				entry.errors++;
+			} else if (e.outcome === 'cancel') {
+				entry.cancellations++;
+			}
+		}
+		const tooltip = new vscode.MarkdownString();
+		tooltip.appendMarkdown(`| Hostname | Errors | Cancellations | Total |\n`);
+		tooltip.appendMarkdown(`|:--|--:|--:|--:|\n`);
+		for (const [hostname, { total, errors, cancellations }] of [...byHostname].sort((a, b) => b[1].total - a[1].total)) {
+			tooltip.appendMarkdown(`| ${hostname} | ${errors} | ${cancellations} | ${total} |\n`);
+		}
+		tooltip.appendMarkdown(`\n**${errors.length}** of **${latest.length}** network requests failed in the last 5 minutes`);
+		this._statusBarItem.tooltip = tooltip;
+
+		this._statusBarItem.show();
+	}
 }

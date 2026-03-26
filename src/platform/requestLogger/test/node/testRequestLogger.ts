@@ -11,7 +11,7 @@ import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IModelAPIResponse } from '../../../endpoint/common/endpointProvider';
 import { ThinkingData } from '../../../thinking/common/thinking';
 import { CapturingToken } from '../../common/capturingToken';
-import { AbstractRequestLogger, ILoggedRequestInfo, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../node/requestLogger';
+import { AbstractRequestLogger, ILoggedRequestInfo, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind, resolveMarkdownContent } from '../../node/requestLogger';
 
 /**
  * A test implementation of IRequestLogger that stores logged requests for verification in tests.
@@ -36,6 +36,10 @@ export class TestRequestLogger extends AbstractRequestLogger {
 
 	public override getRequests(): LoggedInfo[] {
 		return [...this._entries];
+	}
+
+	public override getRequestById(id: string): LoggedInfo | undefined {
+		return this._entries.find(e => e.id === id);
 	}
 
 	public override logModelListCall(id: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void {
@@ -112,7 +116,7 @@ class TestLoggedRequestInfo implements ILoggedRequestInfo {
 			return {
 				...baseInfo,
 				startTime: new Date(this.entry.startTimeMs).toISOString(),
-				content: this.entry.markdownContent
+				content: resolveMarkdownContent(this.entry)
 			};
 		}
 

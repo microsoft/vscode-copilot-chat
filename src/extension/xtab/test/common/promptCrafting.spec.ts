@@ -4,12 +4,21 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { assert, describe, expect, it, suite, test } from 'vitest';
-import { CurrentFileOptions, DEFAULT_OPTIONS, IncludeLineNumbersOption, PromptOptions } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
+import { Edits } from '../../../../platform/inlineEdits/common/dataTypes/edit';
+import { LanguageId } from '../../../../platform/inlineEdits/common/dataTypes/languageId';
+import { AggressivenessLevel, CurrentFileOptions, DEFAULT_OPTIONS, IncludeLineNumbersOption, PromptingStrategy, PromptOptions } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { StatelessNextEditDocument } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { TestLanguageDiagnosticsService } from '../../../../platform/languages/common/testLanguageDiagnosticsService';
 import { Result } from '../../../../util/common/result';
+import { LineEdit } from '../../../../util/vs/editor/common/core/edits/lineEdit';
+import { StringEdit } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { Position } from '../../../../util/vs/editor/common/core/position';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
-import { constructTaggedFile, createTaggedCurrentFileContentUsingPagedClipping, expandRangeToPageRange } from '../../common/promptCrafting';
+import { LintErrors } from '../../common/lintErrors';
+import { constructTaggedFile, createTaggedCurrentFileContentUsingPagedClipping, expandRangeToPageRange, getUserPrompt, PromptPieces } from '../../common/promptCrafting';
+import { PromptTags } from '../../common/tags';
 import { CurrentDocument } from '../../common/xtabCurrentDocument';
 
 function nLines(n: number): StringText {
@@ -536,5 +545,162 @@ suite('constructTaggedFile', () => {
 				4|line5"
 			`);
 		});
+	});
+});
+
+describe('getUserPrompt', () => {
+
+	function createTestPromptPieces(opts: {
+		cursorLine: number;
+		cursorColumn: number;
+		strategy: PromptingStrategy | undefined;
+		includeLineNumbers?: IncludeLineNumbersOption;
+		includePostScript?: boolean;
+	}): PromptPieces {
+		const currentDocLines = ['function foo() {', '  const x = 1;', '  return x;', '}', ''];
+		const docText = new StringText(currentDocLines.join('\n'));
+		const documentId = DocumentId.create('file:///test/file.ts');
+		const currentDocument = new CurrentDocument(docText, new Position(opts.cursorLine, opts.cursorColumn));
+
+		const activeDoc = new StatelessNextEditDocument(
+			documentId,
+			undefined,
+			LanguageId.create('typescript'),
+			currentDocLines,
+			LineEdit.empty,
+			docText,
+			new Edits(StringEdit, []),
+		);
+
+		const promptOptions: PromptOptions = {
+			...DEFAULT_OPTIONS,
+			promptingStrategy: opts.strategy,
+			...(opts.includePostScript !== undefined ? { includePostScript: opts.includePostScript } : {}),
+			currentFile: {
+				...DEFAULT_OPTIONS.currentFile,
+				maxTokens: 10000,
+				...(opts.includeLineNumbers !== undefined ? { includeLineNumbers: opts.includeLineNumbers } : {}),
+			},
+		};
+
+		return new PromptPieces(
+			currentDocument,
+			new OffsetRange(1, 3),
+			new OffsetRange(0, 5),
+			activeDoc,
+			[],
+			currentDocLines,
+			'<area>some code</area>',
+			undefined,
+			AggressivenessLevel.Medium,
+			new LintErrors(documentId, currentDocument, new TestLanguageDiagnosticsService()),
+			s => Math.ceil(s.length / 4),
+			promptOptions,
+		);
+	}
+
+	test('PatchBased02 appends cursor_position snippet and does not wrap in backticks', () => {
+		const pieces = createTestPromptPieces({ cursorLine: 2, cursorColumn: 9, strategy: PromptingStrategy.PatchBased02 });
+		const { prompt } = getUserPrompt(pieces);
+
+		// Contains cursor_position tags with cursor tag in the right position
+		expect(prompt).toContain(PromptTags.CURSOR_LOCATION.start);
+		expect(prompt).toContain(PromptTags.CURSOR_LOCATION.end);
+		expect(prompt).toContain(PromptTags.CURSOR);
+
+		// Cursor at column 9 (1-indexed) inserts tag before the 9th character ('x')
+		// Default includeLineNumbers is None, so no line number prefix
+		expect(prompt).toContain('  const ' + PromptTags.CURSOR + 'x = 1;');
+
+		// Does not contain areaAroundCodeToEdit
+		expect(prompt).not.toContain('<area>');
+
+		// Not wrapped in backticks
+		expect(prompt).not.toMatch(/^```/);
+
+		// Includes postscript (includePostScript defaults to true)
+		expect(prompt).toContain('developer was working on a section of code');
+	});
+
+	test('PatchBased02 with includePostScript=false omits postscript', () => {
+		const pieces = createTestPromptPieces({ cursorLine: 2, cursorColumn: 9, strategy: PromptingStrategy.PatchBased02, includePostScript: false });
+		const { prompt } = getUserPrompt(pieces);
+
+		expect(prompt).toContain(PromptTags.CURSOR_LOCATION.start);
+		expect(prompt).toContain(PromptTags.CURSOR_LOCATION.end);
+		expect(prompt).toContain(PromptTags.CURSOR);
+		expect(prompt).not.toContain('<area>');
+		expect(prompt).not.toMatch(/^```/);
+
+		// No postscript
+		expect(prompt).not.toContain('developer was working');
+	});
+
+	test('PatchBased01 uses basePrompt only (no cursor_position, no area, no backticks)', () => {
+		const pieces = createTestPromptPieces({ cursorLine: 2, cursorColumn: 1, strategy: PromptingStrategy.PatchBased01 });
+		const { prompt } = getUserPrompt(pieces);
+
+		expect(prompt).not.toContain(PromptTags.CURSOR_LOCATION.start);
+		expect(prompt).not.toContain('<area>');
+		expect(prompt).not.toMatch(/^```/);
+	});
+
+	test('default strategy appends areaAroundCodeToEdit and wraps in backticks', () => {
+		const pieces = createTestPromptPieces({ cursorLine: 2, cursorColumn: 1, strategy: undefined });
+		const { prompt } = getUserPrompt(pieces);
+
+		expect(prompt).toContain('<area>some code</area>');
+		expect(prompt).toMatch(/^```/);
+		expect(prompt).not.toContain(PromptTags.CURSOR_LOCATION.start);
+	});
+
+	test('PatchBased02 cursor at beginning of line', () => {
+		const pieces = createTestPromptPieces({ cursorLine: 3, cursorColumn: 1, strategy: PromptingStrategy.PatchBased02 });
+		const { prompt } = getUserPrompt(pieces);
+
+		// Cursor at col 1 means tag is inserted before the line content
+		expect(prompt).toContain(PromptTags.CURSOR + '  return x;');
+	});
+
+	test('PatchBased02 cursor at end of line', () => {
+		const pieces = createTestPromptPieces({ cursorLine: 1, cursorColumn: 17, strategy: PromptingStrategy.PatchBased02 });
+		const { prompt } = getUserPrompt(pieces);
+
+		// Cursor at end: "function foo() {<|cursor|>"
+		expect(prompt).toContain('function foo() {' + PromptTags.CURSOR);
+	});
+
+	test('PatchBased02 cursor_position line includes line number with space when WithSpaceAfter', () => {
+		const pieces = createTestPromptPieces({
+			cursorLine: 2, cursorColumn: 9,
+			strategy: PromptingStrategy.PatchBased02,
+			includeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter,
+		});
+		const { prompt } = getUserPrompt(pieces);
+
+		expect(prompt).toContain('1| ' + '  const ' + PromptTags.CURSOR + 'x = 1;');
+	});
+
+	test('PatchBased02 cursor_position line includes line number without space when WithoutSpace', () => {
+		const pieces = createTestPromptPieces({
+			cursorLine: 2, cursorColumn: 9,
+			strategy: PromptingStrategy.PatchBased02,
+			includeLineNumbers: IncludeLineNumbersOption.WithoutSpace,
+		});
+		const { prompt } = getUserPrompt(pieces);
+
+		expect(prompt).toContain('1|' + '  const ' + PromptTags.CURSOR + 'x = 1;');
+	});
+
+	test('PatchBased02 cursor_position line has no line number when None', () => {
+		const pieces = createTestPromptPieces({
+			cursorLine: 2, cursorColumn: 9,
+			strategy: PromptingStrategy.PatchBased02,
+			includeLineNumbers: IncludeLineNumbersOption.None,
+		});
+		const { prompt } = getUserPrompt(pieces);
+
+		// No line number prefix — cursor line starts directly with content
+		expect(prompt).toContain(PromptTags.CURSOR_LOCATION.start + '\n' + '  const ' + PromptTags.CURSOR + 'x = 1;' + '\n' + PromptTags.CURSOR_LOCATION.end);
 	});
 });

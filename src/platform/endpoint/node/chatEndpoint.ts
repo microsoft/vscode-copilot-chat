@@ -13,23 +13,24 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher, Source } from '../../chat/common/chatMLFetcher';
-import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
+import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { getTextPart } from '../../chat/common/globalStringUtils';
 import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { isAnthropicContextEditingEnabled, isAnthropicMemoryToolEnabled, isAnthropicToolSearchEnabled } from '../../networking/common/anthropic';
+import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled } from '../../networking/common/anthropic';
 import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
 import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { CAPIChatMessage, ChatCompletion, FinishedCompletionReason, RawMessageConversionCallback } from '../../networking/common/openai';
 import { prepareChatCompletionForReturn } from '../../networking/node/chatStream';
+import { IChatWebSocketManager } from '../../networking/node/chatWebSocketManager';
 import { SSEProcessor } from '../../networking/node/stream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
-import { isAnthropicFamily, isGeminiFamily } from '../common/chatModelCapabilities';
+import { isGeminiFamily } from '../common/chatModelCapabilities';
 import { IDomainService } from '../common/domainService';
 import { CustomModel, IChatModelInformation, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createMessagesRequestBody, processResponseFromMessagesEndpoint } from './messagesApi';
@@ -116,6 +117,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly model: string;
 	public readonly name: string;
 	public readonly version: string;
+	public readonly modelProvider: string;
 	public readonly family: string;
 	public readonly tokenizer: TokenizerType;
 	public readonly showInModelPicker: boolean;
@@ -126,6 +128,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly supportsAdaptiveThinking?: boolean;
 	public readonly minThinkingBudget?: number;
 	public readonly maxThinkingBudget?: number;
+	public readonly supportsReasoningEffort?: string[];
 	public readonly isPremium?: boolean | undefined;
 	public readonly multiplier?: number | undefined;
 	public readonly restrictedToSkus?: string[] | undefined;
@@ -142,6 +145,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
 		@IConfigurationService protected readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
+		@IChatWebSocketManager private readonly _chatWebSocketService: IChatWebSocketManager,
 		@ILogService _logService: ILogService,
 	) {
 		// This metadata should always be present, but if not we will default to 8192 tokens
@@ -149,6 +153,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		// This metadata should always be present, but if not we will default to 4096 tokens
 		this._maxOutputTokens = modelMetadata.capabilities.limits?.max_output_tokens ?? 4096;
 		this.model = modelMetadata.id;
+		this.modelProvider = modelMetadata.vendor;
 		this.name = modelMetadata.name;
 		this.version = modelMetadata.version;
 		this.family = modelMetadata.capabilities.family;
@@ -164,11 +169,16 @@ export class ChatEndpoint implements IChatEndpoint {
 		this.supportsAdaptiveThinking = modelMetadata.capabilities.supports.adaptive_thinking;
 		this.minThinkingBudget = modelMetadata.capabilities.supports.min_thinking_budget;
 		this.maxThinkingBudget = modelMetadata.capabilities.supports.max_thinking_budget;
+		this.supportsReasoningEffort = modelMetadata.capabilities.supports.reasoning_effort;
 		this._supportsStreaming = !!modelMetadata.capabilities.supports.streaming;
 		this.customModel = modelMetadata.custom_model;
 		this.maxPromptImages = modelMetadata.capabilities.limits?.vision?.max_prompt_images;
 	}
 
+	// TODO: Thread enableThinking through the fetch pipeline (INetworkRequestOptions / chatMLFetcher positional params)
+	// so getExtraHeaders can gate the interleaved-thinking header on whether thinking is actually enabled for the
+	// request, rather than using the location check. Once plumbed, replace isAllowedConversationAgentModel with
+	// an enableThinking check for the thinking header (keep location gate for context management / tool search).
 	public getExtraHeaders(location?: ChatLocation): Record<string, string> {
 		const headers: Record<string, string> = { ...this.modelMetadata.requestHeaders };
 
@@ -182,12 +192,12 @@ export class ChatEndpoint implements IChatEndpoint {
 
 			const betaFeatures: string[] = [];
 
-			if (!this.supportsAdaptiveThinking) {
+			if (!this.supportsAdaptiveThinking || this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicForceExtendedThinking, this._expService)) {
 				betaFeatures.push('interleaved-thinking-2025-05-14');
 			}
 
-			// Add context management beta if enabled (required for both context editing and built-in memory tool)
-			if (isAnthropicContextEditingEnabled(this.model, this._configurationService, this._expService) || isAnthropicMemoryToolEnabled(this.model, this._configurationService, this._expService)) {
+			// Add context management beta if enabled (required for context editing)
+			if (isAnthropicContextEditingEnabled(this.model, this._configurationService, this._expService)) {
 				betaFeatures.push('context-management-2025-06-27');
 			}
 
@@ -202,16 +212,6 @@ export class ChatEndpoint implements IChatEndpoint {
 		}
 
 		return headers;
-	}
-
-	private _getThinkingBudget(): number | undefined {
-		const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._expService);
-		if (!configuredBudget || configuredBudget <= 0) {
-			return undefined;
-		}
-		const normalizedBudget = configuredBudget < 1024 ? 1024 : configuredBudget;
-		// Cap thinking budget to Anthropic's recommended max (32000), and ensure it's less than max output tokens
-		return Math.min(32000, this._maxOutputTokens - 1, normalizedBudget);
 	}
 
 	public get modelMaxPromptTokens(): number {
@@ -239,6 +239,10 @@ export class ChatEndpoint implements IChatEndpoint {
 		}
 
 		return !!this.modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Responses);
+	}
+
+	protected get useWebSocketResponsesApi(): boolean {
+		return !!this.modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.WebSocketResponses);
 	}
 
 	protected get useMessagesApi(): boolean {
@@ -337,13 +341,6 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	protected customizeCapiBody(body: IEndpointBody, options: ICreateEndpointBodyOptions): IEndpointBody {
-		const isConversationAgent = options.location === ChatLocation.Agent;
-		if (isAnthropicFamily(this) && !options.disableThinking && isConversationAgent) {
-			const thinkingBudget = this._getThinkingBudget();
-			if (thinkingBudget) {
-				body.thinking_budget = thinkingBudget;
-			}
-		}
 
 		// Apply Gemini function calling mode if configured
 		const hasTools = !!options.requestOptions?.tools?.length;
@@ -386,14 +383,31 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	public async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
-		return this._makeChatRequest2({ ...options, ignoreStatefulMarker: options.ignoreStatefulMarker ?? true }, token);
-
-		// Stateful responses API not supported for now
-		// const response = await this._makeChatRequest2(options, token);
-		// if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
-		// 	return this._makeChatRequest2({ ...options, ignoreStatefulMarker: true }, token);
-		// }
-		// return response;
+		const useWebSocket = options.useWebSocket ?? !!(
+			options.turnId
+			&& options.conversationId
+			&& this.useWebSocketResponsesApi
+			&& this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.ResponsesApiWebSocketEnabled, this._expService)
+		);
+		const ignoreStatefulMarker = options.ignoreStatefulMarker ?? !(
+			useWebSocket
+			&& options.conversationId
+			&& options.turnId
+			&& this._chatWebSocketService.hasActiveConnection(options.conversationId, options.turnId)
+		);
+		const response = await this._makeChatRequest2({
+			...options,
+			useWebSocket,
+			ignoreStatefulMarker,
+		}, token);
+		if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
+			return this._makeChatRequest2({
+				...options,
+				useWebSocket,
+				ignoreStatefulMarker: true
+			}, token);
+		}
+		return response;
 	}
 
 	protected async _makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken) {
@@ -448,6 +462,7 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configService: IConfigurationService,
 		@IExperimentationService experimentService: IExperimentationService,
+		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
 		@ILogService logService: ILogService
 	) {
 		super(
@@ -458,6 +473,7 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 			instantiationService,
 			configService,
 			experimentService,
+			chatWebSocketService,
 			logService
 		);
 	}

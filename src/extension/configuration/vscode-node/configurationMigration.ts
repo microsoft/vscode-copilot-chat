@@ -153,16 +153,6 @@ ConfigurationMigrationRegistry.registerConfigurationMigrations([{
 }]);
 
 ConfigurationMigrationRegistry.registerConfigurationMigrations([{
-	key: 'github.copilot.chat.experimental.generateTests.codeLens',
-	migrateFn: async (value: any) => {
-		return [
-			['github.copilot.chat.generateTests.codeLens', { value }],
-			['github.copilot.chat.experimental.generateTests.codeLens', { value: undefined }]
-		];
-	}
-}]);
-
-ConfigurationMigrationRegistry.registerConfigurationMigrations([{
 	key: 'github.copilot.chat.planAgent.model',
 	migrateFn: async (value: any) => {
 		return [

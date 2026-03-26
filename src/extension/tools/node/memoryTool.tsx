@@ -169,15 +169,14 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		const command = options.input.command;
 		const path = command === 'rename' ? (options.input as IRenameParams).old_path ?? (options.input as IRenameParams).path : options.input.path;
 
-		if (path && !isRepoPath(path)) {
-			return this._prepareLocalInvocation(command, path, options.chatSessionResource);
-		}
-		return this._prepareRepoInvocation(command, path);
+		return this._prepareLocalInvocation(command, path ?? '/memories/', options.chatSessionResource);
 	}
 
 	private _prepareLocalInvocation(command: string, path: string, chatSessionResource?: vscode.Uri): vscode.PreparedToolInvocation {
-		// Directory paths (e.g. /memories/, /memories/session/) — show verb only, no file widget
-		if (path.endsWith('/')) {
+		// Directory paths (e.g. /memories/, /memories/session/, /memories/session) — show verb only, no file widget.
+		// Use normalizePath to handle paths with or without trailing slash consistently.
+		const normalized = normalizePath(path);
+		if (path.endsWith('/') || normalized === '/memories/session/' || normalized === '/memories/repo/' || isMemoriesRoot(path)) {
 			switch (command) {
 				case 'view':
 					return { invocationMessage: l10n.t('Reading memory'), pastTenseMessage: l10n.t('Read memory') };
@@ -205,27 +204,6 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 				return { invocationMessage: new MarkdownString(l10n.t('Renaming memory {0}', fw)), pastTenseMessage: new MarkdownString(l10n.t('Renamed memory {0}', fw)) };
 			default:
 				return { invocationMessage: new MarkdownString(l10n.t('Updating memory {0}', fw)), pastTenseMessage: new MarkdownString(l10n.t('Updated memory {0}', fw)) };
-		}
-	}
-
-	private _prepareRepoInvocation(command: string, path: string | undefined): vscode.PreparedToolInvocation {
-		const fileName = path ? path.split('/').pop() || path : undefined;
-		const suffix = fileName ? ` ${fileName}` : '';
-		switch (command) {
-			case 'view':
-				return { invocationMessage: l10n.t('Reading memory{0}', suffix), pastTenseMessage: l10n.t('Read memory{0}', suffix) };
-			case 'create':
-				return { invocationMessage: l10n.t('Creating memory file{0}', suffix), pastTenseMessage: l10n.t('Created memory file{0}', suffix) };
-			case 'str_replace':
-				return { invocationMessage: l10n.t('Updating memory file{0}', suffix), pastTenseMessage: l10n.t('Updated memory file{0}', suffix) };
-			case 'insert':
-				return { invocationMessage: l10n.t('Inserting into memory file{0}', suffix), pastTenseMessage: l10n.t('Inserted into memory file{0}', suffix) };
-			case 'delete':
-				return { invocationMessage: l10n.t('Deleting memory{0}', suffix), pastTenseMessage: l10n.t('Deleted memory{0}', suffix) };
-			case 'rename':
-				return { invocationMessage: l10n.t('Renaming memory{0}', suffix), pastTenseMessage: l10n.t('Renamed memory{0}', suffix) };
-			default:
-				return { invocationMessage: l10n.t('Updating memory{0}', suffix), pastTenseMessage: l10n.t('Updated memory{0}', suffix) };
 		}
 	}
 

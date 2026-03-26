@@ -29,6 +29,14 @@ export const enum BackgroundSummarizationState {
 export interface IBackgroundSummarizationResult {
 	readonly summary: string;
 	readonly toolCallRoundId: string;
+	readonly promptTokens?: number;
+	readonly promptCacheTokens?: number;
+	readonly outputTokens?: number;
+	readonly durationMs?: number;
+	readonly model?: string;
+	readonly summarizationMode?: string;
+	readonly numRounds?: number;
+	readonly numRoundsSinceLastSummarization?: number;
 }
 
 /**

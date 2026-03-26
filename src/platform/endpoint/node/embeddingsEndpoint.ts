@@ -5,7 +5,6 @@
 
 import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { ITokenizer } from '../../../util/common/tokenizer';
-import { LEGACY_EMBEDDING_MODEL_ID } from '../../embeddings/common/embeddingsComputer';
 import { IEmbeddingsEndpoint } from '../../networking/common/networking';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { IEmbeddingModelInformation } from '../common/endpointProvider';
@@ -32,6 +31,6 @@ export class EmbeddingEndpoint implements IEmbeddingsEndpoint {
 	}
 
 	public get urlOrRequestMetadata(): string | RequestMetadata {
-		return { type: RequestType.CAPIEmbeddings, modelId: LEGACY_EMBEDDING_MODEL_ID.TEXT3SMALL };
+		return { type: RequestType.CAPIEmbeddings };
 	}
 }

@@ -3,45 +3,55 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Attachment, SessionOptions } from '@github/copilot/sdk';
+import { Attachment, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
+import { NullChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
+import { IOctoKitService } from '../../../../platform/github/common/githubService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { NoopOTelService, resolveOTelConfig } from '../../../../platform/otel/common/index';
 import { PromptsServiceImpl } from '../../../../platform/promptFiles/common/promptsServiceImpl';
 import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import type { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { MockExtensionContext } from '../../../../platform/test/node/extensionContext';
 import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { LanguageModelTextPart, LanguageModelToolResult2 } from '../../../../vscodeTypes';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
-import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { Event } from '../../../../util/vs/base/common/event';
+import { Disposable, DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { sep } from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { IChatDelegationSummaryService } from '../../../agents/copilotcli/common/delegationSummaryService';
-import { type CopilotCLIModelInfo, type ICopilotCLIModels, type ICopilotCLISDK } from '../../../agents/copilotcli/node/copilotCli';
-import { CopilotCLIPromptResolver } from '../../../agents/copilotcli/node/copilotcliPromptResolver';
-import { CopilotCLISession, CopilotCLISessionInput } from '../../../agents/copilotcli/node/copilotcliSession';
-import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker, ICopilotCLISessionService } from '../../../agents/copilotcli/node/copilotcliSessionService';
-import { CustomSessionTitleService } from '../../../agents/copilotcli/node/customSessionTitleServiceImpl';
-import { ICopilotCLIMCPHandler } from '../../../agents/copilotcli/node/mcpHandler';
-import { MockCliSdkSession, MockCliSdkSessionManager, NullCopilotCLIAgents, NullICopilotCLIImageSupport } from '../../../agents/copilotcli/node/test/copilotCliSessionService.spec';
+import { LanguageModelTextPart, LanguageModelToolResult2 } from '../../../../vscodeTypes';
 import { ChatSummarizerProvider } from '../../../prompt/node/summarizer';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { MockChatResponseStream, TestChatRequest } from '../../../test/node/testHelpers';
 import { type IToolsService } from '../../../tools/common/toolsService';
 import { mockLanguageModelChat } from '../../../tools/node/test/searchToolTestUtils';
+import { IAgentSessionsWorkspace } from '../../common/agentSessionsWorkspace';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
-import { IChatSessionWorktreeService, type ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
+import { IChatSessionWorktreeCheckpointService } from '../../common/chatSessionWorktreeCheckpointService';
+import { IChatSessionWorktreeService, type ChatSessionWorktreeFile, type ChatSessionWorktreeProperties, type ChatSessionWorktreePropertiesV2 } from '../../common/chatSessionWorktreeService';
+import { MockChatSessionMetadataStore } from '../../common/test/mockChatSessionMetadataStore';
+import { getWorkingDirectory, IWorkspaceInfo } from '../../common/workspaceInfo';
+import { IChatDelegationSummaryService } from '../../copilotcli/common/delegationSummaryService';
+import { type CopilotCLIModelInfo, type ICopilotCLIModels, type ICopilotCLISDK } from '../../copilotcli/node/copilotCli';
+import { CopilotCLIPromptResolver } from '../../copilotcli/node/copilotcliPromptResolver';
+import { CopilotCLISession, CopilotCLISessionInput } from '../../copilotcli/node/copilotcliSession';
+import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker, ICopilotCLISessionService } from '../../copilotcli/node/copilotcliSessionService';
+import { ICopilotCLIMCPHandler } from '../../copilotcli/node/mcpHandler';
+import { MockCliSdkSession, MockCliSdkSessionManager, MockSkillLocations, NullCopilotCLIAgents, NullICopilotCLIImageSupport } from '../../copilotcli/node/test/testHelpers';
+import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../copilotcli/node/userInputHelpers';
+import { CustomSessionTitleService } from '../../copilotcli/vscode-node/customSessionTitleServiceImpl';
+import { MockChatPromptFileService } from '../../copilotcli/vscode-node/test/testHelpers';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant } from '../copilotCLIChatSessionsContribution';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
 import { CopilotCLIFolderRepositoryManager } from '../folderRepositoryManagerImpl';
@@ -76,16 +86,32 @@ vi.mock('vscode', async (importOriginal) => {
 	const actual = await import('../../../../vscodeTypes');
 	return {
 		...actual,
+		env: {
+			appName: 'VS Code'
+		},
+		version: 'test-vscode-version',
+		extensions: {
+			getExtension: vi.fn(() => ({ packageJSON: { version: 'test-version' } }))
+		},
 		commands: {
 			executeCommand: mockExecuteCommand
+		},
+		workspace: {
+			isAgentSessionsWorkspace: false
 		}
 	};
 });
 
 class FakeToolsService extends mock<IToolsService>() {
 	nextConfirmationButton: string | undefined = undefined;
+	override getTool(name: string) {
+		if (name === 'vscode_get_modified_files_confirmation') {
+			return { name } as any;
+		}
+		return undefined;
+	}
 	override invokeTool = vi.fn(async (name: string, _options: unknown, _token: unknown) => {
-		if (name === 'vscode_get_confirmation_with_options') {
+		if (name === 'vscode_get_modified_files_confirmation') {
 			const button = this.nextConfirmationButton;
 			if (button !== undefined) {
 				return new LanguageModelToolResult2([new LanguageModelTextPart(button)]);
@@ -99,23 +125,30 @@ class FakeToolsService extends mock<IToolsService>() {
 class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFolderService>() {
 	private _sessionWorkspaceFolders = new Map<string, vscode.Uri>();
 	private _recentFolders: { folder: vscode.Uri; lastAccessTime: number }[] = [];
+	private _workspaceChanges = new Map<string, readonly ChatSessionWorktreeFile[] | undefined>();
 	override trackSessionWorkspaceFolder = vi.fn(async (sessionId: string, workspaceFolderUri: string) => {
 		this._sessionWorkspaceFolders.set(sessionId, vscode.Uri.file(workspaceFolderUri));
 	});
 	override deleteTrackedWorkspaceFolder = vi.fn(async (sessionId: string) => {
 		this._sessionWorkspaceFolders.delete(sessionId);
 	});
-	override getSessionWorkspaceFolder = vi.fn((sessionId: string) => {
+	override getSessionWorkspaceFolder = vi.fn(async (sessionId: string): Promise<vscode.Uri | undefined> => {
 		return this._sessionWorkspaceFolders.get(sessionId);
 	});
-	override getRecentFolders = vi.fn((): { folder: vscode.Uri; lastAccessTime: number }[] => {
-		return this._recentFolders;
+	override getRecentFolders = vi.fn((): Promise<{ folder: vscode.Uri; lastAccessTime: number }[]> => {
+		return Promise.resolve(this._recentFolders);
+	});
+	override getWorkspaceChanges = vi.fn(async (workspaceFolderUri: vscode.Uri): Promise<readonly ChatSessionWorktreeFile[] | undefined> => {
+		return this._workspaceChanges.get(workspaceFolderUri.toString());
 	});
 	setTestRecentFolders(folders: { folder: vscode.Uri; lastAccessTime: number }[]): void {
 		this._recentFolders = folders;
 	}
 	setTestSessionWorkspaceFolder(sessionId: string, folder: vscode.Uri): void {
 		this._sessionWorkspaceFolders.set(sessionId, folder);
+	}
+	setTestWorkspaceChanges(folder: vscode.Uri, changes: readonly ChatSessionWorktreeFile[] | undefined): void {
+		this._workspaceChanges.set(folder.toString(), changes);
 	}
 }
 
@@ -124,14 +157,24 @@ class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>()
 		super();
 	}
 	override createWorktree = vi.fn(async () => undefined) as unknown as IChatSessionWorktreeService['createWorktree'];
-	override getWorktreeProperties = vi.fn((_id: string | vscode.Uri) => undefined);
+	override getWorktreeProperties: any = vi.fn(async (_id: string | vscode.Uri): Promise<ChatSessionWorktreeProperties | undefined> => undefined);
 	override setWorktreeProperties = vi.fn(async () => { });
-	override getWorktreePath = vi.fn((_id: string) => undefined);
+	override getWorktreePath: any = vi.fn(async (_id: string): Promise<vscode.Uri | undefined> => undefined);
 	override handleRequestCompleted = vi.fn(async () => { });
 	override getWorktreeRepository(sessionId: string): Promise<RepoContext | undefined> {
 		return Promise.resolve(undefined);
 	}
 }
+
+class FakeChatSessionWorktreeCheckpointService extends mock<IChatSessionWorktreeCheckpointService>() {
+	constructor() {
+		super();
+	}
+	override handleRequest = vi.fn(async () => { });
+	override handleRequestCompleted = vi.fn(async () => { });
+	override getWorktreeCheckpointSupport = vi.fn(async () => false);
+}
+
 
 class FakeModels {
 	_serviceBrand: undefined;
@@ -145,6 +188,8 @@ class FakeModels {
 
 class FakeGitService extends mock<IGitService>() {
 	override activeRepository = { get: () => undefined } as unknown as IGitService['activeRepository'];
+	override onDidFinishInitialization = Event.None;
+	override onDidOpenRepository = Event.None;
 	override repositories: RepoContext[] = [];
 	private _recentRepositories: { rootUri: vscode.Uri; lastAccessTime: number }[] = [];
 	setRepo(repos: RepoContext) {
@@ -187,15 +232,25 @@ function createChatContext(sessionId: string, isUntitled: boolean): vscode.ChatC
 
 class TestCopilotCLISession extends CopilotCLISession {
 	public requests: Array<{ input: CopilotCLISessionInput; attachments: Attachment[]; modelId: string | undefined; authInfo: NonNullable<SessionOptions['authInfo']>; token: vscode.CancellationToken }> = [];
-	override handleRequest(request: { id: string; toolInvocationToken: vscode.ChatParticipantToolToken }, input: CopilotCLISessionInput, attachments: Attachment[], modelId: string | undefined, authInfo: NonNullable<SessionOptions['authInfo']>, token: vscode.CancellationToken): Promise<void> {
+	public static nextHandleRequestResult: Promise<void> | undefined;
+	public static handleRequestHook: ((request: { id: string; toolInvocationToken: vscode.ChatParticipantToolToken; sessionResource?: vscode.Uri }, input: CopilotCLISessionInput) => Promise<void>) | undefined;
+	public static statusOverride?: vscode.ChatSessionStatus;
+	override get status(): vscode.ChatSessionStatus | undefined {
+		return TestCopilotCLISession.statusOverride;
+	}
+	override handleRequest(request: { id: string; toolInvocationToken: vscode.ChatParticipantToolToken; sessionResource?: vscode.Uri }, input: CopilotCLISessionInput, attachments: Attachment[], modelId: string | undefined, authInfo: NonNullable<SessionOptions['authInfo']>, token: vscode.CancellationToken): Promise<void> {
 		this.requests.push({ input, attachments, modelId, authInfo, token });
-		return Promise.resolve();
+		if (TestCopilotCLISession.handleRequestHook) {
+			return TestCopilotCLISession.handleRequestHook(request, input);
+		}
+		return TestCopilotCLISession.nextHandleRequestResult ?? Promise.resolve();
 	}
 }
 
 
 class FakeCopilotCLISessionService extends mock<ICopilotCLISessionService>() {
 	private _sessionWorkingDirs = new Map<string, vscode.Uri>();
+	override tryGetPartialSesionHistory: ICopilotCLISessionService['tryGetPartialSesionHistory'] = vi.fn(async () => undefined);
 
 	override getSessionWorkingDirectory = vi.fn((sessionId: string): vscode.Uri | undefined => {
 		return this._sessionWorkingDirs.get(sessionId);
@@ -213,6 +268,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let cloudProvider: FakeCloudProvider;
 	let summarizer: ChatSummarizerProvider;
 	let worktree: FakeChatSessionWorktreeService;
+	let worktreeCheckpointService: FakeChatSessionWorktreeCheckpointService;
 	let workspaceFolderService: FakeChatSessionWorkspaceFolderService;
 	let git: FakeGitService;
 	let models: FakeModels;
@@ -222,16 +278,22 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let participant: CopilotCLIChatSessionParticipant;
 	let workspaceService: IWorkspaceService;
 	let instantiationService: IInstantiationService;
+	let logService: ILogService;
+	let configurationService: InMemoryConfigurationService;
 	let manager: MockCliSdkSessionManager;
 	let mcpHandler: ICopilotCLIMCPHandler;
 	let folderRepositoryManager: CopilotCLIFolderRepositoryManager;
 	let cliSessionServiceForFolderManager: FakeCopilotCLISessionService;
 	let contentProvider: CopilotCLIChatSessionContentProvider;
 	let sdk: ICopilotCLISDK;
+	let customSessionTitleService: CustomSessionTitleService;
 	const cliSessions: TestCopilotCLISession[] = [];
 
 	beforeEach(async () => {
 		cliSessions.length = 0;
+		TestCopilotCLISession.nextHandleRequestResult = undefined;
+		TestCopilotCLISession.handleRequestHook = undefined;
+		TestCopilotCLISession.statusOverride = undefined;
 		// By default, simulate the command not being available so that
 		// handleDelegationFromAnotherChat falls into its catch block and
 		// calls handleRequest directly. The workaround tests override this.
@@ -244,19 +306,24 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const accessor = services.createTestingAccessor();
 		disposables.add(accessor);
 		promptResolver = new class extends mock<CopilotCLIPromptResolver>() {
-			override resolvePrompt = vi.fn(async (request: vscode.ChatRequest, prompt: string | undefined) => {
+			override resolvePrompt = vi.fn(async (request: vscode.ChatRequest, prompt: string | undefined, _additionalReferences: vscode.ChatPromptReference[], _workspaceInfo: IWorkspaceInfo, _additionalWorkspaces: IWorkspaceInfo[], _token: vscode.CancellationToken) => {
 				return { prompt: prompt ?? request.prompt, attachments: [], references: [] };
 			});
 		}();
 		itemProvider = new class extends mock<CopilotCLIChatSessionItemProvider>() {
 			override swap = vi.fn();
 			override notifySessionsChange = vi.fn();
+			override untitledSessionIdMapping = new Map<string, string>();
+			override sdkToUntitledUriMapping = new Map<string, Uri>();
+			override isNewSession = vi.fn((_session: string) => false);
+			override detectPullRequestOnSessionOpen = vi.fn(async () => { });
 		}();
 		cloudProvider = new FakeCloudProvider();
 		summarizer = new class extends mock<ChatSummarizerProvider>() {
 			override provideChatSummary(_context: vscode.ChatContext) { return Promise.resolve('summary text'); }
 		}();
 		worktree = new FakeChatSessionWorktreeService();
+		worktreeCheckpointService = new FakeChatSessionWorktreeCheckpointService();
 		workspaceFolderService = new FakeChatSessionWorkspaceFolderService();
 		git = new FakeGitService();
 		models = new FakeModels();
@@ -265,10 +332,10 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		tools = new FakeToolsService();
 		workspaceService = new NullWorkspaceService([URI.file('/workspace')]);
 		const logger = accessor.get(ILogService);
-		const logService = accessor.get(ILogService);
+		logService = accessor.get(ILogService);
 		mcpHandler = new class extends mock<ICopilotCLIMCPHandler>() {
 			override loadMcpConfig = vi.fn(async () => {
-				return undefined;
+				return { mcpConfig: undefined, disposable: Disposable.None };
 			});
 		}();
 		const delegationService = new class extends mock<IChatDelegationSummaryService>() {
@@ -277,6 +344,13 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			}
 		}();
 		const fileSystem = new MockFileSystemService();
+		class FakeUserQuestionHandler implements IUserQuestionHandler {
+			_serviceBrand: undefined;
+			async askUserQuestion(question: UserInputRequest, toolInvocationToken: vscode.ChatParticipantToolToken, token: vscode.CancellationToken): Promise<UserInputResponse | undefined> {
+				return undefined;
+			}
+		}
+
 		instantiationService = {
 			invokeFunction<R, TS extends any[] = []>(fn: (accessor: ServicesAccessor, ...args: TS) => R, ...args: TS): R {
 				return fn(accessor, ...args);
@@ -293,13 +367,13 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 						}
 					}();
 				}
-				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService());
+				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, new MockChatSessionMetadataStore(), instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullChatDebugFileLoggerService(), disposables.add(new MockChatPromptFileService()));
 				cliSessions.push(session);
 				return disposables.add(session);
 			}
 		} as unknown as IInstantiationService;
-		const titleServce = new CustomSessionTitleService(new MockExtensionContext() as unknown as IVSCodeExtensionContext);
-		sessionService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, mcpHandler, new NullCopilotCLIAgents(), workspaceService, titleServce));
+		customSessionTitleService = new CustomSessionTitleService(new MockExtensionContext() as unknown as IVSCodeExtensionContext, accessor.get(IInstantiationService), logService, new MockChatSessionMetadataStore());
+		sessionService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, mcpHandler, new NullCopilotCLIAgents(), workspaceService, customSessionTitleService, accessor.get(IConfigurationService), new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), { _serviceBrand: undefined, isAgentSessionsWorkspace: false } as IAgentSessionsWorkspace, workspaceFolderService, worktree, new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' }))));
 
 		manager = await sessionService.getSessionManager() as unknown as MockCliSdkSessionManager;
 		contentProvider = new class extends mock<CopilotCLIChatSessionContentProvider>() {
@@ -319,8 +393,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		);
 
 		instantiationService = accessor.get(IInstantiationService);
-		const mockConfigurationService = accessor.get(IConfigurationService) as InMemoryConfigurationService;
-		await mockConfigurationService.setConfig(ConfigKey.Advanced.CLIBranchSupport, true);
+		configurationService = accessor.get(IConfigurationService) as InMemoryConfigurationService;
+		await configurationService.setConfig(ConfigKey.Advanced.CLIBranchSupport, true);
 
 		participant = new CopilotCLIChatSessionParticipant(
 			contentProvider,
@@ -332,16 +406,18 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			new NullCopilotCLIAgents(),
 			sessionService,
 			worktree,
+			worktreeCheckpointService,
 			workspaceFolderService,
 			telemetry,
-			tools,
-			instantiationService,
 			logger,
 			new PromptsServiceImpl(new NullWorkspaceService()),
 			delegationService,
 			folderRepositoryManager,
-			mockConfigurationService,
-			sdk
+			configurationService,
+			sdk,
+			new MockChatSessionMetadataStore(),
+			customSessionTitleService,
+			new (mock<IOctoKitService>())(),
 		);
 	});
 
@@ -375,7 +451,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			version: 1
 		} satisfies ChatSessionWorktreeProperties;
 		// Set up untitled session folder
-		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
+		folderRepositoryManager.setNewSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
 		// Configure git to return repository for the folder
 		git.setRepo({ rootUri: Uri.file(`${sep}repo`), kind: 'repository' } as unknown as RepoContext);
 		// Configure worktree service to return worktree properties when createWorktree is called
@@ -389,17 +465,17 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		await participant.createHandler()(request, context, stream, token);
 
 		expect(cliSessions.length).toBe(1);
-		expect(cliSessions[0].options.isolationEnabled).toBe(true);
-		expect(cliSessions[0].options.workingDirectory?.fsPath).toBe(`${sep}worktree`);
+		expect(cliSessions[0].workspace.worktreeProperties).toBeDefined();
+		expect(getWorkingDirectory(cliSessions[0].workspace)?.fsPath).toBe(`${sep}worktree`);
 		expect(mcpHandler.loadMcpConfig).toHaveBeenCalled();
 		// Prompt resolver should receive the effective workingDirectory.
 		expect(promptResolver.resolvePrompt).toHaveBeenCalled();
-		expect((promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0][4]?.fsPath).toBe(`${sep}worktree`);
+		expect(getWorkingDirectory((promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0][3])?.fsPath).toBe(`${sep}worktree`);
 	});
 
 	it('falls back to workspace workingDirectory when isolation is enabled but worktree creation fails', async () => {
 		// Set up untitled session folder (no git repo)
-		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}workspace`));
+		folderRepositoryManager.setNewSessionFolder('untitled:temp-new', Uri.file(`${sep}workspace`));
 		// Git returns no repository for this folder (default FakeGitService behavior)
 		const request = new TestChatRequest('Say hi');
 		const context = createChatContext('untitled:temp-new', true);
@@ -409,12 +485,12 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		await participant.createHandler()(request, context, stream, token);
 
 		expect(cliSessions.length).toBe(1);
-		expect(cliSessions[0].options.isolationEnabled).toBe(false);
-		expect(cliSessions[0].options.workingDirectory?.fsPath).toBe(`${sep}workspace`);
+		expect(cliSessions[0].workspace.worktreeProperties).toBeUndefined();
+		expect(getWorkingDirectory(cliSessions[0].workspace)?.fsPath).toBe(`${sep}workspace`);
 		expect(mcpHandler.loadMcpConfig).toHaveBeenCalled();
 		// Prompt resolver should receive the effective workingDirectory.
 		expect(promptResolver.resolvePrompt).toHaveBeenCalled();
-		expect((promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0][4]?.fsPath).toBe(`${sep}workspace`);
+		expect(getWorkingDirectory((promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0][3])?.fsPath).toBe(`${sep}workspace`);
 	});
 
 	it('reuses existing session (non-untitled) and does not create new one', async () => {
@@ -439,13 +515,292 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(itemProvider.swap).not.toHaveBeenCalled();
 	});
 
+	it('maps known slash commands to CLI command input for existing sessions', async () => {
+		const sessionId = 'existing-compact';
+		const sdkSession = new MockCliSdkSession(sessionId, new Date());
+		manager.sessions.set(sessionId, sdkSession);
+		const request = new TestChatRequest('');
+		request.command = 'compact';
+		const context = createChatContext(sessionId, false);
+		const stream = new MockChatResponseStream();
+		const token = disposables.add(new CancellationTokenSource()).token;
+
+		await participant.createHandler()(request, context, stream, token);
+
+		expect(cliSessions.length).toBe(1);
+		expect(cliSessions[0].requests).toHaveLength(1);
+		expect(cliSessions[0].requests[0].input).toEqual({ command: 'compact' });
+		expect(promptResolver.resolvePrompt).not.toHaveBeenCalled();
+	});
+
+	it.skip('returns early when yield is requested while the session is still running', async () => {
+		const sessionId = 'existing-yield';
+		const sdkSession = new MockCliSdkSession(sessionId, new Date());
+		manager.sessions.set(sessionId, sdkSession);
+		let resolveHandleRequest!: () => void;
+		let yieldRequested = false;
+		TestCopilotCLISession.nextHandleRequestResult = new Promise<void>(resolve => {
+			resolveHandleRequest = resolve;
+		});
+
+		const request = new TestChatRequest('Continue');
+		const context = createChatContext(sessionId, false) as vscode.ChatContext & { history: []; readonly yieldRequested: boolean };
+		Object.defineProperty(context, 'history', {
+			value: [],
+			configurable: true,
+		});
+		Object.defineProperty(context, 'yieldRequested', {
+			get: () => yieldRequested,
+			configurable: true,
+		});
+		const stream = new MockChatResponseStream();
+		const token = disposables.add(new CancellationTokenSource()).token;
+		let resolved = false;
+
+		const handlerPromise = (async () => {
+			await participant.createHandler()(request, context, stream, token);
+			resolved = true;
+		})();
+		await new Promise(resolve => setTimeout(resolve, 50));
+		expect(resolved).toBe(false);
+
+		yieldRequested = true;
+		await new Promise(resolve => setTimeout(resolve, 600));
+		expect(resolved).toBe(true);
+
+		resolveHandleRequest();
+		await handlerPromise;
+	});
+
+	it('defers worktree handleRequestCompleted until all steering requests complete', async () => {
+		// Use an existing (non-untitled) session so both concurrent requests are guaranteed to
+		// resolve to the same SDK session and share the same pendingRequestBySession entry.
+		const sessionId = 'existing-worktree-session';
+		const sdkSession = new MockCliSdkSession(sessionId, new Date());
+		manager.sessions.set(sessionId, sdkSession);
+
+		const worktreeProperties = {
+			autoCommit: true,
+			baseCommit: 'deadbeef',
+			branchName: 'test',
+			repositoryPath: `${sep}repo`,
+			worktreePath: `${sep}worktree`,
+			version: 1
+		} satisfies ChatSessionWorktreeProperties;
+		// FolderRepositoryManagerImpl.getFolderRepository checks worktreeService.getWorktreeProperties(sessionId)
+		// when the session ID is not an untitled ID.
+		(worktree.getWorktreeProperties as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(worktreeProperties);
+		// Simulate the session completing so the worktree commit path runs
+		TestCopilotCLISession.statusOverride = vscode.ChatSessionStatus.Completed;
+
+		let resolveFirst!: () => void;
+		const firstDeferred = new Promise<void>(resolve => { resolveFirst = resolve; });
+		let resolveSecond!: () => void;
+		const secondDeferred = new Promise<void>(resolve => { resolveSecond = resolve; });
+
+		TestCopilotCLISession.handleRequestHook = vi.fn((_request, input) => {
+			if (input.prompt === 'First') { return firstDeferred; }
+			return secondDeferred;
+		});
+
+		const context = createChatContext(sessionId, false);
+		const stream = new MockChatResponseStream();
+
+		const firstRequest = new TestChatRequest('First');
+		const firstToken = disposables.add(new CancellationTokenSource()).token;
+		const firstPromise = participant.createHandler()(firstRequest, context, stream, firstToken);
+
+		const secondRequest = new TestChatRequest('Second');
+		const secondToken = disposables.add(new CancellationTokenSource()).token;
+		const secondPromise = participant.createHandler()(secondRequest, context, stream, secondToken);
+
+		// Second (steering) request completes first — commit must NOT fire while first is still pending
+		resolveSecond();
+		await secondPromise;
+		expect(worktree.handleRequestCompleted).not.toHaveBeenCalled();
+
+		// First request completes last — commit fires exactly once
+		resolveFirst();
+		await firstPromise;
+		expect(worktree.handleRequestCompleted).toHaveBeenCalledTimes(1);
+	});
+
+	it('defers untitled session swap while a steering request is still pending', async () => {
+		(itemProvider.isNewSession as ReturnType<typeof vi.fn>).mockImplementation((sessionId: string) => sessionId.startsWith('untitled:'));
+		let resolveFirstRequest!: () => void;
+		const firstRequestDeferred = new Promise<void>(resolve => {
+			resolveFirstRequest = resolve;
+		});
+		let resolveSteeringRequest1!: () => void;
+		const steeringRequestDeferred1 = new Promise<void>(resolve => {
+			resolveSteeringRequest1 = resolve;
+		});
+		let resolveSteeringRequest2!: () => void;
+		const steeringRequestDeferred2 = new Promise<void>(resolve => {
+			resolveSteeringRequest2 = resolve;
+		});
+		let resolveSteeringRequest3!: () => void;
+		const steeringRequestDeferred3 = new Promise<void>(resolve => {
+			resolveSteeringRequest3 = resolve;
+		});
+		TestCopilotCLISession.handleRequestHook = vi.fn((_request, input) => {
+			if (input.prompt === 'First request') {
+				return firstRequestDeferred;
+			}
+			if (input.prompt === 'Steering request 1') {
+				return steeringRequestDeferred1;
+			}
+			if (input.prompt === 'Steering request 2') {
+				return steeringRequestDeferred2;
+			}
+			if (input.prompt === 'Steering request 3') {
+				return steeringRequestDeferred3;
+			}
+			return Promise.resolve();
+		});
+
+		const context = createChatContext('untitled:temp-steering', true);
+		const stream = new MockChatResponseStream();
+
+		const firstRequest = new TestChatRequest('First request');
+		const firstToken = disposables.add(new CancellationTokenSource()).token;
+		const firstPromise = participant.createHandler()(firstRequest, context, stream, firstToken);
+
+		const secondRequest = new TestChatRequest('Steering request 1');
+		const secondToken = disposables.add(new CancellationTokenSource()).token;
+		const secondPromise = participant.createHandler()(secondRequest, context, stream, secondToken);
+
+		const thirdRequest = new TestChatRequest('Steering request 2');
+		const thirdToken = disposables.add(new CancellationTokenSource()).token;
+		const thirdPromise = participant.createHandler()(thirdRequest, context, stream, thirdToken);
+
+		const fourthRequest = new TestChatRequest('Steering request 3');
+		const fourthToken = disposables.add(new CancellationTokenSource()).token;
+		const fourthPromise = participant.createHandler()(fourthRequest, context, stream, fourthToken);
+
+		resolveFirstRequest();
+		await firstPromise;
+
+		expect(itemProvider.swap).not.toHaveBeenCalled();
+
+		resolveSteeringRequest1();
+		await secondPromise;
+
+		expect(itemProvider.swap).not.toHaveBeenCalled();
+
+		resolveSteeringRequest2();
+		await thirdPromise;
+
+		expect(itemProvider.swap).not.toHaveBeenCalled();
+
+		const otherSessionId = 'existing-unblocked-session';
+		manager.sessions.set(otherSessionId, new MockCliSdkSession(otherSessionId, new Date()));
+		const otherContext = createChatContext(otherSessionId, false);
+		const otherRequest = new TestChatRequest('Request from other session');
+		const otherStream = new MockChatResponseStream();
+		const otherToken = disposables.add(new CancellationTokenSource()).token;
+		const otherRequestPromise = participant.createHandler()(otherRequest, otherContext, otherStream, otherToken);
+		const otherResult = await Promise.race([
+			Promise.resolve(otherRequestPromise).then(() => 'done'),
+			new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), 75))
+		]);
+		expect(otherResult).toBe('done');
+
+		expect(itemProvider.swap).not.toHaveBeenCalled();
+
+		resolveSteeringRequest3();
+		await fourthPromise;
+
+		expect(itemProvider.swap).toHaveBeenCalledTimes(1);
+	});
+
+	it('hydrates invalid sessions from partial history and blocks follow-up requests', async () => {
+		const sessionId = 'invalid-session';
+		const invalidSessionService = new class extends FakeCopilotCLISessionService {
+			override getSession = vi.fn(async () => {
+				throw new Error('Failed to load session. Unknown event type: custom.unknown.');
+			});
+			override createSession = vi.fn(async () => {
+				throw new Error('createSession should not be called for invalid sessions');
+			});
+			override tryGetPartialSesionHistory: ICopilotCLISessionService['tryGetPartialSesionHistory'] = vi.fn(async () => ([{} as unknown as vscode.ChatRequestTurn, {} as unknown as vscode.ChatResponseTurn]));
+		}();
+		invalidSessionService.setTestSessionWorkingDirectory(sessionId, Uri.file(`${sep}workspace`));
+		const invalidContentProvider = new CopilotCLIChatSessionContentProvider(
+			itemProvider,
+			new NullCopilotCLIAgents(),
+			invalidSessionService,
+			worktree,
+			workspaceService,
+			new MockFileSystemService(),
+			git,
+			folderRepositoryManager,
+			configurationService,
+			customSessionTitleService,
+			new MockExtensionContext() as unknown as IVSCodeExtensionContext,
+		);
+		const invalidParticipant = new CopilotCLIChatSessionParticipant(
+			invalidContentProvider,
+			promptResolver,
+			itemProvider,
+			cloudProvider,
+			git,
+			models as unknown as ICopilotCLIModels,
+			new NullCopilotCLIAgents(),
+			invalidSessionService,
+			worktree,
+			worktreeCheckpointService,
+			workspaceFolderService,
+			telemetry,
+			logService,
+			new PromptsServiceImpl(new NullWorkspaceService()),
+			new class extends mock<IChatDelegationSummaryService>() {
+				override async summarize(_context: vscode.ChatContext, _token: vscode.CancellationToken): Promise<string | undefined> {
+					return undefined;
+				}
+			}(),
+			folderRepositoryManager,
+			configurationService,
+			sdk,
+			new MockChatSessionMetadataStore(),
+			customSessionTitleService,
+			new (mock<IOctoKitService>())(),
+		);
+		const sessionResource = vscode.Uri.from({ scheme: 'copilotcli', path: `/${sessionId}` });
+		const contentToken = disposables.add(new CancellationTokenSource()).token;
+
+		const sessionContent = await invalidContentProvider.provideChatSessionContentForExistingSession(sessionResource, contentToken);
+
+		expect(sessionContent.history).toHaveLength(2);
+		expect(invalidSessionService.tryGetPartialSesionHistory).toHaveBeenCalledWith(sessionId);
+
+		(invalidSessionService.getSession as ReturnType<typeof vi.fn>).mockClear();
+		(invalidSessionService.createSession as ReturnType<typeof vi.fn>).mockClear();
+		(invalidSessionService.tryGetPartialSesionHistory as ReturnType<typeof vi.fn>).mockClear();
+		const request = new TestChatRequest('Continue from VS Code');
+		const context = createChatContext(sessionId, false);
+		const stream = new MockChatResponseStream();
+		const requestToken = disposables.add(new CancellationTokenSource()).token;
+
+		await invalidParticipant.createHandler()(request, context, stream, requestToken);
+
+		const output = stream.output.join('\n');
+		expect(output).toContain('Failed loading this session');
+		expect(output).toContain('report an issue');
+		// The error message is appended via MarkdownString.appendText which encodes spaces as &nbsp;
+		expect(output).toContain('Failed&nbsp;to&nbsp;load&nbsp;session');
+		expect(invalidSessionService.getSession).not.toHaveBeenCalled();
+		expect(invalidSessionService.createSession).not.toHaveBeenCalled();
+	});
+
 	it('handles /delegate command for existing session (no session.handleRequest)', async () => {
 		const sessionId = 'existing-123';
 		const sdkSession = new MockCliSdkSession(sessionId, new Date());
 		manager.sessions.set(sessionId, sdkSession);
 
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }] } }) } as unknown as IGitService['activeRepository'];
-		const request = new TestChatRequest('/delegate Build feature');
+		const request = new TestChatRequest('Build feature');
+		request.command = 'delegate';
 		const context = createChatContext(sessionId, false);
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
@@ -481,11 +836,12 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		// With the awaitable confirmation, the session should be created in a single request
 		expect(manager.sessions.size).toBe(1);
-		expect(tools.invokeTool).toHaveBeenCalledWith(
-			'vscode_get_confirmation_with_options',
-			expect.objectContaining({ input: expect.objectContaining({ title: 'Delegate to Background Agent' }) }),
-			token
-		);
+		const delegateCallArgs = (tools.invokeTool as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+		expect(delegateCallArgs[0]).toBe('vscode_get_modified_files_confirmation');
+		expect(delegateCallArgs[1].input.title).toBe('Delegate to Copilot CLI');
+		expect(delegateCallArgs[1].input.modifiedFiles).toHaveLength(1);
+		expect(delegateCallArgs[1].input.modifiedFiles[0].uri.toString()).toBe(Uri.file(`${sep}workspace${sep}file.ts`).toString());
+		expect(delegateCallArgs[2]).toBe(token);
 	});
 
 	it('handles /delegate command from another chat without active repository', async () => {
@@ -505,7 +861,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	it('handles /delegate command for new session without uncommitted changes', async () => {
 		expect(manager.sessions.size).toBe(0);
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
-		const request = new TestChatRequest('/delegate Build feature');
+		const request = new TestChatRequest('Build feature');
+		request.command = 'delegate';
 		const context = createChatContext('existing-delegate', true);
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
@@ -600,7 +957,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 		git.setRepo({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
 		// Set up untitled session folder so getFolderRepository returns repository info
-		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
+		folderRepositoryManager.setNewSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
 		// User selects Copy Changes
 		tools.nextConfirmationButton = 'Copy Changes';
 		const request = new TestChatRequest('Fix the bug');
@@ -615,17 +972,18 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions[0].requests.length).toBe(1);
 		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'Fix the bug' });
 		// Verify confirmation tool was invoked with the right title
-		expect(tools.invokeTool).toHaveBeenCalledWith(
-			'vscode_get_confirmation_with_options',
-			expect.objectContaining({ input: expect.objectContaining({ title: 'Uncommitted Changes' }) }),
-			token
-		);
+		const confirmCallArgs = (tools.invokeTool as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+		expect(confirmCallArgs[0]).toBe('vscode_get_modified_files_confirmation');
+		expect(confirmCallArgs[1].input.title).toBe('Uncommitted Changes');
+		expect(confirmCallArgs[1].input.modifiedFiles).toHaveLength(1);
+		expect(confirmCallArgs[1].input.modifiedFiles[0].uri.toString()).toBe(Uri.file(`${sep}repo${sep}file.ts`).toString());
+		expect(confirmCallArgs[2]).toBe(token);
 	});
 
 	it('uses request prompt directly when user accepts uncommitted changes confirmation', async () => {
 		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 		git.setRepo({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
-		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
+		folderRepositoryManager.setNewSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
 		tools.nextConfirmationButton = 'Copy Changes';
 
 		const request = new TestChatRequest('Fix the bug');
@@ -647,7 +1005,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	it('uses request prompt for session label when swapping untitled session', async () => {
 		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 		git.setRepo({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
-		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
+		folderRepositoryManager.setNewSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
 		tools.nextConfirmationButton = 'Move Changes';
 
 		const request = new TestChatRequest('Implement new feature');
@@ -666,7 +1024,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	it('passes empty references array to resolvePrompt after confirmation', async () => {
 		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 		git.setRepo({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
-		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
+		folderRepositoryManager.setNewSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
 		tools.nextConfirmationButton = 'Copy Changes';
 
 		const request = new TestChatRequest('Fix the bug');
@@ -685,7 +1043,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	it('returns empty when user cancels untitled session confirmation', async () => {
 		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 		git.setRepo({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
-		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
+		folderRepositoryManager.setNewSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
 		// User clicks Cancel
 		tools.nextConfirmationButton = 'Cancel';
 
@@ -757,19 +1115,19 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		await participant.createHandler()(request2, context2, stream2, token2);
 
-		// Should not create a new session
-		expect(cliSessions.length).toBe(1);
-		expect(cliSessions[0].sessionId).toBe(firstSessionId);
-		expect(cliSessions[0].requests.length).toBe(2);
+		// Session wrapper can be recreated, but the SDK session should be reused.
+		expect(manager.sessions.size).toBe(1);
+		expect(new Set(cliSessions.map(s => s.sessionId))).toEqual(new Set([firstSessionId]));
+		expect(cliSessions.reduce((count, s) => count + s.requests.length, 0)).toBe(2);
 		expect(cliSessions[0].requests[0].input).toEqual({ prompt: 'First request' });
-		expect(cliSessions[0].requests[1].input).toEqual({ prompt: 'Second request' });
+		expect(cliSessions.at(-1)?.requests.at(-1)?.input).toEqual({ prompt: 'Second request' });
 	});
 
 	it('reuses untitled session after confirmation without creating new session', async () => {
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 		git.setRepo({ rootUri: Uri.file(`${sep}workspace`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
 		// Set up untitled session folder so getFolderRepository returns repository info (for uncommitted changes check)
-		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}workspace`));
+		folderRepositoryManager.setNewSessionFolder('untitled:temp-new', Uri.file(`${sep}workspace`));
 		// User selects Copy Changes via the tools confirmation
 		tools.nextConfirmationButton = 'Copy Changes';
 
@@ -795,11 +1153,11 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		await participant.createHandler()(request2, context2, stream2, token2);
 
-		// Should not create a new session
-		expect(cliSessions.length).toBe(1);
-		expect(cliSessions[0].sessionId).toBe(firstSessionId);
-		expect(cliSessions[0].requests.length).toBe(2);
-		expect(cliSessions[0].requests[1].input).toEqual({ prompt: 'Second request' });
+		// Session wrapper can be recreated, but the SDK session should be reused.
+		expect(manager.sessions.size).toBe(1);
+		expect(new Set(cliSessions.map(s => s.sessionId))).toEqual(new Set([firstSessionId]));
+		expect(cliSessions.reduce((count, s) => count + s.requests.length, 0)).toBe(2);
+		expect(cliSessions.at(-1)?.requests.at(-1)?.input).toEqual({ prompt: 'Second request' });
 	});
 
 	describe('Authorization check', () => {
@@ -1020,7 +1378,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			);
 			expect(lockCalls.length).toBeGreaterThan(0);
 
-			// Verify unlock was called on failure
+			// Verify unlock was NOT called on failure (session creation failed but workspace was trusted)
 			const unlockCalls = allCalls.filter(
 				call => call[1].some((update: any) => update.optionId === 'repository' && typeof update.value === 'string')
 			);
@@ -1496,6 +1854,330 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			expect(cliSessions[0].requests[0].input).toEqual(
 				expect.objectContaining({ prompt: expect.stringContaining('do some work') })
 			);
+		});
+	});
+
+	describe('agent tool references via modeInstructions2', () => {
+		class MockCopilotCLIAgentsWithCustomAgent extends NullCopilotCLIAgents {
+			constructor(private readonly agentTools: string[] | null) {
+				super();
+			}
+			override resolveAgent(agentId: string): Promise<SweCustomAgent | undefined> {
+				if (agentId === 'custom-agent') {
+					return Promise.resolve({
+						name: 'custom-agent',
+						displayName: 'Custom Agent',
+						description: 'A test agent',
+						tools: this.agentTools,
+						prompt: async () => 'System prompt',
+						disableModelInvocation: false,
+					});
+				}
+				return Promise.resolve(undefined);
+			}
+		}
+
+		function makeParticipantWithAgents(agents: MockCopilotCLIAgentsWithCustomAgent): CopilotCLIChatSessionParticipant {
+			const nullDelegationService = new class extends mock<IChatDelegationSummaryService>() {
+				override async summarize(_context: vscode.ChatContext, _token: vscode.CancellationToken): Promise<string | undefined> {
+					return undefined;
+				}
+			}();
+			return new CopilotCLIChatSessionParticipant(
+				contentProvider,
+				promptResolver,
+				itemProvider,
+				cloudProvider,
+				git,
+				models as unknown as ICopilotCLIModels,
+				agents,
+				sessionService,
+				worktree,
+				worktreeCheckpointService,
+				workspaceFolderService,
+				telemetry,
+				logService,
+				new PromptsServiceImpl(new NullWorkspaceService()),
+				nullDelegationService,
+				folderRepositoryManager,
+				configurationService,
+				sdk,
+				new MockChatSessionMetadataStore(),
+				customSessionTitleService,
+				new (mock<IOctoKitService>())(),
+			);
+		}
+
+		it('preserves agent tools when modeInstructions2 has no tool references', async () => {
+			const agentParticipant = makeParticipantWithAgents(new MockCopilotCLIAgentsWithCustomAgent(['original-tool']));
+			const createSessionSpy = vi.spyOn(sessionService, 'createSession');
+
+			const request = new TestChatRequest('Do something');
+			(request as any).modeInstructions2 = { name: 'custom-agent', content: 'agent content' };
+			const context = createChatContext('temp-new', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await agentParticipant.createHandler()(request, context, stream, token);
+
+			expect(createSessionSpy).toHaveBeenCalled();
+			const { agent } = createSessionSpy.mock.calls[0][0];
+			expect(agent?.tools).toEqual(['original-tool']);
+		});
+
+		it('overrides agent tools when modeInstructions2 provides tool references', async () => {
+			const agentParticipant = makeParticipantWithAgents(new MockCopilotCLIAgentsWithCustomAgent(['original-tool']));
+			const createSessionSpy = vi.spyOn(sessionService, 'createSession');
+
+			const request = new TestChatRequest('Do something');
+			(request as any).modeInstructions2 = {
+				name: 'custom-agent',
+				content: 'agent content',
+				toolReferences: [{ name: 'override-tool-1' }, { name: 'override-tool-2' }],
+			};
+			const context = createChatContext('temp-new', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await agentParticipant.createHandler()(request, context, stream, token);
+
+			expect(createSessionSpy).toHaveBeenCalled();
+			const { agent } = createSessionSpy.mock.calls[0][0];
+			expect(agent?.tools).toEqual(['override-tool-1', 'override-tool-2']);
+		});
+
+		it('preserves null tools when modeInstructions2 has no tool references', async () => {
+			const agentParticipant = makeParticipantWithAgents(new MockCopilotCLIAgentsWithCustomAgent(null));
+			const createSessionSpy = vi.spyOn(sessionService, 'createSession');
+
+			const request = new TestChatRequest('Do something');
+			(request as any).modeInstructions2 = { name: 'custom-agent', content: 'agent content' };
+			const context = createChatContext('temp-new', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await agentParticipant.createHandler()(request, context, stream, token);
+
+			expect(createSessionSpy).toHaveBeenCalled();
+			const { agent } = createSessionSpy.mock.calls[0][0];
+			expect(agent?.tools).toBeNull();
+		});
+
+		it('does not use session agent when no modeInstructions2 is provided', async () => {
+			const agentParticipant = makeParticipantWithAgents(new MockCopilotCLIAgentsWithCustomAgent(['tool-a']));
+			const createSessionSpy = vi.spyOn(sessionService, 'createSession');
+
+			const request = new TestChatRequest('Do something');
+			// No modeInstructions2 set — agent should be undefined regardless of session state
+			const context = createChatContext('temp-new', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await agentParticipant.createHandler()(request, context, stream, token);
+
+			expect(createSessionSpy).toHaveBeenCalled();
+			const { agent } = createSessionSpy.mock.calls[0][0];
+			expect(agent).toBeUndefined();
+		});
+	});
+
+	describe('PR detection with retry', () => {
+		let octoKitService: IOctoKitService;
+
+		const v2WorktreeProperties: ChatSessionWorktreePropertiesV2 = {
+			version: 2,
+			baseCommit: 'abc123',
+			branchName: 'copilot/test-branch',
+			baseBranchName: 'main',
+			repositoryPath: `${sep}repo`,
+			worktreePath: `${sep}worktree`,
+		};
+
+		const repoContext: RepoContext = {
+			rootUri: Uri.file(`${sep}repo`),
+			kind: 'repository',
+			remotes: ['origin'],
+			remoteFetchUrls: ['https://github.com/testowner/testrepo.git'],
+		} as unknown as RepoContext;
+
+		beforeEach(() => {
+			vi.useFakeTimers();
+			octoKitService = {
+				findPullRequestByHeadBranch: vi.fn(async () => undefined),
+			} as unknown as IOctoKitService;
+
+			// Set up folder & git repo so session creation succeeds with worktree isolation
+			folderRepositoryManager.setNewSessionFolder('untitled:pr-test', Uri.file(`${sep}repo`));
+			git.setRepo(repoContext);
+			(worktree.createWorktree as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(v2WorktreeProperties);
+			// After session creation, getWorktreeProperties returns v2 for any session
+			(worktree.getWorktreeProperties as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(v2WorktreeProperties);
+			TestCopilotCLISession.statusOverride = vscode.ChatSessionStatus.Completed;
+
+			// Recreate participant with the controllable octoKitService
+			participant = new CopilotCLIChatSessionParticipant(
+				contentProvider,
+				promptResolver,
+				itemProvider,
+				cloudProvider,
+				git,
+				models as unknown as ICopilotCLIModels,
+				new NullCopilotCLIAgents(),
+				sessionService,
+				worktree,
+				worktreeCheckpointService,
+				workspaceFolderService,
+				telemetry,
+				logService,
+				new PromptsServiceImpl(new NullWorkspaceService()),
+				new (mock<IChatDelegationSummaryService>())(),
+				folderRepositoryManager,
+				configurationService,
+				sdk,
+				new MockChatSessionMetadataStore(),
+				customSessionTitleService,
+				octoKitService,
+			);
+		});
+
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it('retries PR detection with exponential backoff and succeeds on second attempt', async () => {
+			const findPr = octoKitService.findPullRequestByHeadBranch as ReturnType<typeof vi.fn>;
+			findPr
+				.mockResolvedValueOnce(undefined) // attempt 1: not found
+				.mockResolvedValueOnce({ url: 'https://github.com/testowner/testrepo/pull/42', state: 'OPEN' }); // attempt 2: found
+
+			const request = new TestChatRequest('Create a PR');
+			const context = createChatContext('untitled:pr-test', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			const handlerPromise = participant.createHandler()(request, context, stream, token);
+			await vi.runAllTimersAsync();
+			await handlerPromise;
+
+			// Should have been called twice (after 2s delay, then after 4s delay)
+			expect(findPr).toHaveBeenCalledTimes(2);
+			// Should have persisted the PR URL and state
+			expect(worktree.setWorktreeProperties).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({ pullRequestUrl: 'https://github.com/testowner/testrepo/pull/42', pullRequestState: 'open' })
+			);
+		});
+
+		it('stops retrying once all attempts are exhausted', async () => {
+			const findPr = octoKitService.findPullRequestByHeadBranch as ReturnType<typeof vi.fn>;
+			findPr.mockResolvedValue(undefined); // always returns not found
+
+			const request = new TestChatRequest('Create something');
+			const context = createChatContext('untitled:pr-test', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			const handlerPromise = participant.createHandler()(request, context, stream, token);
+			await vi.runAllTimersAsync();
+			await handlerPromise;
+
+			// 3 attempts total (after 2s, 4s, and 8s delays)
+			expect(findPr).toHaveBeenCalledTimes(3);
+			// Should NOT have persisted any PR URL since all attempts failed
+			const setPropsCallsWithPrUrl = (worktree.setWorktreeProperties as ReturnType<typeof vi.fn>).mock.calls
+				.filter((args: unknown[]) => (args[1] as { pullRequestUrl?: string })?.pullRequestUrl !== undefined);
+			expect(setPropsCallsWithPrUrl).toHaveLength(0);
+		});
+
+		it('skips retry when session already has createdPullRequestUrl', async () => {
+			const findPr = octoKitService.findPullRequestByHeadBranch as ReturnType<typeof vi.fn>;
+
+			// Make the session report a PR URL directly
+			TestCopilotCLISession.handleRequestHook = vi.fn(async () => {
+				const session = cliSessions[cliSessions.length - 1];
+				(session as any)._createdPullRequestUrl = 'https://github.com/testowner/testrepo/pull/99';
+			});
+
+			const request = new TestChatRequest('Create a PR via MCP');
+			const context = createChatContext('untitled:pr-test', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			const handlerPromise = participant.createHandler()(request, context, stream, token);
+			await vi.runAllTimersAsync();
+			await handlerPromise;
+
+			// Should NOT have called the GitHub API since session had the URL
+			expect(findPr).not.toHaveBeenCalled();
+			// Should have persisted the session's PR URL
+			expect(worktree.setWorktreeProperties).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({ pullRequestUrl: 'https://github.com/testowner/testrepo/pull/99' })
+			);
+		});
+	});
+
+	describe('sdkToUntitledUriMapping lifecycle', () => {
+		it('populates sdkToUntitledUriMapping during request and cleans up after swap', async () => {
+			folderRepositoryManager.setNewSessionFolder('untitled:mapping-test', Uri.file(`${sep}workspace`));
+
+			let capturedSdkSessionId: string | undefined;
+			let mappingExistedDuringRequest = false;
+			TestCopilotCLISession.handleRequestHook = vi.fn(async () => {
+				const session = cliSessions[cliSessions.length - 1];
+				capturedSdkSessionId = session.sessionId;
+				mappingExistedDuringRequest = itemProvider.sdkToUntitledUriMapping.has(capturedSdkSessionId);
+			});
+
+			const request = new TestChatRequest('Hello');
+			const context = createChatContext('untitled:mapping-test', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			// Mapping should have existed during the request
+			expect(mappingExistedDuringRequest).toBe(true);
+			// After the request completes and the session is swapped, the mapping should be cleaned up
+			expect(itemProvider.sdkToUntitledUriMapping.has(capturedSdkSessionId!)).toBe(false);
+		});
+
+		it('maps SDK session ID to the original untitled URI', async () => {
+			folderRepositoryManager.setNewSessionFolder('untitled:uri-check', Uri.file(`${sep}workspace`));
+
+			let capturedUri: Uri | undefined;
+			TestCopilotCLISession.handleRequestHook = vi.fn(async () => {
+				const session = cliSessions[cliSessions.length - 1];
+				capturedUri = itemProvider.sdkToUntitledUriMapping.get(session.sessionId);
+			});
+
+			const request = new TestChatRequest('Hello');
+			const context = createChatContext('untitled:uri-check', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			expect(capturedUri).toBeDefined();
+			expect(capturedUri!.scheme).toBe('copilotcli');
+			expect(capturedUri!.path).toBe('/untitled:uri-check');
+		});
+
+		it('does not populate sdkToUntitledUriMapping for existing sessions', async () => {
+			const sessionId = 'existing-mapping-test';
+			const sdkSession = new MockCliSdkSession(sessionId, new Date());
+			manager.sessions.set(sessionId, sdkSession);
+
+			const request = new TestChatRequest('Continue');
+			const context = createChatContext(sessionId, false);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			expect(cliSessions.length).toBe(1);
+			// Should NOT have set sdkToUntitledUriMapping for existing sessions
+			expect(itemProvider.sdkToUntitledUriMapping.size).toBe(0);
 		});
 	});
 });

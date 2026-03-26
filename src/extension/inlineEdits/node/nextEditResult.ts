@@ -38,6 +38,7 @@ export class NextEditResult implements INextEditResult {
 			action?: Command;
 			isFromCursorJump: boolean;
 			jumpToPosition?: Position;
+			isSubsequentEdit: boolean;
 		} | undefined,
 	) { }
 }

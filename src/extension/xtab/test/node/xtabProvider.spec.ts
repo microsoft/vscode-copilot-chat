@@ -6,7 +6,7 @@
 import { Raw } from '@vscode/prompt-tsx';
 import { afterEach, beforeEach, describe, expect, it, suite, test, vi } from 'vitest';
 import { IChatMLFetcher } from '../../../../platform/chat/common/chatMLFetcher';
-import { ChatFetchResponseType } from '../../../../platform/chat/common/commonTypes';
+import { ChatFetchResponseType, RESPONSE_CONTAINED_NO_CHOICES } from '../../../../platform/chat/common/commonTypes';
 import { StreamingMockChatMLFetcher } from '../../../../platform/chat/test/common/streamingMockChatMLFetcher';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
@@ -28,12 +28,14 @@ import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { LineEdit } from '../../../../util/vs/editor/common/core/edits/lineEdit';
+import { LineEdit, LineReplacement } from '../../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit, StringReplacement } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { Position } from '../../../../util/vs/editor/common/core/position';
+import { LineRange } from '../../../../util/vs/editor/common/core/ranges/lineRange';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { DelaySession } from '../../../inlineEdits/common/delay';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { N_LINES_AS_CONTEXT } from '../../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../../common/systemMessages';
@@ -41,6 +43,7 @@ import { CurrentDocument } from '../../common/xtabCurrentDocument';
 import {
 	computeAreaAroundEditWindowLinesRange,
 	determineLanguageContextOptions,
+	filterOutEditsWithSubstrings,
 	findMergeConflictMarkersRange,
 	getPredictionContents,
 	mapChatFetcherErrorToNoNextEditReason,
@@ -444,6 +447,7 @@ describe('pickSystemPrompt', () => {
 	it.each([
 		PromptingStrategy.PatchBased,
 		PromptingStrategy.PatchBased01,
+		PromptingStrategy.PatchBased02,
 		PromptingStrategy.Xtab275,
 		PromptingStrategy.XtabAggressiveness,
 		PromptingStrategy.Xtab275EditIntent,
@@ -485,7 +489,7 @@ describe('mapChatFetcherErrorToNoNextEditReason', () => {
 		{ type: ChatFetchResponseType.Filtered, ...baseRequestFields, category: FilterReason.Hate },
 		{ type: ChatFetchResponseType.PromptFiltered, ...baseRequestFields, category: FilterReason.Hate },
 		{ type: ChatFetchResponseType.Length, ...baseRequestFields, truncatedValue: '' },
-		{ type: ChatFetchResponseType.RateLimited, ...baseRequestFields, retryAfter: undefined, rateLimitKey: 'k' },
+		{ type: ChatFetchResponseType.RateLimited, ...baseRequestFields, retryAfter: undefined, rateLimitKey: 'k', isAuto: false },
 		{ type: ChatFetchResponseType.QuotaExceeded, ...baseRequestFields, retryAfter: new Date() },
 		{ type: ChatFetchResponseType.ExtensionBlocked, ...baseRequestFields, retryAfter: 0, learnMoreLink: '' },
 		{ type: ChatFetchResponseType.AgentUnauthorized, ...baseRequestFields, authorizationUrl: '' },
@@ -547,12 +551,12 @@ describe('overrideModelConfig', () => {
 	});
 
 	it('merges lintOptions when overridingConfig has lintOptions', () => {
-		const testLintOptions = { tagName: 'lint', warnings: LintOptionWarning.YES, showCode: LintOptionShowCode.YES, maxLints: 5, maxLineDistance: 10 };
+		const testLintOptions = { tagName: 'lint', warnings: LintOptionWarning.YES, showCode: LintOptionShowCode.YES, maxLints: 5, maxLineDistance: 10, nRecentFiles: 0 };
 		const base: ModelConfig = {
 			...makeBaseModelConfig(),
 			lintOptions: testLintOptions,
 		};
-		const overrideLintOptions = { tagName: 'diag', warnings: LintOptionWarning.NO, showCode: LintOptionShowCode.NO, maxLints: 3, maxLineDistance: 5 };
+		const overrideLintOptions = { tagName: 'diag', warnings: LintOptionWarning.NO, showCode: LintOptionShowCode.NO, maxLints: 3, maxLineDistance: 5, nRecentFiles: 0 };
 		const override: ModelConfiguration = {
 			modelName: 'test',
 			promptingStrategy: undefined,
@@ -566,7 +570,7 @@ describe('overrideModelConfig', () => {
 	});
 
 	it('keeps base lintOptions when override has no lintOptions', () => {
-		const testLintOptions = { tagName: 'lint', warnings: LintOptionWarning.YES, showCode: LintOptionShowCode.YES, maxLints: 5, maxLineDistance: 10 };
+		const testLintOptions = { tagName: 'lint', warnings: LintOptionWarning.YES, showCode: LintOptionShowCode.YES, maxLints: 5, maxLineDistance: 10, nRecentFiles: 0 };
 		const base: ModelConfig = {
 			...makeBaseModelConfig(),
 			lintOptions: testLintOptions,
@@ -597,6 +601,44 @@ describe('overrideModelConfig', () => {
 
 		expect(result.currentFile.includeTags).toBe(true);
 		expect(result.currentFile.maxTokens).toBe(originalMaxTokens);
+	});
+
+	it('merges currentFile partial overrides with base currentFile', () => {
+		const base = makeBaseModelConfig();
+		const override: ModelConfiguration = {
+			modelName: 'test',
+			promptingStrategy: undefined,
+			includeTagsInCurrentFile: false,
+			currentFile: { maxTokens: 500 },
+			lintOptions: undefined,
+		};
+
+		const result = overrideModelConfig(base, override);
+
+		expect(result.currentFile.maxTokens).toBe(500);
+		// includeTags comes from includeTagsInCurrentFile, applied last
+		expect(result.currentFile.includeTags).toBe(false);
+		// Other fields preserved from base
+		expect(result.currentFile.includeLineNumbers).toBe(base.currentFile.includeLineNumbers);
+		expect(result.currentFile.includeCursorTag).toBe(base.currentFile.includeCursorTag);
+	});
+
+	it('merges recentlyViewedDocuments partial overrides with base', () => {
+		const base = makeBaseModelConfig();
+		const override: ModelConfiguration = {
+			modelName: 'test',
+			promptingStrategy: undefined,
+			includeTagsInCurrentFile: false,
+			recentlyViewedDocuments: { maxTokens: 3000 },
+			lintOptions: undefined,
+		};
+
+		const result = overrideModelConfig(base, override);
+
+		expect(result.recentlyViewedDocuments.maxTokens).toBe(3000);
+		// Other fields preserved from base
+		expect(result.recentlyViewedDocuments.nDocuments).toBe(base.recentlyViewedDocuments.nDocuments);
+		expect(result.recentlyViewedDocuments.includeViewedFiles).toBe(base.recentlyViewedDocuments.includeViewedFiles);
 	});
 });
 
@@ -917,6 +959,7 @@ describe('XtabProvider integration', () => {
 		insertedText?: string;
 		languageId?: string;
 		expandedEditWindowNLines?: number;
+		isSpeculative?: boolean;
 	}): StatelessNextEditRequest {
 		const doc = makeDocumentWithEdit(lines, opts);
 		const beforeText = new StringText(doc.documentBeforeEdits.value);
@@ -931,6 +974,7 @@ describe('XtabProvider integration', () => {
 			[{ docId, kind: 'visibleRanges', visibleRanges: [new OffsetRange(0, 100)], documentContent: doc.documentAfterEdits }],
 			new DeferredPromise<Result<unknown, NoNextEditReason>>(),
 			opts?.expandedEditWindowNLines,
+			opts?.isSpeculative ?? false,
 			new InlineEditRequestLogContext('file:///test/file.ts', 1, undefined),
 			undefined,
 			undefined,
@@ -1004,6 +1048,7 @@ describe('XtabProvider integration', () => {
 				'req-1', 'opp-1', text, [doc], 0,
 				[], // empty history
 				new DeferredPromise<Result<unknown, NoNextEditReason>>(), undefined,
+				false, // isSpeculative
 				createLogContext(), undefined, undefined, Date.now(),
 			);
 
@@ -1031,6 +1076,7 @@ describe('XtabProvider integration', () => {
 				'req-1', 'opp-1', text, [doc], 0,
 				[{ docId: doc.id, kind: 'visibleRanges', visibleRanges: [new OffsetRange(0, 50)], documentContent: text }],
 				new DeferredPromise<Result<unknown, NoNextEditReason>>(), undefined,
+				false, // isSpeculative
 				createLogContext(), undefined, undefined, Date.now(),
 			);
 
@@ -1267,6 +1313,44 @@ describe('XtabProvider integration', () => {
 			expect(finalValue.v).toBeInstanceOf(NoNextEditReason.FetchFailure);
 			// Exactly 2 calls: initial + one retry with default model
 			expect(streamingFetcher.callCount).toBe(2);
+		});
+
+		it('returns NoSuggestions when response contains no choices', async () => {
+			const provider = createProvider();
+
+			const lines = ['const x = 1;'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 3, insertedText: 'a' });
+
+			streamingFetcher.enqueueResponse({
+				type: ChatFetchResponseType.Unknown,
+				reason: RESPONSE_CONTAINED_NO_CHOICES,
+				requestId: 'req-1',
+				serverRequestId: undefined,
+			});
+
+			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
+			const finalValue = await AsyncIterUtils.drainUntilReturn(gen);
+
+			expect(finalValue.v).toBeInstanceOf(NoNextEditReason.NoSuggestions);
+		});
+
+		it('returns FetchFailure for Unknown response with a different reason', async () => {
+			const provider = createProvider();
+
+			const lines = ['const x = 1;'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 3, insertedText: 'a' });
+
+			streamingFetcher.enqueueResponse({
+				type: ChatFetchResponseType.Unknown,
+				reason: 'some other error',
+				requestId: 'req-1',
+				serverRequestId: undefined,
+			});
+
+			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
+			const finalValue = await AsyncIterUtils.drainUntilReturn(gen);
+
+			expect(finalValue.v).toBeInstanceOf(NoNextEditReason.FetchFailure);
 		});
 	});
 
@@ -1722,6 +1806,54 @@ describe('XtabProvider integration', () => {
 			expect(edits.length).toBe(0);
 			expect(finalReason.v).toBeInstanceOf(NoNextEditReason.NoSuggestions);
 		});
+
+		it('no edits + cursor prediction enabled + user typed during request → skips cursor prediction', async () => {
+			const provider = createProvider();
+			await configService.setConfig(ConfigKey.InlineEditsNextCursorPredictionEnabled, true);
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionModelName, 'test-model');
+
+			const lines = ['line 0', 'line 1', 'line 2'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 3 });
+
+			// Simulate the user typing after the request was created
+			request.intermediateUserEdit = StringEdit.single(
+				new StringReplacement(OffsetRange.emptyAt(0), 'x')
+			);
+
+			// Stream back identical content → no diff → would trigger cursor jump path,
+			// but intermediateUserEdit is non-empty so cursor prediction should be skipped
+			streamingFetcher.setStreamingLines(lines);
+
+			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
+			const { edits, finalReason } = await collectEdits(gen);
+
+			expect(edits.length).toBe(0);
+			expect(finalReason.v).toBeInstanceOf(NoNextEditReason.GotCancelled);
+			// Cursor prediction must not have been issued — only the main LLM call was made
+			expect(streamingFetcher.callCount).toBe(1);
+		});
+
+		it('no edits + cursor prediction enabled + intermediateUserEdit undefined → skips cursor prediction', async () => {
+			const provider = createProvider();
+			await configService.setConfig(ConfigKey.InlineEditsNextCursorPredictionEnabled, true);
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionModelName, 'test-model');
+
+			const lines = ['line 0', 'line 1', 'line 2'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 3 });
+
+			// intermediateUserEdit = undefined means consistency check failed (user typed and edits diverged)
+			request.intermediateUserEdit = undefined;
+
+			streamingFetcher.setStreamingLines(lines);
+
+			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
+			const { edits, finalReason } = await collectEdits(gen);
+
+			expect(edits.length).toBe(0);
+			expect(finalReason.v).toBeInstanceOf(NoNextEditReason.GotCancelled);
+			// Cursor prediction must not have been issued — only the main LLM call was made
+			expect(streamingFetcher.callCount).toBe(1);
+		});
 	});
 
 	// ========================================================================
@@ -1751,6 +1883,7 @@ describe('XtabProvider integration', () => {
 				'req-sim', 'opp-sim', beforeText, [doc], 0,
 				[{ docId: doc.id, kind: 'visibleRanges', visibleRanges: [new OffsetRange(0, 100)], documentContent: doc.documentAfterEdits }],
 				new DeferredPromise<Result<unknown, NoNextEditReason>>(), undefined,
+				false, // isSpeculative
 				createLogContext(), undefined, undefined, Date.now(),
 			);
 
@@ -1766,6 +1899,92 @@ describe('XtabProvider integration', () => {
 			// Use a generous threshold since CI can be slow, but it should be much less than
 			// a typical debounce time of 200-500ms
 			expect(elapsed).toBeLessThan(5000);
+		});
+
+		it('does not apply extra debounce for speculative requests even when cursor is at end of line', async () => {
+			const provider = createProvider();
+			const spy = vi.spyOn(DelaySession.prototype, 'setExtraDebounce');
+
+			// Cursor at end of line (insertionOffset = 12 inserts ';' at end → cursor after last char)
+			const request = createRequestWithEdit(['const x = 1;'], { insertionOffset: 12, isSpeculative: true });
+			streamingFetcher.setStreamingLines(['const x = 42;']);
+
+			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
+			await AsyncIterUtils.drainUntilReturn(gen);
+
+			expect(spy).not.toHaveBeenCalled();
+			spy.mockRestore();
+		});
+
+		it('applies extra debounce for non-speculative requests when cursor is at end of line', async () => {
+			const provider = createProvider();
+			const spy = vi.spyOn(DelaySession.prototype, 'setExtraDebounce');
+
+			// Same cursor-at-end-of-line setup, but non-speculative
+			const request = createRequestWithEdit(['const x = 1;'], { insertionOffset: 12, isSpeculative: false });
+			streamingFetcher.setStreamingLines(['const x = 42;']);
+
+			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
+			await AsyncIterUtils.drainUntilReturn(gen);
+
+			expect(spy).toHaveBeenCalled();
+			spy.mockRestore();
+		});
+
+		it('cancellation during debounce exits early with GotCancelled before LLM fetch', async () => {
+			const debounceMs = 500;
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsDebounce, debounceMs);
+
+			const provider = createProvider();
+			const lines = ['function foo() {', '  return 1;', '}'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 5, insertedText: 'c' });
+			streamingFetcher.setStreamingLines(lines);
+
+			const cts = new CancellationTokenSource();
+			vi.useFakeTimers();
+			try {
+				const genPromise = AsyncIterUtils.drainUntilReturn(
+					provider.provideNextEdit(request, createMockLogger(), createLogContext(), cts.token)
+				);
+
+				// Flush pending microtasks so the provider reaches the debounce await
+				await vi.advanceTimersByTimeAsync(0);
+				// Cancel while the debounce timer is scheduled but has not fired
+				cts.cancel();
+
+				const finalValue = await genPromise;
+
+				expect(finalValue.v).toBeInstanceOf(NoNextEditReason.GotCancelled);
+				// LLM fetch must not have been issued — cancelled before the fetch phase
+				expect(streamingFetcher.callCount).toBe(0);
+			} finally {
+				vi.useRealTimers();
+				cts.dispose();
+			}
+		});
+
+		it('pre-cancelled token resolves without waiting for debounce', async () => {
+			const debounceMs = 500;
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsDebounce, debounceMs);
+
+			const provider = createProvider();
+			const lines = ['function foo() {', '  return 1;', '}'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 5, insertedText: 'c' });
+			streamingFetcher.setStreamingLines(lines);
+
+			const cts = new CancellationTokenSource();
+			cts.cancel(); // already cancelled before provideNextEdit is called
+
+			vi.useFakeTimers();
+			try {
+				const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), cts.token);
+				const finalValue = await AsyncIterUtils.drainUntilReturn(gen);
+
+				expect(finalValue.v).toBeInstanceOf(NoNextEditReason.GotCancelled);
+			} finally {
+				vi.useRealTimers();
+				cts.dispose();
+			}
 		});
 	});
 
@@ -1787,6 +2006,7 @@ describe('XtabProvider integration', () => {
 				serverRequestId: undefined,
 				retryAfter: undefined,
 				rateLimitKey: 'test',
+				isAuto: false,
 			});
 
 			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
@@ -1915,5 +2135,76 @@ describe('XtabProvider integration', () => {
 			const captured = streamingFetcher.capturedOptions[0];
 			expect(captured.requestOptions?.stream).toBe(true);
 		});
+	});
+});
+suite('filterOutEditsWithSubstrings', () => {
+
+	function makeEdit(newLines: string[]): LineReplacement {
+		return new LineReplacement(new LineRange(1, 2), newLines);
+	}
+
+	test('should return all edits when no lines contain any forbidden substring', () => {
+		const edits = [
+			makeEdit(['const x = 1;']),
+			makeEdit(['const y = 2;']),
+		];
+		const result = filterOutEditsWithSubstrings(edits, ['<|forbidden|>']);
+		expect(result).toEqual(edits);
+	});
+
+	test('should filter out edits where a line contains a forbidden substring', () => {
+		const kept = makeEdit(['const x = 1;']);
+		const filtered = makeEdit(['<|current_file_content|>some text']);
+		const result = filterOutEditsWithSubstrings([kept, filtered], ['<|current_file_content|>']);
+		expect(result).toEqual([kept]);
+	});
+
+	test('should filter out edits matching any of multiple substrings', () => {
+		const e1 = makeEdit(['hello world']);
+		const e2 = makeEdit(['<|diff_marker|>']);
+		const e3 = makeEdit(['<|current_file_content|>']);
+		const result = filterOutEditsWithSubstrings([e1, e2, e3], ['<|diff_marker|>', '<|current_file_content|>']);
+		expect(result).toEqual([e1]);
+	});
+
+	test('should filter out edit if any line in newLines contains a forbidden substring', () => {
+		const edit = makeEdit(['line 1', '<|diff_marker|> line 2', 'line 3']);
+		const result = filterOutEditsWithSubstrings([edit], ['<|diff_marker|>']);
+		expect(result).toEqual([]);
+	});
+
+	test('should keep edit when lines are close to but do not match the substring', () => {
+		const edit = makeEdit(['<|diff_marke|>']);
+		const result = filterOutEditsWithSubstrings([edit], ['<|diff_marker|>']);
+		expect(result).toEqual([edit]);
+	});
+
+	test('should return empty array when all edits are filtered out', () => {
+		const edits = [
+			makeEdit(['<|current_file_content|>']),
+			makeEdit(['<|diff_marker|>']),
+		];
+		const result = filterOutEditsWithSubstrings(edits, ['<|current_file_content|>', '<|diff_marker|>']);
+		expect(result).toEqual([]);
+	});
+
+	test('should return all edits when substringsToFilterOut is empty', () => {
+		const edits = [
+			makeEdit(['<|current_file_content|>']),
+			makeEdit(['anything']),
+		];
+		const result = filterOutEditsWithSubstrings(edits, []);
+		expect(result).toEqual(edits);
+	});
+
+	test('should handle empty edits array', () => {
+		const result = filterOutEditsWithSubstrings([], ['<|diff_marker|>']);
+		expect(result).toEqual([]);
+	});
+
+	test('should keep edits with empty newLines', () => {
+		const edit = makeEdit([]);
+		const result = filterOutEditsWithSubstrings([edit], ['<|diff_marker|>']);
+		expect(result).toEqual([edit]);
 	});
 });

@@ -26,6 +26,7 @@ export enum ToolName {
 	FindFiles = 'file_search',
 	FindTextInFiles = 'grep_search',
 	ReadFile = 'read_file',
+	ViewImage = 'view_image',
 	ListDirectory = 'list_dir',
 	GetErrors = 'get_errors',
 	GetScmChanges = 'get_changed_files',
@@ -47,9 +48,7 @@ export enum ToolName {
 	FindTestFiles = 'test_search',
 	GetProjectSetupInfo = 'get_project_setup_info',
 	SearchViewResults = 'get_search_view_results',
-	DocInfo = 'get_doc_info',
 	GithubRepo = 'github_repo',
-	IntegratedBrowser = 'open_integrated_browser',
 	CreateDirectory = 'create_directory',
 	RunVscodeCmd = 'run_vscode_command',
 	CoreManageTodoList = 'manage_todo_list',
@@ -65,10 +64,14 @@ export enum ToolName {
 	EditFilesPlaceholder = 'edit_files',
 	CoreRunSubagent = 'runSubagent',
 	CoreConfirmationTool = 'vscode_get_confirmation',
+	CoreConfirmationToolWithOptions = 'vscode_get_confirmation_with_options',
 	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation',
 	SearchSubagent = 'search_subagent',
-	AskQuestions = 'ask_questions',
-	SwitchAgent = 'switch_agent'
+	CoreAskQuestions = 'vscode_askQuestions',
+	SwitchAgent = 'switch_agent',
+	ToolSearch = 'tool_search',
+	ResolveMemoryFileUri = 'resolve_memory_file_uri',
+	ExecutionSubagent = 'execution_subagent',
 }
 
 export enum ContributedToolName {
@@ -82,9 +85,9 @@ export enum ContributedToolName {
 	FindFiles = 'copilot_findFiles',
 	FindTextInFiles = 'copilot_findTextInFiles',
 	ReadFile = 'copilot_readFile',
+	ViewImage = 'copilot_viewImage',
 	ListDirectory = 'copilot_listDirectory',
 	GetErrors = 'copilot_getErrors',
-	DocInfo = 'copilot_getDocInfo',
 	GetScmChanges = 'copilot_getChangedFiles',
 	ReadProjectStructure = 'copilot_readProjectStructure',
 	CreateNewWorkspace = 'copilot_createNewWorkspace',
@@ -105,13 +108,12 @@ export enum ContributedToolName {
 	SearchViewResults = 'copilot_getSearchResults',
 	GithubRepo = 'copilot_githubRepo',
 	CreateAndRunTask = 'copilot_createAndRunTask',
-	IntegratedBrowser = 'copilot_openIntegratedBrowser',
 	CreateDirectory = 'copilot_createDirectory',
 	RunVscodeCmd = 'copilot_runVscodeCommand',
 	ToolReplay = 'copilot_toolReplay',
 	EditFilesPlaceholder = 'copilot_editFiles',
-	AskQuestions = 'copilot_askQuestions',
 	SwitchAgent = 'copilot_switchAgent',
+	ResolveMemoryFileUri = 'copilot_resolveMemoryFileUri',
 }
 
 export const byokEditToolNamesToToolNames = {
@@ -161,6 +163,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.Codebase]: ToolCategory.Core,
 	[ToolName.FindTextInFiles]: ToolCategory.Core,
 	[ToolName.ReadFile]: ToolCategory.Core,
+	[ToolName.ViewImage]: ToolCategory.Core,
 	[ToolName.CreateFile]: ToolCategory.Core,
 	[ToolName.ApplyPatch]: ToolCategory.Core,
 	[ToolName.ReplaceString]: ToolCategory.Core,
@@ -175,7 +178,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.ReadProjectStructure]: ToolCategory.Core,
 	[ToolName.CoreRunSubagent]: ToolCategory.Core,
 	[ToolName.SearchSubagent]: ToolCategory.Core,
-	[ToolName.Memory]: ToolCategory.Core,
+	[ToolName.ExecutionSubagent]: ToolCategory.Core,
 
 	// already enabled only when tasks are enabled
 	[ToolName.CoreRunTask]: ToolCategory.Core,
@@ -193,7 +196,6 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 
 	// Web Interaction
 	[ToolName.FetchWebPage]: ToolCategory.WebInteraction,
-	[ToolName.IntegratedBrowser]: ToolCategory.WebInteraction,
 	[ToolName.GithubRepo]: ToolCategory.WebInteraction,
 
 	// VS Code Interaction
@@ -215,15 +217,16 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.FindTestFiles]: ToolCategory.Testing,
 	[ToolName.CoreRunTest]: ToolCategory.Testing,
 
-	// Redundant but Specific
-	[ToolName.DocInfo]: ToolCategory.RedundantButSpecific,
-
 	// Other tools - categorize appropriately
 	[ToolName.ToolReplay]: ToolCategory.RedundantButSpecific,
 	[ToolName.CoreConfirmationTool]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreConfirmationToolWithOptions]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreTerminalConfirmationTool]: ToolCategory.VSCodeInteraction,
-	[ToolName.AskQuestions]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreAskQuestions]: ToolCategory.VSCodeInteraction,
 	[ToolName.SwitchAgent]: ToolCategory.VSCodeInteraction,
+	[ToolName.Memory]: ToolCategory.VSCodeInteraction,
+	[ToolName.ToolSearch]: ToolCategory.Core,
+	[ToolName.ResolveMemoryFileUri]: ToolCategory.Core,
 } as const;
 
 

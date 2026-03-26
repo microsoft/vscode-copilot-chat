@@ -6,7 +6,7 @@
 import type * as vscode from 'vscode';
 import { filterMap } from '../../../util/common/arrays';
 import { TaskQueue } from '../../../util/common/async';
-import * as errors from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { pushMany } from '../../../util/vs/base/common/arrays';
 import { assertNever, softAssert } from '../../../util/vs/base/common/assert';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -21,7 +21,7 @@ import { IProxyModelsService } from '../../proxyModels/common/proxyModelsService
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { WireTypes } from '../common/dataTypes/inlineEditsModelsTypes';
-import { isPromptingStrategy, LintOptions, MODEL_CONFIGURATION_VALIDATOR, ModelConfiguration, PromptingStrategy } from '../common/dataTypes/xtabPromptOptions';
+import { isPromptingStrategy, MODEL_CONFIGURATION_VALIDATOR, ModelConfiguration, PromptingStrategy } from '../common/dataTypes/xtabPromptOptions';
 import { IInlineEditsModelService, IUndesiredModelsManager } from '../common/inlineEditsModelService';
 
 const enum ModelSource {
@@ -32,16 +32,12 @@ const enum ModelSource {
 	HardCodedDefault = 'hardCodedDefault',
 }
 
-type Model = {
-	modelName: string;
-	promptingStrategy: PromptingStrategy | undefined;
-	includeTagsInCurrentFile: boolean;
-	lintOptions: LintOptions | undefined;
+interface ModelConfigurationWithSource extends ModelConfiguration {
 	source: ModelSource;
 }
 
 type ModelInfo = {
-	models: Model[];
+	models: ModelConfigurationWithSource[];
 	currentModelId: string;
 }
 
@@ -49,7 +45,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 	_serviceBrand: undefined;
 
-	private static readonly COPILOT_NES_XTAB_MODEL: Model = {
+	private static readonly COPILOT_NES_XTAB_MODEL: ModelConfigurationWithSource = {
 		modelName: 'copilot-nes-xtab',
 		promptingStrategy: PromptingStrategy.CopilotNesXtab,
 		includeTagsInCurrentFile: true,
@@ -57,7 +53,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		lintOptions: undefined,
 	};
 
-	private static readonly COPILOT_NES_OCT: Model = {
+	private static readonly COPILOT_NES_OCT: ModelConfigurationWithSource = {
 		modelName: 'copilot-nes-oct',
 		promptingStrategy: PromptingStrategy.Xtab275,
 		includeTagsInCurrentFile: false,
@@ -65,7 +61,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		lintOptions: undefined,
 	};
 
-	private static readonly COPILOT_NES_CALLISTO: Model = {
+	private static readonly COPILOT_NES_CALLISTO: ModelConfigurationWithSource = {
 		modelName: 'nes-callisto',
 		promptingStrategy: PromptingStrategy.Xtab275,
 		includeTagsInCurrentFile: false,
@@ -85,8 +81,8 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	private _useSlashModelsObs = this._configService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsUseSlashModels, this._expService);
 	private _undesiredModelsObs = observableFromEvent(this, this._undesiredModelsManager.onDidChange, () => this._undesiredModelsManager);
 
-	private _modelsObs: IObservable<Model[]>;
-	private _currentModelObs: IObservable<Model>;
+	private _modelsObs: IObservable<ModelConfigurationWithSource[]>;
+	private _currentModelObs: IObservable<ModelConfigurationWithSource>;
 	private _modelInfoObs: IObservable<ModelInfo>;
 
 	public readonly onModelListUpdated: Event<void>;
@@ -121,7 +117,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			});
 		}).recomputeInitiallyAndOnChange(this._store);
 
-		this._currentModelObs = derived<Model, void>((reader) => {
+		this._currentModelObs = derived<ModelConfigurationWithSource, void>((reader) => {
 			logger.trace('computing current model');
 			const undesiredModelsManager = this._undesiredModelsObs.read(reader);
 			return this._pickModel({
@@ -219,10 +215,10 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			defaultModelConfigString: string | undefined;
 			useSlashModels: boolean;
 		},
-	): Model[] {
+	): ModelConfigurationWithSource[] {
 		const logger = this._logger.createSubLogger('aggregateModels');
 
-		const models: Model[] = [];
+		const models: ModelConfigurationWithSource[] = [];
 
 		// priority of adding models to the list:
 		// 0. model from user local setting
@@ -265,7 +261,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 					includeTagsInCurrentFile: false, // FIXME@ulugbekna: determine this based on model capabilities and config
 					source: ModelSource.Fetched,
 					lintOptions: undefined,
-				} satisfies Model;
+				} satisfies ModelConfigurationWithSource;
 			});
 			logger.trace(`Adding ${filteredFetchedModels.length} fetched models after filtering.`);
 			pushMany(models, filteredFetchedModels);
@@ -288,13 +284,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	}
 
 	public selectedModelConfiguration(): ModelConfiguration {
-		const model = this._currentModelObs.get();
-		return {
-			modelName: model.modelName,
-			promptingStrategy: model.promptingStrategy,
-			includeTagsInCurrentFile: model.includeTagsInCurrentFile,
-			lintOptions: model.lintOptions,
-		};
+		return toModelConfiguration(this._currentModelObs.get());
 	}
 
 	public defaultModelConfiguration(): ModelConfiguration {
@@ -302,13 +292,13 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		if (models && models.length > 0) {
 			const defaultModels = models.filter(m => !this.isConfiguredModel(m));
 			if (defaultModels.length > 0) {
-				return defaultModels[0];
+				return toModelConfiguration(defaultModels[0]);
 			}
 		}
-		return this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
+		return toModelConfiguration(this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get()));
 	}
 
-	private isConfiguredModel(model: Model): boolean {
+	private isConfiguredModel(model: ModelConfigurationWithSource): boolean {
 		switch (model.source) {
 			case ModelSource.LocalConfig:
 			case ModelSource.ExpConfig:
@@ -322,7 +312,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		}
 	}
 
-	private determineDefaultModel(copilotToken: CopilotToken | undefined, defaultModelConfigString: string | undefined): Model {
+	private determineDefaultModel(copilotToken: CopilotToken | undefined, defaultModelConfigString: string | undefined): ModelConfigurationWithSource {
 		// if a default model config string is specified, use that
 		if (defaultModelConfigString) {
 			const parsedConfig = this.parseModelConfigString(defaultModelConfigString, ConfigKey.TeamInternal.InlineEditsXtabProviderDefaultModelConfigurationString);
@@ -347,9 +337,9 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		undesiredModelsManager,
 	}: {
 		preferredModelName: string;
-		models: Model[];
+		models: ModelConfigurationWithSource[];
 		undesiredModelsManager: IUndesiredModelsManager;
-	}): Model {
+	}): ModelConfigurationWithSource {
 		// priority of picking a model:
 		// 0. model from modelConfigurationString setting from ExP, unless marked as undesired
 		// 1. user preferred model
@@ -394,7 +384,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			}
 			errorMessage = result.error.message;
 		} catch (e: unknown) {
-			errorMessage = errors.toString(errors.fromUnknown(e));
+			errorMessage = ErrorUtils.toString(ErrorUtils.fromUnknown(e));
 		}
 
 		/* __GDPR__
@@ -409,6 +399,11 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		this._telemetryService.sendMSFTTelemetryEvent('incorrectNesModelConfig', { configName: configKey.id, errorMessage, configValue: configString });
 		return undefined;
 	}
+}
+
+function toModelConfiguration(model: ModelConfigurationWithSource): ModelConfiguration {
+	const { source: _, ...config } = model;
+	return config;
 }
 
 export namespace UndesiredModels {

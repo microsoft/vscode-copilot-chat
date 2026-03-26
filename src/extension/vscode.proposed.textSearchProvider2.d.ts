@@ -14,16 +14,16 @@ declare module 'vscode' {
 		/**
 		 * The text pattern to search for.
 		 *
-		 * If explicitly contains a newline character (`\n`), the default search behavior
+		 * If pattern contains a newline character (`\n`), the default search behavior
 		 * will automatically enable {@link isMultiline}.
 		 */
 		pattern: string;
 
 		/**
-		 * Whether or not `pattern` should match multiple lines of text.
+		 * Whether or not {@link pattern} should match multiple lines of text.
 		 *
 		 * If using the default search provider, this will be interpreted as `true` if
-		 * `pattern` contains a newline character (`\n`).
+		 * {@link pattern} contains a newline character (`\n`).
 		 */
 		isMultiline?: boolean;
 
@@ -89,11 +89,11 @@ declare module 'vscode' {
 				 */
 				local: boolean;
 				/**
-				 * Use ignore files at the parent directory. If set, {@link TextSearchProviderOptions.useIgnoreFiles.local} should also be `true`.
-				 */
+				* Use ignore files at the parent directory. If set, `local` in {@link TextSearchProviderFolderOptions.useIgnoreFiles} should also be `true`.
+				*/
 				parent: boolean;
 				/**
-				 * Use global ignore files. If set, {@link TextSearchProviderOptions.useIgnoreFiles.local} should also be `true`.
+				 * Use global ignore files. If set, `local` in {@link TextSearchProviderFolderOptions.useIgnoreFiles} should also be `true`.
 				 */
 				global: boolean;
 			};
@@ -145,7 +145,7 @@ declare module 'vscode' {
 	export interface TextSearchComplete2 {
 		/**
 		 * Whether the search hit the limit on the maximum number of search results.
-		 * `maxResults` on {@linkcode TextSearchProviderOptions} specifies the max number of results.
+		 * `maxResults` on {@link TextSearchProviderOptions} specifies the max number of results.
 		 * - If exactly that number of matches exist, this should be false.
 		 * - If `maxResults` matches are returned and more exist, this should be true.
 		 * - If search hits an internal limit which is less than `maxResults`, this should be true.
@@ -270,8 +270,6 @@ declare module 'vscode' {
 	 */
 	export interface TextSearchProvider2 {
 		/**
-		 * WARNING: VERY EXPERIMENTAL.
-		 *
 		 * Provide results that match the given text pattern.
 		 * @param query The parameters for this query.
 		 * @param options A set of options to consider while searching.
@@ -279,7 +277,7 @@ declare module 'vscode' {
 		 * These results can be direct matches, or context that surrounds matches.
 		 * @param token A cancellation token.
 		 */
-		provideTextSearchResults(query: TextSearchQuery2, options: TextSearchProviderOptions, progress: Progress<TextSearchResult2>, token: CancellationToken): ProviderResult<TextSearchComplete2>;
+		provideTextSearchResults(query: TextSearchQuery2, options: TextSearchProviderOptions, progress: Progress<AISearchResult>, token: CancellationToken): ProviderResult<TextSearchComplete2>;
 	}
 
 	export namespace workspace {
@@ -292,6 +290,6 @@ declare module 'vscode' {
 		 * @param provider The provider.
 		 * @return A {@link Disposable} that unregisters this provider when being disposed.
 		 */
-		export function registertextSearchProvider2(scheme: string, provider: TextSearchProvider2): Disposable;
+		export function registerTextSearchProvider2(scheme: string, provider: TextSearchProvider2): Disposable;
 	}
 }

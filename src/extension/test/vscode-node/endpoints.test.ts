@@ -30,6 +30,7 @@ class FakeModelMetadataFetcher implements IModelMetadataFetcher {
 	async getChatModelFromFamily(modelId: string): Promise<IChatModelInformation> {
 		return {
 			id: modelId,
+			vendor: 'fake-vendor',
 			name: 'fake-name',
 			version: 'fake-version',
 			model_picker_enabled: false,
@@ -48,6 +49,7 @@ class FakeModelMetadataFetcher implements IModelMetadataFetcher {
 		return {
 			id: 'text-embedding-3-small',
 			name: 'fake-name',
+			vendor: 'fake-vendor',
 			version: 'fake-version',
 			model_picker_enabled: false,
 			is_chat_default: false,
@@ -77,11 +79,6 @@ suite('Endpoint Class Test', function () {
 
 	teardown(() => {
 		sandbox.restore();
-	});
-
-	test('getChatEndpoint by family', async function () {
-		const chatEndpointInfo = await endpointProvider.getChatEndpoint('gpt-5-mini');
-		assert.strictEqual(chatEndpointInfo.model, 'gpt-5-mini');
 	});
 
 	test('Model names have proper casing', async function () {

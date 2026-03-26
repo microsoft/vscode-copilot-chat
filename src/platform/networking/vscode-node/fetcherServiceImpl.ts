@@ -3,25 +3,31 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Emitter } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { Config, ConfigKey, ExperimentBasedConfig, ExperimentBasedConfigType, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from '../common/fetcherService';
+import { FetchEvent, FetchOptions, FetchTelemetryEvent, IAbortController, IFetcherService, NO_FETCH_TELEMETRY, PaginationOptions, ReportFetchEvent, Response, safeGetHostname, WebSocketConnection, WebSocketConnectOptions } from '../common/fetcherService';
 import { IFetcher } from '../common/networking';
 import { fetchWithFallbacks } from '../node/fetcherFallback';
 import { NodeFetcher } from '../node/nodeFetcher';
-import { NodeFetchFetcher } from '../node/nodeFetchFetcher';
+import { createWebSocket, NodeFetchFetcher } from '../node/nodeFetchFetcher';
 import { ElectronFetcher } from './electronFetcher';
 
-export class FetcherService implements IFetcherService {
+export class FetcherService extends Disposable implements IFetcherService {
 
 	declare readonly _serviceBrand: undefined;
 	private _availableFetchers: readonly IFetcher[] | undefined;
 	private _knownBadFetchers = new Set<string>();
 	private _experimentationService: IExperimentationService | undefined;
 	private _telemetryService: ITelemetryService | undefined;
+	private readonly _onDidFetch = this._register(new Emitter<FetchEvent>());
+	readonly onDidFetch = this._onDidFetch.event;
+	private readonly _onDidCompleteFetch = this._register(new Emitter<FetchTelemetryEvent>());
+	readonly onDidCompleteFetch = this._onDidCompleteFetch.event;
 
 	constructor(
 		fetcher: IFetcher | undefined,
@@ -29,6 +35,7 @@ export class FetcherService implements IFetcherService {
 		@IEnvService private readonly _envService: IEnvService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
+		super();
 		this._availableFetchers = fetcher ? [fetcher] : undefined;
 	}
 
@@ -79,8 +86,9 @@ export class FetcherService implements IFetcherService {
 	}
 
 	private _getFetchers(configurationService: IConfigurationService, experimentationService: IExperimentationService | undefined, envService: IEnvService): IFetcher[] {
+		const reportEvent: ReportFetchEvent = e => this._onDidFetch.fire(e);
 		const useElectronFetcher = getShadowedConfig<boolean>(configurationService, experimentationService, ConfigKey.Shared.DebugUseElectronFetcher, ConfigKey.TeamInternal.DebugExpUseElectronFetcher);
-		const electronFetcher = ElectronFetcher.create(envService);
+		const electronFetcher = ElectronFetcher.create(envService, reportEvent);
 		const useNodeFetcher = !(useElectronFetcher && electronFetcher) && getShadowedConfig<boolean>(configurationService, experimentationService, ConfigKey.Shared.DebugUseNodeFetcher, ConfigKey.TeamInternal.DebugExpUseNodeFetcher); // Node https wins over Node fetch. (historical order)
 		const useNodeFetchFetcher = !(useElectronFetcher && electronFetcher) && !useNodeFetcher && getShadowedConfig<boolean>(configurationService, experimentationService, ConfigKey.Shared.DebugUseNodeFetchFetcher, ConfigKey.TeamInternal.DebugExpUseNodeFetchFetcher);
 
@@ -97,7 +105,7 @@ export class FetcherService implements IFetcherService {
 		}
 
 		// Node fetch preferred over Node https in fallbacks. (HTTP2 support)
-		const nodeFetchFetcher = new NodeFetchFetcher(envService);
+		const nodeFetchFetcher = new NodeFetchFetcher(envService, reportEvent);
 		if (useNodeFetchFetcher) {
 			this._logService.info(`Using the Node fetch fetcher.`);
 			fetchers.unshift(nodeFetchFetcher);
@@ -105,7 +113,7 @@ export class FetcherService implements IFetcherService {
 			fetchers.push(nodeFetchFetcher);
 		}
 
-		const nodeFetcher = new NodeFetcher(envService);
+		const nodeFetcher = new NodeFetcher(envService, reportEvent);
 		if (useNodeFetcher || (!(useElectronFetcher && electronFetcher) && !useNodeFetchFetcher)) { // Node https used when none is configured. (historical)
 			this._logService.info(`Using the Node fetcher.`);
 			fetchers.unshift(nodeFetcher);
@@ -120,7 +128,16 @@ export class FetcherService implements IFetcherService {
 		return this._getAvailableFetchers()[0].getUserAgentLibrary();
 	}
 
+	createWebSocket(url: string, options?: WebSocketConnectOptions): WebSocketConnection {
+		if (options?.headers) {
+			delete options.headers['Request-Hmac'];
+			options.headers['Copilot-Integration-Id'] = 'vscode-chat';
+		}
+		return createWebSocket(url, options);
+	}
+
 	async fetch(url: string, options: FetchOptions): Promise<Response> {
+		const start = Date.now();
 		try {
 			const { response: res, updatedFetchers, updatedKnownBadFetchers } = await fetchWithFallbacks(this._getAvailableFetchers(), url, options, this._knownBadFetchers, this._configurationService, this._logService, this._telemetryService, this._experimentationService);
 			if (updatedFetchers) {
@@ -128,6 +145,15 @@ export class FetcherService implements IFetcherService {
 			}
 			if (updatedKnownBadFetchers) {
 				this._knownBadFetchers = updatedKnownBadFetchers;
+			}
+			if (options.callSite !== NO_FETCH_TELEMETRY) {
+				this._onDidCompleteFetch.fire({
+					callSite: options.callSite,
+					hostname: safeGetHostname(url),
+					latencyMs: Date.now() - start,
+					statusCode: res.status,
+					success: res.ok,
+				});
 			}
 			return res;
 		} catch (err) {
@@ -140,6 +166,15 @@ export class FetcherService implements IFetcherService {
 				if (demotion.updatedKnownBadFetchers) {
 					this._knownBadFetchers = demotion.updatedKnownBadFetchers;
 				}
+			}
+			if (options.callSite !== NO_FETCH_TELEMETRY) {
+				this._onDidCompleteFetch.fire({
+					callSite: options.callSite,
+					hostname: safeGetHostname(url),
+					latencyMs: Date.now() - start,
+					statusCode: undefined,
+					success: false,
+				});
 			}
 			throw err;
 		}

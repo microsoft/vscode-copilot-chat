@@ -11,12 +11,10 @@ import { ConfigKey, IConfigurationService } from '../../../../platform/configura
 import { modelCanUseImageURL } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IImageService } from '../../../../platform/image/common/imageService';
 import { ILogService } from '../../../../platform/log/common/logService';
-import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { getMimeType } from '../../../../util/common/imageUtils';
 import { Uri } from '../../../../vscodeTypes';
 import { IPromptEndpoint } from '../base/promptRenderer';
-import { Tag } from '../base/tag';
 
 export interface ImageProps extends BasePromptElementProps {
 	variableName: string;
@@ -69,8 +67,7 @@ export class Image extends PromptElement<ImageProps, unknown> {
 		@ILogService private readonly logService: ILogService,
 		@IImageService private readonly imageService: IImageService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
-		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService
+		@IExperimentationService private readonly experimentationService: IExperimentationService
 	) {
 		super(props);
 	}
@@ -95,6 +92,7 @@ export class Image extends PromptElement<ImageProps, unknown> {
 			const variable = await this.props.variableValue;
 			let imageSource = Buffer.from(variable).toString('base64');
 			let imageMimeType: string | undefined = undefined;
+
 			const isChatRequest = typeof this.promptEndpoint.urlOrRequestMetadata !== 'string' && (this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatCompletions || this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatResponses || this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatMessages);
 			const enabled = this.configurationService.getExperimentBasedConfig(ConfigKey.EnableChatImageUpload, this.experimentationService);
 			if (isChatRequest && enabled && modelCanUseImageURL(this.promptEndpoint)) {
@@ -115,14 +113,7 @@ export class Image extends PromptElement<ImageProps, unknown> {
 				<UserMessage priority={0}>
 					<BaseImage src={imageSource} detail='high' mimeType={imageMimeType} />
 					{this.props.reference && (
-						<>
-							<Tag name='attachment' attrs={
-								this.props.variableName
-									? { id: this.props.variableName, filePath: this.promptPathRepresentationService.getFilePath(this.props.reference) }
-									: { filePath: this.promptPathRepresentationService.getFilePath(this.props.reference) }
-							} />
-							<references value={[new PromptReference(this.props.variableName ? { variableName: this.props.variableName, value: fillerUri } : fillerUri, undefined)]} />
-						</>
+						<references value={[new PromptReference(this.props.variableName ? { variableName: this.props.variableName, value: fillerUri } : fillerUri, undefined)]} />
 					)}
 				</UserMessage>
 			);

@@ -4,15 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import Anthropic from '@anthropic-ai/sdk';
-import { readFile } from 'fs/promises';
-import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import type * as vscode from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatReferenceBinaryData, ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
-import { IClaudeCodeSession, ISubagentSession, StoredMessage } from '../../../agents/claude/node/sessionParser/claudeSessionSchema';
-import { buildSessions, parseSessionFileContent } from '../../../agents/claude/node/sessionParser/claudeSessionParser';
-import { buildChatHistory } from '../chatHistoryBuilder';
+import { ChatReferenceBinaryData, ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
+import { IClaudeCodeSession, ISubagentSession, StoredMessage, SYNTHETIC_MODEL_ID } from '../../claude/node/sessionParser/claudeSessionSchema';
+import { buildChatHistory, collectSdkModelIds } from '../chatHistoryBuilder';
 
 // #region Test Helpers
 
@@ -102,7 +99,7 @@ function getResponseParts(snapshot: SnapshotTurn[], index: number): Array<Record
 
 function mapHistoryForSnapshot(history: readonly (vscode.ChatRequestTurn | vscode.ChatResponseTurn2)[]): SnapshotTurn[] {
 	return history.map(turn => {
-		if (turn instanceof ChatRequestTurn) {
+		if (turn instanceof ChatRequestTurn || turn instanceof ChatRequestTurn2) {
 			return {
 				type: 'request',
 				prompt: turn.prompt,
@@ -220,9 +217,9 @@ describe('buildChatHistory', () => {
 				assistantMsg([{ type: 'text', text: 'Second answer' }]),
 			]));
 			expect(result).toHaveLength(4);
-			expect(result[0]).toBeInstanceOf(ChatRequestTurn);
+			expect(result[0]).toBeInstanceOf(ChatRequestTurn2);
 			expect(result[1]).toBeInstanceOf(ChatResponseTurn2);
-			expect(result[2]).toBeInstanceOf(ChatRequestTurn);
+			expect(result[2]).toBeInstanceOf(ChatRequestTurn2);
 			expect(result[3]).toBeInstanceOf(ChatResponseTurn2);
 		});
 	});
@@ -282,7 +279,7 @@ describe('buildChatHistory', () => {
 				type: 'response',
 				parts: [
 					{ type: 'markdown', content: 'Let me check.' },
-					{ type: 'tool', toolName: 'bash', toolCallId: 'tool-1', isError: false, isComplete: undefined },
+					{ type: 'tool', toolName: 'bash', toolCallId: 'tool-1', isComplete: undefined },
 				],
 			});
 		});
@@ -713,150 +710,6 @@ describe('buildChatHistory', () => {
 			const systemParts = getResponseParts(snapshot, 0);
 			expect(systemParts).toHaveLength(1);
 			expect(systemParts[0]).toMatchObject({ type: 'markdown', content: '\n\n---\n\n*Conversation compacted*' });
-		});
-	});
-
-	// #endregion
-
-	// #region Real Session Fixtures
-
-	/**
-	 * Loads a real JSONL session fixture through the full parser pipeline
-	 * (parseSessionFileContent → buildSessions), returning the first session.
-	 */
-	async function loadFixtureSession(filename: string): Promise<IClaudeCodeSession> {
-		const fixturePath = path.join(__dirname, 'fixtures', filename);
-		const content = await readFile(fixturePath, 'utf8');
-		const parseResult = parseSessionFileContent(content, fixturePath);
-		const buildResult = buildSessions(parseResult);
-		expect(buildResult.sessions.length).toBeGreaterThan(0);
-		return buildResult.sessions[0];
-	}
-
-	describe('real session fixtures', () => {
-		it('shrek session: multi-turn conversation with /compact command', async () => {
-			// This session contains 3 conversation turns, a /compact command with stdout,
-			// system messages, and a synthetic assistant message — exercising the full pipeline.
-			const fixtureSession = await loadFixtureSession('98b76fb9-f5d3-40c5-ab82-b970c20e3764.jsonl');
-			const result = buildChatHistory(fixtureSession);
-			const snapshot = mapHistoryForSnapshot(result);
-
-			// Expected: 3 request/response pairs + compact system separator + /compact command + stdout response
-			// Turn 1: "Give me 4 20 sentince long paragraphs of lorem ipsum as if you were shrek"
-			// Turn 2: "...for testing"
-			// Turn 3: "im testing chat just do it" → response includes system "Conversation compacted"
-			// Turn 4: "/compact" → "Compacted PreCompact [callback] completed successfully"
-			expect(snapshot).toHaveLength(8);
-
-			// Turn 1
-			expect(snapshot[0]).toMatchObject({ type: 'request' });
-			expect((snapshot[0] as SnapshotRequest).prompt).toContain('lorem ipsum');
-			expect(snapshot[1]).toMatchObject({ type: 'response' });
-
-			// Turn 2
-			expect(snapshot[2]).toMatchObject({ type: 'request' });
-			expect((snapshot[2] as SnapshotRequest).prompt).toContain('for testing');
-			expect(snapshot[3]).toMatchObject({ type: 'response' });
-
-			// Turn 3 — response should include the "Conversation compacted" separator
-			expect(snapshot[4]).toMatchObject({ type: 'request' });
-			expect((snapshot[4] as SnapshotRequest).prompt).toContain('just do it');
-			expect(snapshot[5]).toMatchObject({ type: 'response' });
-			const turn3Parts = getResponseParts(snapshot, 5);
-			const systemPart = turn3Parts.find(p => p.type === 'markdown' && (p as Record<string, unknown>).content === '\n\n---\n\n*Conversation compacted*');
-			expect(systemPart).toBeDefined();
-
-			// Turn 4 — /compact command with stdout
-			expect(snapshot[6]).toMatchObject({ type: 'request', prompt: '/compact' });
-			expect(snapshot[7]).toMatchObject({ type: 'response' });
-			const compactResponseParts = getResponseParts(snapshot, 7);
-			expect(compactResponseParts).toHaveLength(1);
-			expect(compactResponseParts[0]).toMatchObject({
-				type: 'markdown',
-				content: 'Compacted PreCompact [callback] completed successfully',
-			});
-
-			// Synthetic message ("No response requested.") should NOT appear anywhere
-			for (const turn of snapshot) {
-				if (turn.type === 'response') {
-					for (const part of turn.parts) {
-						if (part.type === 'markdown') {
-							expect((part as Record<string, unknown>).content).not.toContain('No response requested');
-						}
-					}
-				}
-			}
-
-			// Structural: no consecutive request turns
-			for (let j = 0; j < result.length - 1; j++) {
-				if (result[j] instanceof ChatRequestTurn) {
-					expect(result[j + 1]).toBeInstanceOf(ChatResponseTurn2);
-				}
-			}
-		});
-
-		it('tool use session: thinking blocks and bash tool invocation', async () => {
-			// This session contains a single turn with thinking blocks, text, and a Bash tool call.
-			const fixtureSession = await loadFixtureSession('bd937e2a-89e9-4d7b-8125-293a35863fa4.jsonl');
-			const result = buildChatHistory(fixtureSession);
-			const snapshot = mapHistoryForSnapshot(result);
-
-			// Expected: 1 request + 1 response
-			expect(snapshot).toHaveLength(2);
-
-			// Request: "run sleep 4"
-			expect(snapshot[0]).toMatchObject({ type: 'request' });
-			expect((snapshot[0] as SnapshotRequest).prompt).toContain('run sleep 4');
-
-			// Response: should contain thinking, markdown, tool, thinking, markdown parts
-			expect(snapshot[1]).toMatchObject({ type: 'response' });
-			const parts = getResponseParts(snapshot, 1);
-
-			// Verify thinking blocks are present
-			const thinkingParts = parts.filter(p => p.type === 'thinking');
-			expect(thinkingParts.length).toBeGreaterThanOrEqual(2);
-
-			// Verify markdown text parts exist
-			const markdownParts = parts.filter(p => p.type === 'markdown');
-			expect(markdownParts.length).toBeGreaterThanOrEqual(2);
-			expect(markdownParts.some(p => (p as Record<string, unknown>).content === 'I\'ll run the sleep command for 4 seconds.')).toBe(true);
-			expect(markdownParts.some(p => ((p as Record<string, unknown>).content as string).includes('completed successfully'))).toBe(true);
-
-			// Verify tool invocation exists and is completed
-			const toolParts = parts.filter(p => p.type === 'tool');
-			expect(toolParts).toHaveLength(1);
-			expect(toolParts[0]).toMatchObject({
-				type: 'tool',
-				toolName: 'Bash',
-				isComplete: true,
-				isError: false,
-			});
-		});
-
-		it('preserves the existing 4c289ca8 fixture behavior', async () => {
-			// Backward-compatible test for the original fixture
-			const fixturePath = path.join(__dirname, 'fixtures', '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl');
-			const fixtureContent = await readFile(fixturePath, 'utf8');
-
-			// Parse through real parser
-			const parseResult = parseSessionFileContent(fixtureContent, fixturePath);
-			const buildResult = buildSessions(parseResult);
-			expect(buildResult.sessions.length).toBeGreaterThan(0);
-
-			const result = buildChatHistory(buildResult.sessions[0]);
-
-			const requests = result.filter(t => t instanceof ChatRequestTurn);
-			const responses = result.filter(t => t instanceof ChatResponseTurn2);
-
-			expect(requests.length).toBeGreaterThan(0);
-			expect(responses.length).toBeGreaterThan(0);
-
-			// No two consecutive request turns
-			for (let j = 0; j < result.length - 1; j++) {
-				if (result[j] instanceof ChatRequestTurn) {
-					expect(result[j + 1]).toBeInstanceOf(ChatResponseTurn2);
-				}
-			}
 		});
 	});
 
@@ -1360,6 +1213,175 @@ describe('buildChatHistory', () => {
 			]);
 			// No "No response requested." in any part
 			expect(parts.every(p => p.type !== 'markdown' || (p as Record<string, unknown>).content !== 'No response requested.')).toBe(true);
+		});
+	});
+
+	// #endregion
+
+	// #region Model ID Resolution
+
+	describe('model ID resolution via modelIdMap', () => {
+		it('tags request turns with the mapped model ID from the following assistant message', () => {
+			const s = session([
+				userMsg('Hello'),
+				assistantMsg([{ type: 'text', text: 'Hi' }], 'claude-opus-4-5-20251101'),
+			]);
+
+			const modelIdMap = new Map([['claude-opus-4-5-20251101', 'claude-opus-4.5']]);
+			const result = buildChatHistory(s, modelIdMap);
+
+			const requestTurn = result[0] as vscode.ChatRequestTurn2;
+			expect(requestTurn).toBeInstanceOf(ChatRequestTurn2);
+			expect(requestTurn.modelId).toBe('claude-opus-4.5');
+		});
+
+		it('falls back to raw SDK model ID when modelIdMap has no entry', () => {
+			const s = session([
+				userMsg('Hello'),
+				assistantMsg([{ type: 'text', text: 'Hi' }], 'claude-unknown-1-0-20251101'),
+			]);
+
+			const modelIdMap = new Map<string, string>();
+			const result = buildChatHistory(s, modelIdMap);
+
+			const requestTurn = result[0] as vscode.ChatRequestTurn2;
+			expect(requestTurn.modelId).toBe('claude-unknown-1-0-20251101');
+		});
+
+		it('returns raw SDK model ID when no modelIdMap is provided', () => {
+			const s = session([
+				userMsg('Hello'),
+				assistantMsg([{ type: 'text', text: 'Hi' }], 'claude-opus-4-5-20251101'),
+			]);
+
+			const result = buildChatHistory(s);
+
+			const requestTurn = result[0] as vscode.ChatRequestTurn2;
+			expect(requestTurn.modelId).toBe('claude-opus-4-5-20251101');
+		});
+
+		it('skips synthetic assistant messages when resolving model ID', () => {
+			const s = session([
+				userMsg('Hello'),
+				assistantMsg([{ type: 'text', text: 'No response requested.' }], SYNTHETIC_MODEL_ID),
+				assistantMsg([{ type: 'text', text: 'Real response' }], 'claude-sonnet-4-20250514'),
+			]);
+
+			const modelIdMap = new Map([['claude-sonnet-4-20250514', 'claude-sonnet-4']]);
+			const result = buildChatHistory(s, modelIdMap);
+
+			const requestTurn = result[0] as vscode.ChatRequestTurn2;
+			expect(requestTurn.modelId).toBe('claude-sonnet-4');
+		});
+
+		it('returns undefined modelId when no assistant message follows', () => {
+			const s = session([
+				userMsg('Hello'),
+			]);
+
+			const modelIdMap = new Map([['claude-opus-4-5-20251101', 'claude-opus-4.5']]);
+			const result = buildChatHistory(s, modelIdMap);
+
+			const requestTurn = result[0] as vscode.ChatRequestTurn2;
+			expect(requestTurn.modelId).toBeUndefined();
+		});
+
+		it('uses the correct model for each request in multi-turn conversations', () => {
+			const s = session([
+				userMsg('First question'),
+				assistantMsg([{ type: 'text', text: 'First answer' }], 'claude-sonnet-4-20250514'),
+				userMsg('Second question'),
+				assistantMsg([{ type: 'text', text: 'Second answer' }], 'claude-opus-4-5-20251101'),
+			]);
+
+			const modelIdMap = new Map([
+				['claude-sonnet-4-20250514', 'claude-sonnet-4'],
+				['claude-opus-4-5-20251101', 'claude-opus-4.5'],
+			]);
+			const result = buildChatHistory(s, modelIdMap);
+
+			const firstRequest = result[0] as vscode.ChatRequestTurn2;
+			expect(firstRequest.modelId).toBe('claude-sonnet-4');
+
+			const secondRequest = result[2] as vscode.ChatRequestTurn2;
+			expect(secondRequest.modelId).toBe('claude-opus-4.5');
+		});
+
+		it('tags command request turns with mapped model ID', () => {
+			const s = session([
+				userMsg('<command-name>/compact</command-name><command-message>compact</command-message>'),
+				assistantMsg([{ type: 'text', text: 'Compacted.' }], 'claude-sonnet-4-20250514'),
+			]);
+
+			const modelIdMap = new Map([['claude-sonnet-4-20250514', 'claude-sonnet-4']]);
+			const result = buildChatHistory(s, modelIdMap);
+
+			const commandTurn = result[0] as vscode.ChatRequestTurn2;
+			expect(commandTurn.prompt).toBe('/compact');
+			expect(commandTurn.modelId).toBe('claude-sonnet-4');
+		});
+	});
+
+	// #endregion
+
+	// #region collectSdkModelIds
+
+	describe('collectSdkModelIds', () => {
+		it('collects unique SDK model IDs from assistant messages', () => {
+			const s = session([
+				userMsg('Hello'),
+				assistantMsg([{ type: 'text', text: 'Hi' }], 'claude-sonnet-4-20250514'),
+				userMsg('Again'),
+				assistantMsg([{ type: 'text', text: 'Hello again' }], 'claude-opus-4-5-20251101'),
+			]);
+
+			const ids = collectSdkModelIds(s);
+			expect(ids).toEqual(new Set(['claude-sonnet-4-20250514', 'claude-opus-4-5-20251101']));
+		});
+
+		it('deduplicates repeated model IDs', () => {
+			const s = session([
+				userMsg('Hello'),
+				assistantMsg([{ type: 'text', text: 'Hi' }], 'claude-sonnet-4-20250514'),
+				userMsg('Again'),
+				assistantMsg([{ type: 'text', text: 'Hello again' }], 'claude-sonnet-4-20250514'),
+			]);
+
+			const ids = collectSdkModelIds(s);
+			expect(ids).toEqual(new Set(['claude-sonnet-4-20250514']));
+		});
+
+		it('skips synthetic model IDs', () => {
+			const s = session([
+				userMsg('Hello'),
+				assistantMsg([{ type: 'text', text: 'No response requested.' }], SYNTHETIC_MODEL_ID),
+				assistantMsg([{ type: 'text', text: 'Real' }], 'claude-sonnet-4-20250514'),
+			]);
+
+			const ids = collectSdkModelIds(s);
+			expect(ids).toEqual(new Set(['claude-sonnet-4-20250514']));
+		});
+
+		it('skips user and system messages', () => {
+			const s = session([
+				userMsg('Hello'),
+				{
+					uuid: 'sys-1',
+					sessionId: 'test-session',
+					timestamp: new Date(),
+					parentUuid: null,
+					type: 'system',
+					message: { role: 'system', content: 'Conversation compacted' },
+				} as StoredMessage,
+			]);
+
+			const ids = collectSdkModelIds(s);
+			expect(ids.size).toBe(0);
+		});
+
+		it('returns empty set for sessions with no messages', () => {
+			const ids = collectSdkModelIds(session([]));
+			expect(ids.size).toBe(0);
 		});
 	});
 

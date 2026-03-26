@@ -13,6 +13,8 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicMemoryToolEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
+import { CopilotChatAttr, emitInferenceDetailsEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, type OTelModelOptions, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
+import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IRequestLogger, retrieveCapturingTokenByCorrelation, runWithCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -35,14 +37,15 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		super(AnthropicLMProvider.providerName.toLowerCase(), AnthropicLMProvider.providerName, knownModels, byokStorageService, logService);
 
 	}
 
 	private _getThinkingBudget(modelId: string, maxOutputTokens: number): number | undefined {
-		const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._experimentationService);
+		const configuredBudget = this._configurationService.getConfig(ConfigKey.AnthropicThinkingBudget);
 		if (!configuredBudget || configuredBudget === 0) {
 			return undefined;
 		}
@@ -90,8 +93,14 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 	async provideLanguageModelChatResponse(model: ExtendedLanguageModelChatInformation<LanguageModelChatConfiguration>, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<void> {
 		// Restore CapturingToken context if correlation ID was passed through modelOptions.
 		// This handles the case where AsyncLocalStorage context was lost crossing VS Code IPC.
-		const correlationId = (options as { modelOptions?: { _capturingTokenCorrelationId?: string } }).modelOptions?._capturingTokenCorrelationId;
+		const correlationId = (options as { modelOptions?: OTelModelOptions }).modelOptions?._capturingTokenCorrelationId;
 		const capturingToken = correlationId ? retrieveCapturingTokenByCorrelation(correlationId) : undefined;
+
+		// Restore OTel trace context to link spans back to the agent trace
+		const parentTraceContext = (options as { modelOptions?: OTelModelOptions }).modelOptions?._otelTraceContext ?? undefined;
+
+		// OTel span handle — created outside doRequest, enriched inside with usage data
+		let otelSpan: ReturnType<typeof this._otelService.startSpan> | undefined;
 
 		const doRequest = async () => {
 			const issuedTime = Date.now();
@@ -132,7 +141,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 			const memoryToolEnabled = isAnthropicMemoryToolEnabled(model.id, this._configurationService, this._experimentationService);
 
-			const toolSearchEnabled = isAnthropicToolSearchEnabled(model.id, this._configurationService);
+			const toolSearchEnabled = isAnthropicToolSearchEnabled(model.id.replace(/-/g, '.'), this._configurationService);
 
 			// Build tools array, handling both standard tools and native Anthropic tools
 			const tools: Anthropic.Beta.BetaToolUnion[] = [];
@@ -229,7 +238,8 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 			// Check if model supports adaptive thinking
 			const modelCapabilities = this._knownModels?.[model.id];
-			const supportsAdaptiveThinking = modelCapabilities?.adaptiveThinking ?? false;
+			const forceNonAdaptive = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicForceExtendedThinking, this._experimentationService);
+			const supportsAdaptiveThinking = (modelCapabilities?.adaptiveThinking ?? false) && !forceNonAdaptive;
 
 			// Build context management configuration
 			const thinkingEnabled = supportsAdaptiveThinking || (thinkingBudget ?? 0) > 0;
@@ -243,6 +253,8 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 			const betas: string[] = [];
 			if (thinkingBudget && !supportsAdaptiveThinking) {
 				betas.push('interleaved-thinking-2025-05-14');
+			} else if (forceNonAdaptive && (modelCapabilities?.adaptiveThinking ?? false)) {
+				betas.push('interleaved-thinking-2025-05-14');
 			}
 			if (hasMemoryTool || contextManagement) {
 				betas.push('context-management-2025-06-27');
@@ -251,8 +263,9 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				betas.push('advanced-tool-use-2025-11-20');
 			}
 
-			const effort = supportsAdaptiveThinking
-				? this._configurationService.getConfig(ConfigKey.AnthropicThinkingEffort)
+			const rawEffort = options.modelConfiguration?.reasoningEffort;
+			const effort = supportsAdaptiveThinking && typeof rawEffort === 'string'
+				? rawEffort as 'low' | 'medium' | 'high'
 				: undefined;
 
 			const params: Anthropic.Beta.Messages.MessageCreateParamsStreaming = {
@@ -314,25 +327,105 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 					resolvedModel: model.id
 				}, responseDeltas);
 
+				// Enrich OTel span with usage data from the Anthropic response
+				if (otelSpan && result.usage) {
+					otelSpan.setAttributes({
+						[GenAiAttr.USAGE_INPUT_TOKENS]: result.usage.prompt_tokens ?? 0,
+						[GenAiAttr.USAGE_OUTPUT_TOKENS]: result.usage.completion_tokens ?? 0,
+						...(result.usage.prompt_tokens_details?.cached_tokens
+							? { [GenAiAttr.USAGE_CACHE_READ_INPUT_TOKENS]: result.usage.prompt_tokens_details.cached_tokens }
+							: {}),
+						[GenAiAttr.RESPONSE_MODEL]: model.id,
+						[GenAiAttr.RESPONSE_ID]: requestId,
+						[GenAiAttr.RESPONSE_FINISH_REASONS]: ['stop'],
+						[GenAiAttr.CONVERSATION_ID]: requestId,
+						...(result.ttft ? { [CopilotChatAttr.TIME_TO_FIRST_TOKEN]: result.ttft } : {}),
+						[GenAiAttr.REQUEST_MAX_TOKENS]: model.maxOutputTokens ?? 0,
+					});
+					// Opt-in content capture
+					if (this._otelService.config.captureContent) {
+						const responseText = wrappedProgress.items
+							.filter((p): p is LanguageModelTextPart => p instanceof LanguageModelTextPart)
+							.map(p => p.value).join('');
+						const toolCalls = wrappedProgress.items
+							.filter((p): p is LanguageModelToolCallPart => p instanceof LanguageModelToolCallPart)
+							.map(tc => ({ type: 'tool_call' as const, id: tc.callId, name: tc.name, arguments: tc.input }));
+						const parts: Array<{ type: string; content?: string; id?: string; name?: string; arguments?: unknown }> = [];
+						if (responseText) { parts.push({ type: 'text', content: responseText }); }
+						parts.push(...toolCalls);
+						if (parts.length > 0) {
+							otelSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, truncateForOTel(JSON.stringify([{ role: 'assistant', parts }])));
+						}
+					}
+				}
+
+				// Record OTel metrics for this Anthropic LLM call
+				if (result.usage) {
+					const durationSec = (Date.now() - issuedTime) / 1000;
+					const metricAttrs = { operationName: GenAiOperationName.CHAT, providerName: 'anthropic', requestModel: model.id, responseModel: model.id };
+					GenAiMetrics.recordOperationDuration(this._otelService, durationSec, metricAttrs);
+					if (result.usage.prompt_tokens) { GenAiMetrics.recordTokenUsage(this._otelService, result.usage.prompt_tokens, 'input', metricAttrs); }
+					if (result.usage.completion_tokens) { GenAiMetrics.recordTokenUsage(this._otelService, result.usage.completion_tokens, 'output', metricAttrs); }
+					if (result.ttft) { GenAiMetrics.recordTimeToFirstToken(this._otelService, model.id, result.ttft / 1000); }
+				}
+
+				// Emit OTel inference details event
+				emitInferenceDetailsEvent(
+					this._otelService,
+					{ model: model.id, maxTokens: model.maxOutputTokens },
+					result.usage ? {
+						id: requestId,
+						model: model.id,
+						finishReasons: ['stop'],
+						inputTokens: result.usage.prompt_tokens,
+						outputTokens: result.usage.completion_tokens,
+					} : undefined,
+				);
+
 				// Send success telemetry matching response.success format
 				/* __GDPR__
 					"response.success" : {
-						"owner": "lramos15",
-						"comment": "Report quality details for a successful BYOK Anthropic response.",
+						"owner": "digitarald",
+						"comment": "Report quality details for a successful service response.",
+						"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reason for why a response finished" },
+						"filterReason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reason for why a response was filtered" },
 						"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source of the initial request" },
+						"initiatorType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was initiated by a user or an agent" },
 						"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
+						"modelInvoked": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Actual model invoked for the response" },
+						"apiType": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "API type for the response- chat completions or responses" },
 						"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the current turn request" },
+						"gitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id if available" },
+						"associatedRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Another request ID that this request is associated with (eg, the originating request of a summarization request)." },
+						"reasoningEffort": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning effort level" },
+						"reasoningSummary": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning summary level" },
+						"fetcher": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The fetcher used for the request" },
+						"transport": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The transport used for the request (http or websocket)" },
 						"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
-						"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
+						"clientPromptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens, locally counted", "isMeasurement": true },
 						"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens, server side counted", "isMeasurement": true },
 						"promptCacheTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens hitting cache as reported by server", "isMeasurement": true },
+						"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
 						"tokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of generated tokens", "isMeasurement": true },
+						"reasoningTokens": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of reasoning tokens", "isMeasurement": true },
+						"acceptedPredictionTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens in the prediction that appeared in the completion", "isMeasurement": true },
+						"rejectedPredictionTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens in the prediction that appeared in the completion", "isMeasurement": true },
 						"completionTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens in the output", "isMeasurement": true },
 						"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
 						"timeToFirstTokenEmitted": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token emitted (visible text)", "isMeasurement": true },
 						"timeToComplete": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to complete the request", "isMeasurement": true },
 						"issuedTime": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Timestamp when the request was issued", "isMeasurement": true },
-						"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true }
+						"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
+						"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
+						"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
+						"bytesReceived": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of bytes received in the response", "isMeasurement": true },
+						"retryAfterError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the original request." },
+						"retryAfterErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the original request if available" },
+						"connectivityTestError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the connectivity test." },
+						"connectivityTestErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the connectivity test request if available" },
+						"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." },
+						"suspendEventSeen": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether a system suspend event was seen during the request", "isMeasurement": true },
+						"resumeEventSeen": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether a system resume event was seen during the request", "isMeasurement": true }
 					}
 				*/
 				this._telemetryService.sendTelemetryEvent('response.success', { github: true, microsoft: true }, {
@@ -385,11 +478,56 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 			}
 		};
 
-		// Execute with restored CapturingToken context if available
-		if (capturingToken) {
-			return runWithCapturingToken(capturingToken, doRequest);
+		// Create OTel span and execute with trace context + CapturingToken
+		const executeRequest = async () => {
+			otelSpan = this._otelService.startSpan(`chat ${model.id}`, {
+				kind: SpanKind.CLIENT,
+				attributes: {
+					[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
+					[GenAiAttr.PROVIDER_NAME]: 'anthropic',
+					[GenAiAttr.REQUEST_MODEL]: model.id,
+					[GenAiAttr.AGENT_NAME]: 'AnthropicBYOK',
+					[CopilotChatAttr.MAX_PROMPT_TOKENS]: model.maxInputTokens,
+					[StdAttr.SERVER_ADDRESS]: 'api.anthropic.com',
+				},
+			});
+			// Opt-in: capture input messages
+			if (this._otelService.config.captureContent) {
+				try {
+					const roleNames: Record<number, string> = { 1: 'user', 2: 'assistant', 3: 'system' };
+					const inputMsgs = messages.map(m => {
+						const msg = m as LanguageModelChatMessage;
+						const role = roleNames[msg.role] ?? String(msg.role);
+						const textParts: string[] = [];
+						if (Array.isArray(msg.content)) {
+							for (const p of msg.content) {
+								if (p instanceof LanguageModelTextPart) { textParts.push(p.value); }
+							}
+						}
+						const content = textParts.length > 0 ? textParts.join('') : '[non-text content]';
+						return { role, parts: [{ type: 'text', content }] };
+					});
+					otelSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, truncateForOTel(JSON.stringify(inputMsgs)));
+				} catch { /* swallow */ }
+			}
+			try {
+				const result = capturingToken
+					? await runWithCapturingToken(capturingToken, doRequest)
+					: await doRequest();
+				otelSpan.setStatus(SpanStatusCode.OK);
+				return result;
+			} catch (err) {
+				otelSpan.setStatus(SpanStatusCode.ERROR, err instanceof Error ? err.message : String(err));
+				throw err;
+			} finally {
+				otelSpan.end();
+			}
+		};
+
+		if (parentTraceContext) {
+			return this._otelService.runWithTraceContext(parentTraceContext, executeRequest);
 		}
-		return doRequest();
+		return executeRequest();
 	}
 
 	async provideTokenCount(model: LanguageModelChatInformation, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {

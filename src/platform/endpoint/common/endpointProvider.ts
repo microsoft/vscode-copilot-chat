@@ -53,6 +53,7 @@ export type IChatModelCapabilities = {
 		adaptive_thinking?: boolean;
 		max_thinking_budget?: number;
 		min_thinking_budget?: number;
+		reasoning_effort?: string[];
 	};
 };
 
@@ -72,11 +73,13 @@ type ICompletionModelCapabilities = {
 export enum ModelSupportedEndpoint {
 	ChatCompletions = '/chat/completions',
 	Responses = '/responses',
+	WebSocketResponses = 'ws:/responses',
 	Messages = '/v1/messages'
 }
 
 export interface IModelAPIResponse {
 	id: string;
+	vendor: string;
 	name: string;
 	model_picker_enabled: boolean;
 	preview?: boolean;
@@ -116,7 +119,7 @@ export function isCompletionModelInformation(model: IModelAPIResponse): model is
 	return model.capabilities.type === 'completion';
 }
 
-export type ChatEndpointFamily = 'gpt-4.1' | 'gpt-5-mini' | 'copilot-base' | 'copilot-fast';
+export type ChatEndpointFamily = 'copilot-base' | 'copilot-fast';
 export type EmbeddingsEndpointFamily = 'text3small' | 'metis';
 
 export interface IEndpointProvider {
