@@ -10,6 +10,7 @@ import { IInteractionService } from '../../../platform/chat/common/interactionSe
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observableInternal';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
@@ -17,7 +18,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatRequest } from '../../../vscodeTypes';
 import { Intent, agentsToCommands } from '../../common/constants';
 import { ICopilotChatResultIn } from '../../prompt/common/conversation';
-import { getSwitchToAutoOnRateLimitConfirmation } from '../../prompt/common/specialRequestTypes';
+import { getSwitchToAutoOnRateLimitConfirmation, isContinueOnError } from '../../prompt/common/specialRequestTypes';
 import { ChatParticipantRequestHandler } from '../../prompt/node/chatParticipantRequestHandler';
 import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
 import { IPromptCategorizerService } from '../../prompt/node/promptCategorizer';
@@ -67,6 +68,7 @@ class ChatAgents implements IDisposable {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IPromptCategorizerService private readonly promptCategorizerService: IPromptCategorizerService,
+		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) { }
 
 	dispose() {
@@ -203,7 +205,19 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 			// Handle switch-to-auto confirmation button clicks from rate limit errors
 			const switchToAutoConfirmation = getSwitchToAutoOnRateLimitConfirmation(request);
 			if (switchToAutoConfirmation) {
+				const action = switchToAutoConfirmation.alwaysSwitchToAuto ? 'switchToAutoAlways' : 'switchToAuto';
+				/* __GDPR__
+					"chatRateLimitAction" : {
+						"owner": "lramos15",
+						"comment": "Tracks which action users take when rate limited",
+						"action": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The action taken: switchToAuto, switchToAutoAlways, tryAgain, or autoSwitch." },
+						"modelId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model ID the user was rate limited on." }
+					}
+				*/
+				this.telemetryService.sendMSFTTelemetryEvent('chatRateLimitAction', { action, modelId: request.model?.id });
 				request = await this.switchToAutoModel(request, stream, switchToAutoConfirmation.alwaysSwitchToAuto);
+			} else if (isContinueOnError(request)) {
+				this.telemetryService.sendMSFTTelemetryEvent('chatRateLimitAction', { action: 'tryAgain', modelId: request.model?.id });
 			}
 
 			// The user is starting an interaction with the chat
@@ -238,6 +252,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 				const previousModelId = request.model?.id;
 				const switchedRequest = await this.switchToAutoModel(request, stream, false);
 				if (switchedRequest.model?.id !== previousModelId) {
+					this.telemetryService.sendMSFTTelemetryEvent('chatRateLimitAction', { action: 'autoSwitch', modelId: previousModelId });
 					request = switchedRequest;
 					const retryHandler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, telemetryMessageId);
 					result = await retryHandler.getResult();

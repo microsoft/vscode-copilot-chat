@@ -638,7 +638,6 @@ export namespace ConfigKey {
 		export const InstantApplyShortModelName = defineAndMigrateExpSetting<string>('chat.advanced.instantApply.shortContextModelName', 'chat.instantApply.shortContextModelName', CHAT_MODEL.SHORT_INSTANT_APPLY);
 		export const InstantApplyShortContextLimit = defineAndMigrateExpSetting<number>('chat.advanced.instantApply.shortContextLimit', 'chat.instantApply.shortContextLimit', 8000);
 		export const AgentHistorySummarizationWithPromptCache = defineAndMigrateExpSetting<boolean | undefined>('chat.advanced.agentHistorySummarizationWithPromptCache', 'chat.agentHistorySummarizationWithPromptCache', false);
-		export const AgentHistorySummarizationForceGpt41 = defineAndMigrateExpSetting<boolean | undefined>('chat.advanced.agentHistorySummarizationForceGpt41', 'chat.agentHistorySummarizationForceGpt41', false);
 		export const PromptFileContext = defineAndMigrateExpSetting<boolean>('chat.advanced.promptFileContextProvider.enabled', 'chat.promptFileContextProvider.enabled', true);
 		export const DefaultToolsGrouped = defineAndMigrateExpSetting<boolean>('chat.advanced.tools.defaultToolsGrouped', 'chat.tools.defaultToolsGrouped', false);
 		export const Gpt5AlternativePatch = defineAndMigrateExpSetting<boolean>('chat.advanced.gpt5AlternativePatch', 'chat.gpt5AlternativePatch', false);
@@ -658,7 +657,7 @@ export namespace ConfigKey {
 
 		export const InlineEditsTriggerOnEditorChangeAfterSeconds = defineAndMigrateExpSetting<number | undefined>('chat.advanced.inlineEdits.triggerOnEditorChangeAfterSeconds', 'chat.inlineEdits.triggerOnEditorChangeAfterSeconds', undefined);
 		export const InlineEditsNextCursorPredictionDisplayLine = defineAndMigrateExpSetting<boolean>('chat.advanced.inlineEdits.nextCursorPrediction.displayLine', 'chat.inlineEdits.nextCursorPrediction.displayLine', true);
-		export const InlineEditsNextCursorPredictionCurrentFileMaxTokens = defineAndMigrateExpSetting<number>('chat.advanced.inlineEdits.nextCursorPrediction.currentFileMaxTokens', 'chat.inlineEdits.nextCursorPrediction.currentFileMaxTokens', xtabPromptOptions.DEFAULT_OPTIONS.currentFile.maxTokens);
+		export const InlineEditsNextCursorPredictionCurrentFileMaxTokens = defineAndMigrateExpSetting<number>('chat.advanced.inlineEdits.nextCursorPrediction.currentFileMaxTokens', 'chat.inlineEdits.nextCursorPrediction.currentFileMaxTokens', 3000);
 		export const InlineEditsRenameSymbolSuggestions = defineSetting<boolean>('chat.inlineEdits.renameSymbolSuggestions', ConfigType.ExperimentBased, true);
 		export const InlineEditsPreferredModel = defineSetting<string | 'none'>('nextEditSuggestions.preferredModel', ConfigType.ExperimentBased, 'none');
 		export const InlineEditsAggressiveness = defineSetting<xtabPromptOptions.AggressivenessSetting>('nextEditSuggestions.eagerness', ConfigType.ExperimentBased, xtabPromptOptions.AggressivenessSetting.Default, xtabPromptOptions.AggressivenessSetting.VALIDATOR);
@@ -698,8 +697,6 @@ export namespace ConfigKey {
 		export const OTelOtlpEndpoint = defineSetting<string>('chat.otel.otlpEndpoint', ConfigType.Simple, 'http://localhost:4318');
 		export const OTelCaptureContent = defineSetting<boolean>('chat.otel.captureContent', ConfigType.Simple, false);
 		export const OTelOutfile = defineSetting<string>('chat.otel.outfile', ConfigType.Simple, '');
-		/** Enable extended prompt cache TTL for Anthropic models. */
-		export const AnthropicExtendedCacheTtl = defineSetting<boolean>('chat.anthropic.promptCaching.extendedTtl', ConfigType.ExperimentBased, false);
 	}
 
 	/**
@@ -729,7 +726,7 @@ export namespace ConfigKey {
 		export const InlineEditsXtabProviderUrl = defineTeamInternalSetting<string | undefined>('chat.advanced.inlineEdits.xtabProvider.url', ConfigType.Simple, undefined, vString());
 		export const InlineEditsXtabProviderApiKey = defineTeamInternalSetting<string | undefined>('chat.advanced.inlineEdits.xtabProvider.apiKey', ConfigType.Simple, undefined, vString());
 		export const InlineEditsXtabProviderModelConfiguration = defineTeamInternalSetting<xtabPromptOptions.ModelConfiguration | undefined>('chat.advanced.inlineEdits.xtabProvider.modelConfiguration', ConfigType.Simple, undefined, xtabPromptOptions.MODEL_CONFIGURATION_VALIDATOR);
-		export const InlineEditsNextCursorPredictionLintOptions = defineTeamInternalSetting<xtabPromptOptions.LintOptions | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.lintOptions', ConfigType.Simple, undefined, xtabPromptOptions.LINT_OPTIONS_VALIDATOR);
+		export const InlineEditsNextCursorPredictionLintOptions = defineTeamInternalSetting<Partial<xtabPromptOptions.LintOptions> | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.lintOptions', ConfigType.Simple, undefined, xtabPromptOptions.LINT_OPTIONS_VALIDATOR);
 		export const InlineEditsInlineCompletionsEnabled = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.inlineCompletions.enabled', ConfigType.Simple, true, vBoolean());
 		export const InlineEditsInlineCompletionsAdvanced = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.inlineCompletions.advancedDetection', ConfigType.ExperimentBased, true, vBoolean());
 		export const InlineEditsXtabProviderUsePrediction = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.usePrediction', ConfigType.ExperimentBased, true, vBoolean());
@@ -881,11 +878,17 @@ export namespace ConfigKey {
 	export const ResponsesApiReasoningSummary = defineSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', ConfigType.ExperimentBased, 'detailed');
 	/** Enable context_management sent to Responses API */
 	export const ResponsesApiContextManagementEnabled = defineSetting<boolean>('chat.responsesApiContextManagement.enabled', ConfigType.ExperimentBased, false);
+	/** Enable client-side prompt_cache_key (conversationId:modelFamily) sent to Responses API */
+	export const ResponsesApiPromptCacheKeyEnabled = defineSetting<boolean>('chat.responsesApi.promptCacheKey.enabled', ConfigType.ExperimentBased, false);
 	/** Enable updated prompt for 5.3Codex model */
 	export const Updated53CodexPromptEnabled = defineSetting<boolean>('chat.updated53CodexPrompt.enabled', ConfigType.ExperimentBased, true);
+	/** Enable concise prompt experiment for GPT-5.4 model */
+	export const EnableGpt54ConcisePromptExp = defineSetting<boolean>('chat.gpt54ConcisePrompt.enabled', ConfigType.ExperimentBased, false);
+	/** Enable large prompt experiment for GPT-5.4 model */
+	export const EnableGpt54LargePromptExp = defineSetting<boolean>('chat.gpt54LargePrompt.enabled', ConfigType.ExperimentBased, false);
 	export const EnableChatImageUpload = defineSetting<boolean>('chat.imageUpload.enabled', ConfigType.ExperimentBased, true);
 	/** Thinking token budget for Anthropic extended thinking. If set, enables extended thinking. */
-	export const AnthropicThinkingBudget = defineSetting<number>('chat.anthropic.thinking.budgetTokens', ConfigType.ExperimentBased, 16000);
+	export const AnthropicThinkingBudget = defineSetting<number>('chat.anthropic.thinking.budgetTokens', ConfigType.Simple, 16000);
 	/** Force extended thinking (with explicit token budgets) even on models that support adaptive thinking. */
 	export const AnthropicForceExtendedThinking = defineSetting<boolean>('chat.anthropic.thinking.forceExtendedThinking', ConfigType.ExperimentBased, false);
 	/** Enable Anthropic web search tool for BYOK Claude models */

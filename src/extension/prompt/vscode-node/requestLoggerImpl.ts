@@ -16,13 +16,14 @@ import { ContextManagementResponse } from '../../../platform/networking/common/a
 import { IResponseDelta, isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IEndpointBody } from '../../../platform/networking/common/networking';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
-import { AbstractRequestLogger, ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
+import { AbstractRequestLogger, ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind, resolveMarkdownContent } from '../../../platform/requestLogger/node/requestLogger';
 import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { createFencedCodeBlock } from '../../../util/common/markdown';
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { Codicon } from '../../../util/vs/base/common/codicons';
-import { Emitter, Event } from '../../../util/vs/base/common/event';
+import { Emitter } from '../../../util/vs/base/common/event';
 import { Iterable } from '../../../util/vs/base/common/iterator';
+import { IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { renderDataPartToString, renderToolResultToStringNoBudget } from './requestLoggerToolResult';
@@ -138,7 +139,7 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 			return {
 				...baseInfo,
 				startTime: new Date(this.entry.startTimeMs).toISOString(),
-				content: this.entry.markdownContent
+				content: resolveMarkdownContent(this.entry)
 			};
 		}
 
@@ -274,7 +275,9 @@ export class RequestLogger extends AbstractRequestLogger {
 
 	private _didRegisterLinkProvider = false;
 	private readonly _entries: LoggedInfo[] = [];
+	private readonly _entryDisposables = new Map<string, IDisposable>();
 	private _workspaceEditRecorder: WorkspaceEditRecorder | undefined;
+	private readonly _onDidChangeDocument = this._register(new Emitter<Uri>());
 
 	constructor(
 		@ILogService private readonly _logService: ILogService,
@@ -285,7 +288,7 @@ export class RequestLogger extends AbstractRequestLogger {
 
 
 		this._register(workspace.registerTextDocumentContentProvider(ChatRequestScheme.chatRequestScheme, {
-			onDidChange: Event.map(this.onDidChangeRequests, () => Uri.parse(ChatRequestScheme.buildUri({ kind: 'latest' }))),
+			onDidChange: this._onDidChangeDocument.event,
 			provideTextDocumentContent: (uri) => {
 				const parseResult = ChatRequestScheme.parseUri(uri.toString());
 				if (!parseResult) { return `Invalid URI: ${uri}`; }
@@ -409,6 +412,30 @@ export class RequestLogger extends AbstractRequestLogger {
 				if (ok) {
 					this._ensureLinkProvider();
 
+					// Subscribe to live entry changes for dynamic content/icon refresh
+					if (entry.type === LoggedRequestKind.MarkdownContentRequest && entry.onDidChange) {
+						let treeRefreshTimeout: ReturnType<typeof setTimeout> | undefined;
+						const subscription = entry.onDidChange(() => {
+							// Always update the virtual document immediately for streaming content
+							this._onDidChangeDocument.fire(Uri.parse(ChatRequestScheme.buildUri({ kind: 'request', id })));
+
+							// Also refresh the "latest" document if this is the most recent entry
+							if (this._entries.at(-1)?.id === id) {
+								this._onDidChangeDocument.fire(Uri.parse(ChatRequestScheme.buildUri({ kind: 'latest' })));
+							}
+
+							// Throttle tree refreshes to avoid frequent expensive updates on streaming changes
+							if (treeRefreshTimeout !== undefined) {
+								clearTimeout(treeRefreshTimeout);
+							}
+							treeRefreshTimeout = setTimeout(() => {
+								this._onDidChangeRequests.fire();
+								treeRefreshTimeout = undefined;
+							}, 200);
+						});
+						this._entryDisposables.set(id, subscription);
+					}
+
 					let extraData: string;
 					if (entry.type === LoggedRequestKind.MarkdownContentRequest) {
 						extraData = 'markdown';
@@ -457,9 +484,14 @@ export class RequestLogger extends AbstractRequestLogger {
 		this._entries.push(entry);
 		const maxEntries = this._configService.getConfig(ConfigKey.Advanced.RequestLoggerMaxEntries);
 		if (this._entries.length > maxEntries) {
-			this._entries.shift();
+			const evicted = this._entries.shift();
+			if (evicted) {
+				this._entryDisposables.get(evicted.id)?.dispose();
+				this._entryDisposables.delete(evicted.id);
+			}
 		}
 		this._onDidChangeRequests.fire();
+		this._onDidChangeDocument.fire(Uri.parse(ChatRequestScheme.buildUri({ kind: 'latest' })));
 		return true;
 	}
 
@@ -570,7 +602,7 @@ export class RequestLogger extends AbstractRequestLogger {
 
 	private _renderRequestToMarkdown(id: string, entry: LoggedRequest): string {
 		if (entry.type === LoggedRequestKind.MarkdownContentRequest) {
-			return entry.markdownContent;
+			return resolveMarkdownContent(entry);
 		}
 
 		const result: string[] = [];
