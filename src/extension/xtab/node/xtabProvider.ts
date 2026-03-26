@@ -58,7 +58,7 @@ import { UserInteractionMonitor } from '../../inlineEdits/common/userInteraction
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
 import { isInlineSuggestion } from '../common/inlineSuggestion';
 import { LintErrors } from '../common/lintErrors';
-import { constructTaggedFile, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
+import { ClippedDocument, constructTaggedFile, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
 import { countTokensForLines, toUniquePath } from '../common/promptCraftingUtils';
 import { ISimilarFilesContextService } from '../common/similarFilesContextService';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
@@ -335,7 +335,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return new NoNextEditReason.GotCancelled('afterLanguageContextAwait');
 		}
 
-		const lintErrors = new LintErrors(activeDocument.id, currentDocument, this.langDiagService);
+		const lintErrors = new LintErrors(activeDocument.id, currentDocument, this.langDiagService, request.xtabEditHistory);
 
 		const promptPieces = new PromptPieces(
 			currentDocument,
@@ -405,6 +405,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			endpoint,
 			modelServiceConfig,
 			messages,
+			currentDocument,
+			clippedTaggedCurrentDoc,
 			editWindow,
 			editWindowLines,
 			cursorOriginalLinesOffset,
@@ -585,6 +587,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		endpoint: IChatEndpoint,
 		modelServiceConfig: xtabPromptOptions.ModelConfiguration,
 		messages: Raw.ChatMessage[],
+		currentDocument: CurrentDocument,
+		clippedTaggedCurrentDoc: ClippedDocument,
 		editWindow: OffsetRange,
 		editWindowLines: string[],
 		cursorOriginalLinesOffset: number,
@@ -613,6 +617,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			endpoint,
 			modelServiceConfig,
 			messages,
+			currentDocument,
+			clippedTaggedCurrentDoc,
 			editWindow,
 			editWindowLines,
 			cursorOriginalLinesOffset,
@@ -661,6 +667,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		endpoint: IChatEndpoint,
 		modelServiceConfig: xtabPromptOptions.ModelConfiguration,
 		messages: Raw.ChatMessage[],
+		currentDocument: CurrentDocument,
+		clippedTaggedCurrentDoc: ClippedDocument,
 		editWindow: OffsetRange,
 		editWindowLines: string[],
 		cursorOriginalLinesOffset: number,
@@ -833,13 +841,15 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			cleanedLinesStream = remainingLinesStream;
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.CustomDiffPatch) {
 			const activeDoc = request.getActiveDocument();
+			const lastLine = currentDocument.lines[clippedTaggedCurrentDoc.keptRange.endExclusive - 1];
+			const lastLineLength = lastLine.length;
+			const pseudoEditWindow = currentDocument.transformer.getOffsetRange(new Range(clippedTaggedCurrentDoc.keptRange.start + 1, 1, clippedTaggedCurrentDoc.keptRange.endExclusive, lastLineLength + 1));
 			return yield* XtabCustomDiffPatchResponseHandler.handleResponse(
 				linesStream,
 				request.documentBeforeEdits,
 				activeDoc.id,
 				activeDoc.workspaceRoot,
-				editWindow,
-				originalEditWindow,
+				pseudoEditWindow,
 			);
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.UnifiedWithXml) {
 			const linesIter = linesStream[Symbol.asyncIterator]();
@@ -1475,8 +1485,20 @@ export function overrideModelConfig(modelConfig: ModelConfig, overridingConfig: 
 			includeTags: overridingConfig.includeTagsInCurrentFile,
 		},
 		recentlyViewedDocuments: { ...modelConfig.recentlyViewedDocuments, ...overridingConfig.recentlyViewedDocuments },
-		lintOptions: overridingConfig.lintOptions ? { ...modelConfig.lintOptions, ...overridingConfig.lintOptions } : modelConfig.lintOptions,
+		lintOptions: overridingConfig.lintOptions
+			? mergeLintOptions(modelConfig.lintOptions, overridingConfig.lintOptions)
+			: modelConfig.lintOptions,
 	};
+}
+
+const DEFAULT_XTAB_PROVIDER_LINT_OPTIONS: xtabPromptOptions.LintOptions = {
+	...xtabPromptOptions.DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS,
+	maxLineDistance: 10,
+};
+
+function mergeLintOptions(base: xtabPromptOptions.LintOptions | undefined, override: Partial<xtabPromptOptions.LintOptions>): xtabPromptOptions.LintOptions {
+	const resolved = base ?? DEFAULT_XTAB_PROVIDER_LINT_OPTIONS;
+	return { ...resolved, ...override };
 }
 
 export function pickSystemPrompt(promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): string {

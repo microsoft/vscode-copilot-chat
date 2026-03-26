@@ -72,15 +72,13 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 		this._mruEntries = entries;
 	}
 
-	setUntitledSessionFolder(): void { }
-	getUntitledSessionFolder(): undefined { return undefined; }
-	deleteUntitledSessionFolder(): void { }
+	setNewSessionFolder(): void { }
+	deleteNewSessionFolder(): void { }
 	async getFolderRepository(): Promise<{ folder: undefined; repository: undefined; worktree: undefined; worktreeProperties: undefined; trusted: undefined }> { return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined }; }
 	async initializeFolderRepository(): Promise<{ folder: undefined; repository: undefined; worktree: undefined; worktreeProperties: undefined; trusted: undefined }> { return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined }; }
 	async getRepositoryInfo(): Promise<{ repository: undefined; headBranchName: undefined }> { return { repository: undefined, headBranchName: undefined }; }
 	async getFolderMRU(): Promise<FolderRepositoryMRUEntry[]> { return this._mruEntries; }
 	async deleteMRUEntry(): Promise<void> { }
-	getLastUsedFolderIdInUntitledWorkspace(): undefined { return undefined; }
 }
 
 // #endregion

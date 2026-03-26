@@ -12,6 +12,7 @@ import { ChatLocation, ChatResponse } from '../../../platform/chat/common/common
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isAnthropicFamily, isGptFamily, modelCanUseApplyPatchExclusively, modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsMultiReplaceString, modelSupportsReplaceString, modelSupportsSimplifiedApplyPatchInstructions } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
@@ -169,6 +170,7 @@ export class AgentIntent extends EditCodeIntent {
 		@ICodeMapperService codeMapperService: ICodeMapperService,
 		@IWorkspaceService workspaceService: IWorkspaceService,
 		@IChatSessionService chatSessionService: IChatSessionService,
+		@IAutomodeService private readonly _automodeService: IAutomodeService,
 	) {
 		super(instantiationService, endpointProvider, configurationService, expService, codeMapperService, workspaceService, { intentInvocation: AgentIntentInvocation, processCodeblocks: false });
 		chatSessionService.onDidDisposeChatSession(sessionId => {
@@ -289,6 +291,8 @@ export class AgentIntent extends EditCodeIntent {
 
 			stream.markdown(l10n.t('Compacted conversation.'));
 			const lastTurn = conversation.getLatestTurn();
+			// Next turn if using auto will select a new endpoint
+			this._automodeService.invalidateRouterCache(request);
 
 			const chatResult: vscode.ChatResult = {
 				metadata: {
@@ -355,6 +359,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		@INotebookService notebookService: INotebookService,
 		@ILogService private readonly logService: ILogService,
 		@IExperimentationService private readonly expService: IExperimentationService,
+		@IAutomodeService private readonly automodeService: IAutomodeService,
 	) {
 		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService);
 	}
@@ -775,16 +780,19 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		const currentRound = promptContext.toolCallRounds?.find(r => r.id === bgResult.toolCallRoundId);
 		if (currentRound) {
 			currentRound.summary = bgResult.summary;
-			return;
-		}
-		// Fall back to history turns
-		for (const turn of [...promptContext.history].reverse()) {
-			const round = turn.rounds.find(r => r.id === bgResult.toolCallRoundId);
-			if (round) {
-				round.summary = bgResult.summary;
-				return;
+		} else {
+			// Fall back to history turns
+			for (const turn of [...promptContext.history].reverse()) {
+				const round = turn.rounds.find(r => r.id === bgResult.toolCallRoundId);
+				if (round) {
+					round.summary = bgResult.summary;
+					break;
+				}
 			}
 		}
+		// Invalidate the auto mode router cache so the next getChatEndpoint()
+		// call re-evaluates which model to use after compaction.
+		this.automodeService.invalidateRouterCache(this.request);
 	}
 
 	/**
