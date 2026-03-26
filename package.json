@@ -6266,7 +6266,7 @@
 		"open": "^10.1.2",
 		"openai": "^6.7.0",
 		"outdent": "^0.8.0",
-		"picomatch": "^4.0.2",
+		"picomatch": "^4.0.4",
 		"playwright": "^1.58.2",
 		"prettier": "^3.6.2",
 		"react": "^17.0.2",
