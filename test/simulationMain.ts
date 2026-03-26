@@ -101,13 +101,15 @@ async function run(opts: SimulationOptions): Promise<RunResult> {
 	}
 
 	switch (true) {
+		case opts.help && opts.subcommand === 'nes-datagen':
+			return opts.printTrainHelp();
 		case opts.help:
 			return opts.printHelp();
 		case opts.listModels:
 			await listChatModels(opts.modelCacheMode === CacheMode.Disable);
 			return;
-		case !!opts.trainInput:
-			if (opts.parallelism > 1 && !opts.trainWorkerMode) {
+		case !!opts.nesDatagen:
+			if (opts.parallelism > 1 && !opts.nesDatagen.workerMode) {
 				await runInputPipelineParallel(opts);
 			} else {
 				await runInputPipeline(opts);

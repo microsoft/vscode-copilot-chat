@@ -67,11 +67,15 @@ export class SimulationOptions {
 	public readonly nesUrl: string | undefined;
 	public readonly nesApiKey: string | undefined;
 
-	public readonly trainInput: string | undefined;
-	public readonly trainStrategy: string | undefined;
-	public readonly trainOutput: string | undefined;
-	public readonly trainRowOffset: number;
-	public readonly trainWorkerMode: boolean;
+	public readonly nesDatagen: {
+		readonly input: string;
+		readonly strategy: string | undefined;
+		readonly output: string | undefined;
+		readonly rowOffset: number;
+		readonly workerMode: boolean;
+	} | undefined;
+
+	public readonly subcommand: 'nes-datagen' | undefined;
 
 	public readonly disabledTools: Set<string>;
 
@@ -162,11 +166,17 @@ export class SimulationOptions {
 
 		this.useExperimentalCodeSearchService = boolean(argv['use-experimental-code-search-service'], false);
 
-		this.trainInput = argv['train-input'];
-		this.trainStrategy = argv['train-strategy'];
-		this.trainOutput = argv['train-out'];
-		this.trainRowOffset = typeof argv['train-row-offset'] === 'number' ? argv['train-row-offset'] : 0;
-		this.trainWorkerMode = boolean(argv['train-worker'], false);
+		const isNesDatagen = (argv._ as string[]).includes('nes-datagen');
+		this.subcommand = isNesDatagen ? 'nes-datagen' : undefined;
+		this.nesDatagen = isNesDatagen && argv['input']
+			? {
+				input: argv['input'],
+				strategy: argv['strategy'],
+				output: argv['out'],
+				rowOffset: typeof argv['row-offset'] === 'number' ? argv['row-offset'] : 0,
+				workerMode: boolean(argv['worker'], false),
+			}
+			: undefined;
 
 		this.configFile = argv['config-file'];
 		this.modelConfigFile = argv['model-config-file'];
@@ -223,11 +233,34 @@ export class SimulationOptions {
 			`  --scenario-workspace-folder        If true, runs the stest inline in the scenario's workspace folder`,
 			`  --config-file                      Path to a JSON file containing configuration options`,
 			`  --model-config-file                Path to a JSON file containing model configuration options`,
-			`  --train-input                      Path to a JSON file with training data recordings`,
-			`  --train-strategy                   Prompting strategy (e.g. patchBased02, xtab275). Default: patchBased02`,
-			`  --train-out                        Output path for JSON file. Default: <train-input-path>_output.json`,
-			`  --train-row-offset                 Row offset for parallel chunking (internal, used by workers)`,
-			`  --train-worker                     Run as a worker process (internal, used by parallel mode)`,
+			``,
+			`Subcommands:`,
+			`  nes-datagen                        Generate training data from alternative action recordings`,
+			`                                     Run 'npm run simulate -- nes-datagen --help' for options`,
+			``,
+		].join('\n'));
+	}
+
+	public printTrainHelp(): void {
+		console.log([
+			`Usage: npm run simulate -- [global options] nes-datagen --input=<path> [options]`,
+			``,
+			`Generate training data by replaying alternative action recordings through the NES prompt pipeline.`,
+			``,
+			`Options:`,
+			`  --input                            Path to a JSON file with training data recordings (required)`,
+			`  --strategy                         Prompting strategy (e.g. patchBased02, xtab275). Default: patchBased02`,
+			`  --out                              Output path for JSON file. Default: <input-path>_output.json`,
+			``,
+			`Global options (placed before 'nes-datagen'):`,
+			`  -p, --parallelism                  Number of parallel workers (default: 20)`,
+			`  --verbose                          Print detailed progress and error information`,
+			`  --help                             Show this help message`,
+			``,
+			`Examples:`,
+			`  npm run simulate -- nes-datagen --input=data.json`,
+			`  npm run simulate -- nes-datagen --input=data.json --strategy=xtab275 --out=output.json`,
+			`  npm run simulate -- --parallelism=10 --verbose nes-datagen --input=data.json`,
 			``,
 		].join('\n'));
 	}

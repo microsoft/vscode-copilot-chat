@@ -66,11 +66,12 @@ function formatElapsed(startTime: number): string {
 }
 
 export async function runInputPipeline(opts: SimulationOptions): Promise<void> {
-	const inputPath = opts.trainInput!;
-	const strategy = resolvePromptingStrategy(opts.trainStrategy ?? 'patchBased02');
+	const nesDatagenOpts = opts.nesDatagen!;
+	const inputPath = nesDatagenOpts.input;
+	const strategy = resolvePromptingStrategy(nesDatagenOpts.strategy ?? 'patchBased02');
 	const verbose = !!opts.verbose;
 	const concurrency = opts.parallelism;
-	const rowOffset = opts.trainRowOffset;
+	const rowOffset = nesDatagenOpts.rowOffset;
 
 	console.log(`\n=== Pipeline ===`);
 	console.log(`  Input: ${inputPath}`);
@@ -158,7 +159,7 @@ export async function runInputPipeline(opts: SimulationOptions): Promise<void> {
 
 		// Step 5: Write output
 		const responseByIndex = new Map(responses.map(r => [r.index, r.response]));
-		const outputPath = resolveOutputPath(inputPath, opts.trainOutput);
+		const outputPath = resolveOutputPath(inputPath, nesDatagenOpts.output);
 		const samples: ISample[] = [];
 
 		for (const { index, prompt } of prompts) {
@@ -207,7 +208,8 @@ export async function runInputPipeline(opts: SimulationOptions): Promise<void> {
  * Each child runs the single-process pipeline on its chunk independently.
  */
 export async function runInputPipelineParallel(opts: SimulationOptions): Promise<void> {
-	const inputPath = opts.trainInput!;
+	const nesDatagenOpts = opts.nesDatagen!;
+	const inputPath = nesDatagenOpts.input;
 	const verbose = !!opts.verbose;
 
 	const contents = await fs.promises.readFile(inputPath, 'utf8');
@@ -243,12 +245,13 @@ export async function runInputPipelineParallel(opts: SimulationOptions): Promise
 			await fs.promises.writeFile(chunkPath, JSON.stringify(chunk));
 
 			const args = [
-				'--train-input', chunkPath,
-				'--train-strategy', opts.trainStrategy ?? 'patchBased02', // FIXME @ulugbekna: do not hard code this
-				'--train-out', resultPath,
-				'--train-row-offset', String(start),
-				'--parallelism', '5',
-				'--train-worker',
+				'nes-datagen',
+				'--input', chunkPath,
+				'--strategy', nesDatagenOpts.strategy ?? 'patchBased02',
+				'--out', resultPath,
+				'--row-offset', String(start),
+				'--parallelism', String(opts.parallelism),
+				'--worker',
 			];
 			if (verbose) {
 				args.push('--verbose');
@@ -301,7 +304,7 @@ export async function runInputPipelineParallel(opts: SimulationOptions): Promise
 			}
 		}
 
-		const outputPath = resolveOutputPath(inputPath, opts.trainOutput);
+		const outputPath = resolveOutputPath(inputPath, nesDatagenOpts.output);
 		const writeResult = await writeSamples(outputPath, allSamples);
 		console.log(`  Output: ${writeResult.written} samples → ${writeResult.outputPath} (${elapsed})`);
 	} finally {
