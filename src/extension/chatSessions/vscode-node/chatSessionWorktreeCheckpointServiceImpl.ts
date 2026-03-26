@@ -122,6 +122,9 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 	}
 
 	async getWorktreeCheckpointSupport(sessionId: string): Promise<boolean> {
+		// Checkpoint support:
+		// - isolation mode is workspace
+		// - isolation mode is worktree (version 2) and auto-commit is disabled
 		const worktreeProperties = await this.worktreeService.getWorktreeProperties(sessionId);
 		return worktreeProperties === undefined || (worktreeProperties.version === 2 && worktreeProperties.autoCommit === false);
 	}
