@@ -409,11 +409,19 @@ export class NodeOTelService implements IOTelService {
 	}
 
 	private _createSpan(name: string, options?: SpanOptions): ISpanHandle {
+		const spanOpts = { kind: toOTelSpanKind(options?.kind), attributes: options?.attributes as Attributes };
+
+		// If an explicit parent trace context is provided, create the span as its child.
+		// This ensures correct parent-child hierarchy even when async context propagation
+		// doesn't carry the active span (common in the VS Code extension host).
+		if (options?.parentTraceContext && this._otelApi) {
+			const parentCtx = this._createRemoteContext(options.parentTraceContext);
+			const span = this._tracer!.startSpan(name, spanOpts, parentCtx);
+			return new RealSpanHandle(span, this._onDidCompleteSpan, this._onDidEmitSpanEvent, options?.attributes, options.parentTraceContext.spanId);
+		}
+
 		const parentSpanId = this._getActiveParentSpanId();
-		const span = this._tracer!.startSpan(name, {
-			kind: toOTelSpanKind(options?.kind),
-			attributes: options?.attributes as Attributes,
-		});
+		const span = this._tracer!.startSpan(name, spanOpts);
 		return new RealSpanHandle(span, this._onDidCompleteSpan, this._onDidEmitSpanEvent, options?.attributes, parentSpanId);
 	}
 
