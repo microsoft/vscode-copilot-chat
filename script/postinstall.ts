@@ -98,6 +98,12 @@ async function copyCopilotCLIFolders(sourceDir: string, targetDir: string) {
  *   .claude/skills     →  .agents/skills
  */
 async function createClaudeSymlinks() {
+	if (process.platform === 'win32') {
+		// Windows requires admin permissions to create symlinks.
+		// Return early instead.
+		return;
+	}
+
 	console.log('Creating symlinks for Claude session storage and instructions...');
 	const claudeDir = path.join(REPO_ROOT, '.claude');
 	await fs.promises.mkdir(claudeDir, { recursive: true });
