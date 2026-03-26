@@ -268,7 +268,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let itemProvider: CopilotCLIChatSessionItemProvider;
 	let cloudProvider: FakeCloudProvider;
 	let summarizer: ChatSummarizerProvider;
-	let repositoryTracker: ChatSessionRepositoryTracker;
 	let worktree: FakeChatSessionWorktreeService;
 	let worktreeCheckpointService: FakeChatSessionWorktreeCheckpointService;
 	let workspaceFolderService: FakeChatSessionWorkspaceFolderService;
@@ -316,16 +315,12 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			override swap = vi.fn();
 			override notifySessionsChange = vi.fn();
 			override untitledSessionIdMapping = new Map<string, string>();
+			override sdkToUntitledUriMapping = new Map<string, Uri>();
 			override isNewSession = vi.fn((_session: string) => false);
 		}();
 		cloudProvider = new FakeCloudProvider();
 		summarizer = new class extends mock<ChatSummarizerProvider>() {
 			override provideChatSummary(_context: vscode.ChatContext) { return Promise.resolve('summary text'); }
-		}();
-		repositoryTracker = new class extends mock<ChatSessionRepositoryTracker>() {
-			override async trackRepositoryChanges() {
-				return;
-			}
 		}();
 		worktree = new FakeChatSessionWorktreeService();
 		worktreeCheckpointService = new FakeChatSessionWorktreeCheckpointService();
@@ -372,7 +367,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 						}
 					}();
 				}
-				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, new MockChatSessionMetadataStore(), instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullChatDebugFileLoggerService(), disposables.add(new MockChatPromptFileService()));
+				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, new MockChatSessionMetadataStore(), instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullChatDebugFileLoggerService(), disposables.add(new 
+        ()));
 				cliSessions.push(session);
 				return disposables.add(session);
 			}
@@ -406,7 +402,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			promptResolver,
 			itemProvider,
 			cloudProvider,
-			repositoryTracker,
 			git,
 			models as unknown as ICopilotCLIModels,
 			new NullCopilotCLIAgents(),
@@ -750,7 +745,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			promptResolver,
 			itemProvider,
 			cloudProvider,
-			repositoryTracker,
 			git,
 			models as unknown as ICopilotCLIModels,
 			new NullCopilotCLIAgents(),
@@ -1895,7 +1889,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				promptResolver,
 				itemProvider,
 				cloudProvider,
-				repositoryTracker,
 				git,
 				models as unknown as ICopilotCLIModels,
 				agents,
@@ -2011,7 +2004,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				promptResolver,
 				itemProvider,
 				cloudProvider,
-				repositoryTracker,
 				git,
 				models as unknown as ICopilotCLIModels,
 				new NullCopilotCLIAgents(),
@@ -2040,7 +2032,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			const findPr = octoKitService.findPullRequestByHeadBranch as ReturnType<typeof vi.fn>;
 			findPr
 				.mockResolvedValueOnce(undefined) // attempt 1: not found
-				.mockResolvedValueOnce({ url: 'https://github.com/testowner/testrepo/pull/42' }); // attempt 2: found
+				.mockResolvedValueOnce({ url: 'https://github.com/testowner/testrepo/pull/42', state: 'OPEN' }); // attempt 2: found
 
 			const request = new TestChatRequest('Create a PR');
 			const context = createChatContext('untitled:pr-test', true);
@@ -2053,10 +2045,10 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 			// Should have been called twice (after 2s delay, then after 4s delay)
 			expect(findPr).toHaveBeenCalledTimes(2);
-			// Should have persisted the PR URL
+			// Should have persisted the PR URL and state
 			expect(worktree.setWorktreeProperties).toHaveBeenCalledWith(
 				expect.any(String),
-				expect.objectContaining({ pullRequestUrl: 'https://github.com/testowner/testrepo/pull/42' })
+				expect.objectContaining({ pullRequestUrl: 'https://github.com/testowner/testrepo/pull/42', pullRequestState: 'open' })
 			);
 		});
 
@@ -2106,6 +2098,70 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				expect.any(String),
 				expect.objectContaining({ pullRequestUrl: 'https://github.com/testowner/testrepo/pull/99' })
 			);
+		});
+	});
+
+	describe('sdkToUntitledUriMapping lifecycle', () => {
+		it('populates sdkToUntitledUriMapping during request and cleans up after swap', async () => {
+			folderRepositoryManager.setNewSessionFolder('untitled:mapping-test', Uri.file(`${sep}workspace`));
+
+			let capturedSdkSessionId: string | undefined;
+			let mappingExistedDuringRequest = false;
+			TestCopilotCLISession.handleRequestHook = vi.fn(async () => {
+				const session = cliSessions[cliSessions.length - 1];
+				capturedSdkSessionId = session.sessionId;
+				mappingExistedDuringRequest = itemProvider.sdkToUntitledUriMapping.has(capturedSdkSessionId);
+			});
+
+			const request = new TestChatRequest('Hello');
+			const context = createChatContext('untitled:mapping-test', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			// Mapping should have existed during the request
+			expect(mappingExistedDuringRequest).toBe(true);
+			// After the request completes and the session is swapped, the mapping should be cleaned up
+			expect(itemProvider.sdkToUntitledUriMapping.has(capturedSdkSessionId!)).toBe(false);
+		});
+
+		it('maps SDK session ID to the original untitled URI', async () => {
+			folderRepositoryManager.setNewSessionFolder('untitled:uri-check', Uri.file(`${sep}workspace`));
+
+			let capturedUri: Uri | undefined;
+			TestCopilotCLISession.handleRequestHook = vi.fn(async () => {
+				const session = cliSessions[cliSessions.length - 1];
+				capturedUri = itemProvider.sdkToUntitledUriMapping.get(session.sessionId);
+			});
+
+			const request = new TestChatRequest('Hello');
+			const context = createChatContext('untitled:uri-check', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			expect(capturedUri).toBeDefined();
+			expect(capturedUri!.scheme).toBe('copilotcli');
+			expect(capturedUri!.path).toBe('/untitled:uri-check');
+		});
+
+		it('does not populate sdkToUntitledUriMapping for existing sessions', async () => {
+			const sessionId = 'existing-mapping-test';
+			const sdkSession = new MockCliSdkSession(sessionId, new Date());
+			manager.sessions.set(sessionId, sdkSession);
+
+			const request = new TestChatRequest('Continue');
+			const context = createChatContext(sessionId, false);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			expect(cliSessions.length).toBe(1);
+			// Should NOT have set sdkToUntitledUriMapping for existing sessions
+			expect(itemProvider.sdkToUntitledUriMapping.size).toBe(0);
 		});
 	});
 });

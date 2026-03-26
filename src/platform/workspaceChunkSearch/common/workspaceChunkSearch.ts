@@ -64,7 +64,6 @@ export enum WorkspaceChunkSearchStrategyId {
 export interface StrategySearchSizing {
 	readonly endpoint: IChatEndpoint;
 	readonly tokenBudget: number | undefined;
-	readonly fullWorkspaceTokenBudget: number | undefined;
 	readonly maxResultCountHint: number;
 }
 
