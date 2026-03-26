@@ -68,17 +68,15 @@ export class AtifExportCommands extends Disposable implements IExtensionContribu
 	}
 
 	private async _export(saveDir?: vscode.Uri): Promise<void> {
-		// Determine which session to export:
-		// 1. Try active chat panel session (proposed API)
-		// 2. Try active chat editor session (proposed API)
-		// 3. Fall back to most recent agent session in SQLite (for programmatic/eval use)
-		const sessionId = this._resolveActiveSessionId();
-		if (!sessionId) {
+		// Get the active chat session resource (same API as memory tool in tools.ts)
+		const sessionResource = vscode.window.activeChatPanelSessionResource;
+		if (!sessionResource) {
 			if (!saveDir) {
-				vscode.window.showInformationMessage('No active chat session found to export.');
+				vscode.window.showInformationMessage('No active chat session. Open a chat session first.');
 			}
 			return;
 		}
+		const sessionId = decodeSessionResource(sessionResource);
 
 		// Get traces for this session
 		const traceIds = this._sqliteStore.getTraceIds(sessionId);
@@ -187,32 +185,5 @@ export class AtifExportCommands extends Disposable implements IExtensionContribu
 
 	private _sanitize(name: string): string {
 		return name.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_').substring(0, 100);
-	}
-
-	/**
-	 * Resolve the active session ID using multiple strategies:
-	 * 1. Active chat panel session (proposed API — works for sidebar chat)
-	 * 2. Most recent agent session from SQLite (fallback for programmatic/eval use
-	 *    and for sessions rendered in editors where no panel API exists)
-	 */
-	private _resolveActiveSessionId(): string | undefined {
-		// Strategy 1: Chat panel (sidebar) — proposed API
-		const panelResource = (vscode.chat as {
-			activeChatPanelSessionResource?: vscode.Uri;
-		})?.activeChatPanelSessionResource;
-
-		if (panelResource) {
-			return decodeSessionResource(panelResource);
-		}
-
-		// Strategy 2: Most recent agent session from SQLite.
-		// Filter to sessions with actual agent work (span_count > 1 excludes
-		// title/categorization/git-commit internal sessions).
-		// Sort by most recent start time so the "active" session is always the latest.
-		const sessions = this._sqliteStore.getSessions();
-		const agentSession = sessions
-			.filter(s => s.span_count > 1)
-			.sort((a, b) => b.started_at - a.started_at)[0];
-		return agentSession?.session_id;
 	}
 }
