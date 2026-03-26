@@ -83,8 +83,6 @@ export class ChatSummarizerProvider implements vscode.ChatSummarizer {
 		const capturingToken = new CapturingToken(
 			'summarize',
 			undefined,
-			false,
-			false,
 			undefined,
 			undefined,
 			undefined,

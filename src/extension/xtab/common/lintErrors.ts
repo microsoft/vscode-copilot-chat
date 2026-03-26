@@ -6,6 +6,7 @@
 import { DiagnosticData } from '../../../platform/inlineEdits/common/dataTypes/diagnosticData';
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { LintOptions, LintOptionShowCode, LintOptionWarning } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { BugIndicatingError } from '../../../util/vs/base/common/errors';
 import { isEqual } from '../../../util/vs/base/common/resources';
@@ -30,6 +31,7 @@ export class LintErrors {
 		private readonly _documentId: DocumentId,
 		private readonly _document: CurrentDocument,
 		@ILanguageDiagnosticsService private readonly _langDiagService: ILanguageDiagnosticsService,
+		private readonly _xtabHistory?: readonly IXtabHistoryEntry[],
 	) { }
 
 	private _diagnostics(resource: URI | undefined): readonly DiagnosticDataWithDistance[] {
@@ -66,13 +68,81 @@ export class LintErrors {
 	}
 
 	public getFormattedLintErrors(options: LintOptions): string {
-		const diagnostics = this._getRelevantDiagnostics(options, this._documentId.toUri());
-		this._previousFormttedDiagnostics = diagnostics;
+		const currentFileDiagnostics = this._getRelevantDiagnostics(options, this._documentId.toUri());
 
-		const formattedDiagnostics = diagnostics.map(d => formatSingleDiagnostic(d, this._document.lines, options)).join('\n');
+		let allDiagnostics: readonly DiagnosticDataWithDistance[];
+
+		if (options.nRecentFiles > 0 && this._xtabHistory) {
+			const recentFileUris = this._collectRecentFileUris(options.nRecentFiles);
+			const recentDiagnostics = this._getRecentFileDiagnostics(recentFileUris, options);
+			allDiagnostics = [...currentFileDiagnostics, ...recentDiagnostics].slice(0, options.maxLints);
+		} else {
+			allDiagnostics = currentFileDiagnostics;
+		}
+
+		this._previousFormttedDiagnostics = allDiagnostics;
+
+		const activeDocUri = this._documentId.toUri();
+		const formattedDiagnostics = allDiagnostics.map(d => {
+			// Only show code context for diagnostics from the current file,
+			// since we don't have the document lines for recent files.
+			const isCurrentFile = isEqual(d.documentUri, activeDocUri);
+			const effectiveOptions = isCurrentFile ? options : { ...options, showCode: LintOptionShowCode.NO };
+			return formatSingleDiagnostic(d, this._document.lines, effectiveOptions);
+		}).join('\n');
 
 		const lintTag = PromptTags.createLintTag(options.tagName);
 		return `${lintTag.start}\n${formattedDiagnostics}\n${lintTag.end}`;
+	}
+
+	/**
+	 * Collects URIs of the N most recently edited/viewed files from xtab history,
+	 * excluding the current document. Files are selected in recency order.
+	 */
+	private _collectRecentFileUris(nRecentFiles: number): URI[] {
+		if (!this._xtabHistory) {
+			return [];
+		}
+
+		const result: URI[] = [];
+		const seenDocuments = new Set<DocumentId>();
+		const activeDocId = this._documentId;
+
+		// Iterate from most recent (end) to least recent (start)
+		for (let i = this._xtabHistory.length - 1; i >= 0; --i) {
+			const entry = this._xtabHistory[i];
+
+			if (entry.docId === activeDocId || seenDocuments.has(entry.docId)) {
+				continue;
+			}
+
+			result.push(entry.docId.toUri());
+			seenDocuments.add(entry.docId);
+
+			if (result.length >= nRecentFiles) {
+				break;
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * Collects diagnostics from recent files, maintaining the file recency order.
+	 * Within each file, diagnostics are sorted by line number.
+	 */
+	private _getRecentFileDiagnostics(recentFileUris: readonly URI[], options: LintOptions): readonly DiagnosticDataWithDistance[] {
+		const result: DiagnosticDataWithDistance[] = [];
+
+		for (const uri of recentFileUris) {
+			let fileDiags = this._diagnostics(uri);
+			fileDiags = filterDiagnosticsBySeverity(fileDiags, options.warnings);
+			// Sort by line number within each file
+			fileDiags = fileDiags.slice().sort((a, b) => a.documentRange.startLineNumber - b.documentRange.startLineNumber);
+			result.push(...fileDiags);
+		}
+
+		return result;
 	}
 
 	public lineNumberInPreviousFormattedPrompt(options: LintOptions, lineNumber: number): boolean {
@@ -80,7 +150,14 @@ export class LintErrors {
 			throw new BugIndicatingError('No previous formatted diagnostics available to check line number against.');
 		}
 
+		const activeDocUri = this._documentId.toUri();
+
 		for (const diagnostic of this._previousFormttedDiagnostics) {
+			// Only consider diagnostics from the current file
+			if (!isEqual(diagnostic.documentUri, activeDocUri)) {
+				continue;
+			}
+
 			// Convert diagnostic position (1-based) to 0-based for comparison with formatted output
 			if (diagnostic.documentRange.getStartPosition().lineNumber - 1 === lineNumber) {
 				return true;
@@ -107,6 +184,7 @@ export class LintErrors {
 			showCode: LintOptionShowCode.NO,
 			maxLints: Number.MAX_SAFE_INTEGER,
 			maxLineDistance: Number.MAX_SAFE_INTEGER, // Include all diagnostics regardless of distance
+			nRecentFiles: 0,
 		};
 
 		let diagnostics = this._diagnostics(undefined);
