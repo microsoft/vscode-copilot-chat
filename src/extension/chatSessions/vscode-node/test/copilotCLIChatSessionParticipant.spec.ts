@@ -1970,6 +1970,23 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			const { agent } = createSessionSpy.mock.calls[0][0];
 			expect(agent?.tools).toBeNull();
 		});
+
+		it('does not use session agent when no modeInstructions2 is provided', async () => {
+			const agentParticipant = makeParticipantWithAgents(new MockCopilotCLIAgentsWithCustomAgent(['tool-a']));
+			const createSessionSpy = vi.spyOn(sessionService, 'createSession');
+
+			const request = new TestChatRequest('Do something');
+			// No modeInstructions2 set — agent should be undefined regardless of session state
+			const context = createChatContext('temp-new', true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await agentParticipant.createHandler()(request, context, stream, token);
+
+			expect(createSessionSpy).toHaveBeenCalled();
+			const { agent } = createSessionSpy.mock.calls[0][0];
+			expect(agent).toBeUndefined();
+		});
 	});
 
 	describe('PR detection with retry', () => {
