@@ -727,7 +727,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					[GenAiAttr.CONVERSATION_ID]: this.options.conversation.sessionId,
 					[CopilotChatAttr.SESSION_ID]: this.options.conversation.sessionId,
 					...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}),
-					...(subAgentInvocationId ? { [CopilotChatAttr.SUBAGENT_INVOCATION_ID]: subAgentInvocationId } : {}),
 				},
 				parentTraceContext,
 			},
