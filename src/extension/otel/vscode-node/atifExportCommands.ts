@@ -51,15 +51,21 @@ export class AtifExportCommands extends Disposable implements IExtensionContribu
 	}
 
 	private async _export(saveDir?: vscode.Uri): Promise<void> {
-		// Find the most recent session (same as "active session" in eval harness)
-		const sessions = this._sqliteStore.getSessions(1);
-		if (sessions.length === 0) {
+		// Find the main agent session — the one with the most spans.
+		// Excludes internal sessions (title generation, git commit messages, categorization)
+		// which have few spans and no tool calls.
+		const sessions = this._sqliteStore.getSessions();
+		const agentSession = sessions
+			.filter(s => s.span_count > 1) // exclude single-span internal sessions
+			.sort((a, b) => b.span_count - a.span_count)[0]; // prefer session with most activity
+
+		if (!agentSession) {
 			if (!saveDir) {
 				vscode.window.showInformationMessage('No agent sessions found to export.');
 			}
 			return;
 		}
-		const session = sessions[0];
+		const session = agentSession;
 
 		// Get traces for this session
 		const traceIds = this._sqliteStore.getTraceIds(session.session_id);
