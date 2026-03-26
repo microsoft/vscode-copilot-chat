@@ -20,6 +20,23 @@ import { IExtensionContribution } from '../../common/contributions';
 const exportCommand = 'github.copilot.chat.debug.exportATIFTrajectories';
 
 /**
+ * Decode a VS Code chat session resource URI to extract the raw session ID.
+ * Same logic as the debug panel (otelChatDebugLogProvider.ts decodeSessionId).
+ */
+function decodeSessionResource(sessionResource: vscode.Uri): string {
+	if (sessionResource.scheme === 'copilotcli' || sessionResource.scheme === 'claude-code') {
+		return sessionResource.path.replace(/^\//, '');
+	}
+	const pathSegment = sessionResource.path.replace(/^\//, '').split('/').pop() || '';
+	if (pathSegment) {
+		try {
+			return Buffer.from(pathSegment, 'base64').toString('utf-8');
+		} catch { /* not base64, use as-is */ }
+	}
+	return sessionResource.toString();
+}
+
+/**
  * Export agent trajectories in ATIF format from the OTel SQLite store.
  *
  * Behavior:
@@ -51,24 +68,21 @@ export class AtifExportCommands extends Disposable implements IExtensionContribu
 	}
 
 	private async _export(saveDir?: vscode.Uri): Promise<void> {
-		// Find the main agent session — the one with the most spans.
-		// Excludes internal sessions (title generation, git commit messages, categorization)
-		// which have few spans and no tool calls.
-		const sessions = this._sqliteStore.getSessions();
-		const agentSession = sessions
-			.filter(s => s.span_count > 1) // exclude single-span internal sessions
-			.sort((a, b) => b.span_count - a.span_count)[0]; // prefer session with most activity
-
-		if (!agentSession) {
+		// Get the active chat session from VS Code — same URI the debug panel uses.
+		// Uses proposed API chatParticipantPrivate.activeChatPanelSessionResource.
+		const sessionResource = (vscode.chat as { activeChatPanelSessionResource?: vscode.Uri })?.activeChatPanelSessionResource;
+		if (!sessionResource) {
 			if (!saveDir) {
-				vscode.window.showInformationMessage('No agent sessions found to export.');
+				vscode.window.showInformationMessage('No active chat session. Open a chat session first.');
 			}
 			return;
 		}
-		const session = agentSession;
+
+		// Decode session ID from the URI (same logic as debug panel)
+		const sessionId = decodeSessionResource(sessionResource);
 
 		// Get traces for this session
-		const traceIds = this._sqliteStore.getTraceIds(session.session_id);
+		const traceIds = this._sqliteStore.getTraceIds(sessionId);
 		if (traceIds.length === 0) {
 			return;
 		}
