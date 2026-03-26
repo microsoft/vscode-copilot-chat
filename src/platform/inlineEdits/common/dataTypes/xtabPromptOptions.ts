@@ -94,8 +94,8 @@ export type LintOptions = {
 	showCode: LintOptionShowCode;
 	maxLints: number;
 	maxLineDistance: number;
-	/** When set, also include linter diagnostics from the N most recently edited/viewed files. */
-	nRecentFiles?: number;
+	/** When set to a value > 0, also include linter diagnostics from the N most recently edited/viewed files. */
+	nRecentFiles: number;
 }
 
 /**
@@ -349,7 +349,8 @@ export const DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS: LintOptions = {
 	maxLints: 5,
 	showCode: LintOptionShowCode.YES_WITH_SURROUNDING,
 	tagName: 'linter',
-	warnings: LintOptionWarning.YES_IF_NO_ERRORS
+	warnings: LintOptionWarning.YES_IF_NO_ERRORS,
+	nRecentFiles: 0,
 };
 
 // TODO: consider a better per language setting/experiment approach
@@ -376,7 +377,7 @@ export const LINT_OPTIONS_VALIDATOR: IValidator<LintOptions> = vObj({
 	'showCode': vRequired(vEnum(LintOptionShowCode.NO, LintOptionShowCode.YES, LintOptionShowCode.YES_WITH_SURROUNDING)),
 	'maxLints': vRequired(vNumber()),
 	'maxLineDistance': vRequired(vNumber()),
-	'nRecentFiles': vUnion(vNumber(), vUndefined()),
+	'nRecentFiles': vRequired(vNumber()),
 });
 
 export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vObj({

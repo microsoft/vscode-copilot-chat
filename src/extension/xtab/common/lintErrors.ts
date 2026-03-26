@@ -72,7 +72,7 @@ export class LintErrors {
 
 		let allDiagnostics: readonly DiagnosticDataWithDistance[];
 
-		if (options.nRecentFiles && options.nRecentFiles > 0 && this._xtabHistory) {
+		if (options.nRecentFiles > 0 && this._xtabHistory) {
 			const recentFileUris = this._collectRecentFileUris(options.nRecentFiles);
 			const recentDiagnostics = this._getRecentFileDiagnostics(recentFileUris, options);
 			allDiagnostics = [...currentFileDiagnostics, ...recentDiagnostics].slice(0, options.maxLints);
@@ -170,6 +170,7 @@ export class LintErrors {
 			showCode: LintOptionShowCode.NO,
 			maxLints: Number.MAX_SAFE_INTEGER,
 			maxLineDistance: Number.MAX_SAFE_INTEGER, // Include all diagnostics regardless of distance
+			nRecentFiles: 0,
 		};
 
 		let diagnostics = this._diagnostics(undefined);

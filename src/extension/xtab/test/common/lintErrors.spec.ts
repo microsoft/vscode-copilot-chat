@@ -9,9 +9,9 @@ import { LintOptions, LintOptionShowCode, LintOptionWarning } from '../../../../
 import { IXtabHistoryEntry } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { TestLanguageDiagnosticsService } from '../../../../platform/languages/common/testLanguageDiagnosticsService';
 import { Position } from '../../../../util/vs/editor/common/core/position';
+import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
 import { ensureDependenciesAreSet } from '../../../../util/vs/editor/common/core/text/positionToOffset';
-import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { DiagnosticSeverity, Range } from '../../../../vscodeTypes';
 import { LintErrors } from '../../common/lintErrors';
 import { CurrentDocument } from '../../common/xtabCurrentDocument';
@@ -28,6 +28,7 @@ describe('LintErrors', () => {
 		showCode: LintOptionShowCode.NO,
 		maxLints: 5,
 		maxLineDistance: 10,
+		nRecentFiles: 0,
 	};
 
 	function createDocument(lines: string[], cursorLine: number, cursorColumn: number): CurrentDocument {
@@ -603,6 +604,7 @@ describe('LintErrors', () => {
 				showCode: LintOptionShowCode.NO,
 				maxLints: 10,
 				maxLineDistance: 20,
+				nRecentFiles: 0,
 			};
 
 			const lintErrors = createLintErrors(document);
@@ -649,6 +651,7 @@ describe('LintErrors', () => {
 				showCode: LintOptionShowCode.YES_WITH_SURROUNDING,
 				maxLints: 10,
 				maxLineDistance: 20,
+				nRecentFiles: 0,
 			};
 
 			const lintErrors = createLintErrors(document);
