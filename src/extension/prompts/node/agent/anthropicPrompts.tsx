@@ -86,7 +86,11 @@ class ToolSearchToolPrompt extends PromptElement<ToolSearchToolPromptProps> {
 				NEVER do these:<br />
 				- Calling a deferred tool directly without loading it first with {searchToolName}<br />
 				- Calling {searchToolName} again for a tool that was already returned by a previous search<br />
-				- Retrying {searchToolName} repeatedly if it fails or returns no results. If a search returns no matching tools, the tool is not available. Do NOT retry with different patterns — inform the user that the tool or MCP server is unavailable and stop.<br />
+				- Retrying {searchToolName} repeatedly if it fails or returns no results. If a search returns no matching tools, the tool is not available. Do not retry with different patterns.<br />
+			</Tag>
+			<br />
+			<Tag name='dynamicToolDiscovery'>
+				MCP servers may add or remove tools dynamically during a conversation via tools/list_changed notifications. If you called a tool that may have enabled new tools on an MCP server, search for the new tools — they may now be discoverable even if not listed in the availableDeferredTools list above.<br />
 			</Tag>
 			<br />
 			<Tag name='availableDeferredTools'>

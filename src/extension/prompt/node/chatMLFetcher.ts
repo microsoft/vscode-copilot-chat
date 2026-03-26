@@ -1017,7 +1017,6 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			'OpenAI-Intent': intent,
 			'X-GitHub-Api-Version': '2025-05-01',
 			'X-Interaction-Id': this._interactionService.interactionId,
-			'X-Initiator': userInitiatedRequest ? 'user' : 'agent',
 			...(chatEndpointInfo.getExtraHeaders ? chatEndpointInfo.getExtraHeaders(location) : {}),
 		};
 		if (agentInteractionType) {
@@ -1027,7 +1026,13 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		if (request.messages?.some((m: CAPIChatMessage) => Array.isArray(m.content) ? m.content.some(c => 'image_url' in c) : false) && chatEndpointInfo.supportsVision) {
 			additionalHeaders['Copilot-Vision-Request'] = 'true';
 		}
-		const connection = await this._webSocketManager.getOrCreateConnection(conversationId, turnId, additionalHeaders);
+		const connection = this._webSocketManager.getOrCreateConnection(conversationId, turnId, additionalHeaders);
+		try {
+			await connection.connect();
+		} catch (err) {
+			(err as any).gitHubRequestId = connection.gitHubRequestId;
+			throw err;
+		}
 
 		// Generate unique ID to link input and output messages
 		const modelCallId = generateUuid();
@@ -1056,7 +1061,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		this._telemetryService.sendGHTelemetryEvent('request.sent', telemetryData.properties, telemetryData.measurements);
 
 		const requestStart = Date.now();
-		const handle = connection.sendRequest(request, cancellationToken);
+		const handle = connection.sendRequest(request, { userInitiated: !!userInitiatedRequest }, cancellationToken);
 
 		const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId });
 		const processor = this._instantiationService.createInstance(OpenAIResponsesProcessor, extendedBaseTelemetryData, modelRequestId.headerRequestId, modelRequestId.gitHubRequestId);

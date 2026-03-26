@@ -10,9 +10,11 @@ import { IEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { MockAuthenticationService } from '../../../../platform/ignore/node/test/mockAuthenticationService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { NoopOTelService, resolveOTelConfig } from '../../../../platform/otel/common/index';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { ITerminalService, NullTerminalService } from '../../../../platform/terminal/common/terminalService';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 
 // The .ps1 asset cannot be parsed by Vite's transform pipeline,
@@ -45,7 +47,23 @@ vi.mock('../copilotCLIPythonTerminalService', () => ({
 	}
 }));
 
-import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+// Mock terminal link provider to avoid pulling in unrelated notebook/proposed API dependencies
+vi.mock('../copilotCLITerminalLinkProvider', () => ({
+	CopilotCLITerminalLinkProvider: class {
+		registerTerminal = vi.fn();
+		setSessionDir = vi.fn();
+		setSessionDirResolver = vi.fn();
+	},
+}));
+
+vi.mock('../../../../platform/workspace/common/workspaceService', () => ({
+	IWorkspaceService: (() => {
+		const identifier = () => { };
+		return identifier;
+	})(),
+}));
+
+import type { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { PythonTerminalService } from '../copilotCLIPythonTerminalService';
 import { CopilotCLITerminalIntegration } from '../copilotCLITerminalIntegration';
 
@@ -187,6 +205,10 @@ describe('CopilotCLITerminalIntegration', () => {
 			{ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), createSubLogger: () => ({}) } as unknown as ILogService,
 			telemetryService as unknown as ITelemetryService,
 			{ getConfig: () => true } as unknown as IConfigurationService,
+
+			{ requestResourceTrust: vi.fn().mockResolvedValue(true) } as unknown as IWorkspaceService,
+
+			new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })),
 		);
 		disposables.add(integration);
 
@@ -259,6 +281,10 @@ describe('CopilotCLITerminalIntegration', () => {
 				{ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), createSubLogger: () => ({}) } as unknown as ILogService,
 				telemetryService as unknown as ITelemetryService,
 				{ getConfig: () => true } as unknown as IConfigurationService,
+
+				{ requestResourceTrust: vi.fn().mockResolvedValue(true) } as unknown as IWorkspaceService,
+
+				new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })),
 			);
 			disposables.add(freshIntegration);
 			await (freshIntegration as any).initialization;
@@ -333,7 +359,10 @@ describe('CopilotCLITerminalIntegration', () => {
 				envService as unknown as IEnvService,
 				{ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), createSubLogger: () => ({}) } as unknown as ILogService,
 				telemetryService as unknown as ITelemetryService,
+
 				{ getConfig: () => true } as unknown as IConfigurationService,
+				{ requestResourceTrust: vi.fn().mockResolvedValue(true) } as unknown as IWorkspaceService,
+				new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })),
 			);
 			disposables.add(freshIntegration);
 			await (freshIntegration as any).initialization;
@@ -410,7 +439,10 @@ describe('CopilotCLITerminalIntegration', () => {
 				envService as unknown as IEnvService,
 				{ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), createSubLogger: () => ({}) } as unknown as ILogService,
 				telemetryService as unknown as ITelemetryService,
+
 				{ getConfig: () => true } as unknown as IConfigurationService,
+				{ requestResourceTrust: vi.fn().mockResolvedValue(true) } as unknown as IWorkspaceService,
+				new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })),
 			);
 			disposables.add(freshIntegration);
 			await (freshIntegration as any).initialization;

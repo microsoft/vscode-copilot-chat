@@ -166,6 +166,22 @@ describe('sdkSessionInfoToSessionInfo', () => {
 
 		expect(result.label).toBe('Fallback prompt');
 	});
+
+	it('passes cwd through from SDKSessionInfo', () => {
+		const info = createSdkSessionInfo({ cwd: '/home/user/project' });
+
+		const result = sdkSessionInfoToSessionInfo(info);
+
+		expect(result.cwd).toBe('/home/user/project');
+	});
+
+	it('returns undefined cwd when not present in SDKSessionInfo', () => {
+		const info = createSdkSessionInfo();
+
+		const result = sdkSessionInfoToSessionInfo(info);
+
+		expect(result.cwd).toBeUndefined();
+	});
 });
 
 // #endregion

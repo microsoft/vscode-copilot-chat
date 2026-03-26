@@ -8,6 +8,7 @@ import * as l10n from '@vscode/l10n';
 import * as fs from 'node:fs';
 import sql from 'node:sqlite';
 import { Result } from '../../../../util/common/result';
+import { toErrorMessage } from '../../../../util/common/errorMessage';
 import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { CancelablePromise, createCancelablePromise, Limiter, raceCancellationError, timeout } from '../../../../util/vs/base/common/async';
@@ -308,10 +309,12 @@ export class ExternalIngestIndex extends Disposable {
 						"externalIngestIndex.updateIndex.success" : {
 							"owner": "mjbvz",
 							"comment": "Logged when external ingest index update completes successfully",
-							"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time taken to complete the update in milliseconds" }
+							"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time taken to complete the update in milliseconds" },
+							"totalFileCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of files in the index" },
+							"updatedFileCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of files that were updated" }
 						}
 					*/
-					this._telemetryService.sendMSFTTelemetryEvent('externalIngestIndex.updateIndex.success', undefined, { durationMs: sw.elapsed() });
+					this._telemetryService.sendMSFTTelemetryEvent('externalIngestIndex.updateIndex.success', undefined, { durationMs: sw.elapsed(), totalFileCount: result.val.totalFileCount, updatedFileCount: result.val.updatedFileCount });
 
 					return Result.ok(true);
 				} else {
@@ -624,16 +627,20 @@ export class ExternalIngestIndex extends Disposable {
 		}
 
 		// Complete check based on document contents
-		const data = await this._readLimiter.queue(() => this._fileSystemService.readFile(uri));
-		if (!this._client.canIngestDocument(uri.fsPath, data)) {
+		try {
+			const data = await this._readLimiter.queue(() => this._fileSystemService.readFile(uri));
+			if (!this._client.canIngestDocument(uri.fsPath, data)) {
+				return Result.error(false);
+			}
+			const docSha = this.computeIngestDocShaFromContents(uri, data);
+			if (!docSha) {
+				return Result.error(false);
+			}
+			return Result.ok({ docSha });
+		} catch (err) {
+			this._logService.warn(`ExternalIngestIndex: Failed to read file for shouldIngest check, skipping file: ${uri.toString()}. Error: ${toErrorMessage(err, true)}`);
 			return Result.error(false);
 		}
-		const docSha = this.computeIngestDocShaFromContents(uri, data);
-		if (!docSha) {
-			return Result.error(false);
-		}
-
-		return Result.ok({ docSha });
 	}
 
 	private delete(uri: URI) {

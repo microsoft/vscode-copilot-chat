@@ -36,17 +36,27 @@ export function completedSpanToDebugEvent(span: ICompletedSpanData): vscode.Chat
 		case GenAiOperationName.CHAT:
 			return spanToModelTurnEvent(span);
 		case GenAiOperationName.INVOKE_AGENT:
-			// Subagent spans (those with a parent) become subagent invocation events
+			// Subagent spans (those with a parent and an identifiable agent name) become subagent invocation events.
+			// Skip SDK wrapper invoke_agent spans that have no agent name — they're transparent containers
+			// whose children should appear under their grandparent.
 			if (span.parentSpanId) {
-				return spanToSubagentEvent(span);
+				const hasAgentName = !!asString(span.attributes[GenAiAttr.AGENT_NAME])
+					|| span.name.replace(/^invoke_agent\s*/, '').trim().length > 0;
+				if (hasAgentName) {
+					return spanToSubagentEvent(span);
+				}
 			}
-			return undefined; // Top-level agent spans are containers, not events
+			return undefined; // Top-level agent spans or unnamed wrappers are containers, not events
 		case GenAiOperationName.EXECUTE_HOOK:
 			return spanToHookExecutionEvent(span);
 		case GenAiOperationName.CONTENT_EVENT:
 		case 'core_event':
 			return spanToGenericEvent(span);
 		default:
+			// SDK native hook spans use 'github.copilot.hook.type' instead of gen_ai.operation.name
+			if (span.name.startsWith('hook ') && asString(span.attributes['github.copilot.hook.type'])) {
+				return spanToSdkHookEvent(span);
+			}
 			return undefined;
 	}
 }
@@ -316,7 +326,9 @@ function spanToToolCallEvent(span: ICompletedSpanData): vscode.ChatDebugToolCall
 			toolName = `runSubagent (${agentName})`;
 		}
 	}
-	const evt = new vscode.ChatDebugToolCallEvent(toolName, new Date(span.startTime));
+	// Use span name (e.g., "execute_tool task") for display, matching Grafana
+	const displayName = span.name || `execute_tool ${toolName}`;
+	const evt = new vscode.ChatDebugToolCallEvent(displayName, new Date(span.startTime));
 	evt.id = span.spanId;
 	evt.parentEventId = span.parentSpanId;
 	evt.toolCallId = asString(span.attributes[GenAiAttr.TOOL_CALL_ID]);
@@ -351,11 +363,17 @@ function spanToModelTurnEvent(span: ICompletedSpanData): vscode.ChatDebugModelTu
 }
 
 function spanToSubagentEvent(span: ICompletedSpanData): vscode.ChatDebugSubagentInvocationEvent {
-	const agentName = asString(span.attributes[GenAiAttr.AGENT_NAME]) ?? 'unknown';
-	const evt = new vscode.ChatDebugSubagentInvocationEvent(agentName, new Date(span.startTime));
+	// Use agent name from attributes, falling back to parsing from span name (e.g., "invoke_agent task" → "task")
+	const agentName = asString(span.attributes[GenAiAttr.AGENT_NAME])
+		?? (span.name.replace(/^invoke_agent\s*/, '').trim() || 'agent');
+	// Use span name (e.g., "invoke_agent task") for display, matching Grafana
+	const displayName = span.name || `invoke_agent ${agentName}`;
+	const evt = new vscode.ChatDebugSubagentInvocationEvent(displayName, new Date(span.startTime));
 	evt.id = span.spanId;
 	evt.parentEventId = span.parentSpanId;
 	evt.durationInMillis = span.endTime - span.startTime;
+	const agentDescription = asString(span.attributes[GenAiAttr.AGENT_DESCRIPTION]);
+	evt.description = agentDescription ?? `Subagent: ${agentName}`;
 	evt.status = span.status.code === 1 /* OK */
 		? vscode.ChatDebugSubagentStatus.Completed
 		: span.status.code === 2 /* ERROR */
@@ -390,9 +408,9 @@ function resolveHookExecutionContent(span: ICompletedSpanData): vscode.ChatDebug
 
 function spanToHookExecutionEvent(span: ICompletedSpanData): vscode.ChatDebugGenericEvent {
 	const hookType = asString(span.attributes['copilot_chat.hook_type']) ?? 'unknown';
-	const hookCommand = asString(span.attributes['copilot_chat.hook_command']) ?? '';
+	const hookCommand = asString(span.attributes['copilot_chat.hook_command']);
 	const resultKind = asString(span.attributes['copilot_chat.hook_result_kind']);
-	const durationMs = span.endTime - span.startTime;
+	const durationMs = Math.round(span.endTime - span.startTime);
 
 	const name = `Hook: ${hookType}`;
 	const level = resultKind === 'error'
@@ -403,7 +421,25 @@ function spanToHookExecutionEvent(span: ICompletedSpanData): vscode.ChatDebugGen
 	const evt = new vscode.ChatDebugGenericEvent(name, level, new Date(span.startTime));
 	evt.id = span.spanId;
 	evt.parentEventId = span.parentSpanId;
-	evt.details = `Command: ${hookCommand} (${durationMs}ms, ${resultKind ?? 'unknown'})`;
+	const prefix = hookCommand ? `${hookCommand} ` : '';
+	evt.details = `${prefix}(${durationMs}ms, ${resultKind ?? 'unknown'})`;
+	evt.category = 'hook';
+	return evt;
+}
+
+/**
+ * Convert an SDK native hook span (github.copilot.hook.*) to a debug panel event.
+ * SDK uses span name "hook {type}" and attributes in the github.copilot.hook.* namespace.
+ */
+function spanToSdkHookEvent(span: ICompletedSpanData): vscode.ChatDebugGenericEvent {
+	const hookType = asString(span.attributes['github.copilot.hook.type']) ?? 'unknown';
+	const durationMs = span.endTime - span.startTime;
+	const isError = span.status.code === 2; /* ERROR */
+	const level = isError ? vscode.ChatDebugLogLevel.Error : vscode.ChatDebugLogLevel.Info;
+	const evt = new vscode.ChatDebugGenericEvent(`Hook: ${hookType}`, level, new Date(span.startTime));
+	evt.id = span.spanId;
+	evt.parentEventId = span.parentSpanId;
+	evt.details = `${span.name} (${durationMs}ms, ${isError ? 'error' : 'success'})`;
 	evt.category = 'hook';
 	return evt;
 }

@@ -4,8 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
-import { isGpt54 } from '../../../../../platform/endpoint/common/chatModelCapabilities';
+import { isGpt54, isGpt54ConcisePromptExp, isGpt54LargePromptExp } from '../../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
+import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ToolName } from '../../../../tools/common/toolNames';
 import { GPT5CopilotIdentityRule } from '../../base/copilotIdentity';
 import { InstructionMessage } from '../../base/instructionMessage';
@@ -16,8 +17,10 @@ import { MathIntegrationRules } from '../../panel/editorIntegrationRules';
 import { ApplyPatchInstructions, DefaultAgentPromptProps, detectToolCapabilities, getEditingReminder, McpToolInstructions, ReminderInstructionsProps } from '../defaultAgentInstructions';
 import { FileLinkificationInstructions } from '../fileLinkificationInstructions';
 import { CopilotIdentityRulesConstructor, IAgentPrompt, PromptRegistry, ReminderInstructionsConstructor, SafetyRulesConstructor, SystemPrompt } from '../promptRegistry';
+import { Gpt54ConcisePromptExp, Gpt54ConcisePromptExpReminderInstructions } from './gpt54ConcisePrompt';
+import { Gpt54LargePromptExp, Gpt54LargePromptExpReminderInstructions } from './gpt54LargePrompt';
 
-class Gpt54Prompt extends PromptElement<DefaultAgentPromptProps> {
+export class Gpt54Prompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		return <InstructionMessage>
@@ -182,6 +185,9 @@ class Gpt54Prompt extends PromptElement<DefaultAgentPromptProps> {
 }
 
 class Gpt54PromptResolver implements IAgentPrompt {
+	constructor(
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+	) { }
 
 	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
 		return isGpt54(endpoint);
@@ -190,10 +196,22 @@ class Gpt54PromptResolver implements IAgentPrompt {
 	static readonly familyPrefixes = [];
 
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
+		if (this.instantiationService.invokeFunction(isGpt54LargePromptExp, endpoint)) {
+			return Gpt54LargePromptExp;
+		}
+		if (this.instantiationService.invokeFunction(isGpt54ConcisePromptExp, endpoint)) {
+			return Gpt54ConcisePromptExp;
+		}
 		return Gpt54Prompt;
 	}
 
 	resolveReminderInstructions(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined {
+		if (this.instantiationService.invokeFunction(isGpt54LargePromptExp, endpoint)) {
+			return Gpt54LargePromptExpReminderInstructions;
+		}
+		if (this.instantiationService.invokeFunction(isGpt54ConcisePromptExp, endpoint)) {
+			return Gpt54ConcisePromptExpReminderInstructions;
+		}
 		return Gpt54ReminderInstructions;
 	}
 

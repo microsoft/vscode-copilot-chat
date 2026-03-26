@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Emitter, type Event } from '../../../util/vs/base/common/event';
+import { GenAiAttr, GenAiOperationName } from '../common/genAiAttributes';
 import type { OTelConfig } from '../common/otelConfig';
 import { type ICompletedSpanData, type IOTelService, type ISpanEventData, type ISpanEventRecord, type ISpanHandle, SpanKind, type SpanOptions, SpanStatusCode, type TraceContext } from '../common/otelService';
 
@@ -62,6 +63,10 @@ export class NodeOTelService implements IOTelService {
 	readonly onDidCompleteSpan: Event<ICompletedSpanData> = this._onDidCompleteSpan.event;
 	private readonly _onDidEmitSpanEvent = new Emitter<ISpanEventData>();
 	readonly onDidEmitSpanEvent: Event<ISpanEventData> = this._onDidEmitSpanEvent.event;
+
+	injectCompletedSpan(span: ICompletedSpanData): void {
+		try { this._onDidCompleteSpan.fire(span); } catch { /* emitter may be disposed */ }
+	}
 
 	// Buffer events until SDK is ready
 	private readonly _buffer: Array<() => void> = [];
@@ -667,8 +672,26 @@ function toOTelSpanKind(kind: SpanKind | undefined): number {
 }
 
 /**
+ * Operation names that follow the GenAI semantic conventions and should be
+ * exported to the user's OTLP endpoint. Debug-panel-only spans (e.g.,
+ * `content_event`, `user_message`) are excluded from external export but
+ * still visible in the in-memory span store for the Agent Debug Log panel.
+ */
+const EXPORTABLE_OPERATION_NAMES: ReadonlySet<string> = new Set([
+	GenAiOperationName.CHAT,
+	GenAiOperationName.INVOKE_AGENT,
+	GenAiOperationName.EXECUTE_TOOL,
+	GenAiOperationName.EMBEDDINGS,
+	GenAiOperationName.EXECUTE_HOOK,
+]);
+
+/**
  * Wraps a SpanExporter to log diagnostic info about export results.
  * Logs once on first successful export (info), and on every failure (warn).
+ *
+ * Also filters out debug-panel-only spans (those with non-standard
+ * `gen_ai.operation.name` values) so they don't appear in the user's
+ * configured OTel collector.
  */
 class DiagnosticSpanExporter implements SpanExporter {
 	private _firstSuccessLogged = false;
@@ -685,12 +708,25 @@ class DiagnosticSpanExporter implements SpanExporter {
 	}
 
 	export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
-		this._inner.export(spans, result => {
+		// Filter out debug-panel-only spans — only export standard GenAI operations
+		const exportable = spans.filter(span => {
+			const opName = span.attributes[GenAiAttr.OPERATION_NAME];
+			// If no operation name set, export it (safety: don't drop unknown spans)
+			if (opName === undefined) {
+				return true;
+			}
+			return EXPORTABLE_OPERATION_NAMES.has(String(opName));
+		});
+		if (exportable.length === 0) {
+			resultCallback({ code: 0 }); // ExportResultCode.SUCCESS
+			return;
+		}
+		this._inner.export(exportable, result => {
 			// ExportResultCode.SUCCESS === 0
 			if (result.code === 0) {
 				if (!this._firstSuccessLogged) {
 					this._firstSuccessLogged = true;
-					this._log('info', `[OTel] First span batch exported successfully via ${this._exporterType} (${spans.length} spans)`);
+					this._log('info', `[OTel] First span batch exported successfully via ${this._exporterType} (${exportable.length} spans)`);
 				}
 			} else {
 				// Rate-limit failure logging to avoid flooding stdout

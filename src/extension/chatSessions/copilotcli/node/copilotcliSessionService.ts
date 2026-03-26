@@ -16,6 +16,8 @@ import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/
 import { createDirectoryIfNotExists, IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { deriveCopilotCliOTelEnv } from '../../../../platform/otel/common/agentOTelEnv';
+import { IOTelService } from '../../../../platform/otel/common/otelService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
@@ -41,6 +43,7 @@ import { ICustomSessionTitleService } from '../common/customSessionTitleService'
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
 import { getCopilotCLISessionDir, getCopilotCLISessionEventsFile, getCopilotCLIWorkspaceFile } from './cliHelpers';
 import { CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLISDK } from './copilotCli';
+import { CopilotCliBridgeSpanProcessor } from './copilotCliBridgeSpanProcessor';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { ICopilotCLISkills } from './copilotCLISkills';
 import { ICopilotCLIMCPHandler } from './mcpHandler';
@@ -72,13 +75,15 @@ export interface ICopilotCLISessionService {
 	getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
 
 	// SDK session management
+	createNewSessionId(): string;
+	isNewSessionId(sessionId: string): boolean;
 	deleteSession(sessionId: string): Promise<void>;
 
 	// Session rename
 	renameSession(sessionId: string, title: string): Promise<void>;
 
 	// Session wrapper tracking
-	getSession(sessionId: string, options: { model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
+	getSession(options: { sessionId: string; model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
 	createSession(options: { model?: string; workspaceInfo: IWorkspaceInfo; agent?: SweCustomAgent; sessionId?: string }, token: CancellationToken): Promise<IReference<ICopilotCLISession>>;
 	forkSession(sessionId: string, requestId: string | undefined, options: { workspaceInfo: IWorkspaceInfo }, token: CancellationToken): Promise<string>;
 	tryGetPartialSesionHistory(sessionId: string): Promise<readonly (ChatRequestTurn2 | ChatResponseTurn2)[] | undefined>;
@@ -93,7 +98,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	private _sessionManager: Lazy<Promise<internal.LocalSessionManager>>;
 	private _sessionWrappers = new DisposableMap<string, RefCountedSession>();
-	private _sessionWrappersStillBeingClosed = new Map<string, Promise<unknown>>();
 	private readonly _partialSessionHistories = new Map<string, readonly (ChatRequestTurn2 | ChatResponseTurn2)[]>();
 
 
@@ -118,6 +122,11 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	private readonly _onDidChangeSessionsThrottler = this._register(new ThrottledDelayer<void>(500));
 	private readonly _cachedSessionItems = new Map<string, ICopilotCLISessionItem>();
 	private readonly _sessionsBeingCreatedViaFork = new Set<string>();
+	private readonly _newSessionIds = new Set<string>();
+	/** Bridge processor that forwards SDK native OTel spans to the debug panel. */
+	private _bridgeProcessor: CopilotCliBridgeSpanProcessor | undefined;
+	/** Whether we've attempted to install the bridge (only try once). */
+	private _bridgeInstalled = false;
 	constructor(
 		@ILogService protected readonly logService: ILogService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
@@ -135,12 +144,41 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@IAgentSessionsWorkspace private readonly _agentSessionsWorkspace: IAgentSessionsWorkspace,
 		@IChatSessionWorkspaceFolderService private readonly workspaceFolderService: IChatSessionWorkspaceFolderService,
 		@IChatSessionWorktreeService private readonly worktreeManager: IChatSessionWorktreeService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		super();
 		this.monitorSessionFiles();
 		this._sessionManager = new Lazy<Promise<internal.LocalSessionManager>>(async () => {
 			try {
 				const { internal } = await this.getSDKPackage();
+				// Always enable SDK OTel so the debug panel receives native spans via the bridge.
+				// When user OTel is disabled, we force file exporter to /dev/null so the SDK
+				// creates OtelSessionTracker (for debug panel) but doesn't export to any collector.
+				if (!process.env['COPILOT_OTEL_ENABLED']) {
+					process.env['COPILOT_OTEL_ENABLED'] = 'true';
+				}
+				// Default content capture to 'true' for the debug panel. When user OTel
+				// is enabled, their captureContent setting overrides this default below.
+				// When user OTel is disabled, the default gives debug panel content.
+				// If the user explicitly set the env var, respect their choice.
+				if (!process.env['OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT']) {
+					process.env['OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT'] = 'true';
+				}
+				if (this._otelService.config.enabled) {
+					const otelEnv = deriveCopilotCliOTelEnv(this._otelService.config);
+					for (const [key, value] of Object.entries(otelEnv)) {
+						process.env[key] = value;
+					}
+					// When user OTel is enabled, their captureContent config takes
+					// precedence over the debug-panel default set above.
+					process.env['OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT'] = String(this._otelService.config.captureContent);
+				} else {
+					// User OTel disabled: ensure SDK doesn't export to any external collector.
+					// Use file exporter to /dev/null so the SDK creates OtelSessionTracker
+					// (for debug panel) but writes spans nowhere.
+					process.env['COPILOT_OTEL_EXPORTER_TYPE'] = 'file';
+					process.env['COPILOT_OTEL_FILE_EXPORTER_PATH'] = process.platform === 'win32' ? 'NUL' : '/dev/null';
+				}
 				return new internal.LocalSessionManager({ telemetryService: new internal.NoopTelemetryService(), flushDebounceMs: undefined, settings: undefined, version: undefined });
 			}
 			catch (error) {
@@ -167,6 +205,16 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 
 		this._onDidChangeSessionsThrottler.trigger(() => Promise.resolve(this._onDidChangeSessions.fire()));
+	}
+
+	public createNewSessionId(): string {
+		const sessionId = generateUuid();
+		this._newSessionIds.add(sessionId);
+		return sessionId;
+	}
+
+	public isNewSessionId(sessionId: string): boolean {
+		return this._newSessionIds.has(sessionId);
 	}
 
 	protected monitorSessionFiles() {
@@ -205,13 +253,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 				// If we're already working on a session that we're aware of then no need to trigger a refresh.
 				if (Array.from(this._sessionWrappers.keys()).some(sessionId => e.path.includes(sessionId))) {
-					return;
-				}
-
-				// If we're busy shutting down a session (a session we opened just to get reaondly view)
-				// then also do not trigger a refresh.
-				// SDK causes a an update to the events.jsonl file when we close the session
-				if (Array.from(this._sessionWrappersStillBeingClosed).some(([sessionId,]) => e.path.includes(sessionId))) {
 					return;
 				}
 				if (sessionId) {
@@ -475,6 +516,12 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			const options = await this.createSessionsOptions({ model, workspaceInfo, mcpServers, agent, copilotUrl });
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 			const sdkSession = await sessionManager.createSession({ ...options.toSessionOptions(), sessionId });
+			this._newSessionIds.delete(sdkSession.sessionId);
+			// After the first session creation, the SDK's OTel TracerProvider is
+			// initialized. Install the bridge processor so SDK-native spans flow
+			// to the debug panel.
+			this._installBridgeIfNeeded();
+
 			if (copilotUrl) {
 				sdkSession.setAuthInfo({
 					type: 'hmac',
@@ -497,6 +544,46 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		catch (error) {
 			mcpGateway.dispose();
 			throw error;
+		}
+	}
+
+	/** Get the bridge processor for registering traceId → sessionId mappings. */
+	get bridgeProcessor(): CopilotCliBridgeSpanProcessor | undefined {
+		return this._bridgeProcessor;
+	}
+
+	/**
+	 * Install the bridge SpanProcessor on the SDK's global TracerProvider.
+	 * Called once after the first session creation (when the SDK provider is ready).
+	 */
+	private _installBridgeIfNeeded(): void {
+		if (this._bridgeInstalled) {
+			return;
+		}
+		this._bridgeInstalled = true;
+
+		try {
+			// The SDK registered its BasicTracerProvider as the global provider.
+			// In OTel SDK v2, addSpanProcessor() was removed from BasicTracerProvider.
+			// We access the internal MultiSpanProcessor._spanProcessors array to inject
+			// our bridge. This is the same pattern the SDK itself uses in forceFlush().
+			const api = require('@opentelemetry/api') as typeof import('@opentelemetry/api');
+			const globalProvider = api.trace.getTracerProvider();
+
+			// Navigate: ProxyTracerProvider._delegate → BasicTracerProvider._activeSpanProcessor → MultiSpanProcessor._spanProcessors
+			const delegate = (globalProvider as unknown as Record<string, unknown>)._delegate ?? globalProvider;
+			const activeProcessor = (delegate as unknown as Record<string, unknown>)._activeSpanProcessor as Record<string, unknown> | undefined;
+			const processorArray = activeProcessor?._spanProcessors;
+
+			if (Array.isArray(processorArray)) {
+				this._bridgeProcessor = new CopilotCliBridgeSpanProcessor(this._otelService);
+				processorArray.push(this._bridgeProcessor);
+				this.logService.info('[CopilotCLISession] Bridge SpanProcessor installed on SDK TracerProvider');
+			} else {
+				this.logService.warn('[CopilotCLISession] Could not access SDK TracerProvider internals — debug panel will not show SDK spans');
+			}
+		} catch (err) {
+			this.logService.warn(`[CopilotCLISession] Failed to install bridge SpanProcessor: ${err}`);
 		}
 	}
 
@@ -548,15 +635,11 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		return new CopilotCLISessionOptions({ ...options, customAgents, skillLocations }, this.logService);
 	}
 
-	public async getSession(sessionId: string, { model, workspaceInfo, readonly, agent }: { model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<RefCountedSession | undefined> {
+	public async getSession({ sessionId, model, workspaceInfo, readonly, agent }: { sessionId: string; model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<RefCountedSession | undefined> {
 		// https://github.com/microsoft/vscode/issues/276573
 		const lock = this.sessionMutexForGetSession.get(sessionId) ?? new Mutex();
 		this.sessionMutexForGetSession.set(sessionId, lock);
 		const lockDisposable = await lock.acquire(token);
-		// Possible the session is still being disposed from the last time we acquired it.
-		// Wait for it to completely dispose.
-		const promise = this._sessionWrappersStillBeingClosed.get(sessionId) ?? Promise.resolve();
-		await promise.catch(() => { /* swallow errors */ });
 		try {
 			{
 				const session = this._sessionWrappers.get(sessionId);
@@ -643,13 +726,13 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				const session = this.createCopilotSession(sdkSession, options, sessionManager, false, true);
 				disposables.add(session);
 				const history = await session.object.getChatHistory();
-				const requests = history.filter(event => event instanceof ChatRequestTurn2);
-				const index = requests.findIndex(event => event.id === requestId);
-				const requestToTruncateTo = index !== -1 ? requests[index] : undefined;
+				const requestToTruncateTo = history.find(event => event instanceof ChatRequestTurn2 && event.id === requestId);
 				if (requestToTruncateTo) {
 					const requestId = requestToTruncateTo.id;
 					const storedDetails = await this._chatSessionMetadataStore.getRequestDetails(newSessionId);
-					const eventToTruncateTo = storedDetails.find(d => d.vscodeRequestId === requestId || d.copilotRequestId === requestId)?.copilotRequestId;
+					const translatedSDKEvent = storedDetails.find(d => d.vscodeRequestId === requestId || d.copilotRequestId === requestId)?.copilotRequestId;
+					const sdkEvent = session.object.sdkSession.getEvents().find(e => e.type === 'user.message' && e.id === requestId)?.id;
+					const eventToTruncateTo = translatedSDKEvent ?? sdkEvent;
 					if (eventToTruncateTo) {
 						await sdkSession.truncateToEvent(eventToTruncateTo);
 						events = sdkSession.getEvents();
@@ -676,7 +759,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				await raceTimeout(sessionDisposed, 1_000);
 				if (events.length) {
 					const eventsFile = Uri.file(getCopilotCLISessionEventsFile(newSessionId));
-					const contents = Buffer.from(events.map(e => JSON.stringify(e)).join(EOL));
+					// File must end with EOL
+					const contents = Buffer.from(events.map(e => JSON.stringify(e)).join(EOL) + EOL);
 					await this.fileSystem.writeFile(eventsFile, contents);
 				}
 			} else {
@@ -743,7 +827,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 		if (!firstUserMessage) {
 			try {
-				const session = await this.getSession(sessionId, { readonly: true, workspaceInfo: emptyWorkspaceInfo() }, token);
+				const session = await this.getSession({ sessionId, readonly: true, workspaceInfo: emptyWorkspaceInfo() }, token);
 				firstUserMessage = session?.object ? session.object.sdkSession.getEvents().find((msg: SessionEvent) => msg.type === 'user.message')?.data.content : undefined;
 				session?.dispose();
 			} catch (error) {
@@ -760,6 +844,14 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	private createCopilotSession(sdkSession: Session, options: CopilotCLISessionOptions, sessionManager: internal.LocalSessionManager, readonly = false, nowait = false): RefCountedSession {
 		const session = this.instantiationService.createInstance(CopilotCLISession, options, sdkSession);
+		// Wire the bridge processor so the session can register traceId → sessionId mappings
+		session.setBridgeProcessor(this._bridgeProcessor);
+		// Wire SDK trace context updater so the session can propagate traceparent to SDK spans
+		const otelLifecycle = sessionManager.otel;
+		if (otelLifecycle) {
+			session.setSdkTraceContextUpdater((traceparent, tracestate) =>
+				otelLifecycle.updateParentTraceContext(sdkSession.sessionId, traceparent, tracestate));
+		}
 		session.add(session.onDidChangeStatus(() => {
 			this.triggerOnDidChangeSessionItem(sdkSession.sessionId, 'statusChange');
 			this._onDidChangeSessions.fire();
@@ -767,26 +859,19 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		session.add(toDisposable(() => {
 			this._sessionWrappers.deleteAndLeak(sdkSession.sessionId);
 			this.sessionMutexForGetSession.delete(sdkSession.sessionId);
-			// If this session was created as readonly, then no need to abort,
-			// As we wouldn't have made any changes.
-			const abortPromise = readonly || !sdkSession.isAbortable() ? Promise.resolve() : sdkSession.abort();
-			const promise = abortPromise.finally(() => sessionManager.closeSession(sdkSession.sessionId))
-				.catch(error => {
+			(async () => {
+				// If this session was created as readonly, then no need to abort,
+				// As we wouldn't have made any changes.
+				if (!readonly && sdkSession.isAbortable()) {
+					await sdkSession.abort().catch(error => {
+						this.logService.error(`Failed to abort session ${sdkSession.sessionId}: ${error}`);
+					});
+				}
+				await sessionManager.closeSession(sdkSession.sessionId).catch(error => {
 					this.logService.error(`Failed to close session ${sdkSession.sessionId}: ${error}`);
-				})
-				.finally(() => {
-					if (nowait) {
-						this._sessionWrappersStillBeingClosed.delete(sdkSession.sessionId);
-						this._onDidCloseSession.fire(sdkSession.sessionId);
-					} else {
-						// SDK can update the file a few ms after we call closeSession, hence give a short grace period where we do not trigger file change event to avoid unnecessary refreshes.
-						this._register(disposableTimeout(() => {
-							this._sessionWrappersStillBeingClosed.delete(sdkSession.sessionId);
-							this._onDidCloseSession.fire(sdkSession.sessionId);
-						}, 1_000, this._store));
-					}
 				});
-			this._sessionWrappersStillBeingClosed.set(sdkSession.sessionId, promise);
+				this._onDidCloseSession.fire(sdkSession.sessionId);
+			})();
 		}));
 
 		// We have no way of tracking Chat Editor life cycle.

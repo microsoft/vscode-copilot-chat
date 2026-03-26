@@ -62,7 +62,7 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 
 
 		const results = await raceTimeoutAndCancellationError(
-			(searchToken) => Promise.resolve(this.searchService.findFiles(globResult.patterns, undefined, searchToken)),
+			(searchToken) => Promise.resolve(this.searchService.findFiles(globResult.patterns, { caseInsensitive: true }, searchToken)),
 			token,
 			timeoutInMs,
 			'Timeout in searching files, try a more specific search pattern'

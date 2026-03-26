@@ -447,12 +447,25 @@ enum ToolInvocationOutcome {
 
 export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToken?: string, urlOrRequestMetadata?: string | RequestMetadata, logService?: ILogService, imageService?: IImageService) {
 	if (isImageDataPart(part)) {
-		const base64 = Buffer.from(part.data).toString('base64');
-		let imageSource = `data:${part.mimeType};base64,${base64}`;
+		let imageData: Uint8Array = part.data;
+		let mimeType = part.mimeType;
+
+		if (imageService) {
+			try {
+				const resized = await imageService.resizeImage(imageData, mimeType);
+				imageData = resized.data;
+				mimeType = resized.mimeType;
+			} catch (error) {
+				logService?.warn(`Image resize failed, using original: ${error}`);
+			}
+		}
+
+		const base64 = Buffer.from(imageData).toString('base64');
+		let imageSource = `data:${mimeType};base64,${base64}`;
 		const isChatRequest = typeof urlOrRequestMetadata !== 'string' && (urlOrRequestMetadata?.type === RequestType.ChatCompletions || urlOrRequestMetadata?.type === RequestType.ChatMessages);
 		if (githubToken && isChatRequest && imageService) {
 			try {
-				const uri = await imageService.uploadChatImageAttachment(part.data, 'tool-result-image', part.mimeType ?? 'image/png', githubToken);
+				const uri = await imageService.uploadChatImageAttachment(imageData, 'tool-result-image', mimeType ?? 'image/png', githubToken);
 				if (uri) {
 					imageSource = uri.toString();
 				}
@@ -463,7 +476,7 @@ export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToke
 			}
 		}
 
-		return <Image src={imageSource} mimeType={part.mimeType} />;
+		return <Image src={imageSource} mimeType={mimeType} />;
 	}
 }
 
@@ -579,7 +592,18 @@ class McpLinkedResourceToolResult extends PromptElement<{ resourceUri: URI; mime
 			return <Tag name='resource' attrs={{ uri: this.props.resourceUri.toString() }} />;
 		}
 
-		const contents = await this.fileSystemService.readFile(this.props.resourceUri);
+		let contents: Uint8Array;
+		try {
+			contents = await this.fileSystemService.readFile(this.props.resourceUri);
+		} catch (e) {
+			const isNotFound = e instanceof Error && ('code' in e && (e.code === 'FileNotFound' || e.code === 'EntryNotFound'));
+			const message = isNotFound
+				? 'resource not found - the file may have been deleted or become inaccessible'
+				: `failed to read resource - ${toErrorMessage(e)}`;
+			return <Tag name='resource' attrs={{ uri: this.props.resourceUri.toString() }}>
+				{message}
+			</Tag>;
+		}
 		const lines = new TextDecoder().decode(contents).split(/\r?\n/g);
 		const maxLines = McpLinkedResourceToolResult.MAX_PREVIEW_LINES;
 
@@ -757,8 +781,8 @@ export class ToolResult extends PrimitiveToolResult<IToolResultProps> {
 			ConfigKey.Advanced.LargeToolResultsToDiskEnabled,
 			this._experimentationService
 		);
-		// Exempt the search and execution subagents from disk caching as their results are often ignored if not written directly to the conversation
-		if (isDiskCachingEnabled && this.diskSessionResources && this.props.toolCallId && this.props.sessionId && this.props.toolName !== ToolName.SearchSubagent && this.props.toolName !== ToolName.ExecutionSubagent) {
+		// Exempt the search and execution subagents and memory tool from disk caching as their results are often ignored if not written directly to the conversation
+		if (isDiskCachingEnabled && this.diskSessionResources && this.props.toolCallId && this.props.sessionId && this.props.toolName !== ToolName.SearchSubagent && this.props.toolName !== ToolName.ExecutionSubagent && this.props.toolName !== ToolName.Memory) {
 			const thresholdBytes = this._configurationService.getExperimentBasedConfig(
 				ConfigKey.Advanced.LargeToolResultsToDiskThreshold,
 				this._experimentationService

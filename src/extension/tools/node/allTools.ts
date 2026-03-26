@@ -29,6 +29,7 @@ import './notebookSummaryTool';
 import './readFileTool';
 import './readProjectStructureTool';
 import './replaceStringTool';
+import './resolveMemoryFileUriTool';
 import './runNotebookCellTool';
 import './scmChangesTool';
 import './searchSubagentTool';

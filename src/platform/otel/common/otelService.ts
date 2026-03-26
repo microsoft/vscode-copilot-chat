@@ -86,6 +86,13 @@ export interface IOTelService {
 	shutdown(): Promise<void>;
 
 	/**
+	 * Inject an externally-created completed span into the OTel service's event stream.
+	 * The span will fire `onDidCompleteSpan` (for the debug panel) but will NOT be
+	 * exported via the OTLP exporter (the source system handles its own export).
+	 */
+	injectCompletedSpan(span: ICompletedSpanData): void;
+
+	/**
 	 * Fires when any span ends, providing a serializable snapshot of the span's data.
 	 * Used by the debug panel to react to completed spans without depending on the OTel SDK.
 	 */

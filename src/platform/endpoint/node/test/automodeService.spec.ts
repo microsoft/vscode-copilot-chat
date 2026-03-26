@@ -179,7 +179,8 @@ describe('AutomodeService', () => {
 
 			const chatRequest: Partial<ChatRequest> = {
 				location: ChatLocation.Panel,
-				prompt: 'test prompt'
+				prompt: 'test prompt',
+				sessionId: 'session-router-panel'
 			};
 
 			const result = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [mockChatEndpoint, gpt4oEndpoint]);
@@ -472,6 +473,61 @@ describe('AutomodeService', () => {
 			);
 		});
 
+		it('should fall back to default selection with routerTimeout reason when router times out', async () => {
+			vi.useFakeTimers();
+			enableRouter();
+			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
+			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+
+			(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockImplementation((req: any, opts: any) => {
+				if (opts?.type === RequestType.ModelRouter) {
+					// Return a pending promise that rejects when the signal is aborted,
+					// simulating a real in-flight request cancelled by the 1s timeout.
+					return new Promise((_resolve, reject) => {
+						const signal: AbortSignal = req.signal;
+						if (signal?.aborted) {
+							const err = new Error('The operation was aborted');
+							err.name = 'AbortError';
+							reject(err);
+							return;
+						}
+						signal?.addEventListener('abort', () => {
+							const err = new Error('The operation was aborted');
+							err.name = 'AbortError';
+							reject(err);
+						});
+					});
+				}
+				return Promise.resolve({
+					ok: true,
+					json: vi.fn().mockResolvedValue({
+						available_models: ['claude-sonnet', 'gpt-4o'],
+						expires_at: Math.floor(Date.now() / 1000) + 3600,
+						session_token: 'test-token',
+					})
+				});
+			});
+
+			automodeService = createService();
+			const chatRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'test prompt',
+				sessionId: 'session-router-timeout'
+			};
+
+			const resultPromise = automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [claudeEndpoint, gpt4oEndpoint]);
+			// Advance past the 1-second router timeout to trigger the abort
+			await vi.advanceTimersByTimeAsync(1000);
+
+			const result = await resultPromise;
+			// Should fall back to first available model (claude-sonnet)
+			expect(result.model).toBe('claude-sonnet');
+			expect(mockLogService.error).toHaveBeenCalledWith(
+				expect.stringContaining('routerTimeout'),
+				expect.any(String)
+			);
+		});
+
 		it('should fall back to default selection when router returns unknown model', async () => {
 			enableRouter();
 			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
@@ -493,7 +549,7 @@ describe('AutomodeService', () => {
 			expect(result.model).toBe('gpt-4o');
 		});
 
-		it('should prefer same-provider model from candidate_models on subsequent turns', async () => {
+		it('should skip router on subsequent turns and return cached model', async () => {
 			enableRouter();
 			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
 			const gpt4oMiniEndpoint = createEndpoint('gpt-4o-mini', 'OpenAI');
@@ -515,8 +571,7 @@ describe('AutomodeService', () => {
 			const firstResult = await automodeService.resolveAutoModeEndpoint(chatRequest1 as ChatRequest, [gpt4oEndpoint, gpt4oMiniEndpoint, claudeEndpoint]);
 			expect(firstResult.model).toBe('gpt-4o');
 
-			// Second turn: router returns claude as chosen, but candidates include gpt-4o-mini
-			// Should prefer gpt-4o-mini (same provider as cached gpt-4o)
+			// Second turn: router would return claude, but should be skipped (cached gpt-4o returned)
 			mockRouterResponse(
 				['gpt-4o', 'gpt-4o-mini', 'claude-sonnet'],
 				{ chosen_model: 'claude-sonnet', candidate_models: ['claude-sonnet', 'gpt-4o-mini'] }
@@ -529,10 +584,11 @@ describe('AutomodeService', () => {
 			};
 
 			const secondResult = await automodeService.resolveAutoModeEndpoint(chatRequest2 as ChatRequest, [gpt4oEndpoint, gpt4oMiniEndpoint, claudeEndpoint]);
-			expect(secondResult.model).toBe('gpt-4o-mini');
+			// Router is skipped after first turn — cached model returned
+			expect(secondResult.model).toBe('gpt-4o');
 		});
 
-		it('should use chosen_model when no same-provider candidate exists on subsequent turns', async () => {
+		it('should re-route on subsequent turns after invalidateRouterCache', async () => {
 			enableRouter();
 			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
 			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
@@ -553,7 +609,10 @@ describe('AutomodeService', () => {
 			const firstResult = await automodeService.resolveAutoModeEndpoint(chatRequest1 as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
 			expect(firstResult.model).toBe('gpt-4o');
 
-			// Second turn: no OpenAI candidates, should fall back to chosen_model (claude-sonnet)
+			// Invalidate the cache (simulates compaction)
+			automodeService.invalidateRouterCache({ sessionId: 'session-no-same-provider' } as ChatRequest);
+
+			// Second turn: router is re-run after invalidation, picks claude-sonnet
 			mockRouterResponse(
 				['gpt-4o', 'claude-sonnet'],
 				{ chosen_model: 'claude-sonnet', candidate_models: ['claude-sonnet'] }
@@ -601,6 +660,79 @@ describe('AutomodeService', () => {
 			expect(routerCallCount2).toBe(1);
 		});
 
+		it('should skip router on new turn after a transient fallback reason without invalidation', async () => {
+			enableRouter();
+			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI', { supportsVision: true });
+			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
+
+			(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockImplementation((_body: any, opts: any) => {
+				if (opts?.type === RequestType.ModelRouter) {
+					return Promise.resolve({
+						ok: true,
+						text: vi.fn().mockResolvedValue(JSON.stringify({
+							predicted_label: 'needs_reasoning',
+							confidence: 0.9,
+							latency_ms: 30,
+							chosen_model: 'claude-sonnet',
+							candidate_models: ['claude-sonnet'],
+							scores: { needs_reasoning: 0.9, no_reasoning: 0.1 },
+							sticky_override: false
+						}))
+					});
+				}
+				return Promise.resolve({
+					ok: true,
+					json: vi.fn().mockResolvedValue({
+						available_models: ['claude-sonnet', 'gpt-4o'],
+						expires_at: Math.floor(Date.now() / 1000) + 3600,
+						session_token: 'test-token',
+					})
+				});
+			});
+
+			automodeService = createService();
+
+			// Turn 1: image request — router is skipped (transient fallback)
+			const imageRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'describe this image',
+				sessionId: 'session-transient-fallback',
+				references: [{ id: 'img', value: { mimeType: 'image/png', data: new Uint8Array() } }] as any
+			};
+
+			await automodeService.resolveAutoModeEndpoint(imageRequest as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+
+			// Turn 2: same prompt (tool-calling iteration) — router should NOT be called
+			const samePromptRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'describe this image',
+				sessionId: 'session-transient-fallback',
+			};
+
+			await automodeService.resolveAutoModeEndpoint(samePromptRequest as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+
+			// Router should not have been called for either turn so far
+			expect(mockCAPIClientService.makeRequest).not.toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({ type: RequestType.ModelRouter })
+			);
+
+			// Turn 3: new prompt — router should still NOT be called (skipped after first turn)
+			const textRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'write a function',
+				sessionId: 'session-transient-fallback',
+			};
+
+			await automodeService.resolveAutoModeEndpoint(textRequest as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+
+			// Router should not have been called at all
+			expect(mockCAPIClientService.makeRequest).not.toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({ type: RequestType.ModelRouter })
+			);
+		});
+
 		it('should skip router for image requests and use default selection', async () => {
 			enableRouter();
 			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI', { supportsVision: true });
@@ -627,6 +759,59 @@ describe('AutomodeService', () => {
 				expect.anything(),
 				expect.objectContaining({ type: RequestType.ModelRouter })
 			);
+		});
+
+		it('should be a no-op when invalidateRouterCache is called with unknown conversationId', async () => {
+			automodeService = createService();
+			// Should not throw
+			automodeService.invalidateRouterCache({ sessionId: 'nonexistent-session' } as ChatRequest);
+		});
+
+		it('should re-run router after invalidateRouterCache is called', async () => {
+			enableRouter();
+			const gpt4oEndpoint = createEndpoint('gpt-4o', 'OpenAI');
+			const claudeEndpoint = createEndpoint('claude-sonnet', 'Anthropic');
+
+			mockRouterResponse(
+				['gpt-4o', 'claude-sonnet'],
+				{ chosen_model: 'gpt-4o', candidate_models: ['gpt-4o'] }
+			);
+
+			automodeService = createService();
+			const chatRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'first question',
+				sessionId: 'session-invalidate'
+			};
+
+			const firstResult = await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+			expect(firstResult.model).toBe('gpt-4o');
+
+			// Without invalidation, changing prompt should still return cached model
+			const chatRequest2: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'second question',
+				sessionId: 'session-invalidate'
+			};
+			const cachedResult = await automodeService.resolveAutoModeEndpoint(chatRequest2 as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+			expect(cachedResult.model).toBe('gpt-4o');
+
+			// Invalidate the cache
+			automodeService.invalidateRouterCache({ sessionId: 'session-invalidate' } as ChatRequest);
+
+			// Now the router should re-run and pick claude
+			mockRouterResponse(
+				['gpt-4o', 'claude-sonnet'],
+				{ chosen_model: 'claude-sonnet', candidate_models: ['claude-sonnet'] }
+			);
+
+			const chatRequest3: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'third question',
+				sessionId: 'session-invalidate'
+			};
+			const reEvalResult = await automodeService.resolveAutoModeEndpoint(chatRequest3 as ChatRequest, [gpt4oEndpoint, claudeEndpoint]);
+			expect(reEvalResult.model).toBe('claude-sonnet');
 		});
 	});
 

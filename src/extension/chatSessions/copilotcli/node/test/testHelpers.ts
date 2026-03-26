@@ -9,7 +9,7 @@ import { Event } from '../../../../../util/vs/base/common/event';
 import { Disposable, IDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../../util/vs/base/common/uuid';
-import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents } from '../copilotCli';
+import { ICopilotCLIAgents } from '../copilotCli';
 import { ICopilotCLIImageSupport } from '../copilotCLIImageSupport';
 import { ICopilotCLISkills } from '../copilotCLISkills';
 import { ICopilotCLIMCPHandler } from '../mcpHandler';
@@ -38,16 +38,20 @@ export class MockCliSdkSession {
 
 export class MockSkillLocations implements ICopilotCLISkills {
 	declare _serviceBrand: undefined;
-	async getSkillsLocations(): Promise<Uri[]> {
-		return [];
+	private readonly locations: Uri[];
+	constructor(locations: Uri[] = []) {
+		this.locations = locations;
+	}
+	getSkillsLocations(): Uri[] {
+		return this.locations;
 	}
 }
 
 export class MockCliSdkSessionManager {
 	public sessions = new Map<string, MockCliSdkSession>();
 	constructor(_opts: {}) { }
-	createSession(_options: SessionOptions) {
-		const id = `sess_${generateUuid()}`;
+	createSession(_options: SessionOptions & { sessionId?: string }) {
+		const id = _options.sessionId ?? `sess_${generateUuid()}`;
 		const s = new MockCliSdkSession(id, new Date());
 		this.sessions.set(id, s);
 		return Promise.resolve(s);
@@ -71,20 +75,11 @@ export class NullCopilotCLIAgents implements ICopilotCLIAgents {
 	async getAgents(): Promise<SweCustomAgent[]> {
 		return [];
 	}
-	async getDefaultAgent(): Promise<string> {
-		return COPILOT_CLI_DEFAULT_AGENT_ID;
-	}
 	async getSessionAgent(_sessionId: string): Promise<string | undefined> {
 		return undefined;
 	}
 	resolveAgent(_agentId: string): Promise<SweCustomAgent | undefined> {
 		return Promise.resolve(undefined);
-	}
-	setDefaultAgent(_agent: string | undefined): Promise<void> {
-		return Promise.resolve();
-	}
-	trackSessionAgent(_sessionId: string, agent: string | undefined): Promise<void> {
-		return Promise.resolve();
 	}
 }
 

@@ -551,12 +551,12 @@ describe('overrideModelConfig', () => {
 	});
 
 	it('merges lintOptions when overridingConfig has lintOptions', () => {
-		const testLintOptions = { tagName: 'lint', warnings: LintOptionWarning.YES, showCode: LintOptionShowCode.YES, maxLints: 5, maxLineDistance: 10 };
+		const testLintOptions = { tagName: 'lint', warnings: LintOptionWarning.YES, showCode: LintOptionShowCode.YES, maxLints: 5, maxLineDistance: 10, nRecentFiles: 0 };
 		const base: ModelConfig = {
 			...makeBaseModelConfig(),
 			lintOptions: testLintOptions,
 		};
-		const overrideLintOptions = { tagName: 'diag', warnings: LintOptionWarning.NO, showCode: LintOptionShowCode.NO, maxLints: 3, maxLineDistance: 5 };
+		const overrideLintOptions = { tagName: 'diag', warnings: LintOptionWarning.NO, showCode: LintOptionShowCode.NO, maxLints: 3, maxLineDistance: 5, nRecentFiles: 0 };
 		const override: ModelConfiguration = {
 			modelName: 'test',
 			promptingStrategy: undefined,
@@ -570,7 +570,7 @@ describe('overrideModelConfig', () => {
 	});
 
 	it('keeps base lintOptions when override has no lintOptions', () => {
-		const testLintOptions = { tagName: 'lint', warnings: LintOptionWarning.YES, showCode: LintOptionShowCode.YES, maxLints: 5, maxLineDistance: 10 };
+		const testLintOptions = { tagName: 'lint', warnings: LintOptionWarning.YES, showCode: LintOptionShowCode.YES, maxLints: 5, maxLineDistance: 10, nRecentFiles: 0 };
 		const base: ModelConfig = {
 			...makeBaseModelConfig(),
 			lintOptions: testLintOptions,
