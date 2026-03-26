@@ -15,6 +15,7 @@ import { ILanguageModelServer, ILanguageModelServerConfig, LanguageModelServer }
 import { emptyWorkspaceInfo, IWorkspaceInfo } from '../../src/extension/chatSessions/common/workspaceInfo';
 import { ICustomSessionTitleService } from '../../src/extension/chatSessions/copilotcli/common/customSessionTitleService';
 import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../src/extension/chatSessions/copilotcli/common/delegationSummaryService';
+import type { McpServerMappings } from '../../src/extension/chatSessions/copilotcli/common/mcpServerMappings';
 import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/chatSessions/copilotcli/node/copilotCli';
 import { CopilotCLIImageSupport, ICopilotCLIImageSupport } from '../../src/extension/chatSessions/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLIPromptResolver } from '../../src/extension/chatSessions/copilotcli/node/copilotcliPromptResolver';
@@ -160,8 +161,8 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 		constructor(options: { model?: string; workingDirectory?: Uri; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers'] }, logger: ILogService, private readonly testOptions: Pick<SessionOptions, 'authInfo' | 'copilotUrl'>) {
 			super(options, logger);
 		}
-		override toSessionOptions() {
-			const options = super.toSessionOptions();
+		override toSessionOptions(mcpServerMappings?: McpServerMappings) {
+			const options = super.toSessionOptions(mcpServerMappings);
 			const mutableOptions = options as Mutable<typeof options>;
 			mutableOptions.authInfo = this.testOptions.authInfo ?? options.authInfo;
 			mutableOptions.copilotUrl = this.testOptions.copilotUrl ?? options.copilotUrl;

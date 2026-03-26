@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { Session } from '@github/copilot/sdk';
+import type { Session, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -11,11 +11,24 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { IMcpService } from '../../../../platform/mcp/common/mcpService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { Disposable, DisposableStore, IDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { hasKey } from '../../../../util/vs/base/common/types';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
+import type { LanguageModelToolInformation } from '../../../../vscodeTypes';
 import { GitHubMcpDefinitionProvider } from '../../../githubMcp/common/githubMcpDefinitionProvider';
 
 const toolInvalidCharRe = /[^a-z0-9_-]/gi;
+
+/** The user-facing display label of an MCP server (from VS Code settings). */
+export type MCPDisplayName = string;
+/** The short server name as used in agent definition files (the prefix of `fullReferenceName`). */
+export type MCPServerName = string;
+
+/**
+ * A mapping from friendly MCP server names (as defined in custom agent files)
+ * to VS Code MCP server display labels.
+ */
+export type McpServerMappings = Map<MCPServerName, MCPDisplayName>;
 
 export type MCPServerConfig = NonNullable<Session['mcpServers']>[string];
 
@@ -170,6 +183,86 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 			this.logService.trace('[CopilotCLIMCPHandler] Added built-in GitHub MCP server.');
 		} catch (error) {
 			this.logService.warn(`[CopilotCLIMCPHandler] Failed to add built-in GitHub MCP server: ${error}`);
+		}
+	}
+}
+
+/**
+ * Builds a mapping from friendly MCP server names (as defined in custom agent files)
+ * to VS Code MCP server labels.
+ *
+ * Iterates through tools that have an MCP source (detected via structural typing using
+ * {@link hasKey}) and a `fullReferenceName` in the format `<server name>/<tool name>`,
+ * extracting the server name portion as the key and the source's `label` as the value.
+ */
+export function buildMcpServerMappings(tools: ReadonlyMap<LanguageModelToolInformation, boolean>): McpServerMappings {
+	const mappings = new Map<string, string>();
+	for (const [tool] of tools) {
+		if (!tool.source || !hasKey(tool.source, { name: true }) || !tool.fullReferenceName) {
+			continue;
+		}
+		const slashIndex = tool.fullReferenceName.indexOf('/');
+		if (slashIndex > 0) {
+			const serverName = tool.fullReferenceName.substring(0, slashIndex);
+			if (serverName && !mappings.has(serverName)) {
+				mappings.set(serverName, tool.source.label);
+			}
+		}
+	}
+	return mappings;
+}
+
+/**
+ * Remaps tool references in custom agents from friendly MCP server names to gateway names.
+ *
+ * Agent definition files reference tools as `<friendly server name>/<tool name>`, but the SDK
+ * expects `<gateway name>/<tool name>` where gateway names are the Record keys in the MCP
+ * server config.
+ *
+ * @param customAgents The list of custom agents whose tools will be remapped in place.
+ * @param mcpServerMappings Maps friendly server names (from agent files) → VS Code MCP display labels.
+ * @param mcpServers The MCP server config, keyed by gateway name.
+ * @param selectedAgent Optional selected agent to also remap.
+ */
+export function remapCustomAgentTools(
+	customAgents: SweCustomAgent[],
+	mcpServerMappings: McpServerMappings,
+	mcpServers: SessionOptions['mcpServers'],
+	selectedAgent: SweCustomAgent | undefined,
+): void {
+	if (!mcpServerMappings.size || !mcpServers) {
+		return;
+	}
+	// Build a map from display name → gateway name (the Record key in mcpServers).
+	const displayNameToGatewayName = new Map<string, string>();
+	for (const [gatewayName, config] of Object.entries(mcpServers)) {
+		if (config.displayName) {
+			displayNameToGatewayName.set(config.displayName, gatewayName);
+		}
+	}
+
+	const agentsToRemap = selectedAgent ? [...customAgents, selectedAgent] : customAgents;
+	for (const agent of agentsToRemap) {
+		if (!agent.tools) {
+			continue;
+		}
+		for (let i = 0; i < agent.tools.length; i++) {
+			const tool = agent.tools[i];
+			const slashIndex = tool.indexOf('/'); // Server name cannot be empty, so slash must be at index 1 or greater
+			if (slashIndex < 1) {
+				continue;
+			}
+			const serverName = tool.substring(0, slashIndex);
+			const toolName = tool.substring(slashIndex + 1);
+
+			// First try: map through mcpServerMappings (friendly name → display name) then to gateway name.
+			const displayName = mcpServerMappings.get(serverName);
+			// Also try to look up the server name directly as a display name in the gateway map.
+			const gatewayName = displayName ? displayNameToGatewayName.get(displayName) : displayNameToGatewayName.get(serverName);
+
+			if (gatewayName) {
+				agent.tools[i] = `${gatewayName}/${toolName}`;
+			}
 		}
 	}
 }
