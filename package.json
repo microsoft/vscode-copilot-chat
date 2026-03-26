@@ -2670,6 +2670,11 @@
 				"icon": "$(export)"
 			},
 			{
+				"command": "github.copilot.chat.otel.exportAgentTracesDB",
+				"title": "Export Agent Traces DB",
+				"category": "Chat"
+			},
+			{
 				"command": "github.copilot.nes.captureExpected.start",
 				"title": "Record Expected Edit (NES)",
 				"category": "Copilot"
