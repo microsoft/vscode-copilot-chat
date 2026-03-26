@@ -133,72 +133,32 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 				});
 
 			case 'loaded': {
-				if (state.remoteIndexState.repos.length > 0) {
-					if (state.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.NotIndexable)) {
-						break;
-					}
+				// See if any repos are still being checked/resolved
+				if (state.remoteIndexState.repos.length > 0 && state.remoteIndexState.repos.some(repo => repo.status === CodeSearchRepoStatus.CheckingStatus || repo.status === CodeSearchRepoStatus.Resolving)) {
+					return this._writeStatusItem({
+						title: {
+							title: t('Codebase index'),
+							learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
+						},
+						details: {
+							message: t('Checking status'),
+							busy: true,
+						},
+					});
+				}
 
-					// All repos are ready, check if external ingest is building
-					if (state.remoteIndexState.externalIngestState?.status === CodeSearchRepoStatus.BuildingIndex) {
-						return this._writeStatusItem({
-							title: remotelyIndexedMessage,
-							details: {
-								message: state.remoteIndexState.externalIngestState.progressMessage || t('Building'),
-								busy: true,
-							},
-						});
-					}
+				// See if we are still building any indexes
+				if (state.remoteIndexState.repos.some(repo => repo.status === CodeSearchRepoStatus.BuildingIndex)) {
+					return this._writeStatusItem({
+						title: remotelyIndexedMessage,
+						details: {
+							message: t('Building'),
+							busy: true,
+						},
+					});
+				}
 
-					if (state.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.Ready)) {
-						return this._writeStatusItem({
-							title: remotelyIndexedMessage,
-							details: undefined
-						});
-					}
-
-					if (state.remoteIndexState.repos.some(repo => repo.status === CodeSearchRepoStatus.CheckingStatus || repo.status === CodeSearchRepoStatus.Resolving)) {
-						return this._writeStatusItem({
-							title: {
-								title: t('Codebase index'),
-								learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
-							},
-							details: {
-								message: t('Checking status'),
-								busy: true,
-							},
-						});
-					}
-
-					if (state.remoteIndexState.repos.some(repo => repo.status === CodeSearchRepoStatus.BuildingIndex)) {
-						return this._writeStatusItem({
-							title: remotelyIndexedMessage,
-							details: {
-								message: t('Building'),
-								busy: true,
-							},
-						});
-					}
-
-					if (state.remoteIndexState.repos.some(repo => repo.status === CodeSearchRepoStatus.NotYetIndexed)) {
-						if (id !== this.currentUpdateRequestId) {
-							return;
-						}
-
-						return this._writeStatusItem({
-							title: {
-								title: state.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.NotYetIndexed)
-									? t('Index not yet built')
-									: t('Index not yet built for a repo in the workspace'),
-								learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
-							},
-							details: {
-								message: `[${t`Build index`}](command:${buildRemoteIndexCommandId} "${t('Build Remote Workspace Index')}")`,
-								busy: false,
-							}
-						});
-					}
-
-					// We have a potential mix of statuses
+				{ // Check if we have any errors
 					const readyRepos = state.remoteIndexState.repos.filter(repo => repo.status === CodeSearchRepoStatus.Ready);
 					const errorRepos = state.remoteIndexState.repos.filter(repo => repo.status === CodeSearchRepoStatus.CouldNotCheckIndexStatus || repo.status === CodeSearchRepoStatus.NotAuthorized);
 
@@ -209,7 +169,7 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 							title: {
 								title: readyRepos.length
 									? t('{0} repos with indexes', readyRepos.length)
-									: t('Index unavailable'),
+									: t('Codebase index unavailable'),
 								learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
 							},
 							details: {
@@ -222,18 +182,69 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 					}
 				}
 
+				// See if we have any unindexed repos
+				if (state.remoteIndexState.repos.some(repo => repo.status === CodeSearchRepoStatus.NotYetIndexed)) {
+					if (id !== this.currentUpdateRequestId) {
+						return;
+					}
+
+					return this._writeStatusItem({
+						title: {
+							title: state.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.NotYetIndexed)
+								? t('Codebase index not yet built')
+								: t('Codebase index not yet built for a repo in the workspace'),
+							learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
+						},
+						details: {
+							message: `[${t`Build index`}](command:${buildRemoteIndexCommandId} "${t('Build Codebase Index')}")`,
+							busy: false,
+						}
+					});
+				}
+
+				// Show external ingest index status
+				if (state.remoteIndexState.externalIngestState?.status === CodeSearchRepoStatus.Ready) {
+					return this._writeStatusItem({
+						title: remotelyIndexedMessage,
+						details: undefined,
+					});
+				} else if (state.remoteIndexState.externalIngestState?.status === CodeSearchRepoStatus.BuildingIndex) {
+					return this._writeStatusItem({
+						title: remotelyIndexedMessage,
+						details: {
+							message: state.remoteIndexState.externalIngestState.progressMessage || t('Building'),
+							busy: true,
+						},
+					});
+				} else if (typeof state.remoteIndexState.externalIngestState !== 'undefined') {
+					// External indexing is enabled but not yet built
+					return this._writeStatusItem({
+						title: {
+							title: t('Index not yet built'),
+							learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
+						},
+						details: {
+							message: `[${t`Build index`}](command:${buildRemoteIndexCommandId} "${t('Build Codebase Index')}")`,
+							busy: false,
+						}
+					});
+				}
+
 				break;
 			}
 			case 'disabled': {
-				return this._writeStatusItem({
-					title: {
-						title: t('Codebase index not available'),
-						learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
-					},
-					details: undefined
-				});
+				// fallthrough
+				break;
 			}
 		}
+
+		this._writeStatusItem({
+			title: {
+				title: t('Codebase index not available'),
+				learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
+			},
+			details: undefined
+		});
 	}
 
 	private _writeStatusItem(values: ChatStatusItemState | undefined) {
