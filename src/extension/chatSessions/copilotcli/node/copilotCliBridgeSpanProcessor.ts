@@ -227,7 +227,7 @@ export class CopilotCliBridgeSpanProcessor implements SpanProcessor {
 			name: span.name,
 			spanId: ctx.spanId,
 			traceId: ctx.traceId,
-			parentSpanId: (span as ReadableSpan & { parentSpanId?: string }).parentSpanId,
+			parentSpanId: span.parentSpanContext?.spanId,
 			startTime: hrTimeToMs(span.startTime),
 			endTime: hrTimeToMs(span.endTime),
 			status: {

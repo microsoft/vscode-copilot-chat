@@ -44,7 +44,7 @@ export class SqliteSpanExporter implements SpanExporter {
  */
 function readableSpanToCompletedSpanData(span: ReadableSpan): ICompletedSpanData {
 	const ctx = span.spanContext();
-	const parentSpanId = (span as ReadableSpan & { parentSpanId?: string }).parentSpanId || undefined;
+	const parentSpanId = span.parentSpanContext?.spanId;
 
 	// Convert HrTime [seconds, nanoseconds] to epoch ms
 	const startTime = hrTimeToMs(span.startTime);
