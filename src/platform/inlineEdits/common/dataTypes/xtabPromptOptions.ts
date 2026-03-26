@@ -377,7 +377,7 @@ export const LINT_OPTIONS_VALIDATOR: IValidator<LintOptions> = vObj({
 	'showCode': vRequired(vEnum(LintOptionShowCode.NO, LintOptionShowCode.YES, LintOptionShowCode.YES_WITH_SURROUNDING)),
 	'maxLints': vRequired(vNumber()),
 	'maxLineDistance': vRequired(vNumber()),
-	'nRecentFiles': vRequired(vNumber()),
+	'nRecentFiles': vNumber(),
 });
 
 export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vObj({
@@ -391,6 +391,10 @@ export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vOb
 	'supportsNextCursorLinePrediction': vUnion(vBoolean(), vUndefined()),
 });
 
+export const DEFAULT_LINT_OPTIONS_VALUES: Pick<LintOptions, 'nRecentFiles'> = {
+	nRecentFiles: 0,
+};
+
 export function parseLintOptionString(optionString: string): LintOptions | undefined {
 	try {
 		const parsed = JSON.parse(optionString);
@@ -400,7 +404,7 @@ export function parseLintOptionString(optionString: string): LintOptions | undef
 			throw new Error(`Lint options validation failed: ${lintValidation.error.message}`);
 		}
 
-		return lintValidation.content;
+		return { ...DEFAULT_LINT_OPTIONS_VALUES, ...lintValidation.content };
 	} catch (e) {
 		throw new Error(`Failed to parse lint options string: ${e}`);
 	}
