@@ -117,7 +117,7 @@ export class XtabNextCursorPredictor {
 
 		// Get lint diagnostics if enabled for cursor prediction
 		const lintOptions = this.determineLintOptions();
-		const lintErrors = new LintErrors(promptPieces.activeDoc.id, promptPieces.currentDocument, this.langDiagService);
+		const lintErrors = new LintErrors(promptPieces.activeDoc.id, promptPieces.currentDocument, this.langDiagService, promptPieces.xtabHistory);
 
 		const includeLineNumbersInRecentSnippets = backwardCompatSetting<boolean, xtabPromptOptions.IncludeLineNumbersOption>(
 			this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionRecentSnippetsIncludeLineNumbers, this.expService),
@@ -263,12 +263,12 @@ export class XtabNextCursorPredictor {
 	private determineLintOptions(): xtabPromptOptions.LintOptions | undefined {
 		const localLintOptions = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionLintOptions);
 		if (localLintOptions) {
-			return localLintOptions;
+			return { ...DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS, ...localLintOptions };
 		}
 
 		const expLintOptions = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionLintOptionsString, this.expService);
 		if (expLintOptions) {
-			return parseLintOptionString(expLintOptions);
+			return parseLintOptionString(expLintOptions, DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS);
 		}
 
 		return DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS;

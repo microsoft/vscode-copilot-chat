@@ -2,7 +2,7 @@
 	"files.trimTrailingWhitespace": true,
 	"[typescript]": {
 		"editor.insertSpaces": false,
-		"editor.defaultFormatter": "TypeScriptTeam.native-preview",
+		"editor.defaultFormatter": "vscode.typescript-language-features",
 		"editor.formatOnSave": true,
 		"editor.codeActionsOnSave": {
 			"source.organizeImports": "always"
