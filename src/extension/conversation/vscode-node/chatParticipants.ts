@@ -266,6 +266,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 			}
 
 			markChatExt(request.sessionId, ChatExtPerfMark.DidHandleParticipant);
+			clearChatExtMarks(request.sessionId);
 			return result;
 		};
 	}
