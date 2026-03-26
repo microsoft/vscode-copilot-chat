@@ -327,7 +327,8 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	}
 
 	getSessionDir(sessionId: string): URI | undefined {
-		return this._activeSessions.get(sessionId)?.sessionDir;
+		const dir = this._getDebugLogsDir();
+		return dir ? URI.joinPath(dir, sessionId) : undefined;
 	}
 
 	getActiveSessionIds(): string[] {

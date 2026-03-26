@@ -5,6 +5,7 @@
 
 import { BasePromptElementProps, Chunk, Document, PromptElement, PromptPiece, PromptPieceChild, PromptSizing, Raw, SystemMessage, TokenLimit, UserMessage } from '@vscode/prompt-tsx';
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
+import { sessionResourceToId } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
@@ -114,6 +115,9 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			</SystemMessage>
 		</>;
 		const isAutopilot = this.props.promptContext.request?.permissionLevel === 'autopilot';
+		const sessionResource = this.props.promptContext.request?.sessionResource;
+		const sessionId = sessionResource ? sessionResourceToId(sessionResource) : undefined;
+		const templateVariablesContext = this.promptVariablesService.buildTemplateVariablesContext(sessionId);
 		const baseInstructions = <>
 			{!omitBaseAgentInstructions && baseAgentInstructions}
 			{await this.getAgentCustomInstructions()}
@@ -121,6 +125,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				When you have fully completed the task, call the task_complete tool to signal that you are done.<br />
 				IMPORTANT: Before calling task_complete, you MUST provide a brief text summary of what was accomplished in your message. The task is not complete until both the summary and the task_complete call are present.
 			</SystemMessage>}
+			{templateVariablesContext && <SystemMessage>{templateVariablesContext}</SystemMessage>}
 			<UserMessage>
 				{await this.getOrCreateGlobalAgentContext(this.props.endpoint)}
 			</UserMessage>
