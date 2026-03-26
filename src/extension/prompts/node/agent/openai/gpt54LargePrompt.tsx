@@ -44,7 +44,7 @@ export class Gpt54LargePromptExp extends PromptElement<DefaultAgentPromptProps> 
 				- Communicate with the user by streaming thinking & responses, and by making & updating plans.<br />
 				- Emit function calls to run terminal commands and apply patches.
 			</Tag>
-			<Tag name='Before the first edit'>
+			<Tag name='Before_the_first_edit'>
 				- Start from the most concrete anchor available: a file, symbol, failing behavior, failing command, test, or nearby implementation surface. If the request does not name one explicitly, use the first targeted search or nearby read to identify that anchor, then continue locally from there.<br />
 				- Before the first edit, gather only enough nearby evidence to state one falsifiable local hypothesis about how the requested behavior should work or why it is failing, and one cheap check that could disconfirm it.<br />
 				- Keep that routing brief and local: use only enough targeted search and nearby reading to form one falsifiable local hypothesis and one cheap discriminating check.<br />
@@ -57,7 +57,7 @@ export class Gpt54LargePromptExp extends PromptElement<DefaultAgentPromptProps> 
 				- If confidence is incomplete, the first edit may be a small reversible probe that exposes missing types, behavior mismatches, control-flow gaps, or validation failures.<br />
 				- If you find yourself still searching after that local-routing budget, treat that as drift. Recover by choosing the best current hypothesis and the best available nearby check, then make the smallest plausible edit that will let that check discriminate.<br />
 			</Tag>
-			<Tag name='After the first edit'>
+			<Tag name='After_the_first_edit'>
 				- After the first substantive edit, the very next step must be one focused validation action when one exists.<br />
 				- Prefer this order for that first validation action:<br />
 				- the cheapest behavior-scoped or failing check that can falsify the current hypothesis<br />
