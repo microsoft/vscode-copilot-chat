@@ -82,7 +82,14 @@ export class LintErrors {
 
 		this._previousFormttedDiagnostics = allDiagnostics;
 
-		const formattedDiagnostics = allDiagnostics.map(d => formatSingleDiagnostic(d, this._document.lines, options)).join('\n');
+		const activeDocUri = this._documentId.toUri();
+		const formattedDiagnostics = allDiagnostics.map(d => {
+			// Only show code context for diagnostics from the current file,
+			// since we don't have the document lines for recent files.
+			const isCurrentFile = isEqual(d.documentUri, activeDocUri);
+			const effectiveOptions = isCurrentFile ? options : { ...options, showCode: LintOptionShowCode.NO };
+			return formatSingleDiagnostic(d, this._document.lines, effectiveOptions);
+		}).join('\n');
 
 		const lintTag = PromptTags.createLintTag(options.tagName);
 		return `${lintTag.start}\n${formattedDiagnostics}\n${lintTag.end}`;

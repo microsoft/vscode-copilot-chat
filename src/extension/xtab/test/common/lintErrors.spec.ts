@@ -1231,5 +1231,31 @@ describe('LintErrors', () => {
 			const result = lintErrors.getFormattedLintErrors({ ...defaultLintOptions, nRecentFiles: 5 });
 			expect(result).toContain('Current file error');
 		});
+
+		it('should not show code context for recent file diagnostics', () => {
+			const document = createDocument(['current line 0', 'current line 1', 'current line 2'], 2, 1);
+			diagnosticsService.setDiagnostics(fileUri, [
+				{ message: 'Current error', range: new Range(0, 0, 0, 14), severity: DiagnosticSeverity.Error }
+			]);
+			diagnosticsService.setDiagnostics(otherFileUri, [
+				{ message: 'Other error', range: new Range(0, 0, 0, 10), severity: DiagnosticSeverity.Error }
+			]);
+
+			const history: IXtabHistoryEntry[] = [createHistoryEntry(otherFileId)];
+			const lintErrors = createLintErrorsWithHistory(document, history);
+
+			const result = lintErrors.getFormattedLintErrors({
+				...defaultLintOptions,
+				showCode: LintOptionShowCode.YES_WITH_SURROUNDING,
+				nRecentFiles: 1,
+			});
+			// Current file diagnostic should have code context
+			expect(result).toContain('current line 0');
+			// Recent file diagnostic should NOT show current file lines as code context
+			expect(result).toContain('Other error');
+			// Only one occurrence of current file content (from the current file diagnostic, not from recent)
+			const currentLineCount = (result.match(/current line 0/g) || []).length;
+			expect(currentLineCount).toBe(1);
+		});
 	});
 });
