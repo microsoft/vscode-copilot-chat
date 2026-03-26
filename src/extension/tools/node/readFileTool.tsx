@@ -25,7 +25,7 @@ import { dirname, extUriBiasedIgnorePathCase, joinPath } from '../../../util/vs/
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult, Location, MarkdownString, Range } from '../../../vscodeTypes';
-import { SessionReferenceScheme } from '../../prompt/common/chatVariablesCollection';
+import { isSessionReferenceScheme } from '../../prompt/common/chatVariablesCollection';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { BinaryFileHexdump, hexdumpIfBinary } from '../../prompts/node/panel/binaryFileHexdump';
@@ -332,7 +332,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 
 		// Replace the session log placeholder for the troubleshoot skill
 		if (uri.scheme === 'copilot-skill' && uri.path.includes('/troubleshoot/')) {
-			const sessionRefs = this._promptContext?.request?.references?.filter(ref => URI.isUri(ref.value) && ref.value.scheme === SessionReferenceScheme) ?? [];
+			const sessionRefs = this._promptContext?.request?.references?.filter(ref => URI.isUri(ref.value) && isSessionReferenceScheme(ref.value.scheme)) ?? [];
 			const sessionResources = sessionRefs.length > 0
 				? sessionRefs.map(ref => ref.value as URI)
 				: (this._promptContext?.request?.sessionResource ? [this._promptContext.request.sessionResource] : []);

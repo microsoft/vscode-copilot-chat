@@ -131,13 +131,20 @@ export function isCustomizationsIndex(variable: PromptVariable): variable is Pro
 export const CustomizationsIndexId = 'vscode.customizations.index';
 
 /**
- * URI scheme used by VS Code core for chat session references.
+ * URI schemes used for chat session references.
  */
-export const SessionReferenceScheme = 'vscode-chat-session';
+export const SessionReferenceSchemes: ReadonlySet<string> = new Set(['vscode-chat-session', 'copilotcli', 'claude-code']);
+
+/**
+ * Check if a URI scheme identifies a chat session reference.
+ */
+export function isSessionReferenceScheme(scheme: string): boolean {
+	return SessionReferenceSchemes.has(scheme);
+}
 
 /**
  * Check if provided variable is a session reference.
  */
 export function isSessionReference(variable: PromptVariable): variable is PromptVariable & { value: vscode.Uri } {
-	return URI.isUri(variable.value) && variable.value.scheme === SessionReferenceScheme;
+	return URI.isUri(variable.value) && isSessionReferenceScheme(variable.value.scheme);
 }

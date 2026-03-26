@@ -51,7 +51,7 @@ import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { IToolGrouping, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
-import { ChatVariablesCollection, SessionReferenceScheme } from '../common/chatVariablesCollection';
+import { ChatVariablesCollection, isSessionReferenceScheme } from '../common/chatVariablesCollection';
 import { AnthropicTokenUsageMetadata, Conversation, getUniqueReferences, GlobalContextMessageMetadata, IResultMetadata, RenderedUserMessageMetadata, RequestDebugInformation, ResponseStreamParticipant, Turn, TurnStatus } from '../common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../common/intents';
 import { isToolCallLimitCancellation, ISwitchToAutoOnRateLimitConfirmation } from '../common/specialRequestTypes';
@@ -140,7 +140,7 @@ export class DefaultIntentRequestHandler {
 			// This enables explicit linking between the parent's runSubagent tool call and the subagent trajectory.
 			// For main requests, use the VS Code chat sessionId directly as the trajectory session ID.
 			const isSubagent = !!this.request.subAgentInvocationId;
-			const sessionRefs = this.request.references.filter(ref => URI.isUri(ref.value) && ref.value.scheme === SessionReferenceScheme);
+			const sessionRefs = this.request.references.filter(ref => URI.isUri(ref.value) && isSessionReferenceScheme(ref.value.scheme));
 			const debugTargetSessionIds = sessionRefs.length > 0 ? sessionRefs.map(ref => sessionResourceToId(ref.value as URI)) : undefined;
 			const capturingToken = new CapturingToken(
 				this.request.prompt,
