@@ -6,17 +6,21 @@
 import { promises as fs } from 'fs';
 import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { RelativePattern } from '../../../platform/filesystem/common/fileTypes';
 import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { parseGitChangesRaw } from '../../../platform/git/vscode-node/utils';
 import { DiffChange } from '../../../platform/git/vscode/git';
 import { ILogService } from '../../../platform/log/common/logService';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { SequencerByKey } from '../../../util/vs/base/common/async';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableResourceMap, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
+import { autorun } from '../../../util/vs/base/common/observableInternal';
 import * as path from '../../../util/vs/base/common/path';
 import { isEqual } from '../../../util/vs/base/common/resources';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IAgentSessionsWorkspace } from '../common/agentSessionsWorkspace';
 import { IChatSessionMetadataStore, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { ChatSessionWorktreeFile } from '../common/chatSessionWorktreeService';
@@ -33,12 +37,15 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 	private recentFolders: { folder: vscode.Uri; lastAccessTime: number }[] = [];
 	private readonly deletedFolders = new ResourceSet();
 	private readonly workspaceChangesSequencer = new SequencerByKey<string>();
+	private readonly repoStateSubscriptions = this._register(new DisposableResourceMap());
 
 	constructor(
 		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
 		@IChatSessionMetadataStore private readonly metadataStore: IChatSessionMetadataStore,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+		@IAgentSessionsWorkspace private readonly agentSessionsWorkspace: IAgentSessionsWorkspace,
 	) {
 		super();
 	}
@@ -89,7 +96,7 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 	}
 
 	async handleRequestCompleted(workspaceFolderUri: vscode.Uri): Promise<void> {
-		if (!vscode.workspace.isAgentSessionsWorkspace) {
+		if (!this.agentSessionsWorkspace.isAgentSessionsWorkspace) {
 			// Stage all changes
 			await this.gitService.add(workspaceFolderUri, []);
 		}
@@ -111,10 +118,13 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 				return [];
 			}
 
+			// Subscribe to repository state changes to invalidate the cache
+			this.subscribeToRepoStateChanges(workspaceFolderUri, repository);
+
 			// Workspace changes are handled differently in the Sessions app,
 			// where all changes remain in the working tree and are not being
 			// staged.
-			const changes = vscode.workspace.isAgentSessionsWorkspace
+			const changes = this.agentSessionsWorkspace.isAgentSessionsWorkspace
 				? await this.getWorkspaceChangesFromWorkingtree(repository)
 				: await this.getWorkspaceChangesFromIndex(repository);
 
@@ -211,5 +221,31 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 
 	clearWorkspaceChanges(workspaceFolderUri: vscode.Uri): void {
 		this.workspaceFolderChanges.delete(workspaceFolderUri);
+	}
+
+	private subscribeToRepoStateChanges(workspaceFolderUri: vscode.Uri, repository: RepoContext): void {
+		if (this.repoStateSubscriptions.has(workspaceFolderUri)) {
+			return;
+		}
+
+		const disposables = new DisposableStore();
+
+		// Invalidate cache when the HEAD commit changes (e.g. after a commit, checkout, merge, rebase)
+		disposables.add(autorun(reader => {
+			repository.headCommitHashObs.read(reader);
+			this.workspaceFolderChanges.delete(workspaceFolderUri);
+		}));
+
+		// Invalidate cache when files change in the workspace folder
+		const watcher = this.fileSystemService.createFileSystemWatcher(new RelativePattern(workspaceFolderUri, '**'));
+		disposables.add(watcher);
+		const onFileChange = () => {
+			this.workspaceFolderChanges.delete(workspaceFolderUri);
+		};
+		disposables.add(watcher.onDidChange(onFileChange));
+		disposables.add(watcher.onDidCreate(onFileChange));
+		disposables.add(watcher.onDidDelete(onFileChange));
+
+		this.repoStateSubscriptions.set(workspaceFolderUri, disposables);
 	}
 }
