@@ -56,7 +56,7 @@ describe('ChatReplayNotebookSerializer', () => {
 		it('creates notebook cells from a real logger export with prompt, tool call, and response', async () => {
 			// This test validates the full pipeline using the TestRequestLogger
 			// It should catch any changes to the request logger export format that break the notebook parser
-			const userPromptToken = new CapturingToken('create a hello world file', 'comment', false);
+			const userPromptToken = new CapturingToken('create a hello world file', 'comment');
 
 			await logger.captureInvocation(userPromptToken, async () => {
 				// 1. Tool call - creates the file
@@ -123,7 +123,7 @@ describe('ChatReplayNotebookSerializer', () => {
 			// This tests the real response format from model completions
 			// ChatMLSuccess entries have response: { type: 'success', message: 'the text' }
 			// We use TestRequestLogger.addEntry() with a ChatMLSuccess entry to test the real pipeline
-			const userPromptToken = new CapturingToken('test query', 'comment', false);
+			const userPromptToken = new CapturingToken('test query', 'comment');
 
 			await logger.captureInvocation(userPromptToken, async () => {
 				// Create a ChatMLSuccess entry with a mock result - this matches how real model responses are logged
@@ -264,13 +264,13 @@ describe('ChatReplayNotebookSerializer', () => {
 
 		it('creates notebook cells for multiple prompts with mixed entry types', async () => {
 			// First prompt
-			const firstToken = new CapturingToken('what files are in this directory?', 'comment', false);
+			const firstToken = new CapturingToken('what files are in this directory?', 'comment');
 			await logger.captureInvocation(firstToken, async () => {
 				logger.logToolCall('tool-1', 'list_dir', { path: '/workspace' }, createMockToolResult('file1.ts\nfile2.ts\nREADME.md'));
 			});
 
 			// Second prompt
-			const secondToken = new CapturingToken('read the README file', 'comment', false);
+			const secondToken = new CapturingToken('read the README file', 'comment');
 			await logger.captureInvocation(secondToken, async () => {
 				logger.logToolCall('tool-2', 'read_file', { path: '/workspace/README.md' }, createMockToolResult('# My Project\n\nThis is a test project.'));
 
@@ -323,7 +323,7 @@ describe('ChatReplayNotebookSerializer', () => {
 			});
 
 			// Add an entry with a token
-			const userToken = new CapturingToken('test prompt', 'comment', false);
+			const userToken = new CapturingToken('test prompt', 'comment');
 			await logger.captureInvocation(userToken, async () => {
 				logger.logToolCall('tool-1', 'test_tool', {}, { content: [] });
 			});
@@ -337,7 +337,7 @@ describe('ChatReplayNotebookSerializer', () => {
 		});
 
 		it('preserves tool call arguments and response in exported JSON', async () => {
-			const token = new CapturingToken('search for something', 'comment', false);
+			const token = new CapturingToken('search for something', 'comment');
 
 			const toolArgs = {
 				query: 'find me files',
@@ -591,7 +591,7 @@ describe('chatReplayExport', () => {
 
 	describe('createChatReplayExport', () => {
 		it('creates valid export structure', async () => {
-			const token = new CapturingToken('test prompt', 'comment', false);
+			const token = new CapturingToken('test prompt', 'comment');
 			await logger.captureInvocation(token, async () => {
 				logger.logToolCall('t1', 'test_tool', { arg: 'value' }, { content: [] });
 			});
@@ -617,7 +617,7 @@ describe('chatReplayExport', () => {
 
 	describe('serializeChatReplayExport', () => {
 		it('produces valid JSON', async () => {
-			const token = new CapturingToken('prompt', 'comment', false);
+			const token = new CapturingToken('prompt', 'comment');
 			await logger.captureInvocation(token, async () => {
 				logger.logToolCall('t1', 'tool', {}, { content: [] });
 			});
