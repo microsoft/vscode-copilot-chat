@@ -52,16 +52,27 @@ export class AtifExportCommands extends Disposable implements IExtensionContribu
 	}
 
 	private async _export(saveDir?: vscode.Uri): Promise<void> {
-		// Get the active chat session — works in both interactive and eval harness
-		// (eval harness opens chat via workbench.action.chat.open, so the panel is active)
+		// Get the active chat session.
+		// Strategy 1: activeChatPanelSessionResource (works for sidebar chat sessions)
+		// Strategy 2: Most recent agent session from SQLite (fallback for copilotcli/claude-code
+		//             sessions that render in editors, where the panel API returns undefined)
+		let sessionId: string | undefined;
 		const sessionResource = vscode.window.activeChatPanelSessionResource;
-		if (!sessionResource) {
-			if (!saveDir) {
-				vscode.window.showInformationMessage('No active chat session. Open a chat session first.');
-			}
+		if (sessionResource) {
+			sessionId = decodeSessionId(sessionResource);
+		} else {
+			// Fallback: find the most recent agent session from SQLite
+			const sessions = this._sqliteStore.getSessions();
+			sessionId = sessions
+				.filter(s => s.span_count > 1)
+				.sort((a, b) => b.started_at - a.started_at)[0]
+				?.session_id;
+		}
+
+		if (!sessionId) {
+			vscode.window.showInformationMessage('No active chat session. Open a chat session first.');
 			return;
 		}
-		const sessionId = decodeSessionId(sessionResource);
 
 		// Get traces for this session
 		const traceIds = this._sqliteStore.getTraceIds(sessionId);
@@ -86,9 +97,7 @@ export class AtifExportCommands extends Disposable implements IExtensionContribu
 		}
 
 		if (!mainTrajectory) {
-			if (!saveDir) {
-				vscode.window.showInformationMessage('No agent trajectories found to export.');
-			}
+			vscode.window.showInformationMessage('No agent trajectories found to export.');
 			return;
 		}
 
