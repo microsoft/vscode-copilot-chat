@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Uri } from 'vscode';
+import { IRunCommandExecutionService } from '../../../../platform/commands/common/runCommandExecutionService';
 import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { SKILLS_LOCATION_KEY } from '../../../../platform/customInstructions/common/promptTypes';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
@@ -24,7 +25,7 @@ import { IChatPromptFileService } from '../../common/chatPromptFileService';
 
 export interface ICopilotCLISkills {
 	readonly _serviceBrand: undefined;
-	getSkillsLocations(): Uri[];
+	getSkillsLocations(): Promise<Uri[]>;
 }
 
 export const ICopilotCLISkills = createServiceIdentifier<ICopilotCLISkills>('ICopilotCLISkills');
@@ -38,16 +39,31 @@ export class CopilotCLISkills extends Disposable implements ICopilotCLISkills {
 		@INativeEnvService private readonly envService: INativeEnvService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IChatPromptFileService private readonly chatPromptFileService: IChatPromptFileService,
+		@IRunCommandExecutionService private readonly commandService: IRunCommandExecutionService,
 	) {
 		super();
 	}
 
-	public getSkillsLocations(): Uri[] {
-		// Get additional skill locations from config
+	public async getSkillsLocations(): Promise<Uri[]> {
 		const configSkillLocationUris = new ResourceSet();
-		const locations = this.configurationService.getNonExtensionConfig<Record<string, boolean>>(SKILLS_LOCATION_KEY);
 		const userHome = this.envService.userHome;
 		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
+
+		// Include built-in skill/prompt directories bundled with the application.
+		// In the Sessions app these resolve to vs/sessions/skills/ and vs/sessions/prompts/.
+		try {
+			const builtinDirs = await this.commandService.executeCommand('vscode.builtinPromptDirectories') as { uri: URI }[] | undefined;
+			if (builtinDirs) {
+				for (const dir of builtinDirs) {
+					configSkillLocationUris.add(URI.revive(dir.uri));
+				}
+			}
+		} catch (e) {
+			this.logService.warn(`[CopilotCLISkills] Failed to fetch built-in prompt directories: ${e}`);
+		}
+
+		// Include additional skill locations from config
+		const locations = this.configurationService.getNonExtensionConfig<Record<string, boolean>>(SKILLS_LOCATION_KEY);
 		if (isObject(locations)) {
 			for (const key in locations) {
 				const location = key.trim();

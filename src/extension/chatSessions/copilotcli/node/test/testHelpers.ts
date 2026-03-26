@@ -42,8 +42,8 @@ export class MockSkillLocations implements ICopilotCLISkills {
 	constructor(locations: Uri[] = []) {
 		this.locations = locations;
 	}
-	getSkillsLocations(): Uri[] {
-		return this.locations;
+	getSkillsLocations(): Promise<Uri[]> {
+		return Promise.resolve(this.locations);
 	}
 }
 

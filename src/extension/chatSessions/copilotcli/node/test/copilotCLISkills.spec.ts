@@ -96,46 +96,46 @@ describe('CopilotCLISkills', () => {
 		return skills;
 	}
 
-	it('returns empty array when no config and no skills', () => {
+	it('returns empty array when no config and no skills', async () => {
 		const skills = createSkills();
-		expect(skills.getSkillsLocations()).toEqual([]);
+		expect(await skills.getSkillsLocations()).toEqual([]);
 	});
 
-	it('expands tilde-prefixed paths using user home directory', () => {
+	it('expands tilde-prefixed paths using user home directory', async () => {
 		const userHome = URI.file('/home/user');
 		const skills = createSkills({
 			configLocations: { '~/my-skills': true },
 			userHome,
 		});
 
-		const locations = skills.getSkillsLocations();
+		const locations = await skills.getSkillsLocations();
 		expect(locations).toHaveLength(1);
 		expect(locations[0].path).toBe('/home/user/my-skills');
 	});
 
-	it('handles absolute paths', () => {
+	it('handles absolute paths', async () => {
 		const skills = createSkills({
 			configLocations: { '/absolute/skills/path': true },
 		});
 
-		const locations = skills.getSkillsLocations();
+		const locations = await skills.getSkillsLocations();
 		expect(locations).toHaveLength(1);
 		expect(locations[0].path).toBe('/absolute/skills/path');
 	});
 
-	it('joins relative paths to each workspace folder', () => {
+	it('joins relative paths to each workspace folder', async () => {
 		const skills = createSkills({
 			configLocations: { 'relative/skills': true },
 			workspaceFolders: [URI.file('/workspace1'), URI.file('/workspace2')],
 		});
 
-		const locations = skills.getSkillsLocations();
+		const locations = await skills.getSkillsLocations();
 		expect(locations).toHaveLength(2);
 		expect(locations[0].path).toBe('/workspace1/relative/skills');
 		expect(locations[1].path).toBe('/workspace2/relative/skills');
 	});
 
-	it('ignores config entries with value !== true', () => {
+	it('ignores config entries with value !== true', async () => {
 		const skills = createSkills({
 			configLocations: {
 				'/included': true,
@@ -143,35 +143,35 @@ describe('CopilotCLISkills', () => {
 			},
 		});
 
-		const locations = skills.getSkillsLocations();
+		const locations = await skills.getSkillsLocations();
 		expect(locations).toHaveLength(1);
 		expect(locations[0].path).toBe('/included');
 	});
 
-	it('includes parent-of-parent directories of file-scheme skills', () => {
+	it('includes parent-of-parent directories of file-scheme skills', async () => {
 		const skills = createSkills({
 			skills: [
 				{ uri: URI.file('/skills/myskill/SKILL.md') } as ChatResource,
 			],
 		});
 
-		const locations = skills.getSkillsLocations();
+		const locations = await skills.getSkillsLocations();
 		expect(locations).toHaveLength(1);
 		expect(locations[0].path).toBe('/skills');
 	});
 
-	it('filters out non-file-scheme skills', () => {
+	it('filters out non-file-scheme skills', async () => {
 		const skills = createSkills({
 			skills: [
 				{ uri: URI.parse('copilot-skill:/remote/skill/SKILL.md') } as ChatResource,
 			],
 		});
 
-		const locations = skills.getSkillsLocations();
+		const locations = await skills.getSkillsLocations();
 		expect(locations).toHaveLength(0);
 	});
 
-	it('deduplicates locations from config and skills', () => {
+	it('deduplicates locations from config and skills', async () => {
 		const skills = createSkills({
 			configLocations: { '/skills': true },
 			skills: [
@@ -180,12 +180,12 @@ describe('CopilotCLISkills', () => {
 			],
 		});
 
-		const locations = skills.getSkillsLocations();
+		const locations = await skills.getSkillsLocations();
 		expect(locations).toHaveLength(1);
 		expect(locations[0].path).toBe('/skills');
 	});
 
-	it('deduplicates duplicate config entries', () => {
+	it('deduplicates duplicate config entries', async () => {
 		const skills = createSkills({
 			configLocations: {
 				'/same/path': true,
@@ -194,14 +194,14 @@ describe('CopilotCLISkills', () => {
 			workspaceFolders: [URI.file('/same')],
 		});
 
-		const locations = skills.getSkillsLocations();
+		const locations = await skills.getSkillsLocations();
 		// Absolute '/same/path' and relative 'path' joined to workspace '/same'
 		// both resolve to '/same/path', so the result should be deduplicated.
 		expect(locations).toHaveLength(1);
 		expect(locations[0].path).toBe('/same/path');
 	});
 
-	it('handles multiple skills deriving to same parent directory', () => {
+	it('handles multiple skills deriving to same parent directory', async () => {
 		const skills = createSkills({
 			skills: [
 				{ uri: URI.file('/skills/skill1/SKILL.md') } as ChatResource,
@@ -209,13 +209,13 @@ describe('CopilotCLISkills', () => {
 			],
 		});
 
-		const locations = skills.getSkillsLocations();
+		const locations = await skills.getSkillsLocations();
 		// Both resolve to /skills via dirname(dirname())
 		expect(locations).toHaveLength(1);
 		expect(locations[0].path).toBe('/skills');
 	});
 
-	it('combines config locations and skills locations', () => {
+	it('combines config locations and skills locations', async () => {
 		const skills = createSkills({
 			configLocations: { '/config-skills': true },
 			skills: [
@@ -223,19 +223,19 @@ describe('CopilotCLISkills', () => {
 			],
 		});
 
-		const locations = skills.getSkillsLocations();
+		const locations = await skills.getSkillsLocations();
 		expect(locations).toHaveLength(2);
 		const paths = locations.map(l => l.path);
 		expect(paths).toContain('/config-skills');
 		expect(paths).toContain('/prompt-skills');
 	});
 
-	it('ignores empty or whitespace-only config keys', () => {
+	it('ignores empty or whitespace-only config keys', async () => {
 		const skills = createSkills({
 			configLocations: { '  ': true, '': true, '/valid': true },
 		});
 
-		const locations = skills.getSkillsLocations();
+		const locations = await skills.getSkillsLocations();
 		// Empty string after trim is not absolute, not ~/,
 		// so goes to relative path. But it's just whitespace.
 		// The code trims and checks - empty string is not '~/' prefixed, not absolute,
@@ -245,7 +245,7 @@ describe('CopilotCLISkills', () => {
 		expect(validLocations).toHaveLength(1);
 	});
 
-	it('returns empty when config is not an object', () => {
+	it('returns empty when config is not an object', async () => {
 		const configService = new InMemoryConfigurationService(baseConfigurationService);
 		configService.setNonExtensionConfig(SKILLS_LOCATION_KEY, 'not-an-object');
 
@@ -260,6 +260,6 @@ describe('CopilotCLISkills', () => {
 		);
 		disposables.add(skillsService);
 
-		expect(skillsService.getSkillsLocations()).toEqual([]);
+		expect(await skillsService.getSkillsLocations()).toEqual([]);
 	});
 });
