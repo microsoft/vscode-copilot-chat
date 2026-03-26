@@ -2670,11 +2670,6 @@
 				"icon": "$(export)"
 			},
 			{
-				"command": "github.copilot.chat.debug.exportATIFTrajectories",
-				"title": "Export Agent Trajectories (Harbor ATIF)",
-				"category": "Chat"
-			},
-			{
 				"command": "github.copilot.nes.captureExpected.start",
 				"title": "Record Expected Edit (NES)",
 				"category": "Copilot"
