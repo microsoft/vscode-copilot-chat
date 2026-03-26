@@ -5,7 +5,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CancellationToken, ChatHookResult, ChatHookType, ChatRequest, LanguageModelToolInformation } from 'vscode';
-import { IChatHookService, SessionStartHookInput, SubagentStartHookInput } from '../../../../platform/chat/common/chatHookService';
+import { IChatHookService, SessionStartHookInput, StopHookInput, SubagentStartHookInput, SubagentStopHookInput } from '../../../../platform/chat/common/chatHookService';
+import { NoopOTelService } from '../../../../platform/otel/common/noopOtelService';
+import { resolveOTelConfig } from '../../../../platform/otel/common/otelConfig';
+import { IOTelService } from '../../../../platform/otel/common/otelService';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
@@ -15,9 +18,6 @@ import { IBuildPromptContext } from '../../../prompt/common/intents';
 import { IBuildPromptResult, nullRenderPromptResult } from '../../../prompt/node/intents';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { IToolCallingLoopOptions, ToolCallingLoop } from '../../node/toolCallingLoop';
-import { NoopOTelService } from '../../../../platform/otel/common/noopOtelService';
-import { resolveOTelConfig } from '../../../../platform/otel/common/otelConfig';
-import { IOTelService } from '../../../../platform/otel/common/otelService';
 
 /**
  * Configurable mock implementation of IChatHookService for testing.
@@ -117,6 +117,15 @@ class TestToolCallingLoop extends ToolCallingLoop<IToolCallingLoopOptions> {
 	// Expose the protected method for testing
 	public async testRunStartHooks(token: CancellationToken): Promise<void> {
 		await this.runStartHooks(undefined, token);
+	}
+
+	// Expose the protected stop hook methods for testing
+	public async testExecuteStopHook(input: StopHookInput, sessionId: string, token: CancellationToken) {
+		return this.executeStopHook(input, sessionId, undefined, token);
+	}
+
+	public async testExecuteSubagentStopHook(input: SubagentStopHookInput, sessionId: string, token: CancellationToken) {
+		return this.executeSubagentStopHook(input, sessionId, undefined, token);
 	}
 
 	// Expose additionalHookContext for verification
@@ -744,5 +753,327 @@ describe('ToolCallingLoop SubagentStart hook', () => {
 			const additionalContext = loop.getAdditionalHookContext();
 			expect(additionalContext).toBeUndefined();
 		});
+	});
+});
+
+describe('ToolCallingLoop Stop hook', () => {
+	let disposables: DisposableStore;
+	let instantiationService: IInstantiationService;
+	let mockChatHookService: MockChatHookService;
+	let tokenSource: CancellationTokenSource;
+
+	beforeEach(() => {
+		disposables = new DisposableStore();
+		mockChatHookService = new MockChatHookService();
+
+		const serviceCollection = disposables.add(createExtensionUnitTestingServices());
+		serviceCollection.define(IChatHookService, mockChatHookService);
+		serviceCollection.define(IOTelService, new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })));
+
+		const accessor = serviceCollection.createTestingAccessor();
+		instantiationService = accessor.get(IInstantiationService);
+
+		tokenSource = new CancellationTokenSource();
+		disposables.add(tokenSource);
+	});
+
+	afterEach(() => {
+		disposables.dispose();
+		vi.restoreAllMocks();
+	});
+
+	it('should return shouldContinue=false when no hooks are configured', async () => {
+		const conversation = createTestConversation(1);
+		const request = createMockChatRequest();
+
+		const loop = instantiationService.createInstance(
+			TestToolCallingLoop,
+			{ conversation, toolCallLimit: 10, request }
+		);
+		disposables.add(loop);
+
+		const result = await loop.testExecuteStopHook({ stop_hook_active: false }, 'session-1', tokenSource.token);
+		expect(result.shouldContinue).toBe(false);
+		expect(result.reasons).toBeUndefined();
+	});
+
+	it('should block when hook returns decision=block with hookSpecificOutput wrapper', async () => {
+		const conversation = createTestConversation(1);
+		const request = createMockChatRequest();
+
+		mockChatHookService.setHookResults('Stop', [
+			{
+				resultKind: 'success',
+				output: {
+					hookSpecificOutput: {
+						hookEventName: 'Stop',
+						decision: 'block',
+						reason: 'Tests are failing. Fix the implementation until all tests pass before finishing.',
+					},
+				},
+			},
+		]);
+
+		const loop = instantiationService.createInstance(
+			TestToolCallingLoop,
+			{ conversation, toolCallLimit: 10, request }
+		);
+		disposables.add(loop);
+
+		const result = await loop.testExecuteStopHook({ stop_hook_active: false }, 'session-1', tokenSource.token);
+		expect(result.shouldContinue).toBe(true);
+		expect(result.reasons).toEqual(['Tests are failing. Fix the implementation until all tests pass before finishing.']);
+	});
+
+	it('should allow stopping when hook returns decision other than block', async () => {
+		const conversation = createTestConversation(1);
+		const request = createMockChatRequest();
+
+		mockChatHookService.setHookResults('Stop', [
+			{
+				resultKind: 'success',
+				output: {
+					hookSpecificOutput: {
+						hookEventName: 'Stop',
+						// no decision field
+					},
+				},
+			},
+		]);
+
+		const loop = instantiationService.createInstance(
+			TestToolCallingLoop,
+			{ conversation, toolCallLimit: 10, request }
+		);
+		disposables.add(loop);
+
+		const result = await loop.testExecuteStopHook({ stop_hook_active: false }, 'session-1', tokenSource.token);
+		expect(result.shouldContinue).toBe(false);
+	});
+
+	it('should allow stopping when hookSpecificOutput is missing', async () => {
+		const conversation = createTestConversation(1);
+		const request = createMockChatRequest();
+
+		mockChatHookService.setHookResults('Stop', [
+			{
+				resultKind: 'success',
+				output: {},
+			},
+		]);
+
+		const loop = instantiationService.createInstance(
+			TestToolCallingLoop,
+			{ conversation, toolCallLimit: 10, request }
+		);
+		disposables.add(loop);
+
+		const result = await loop.testExecuteStopHook({ stop_hook_active: false }, 'session-1', tokenSource.token);
+		expect(result.shouldContinue).toBe(false);
+	});
+
+	it('should not block when decision is block but reason is missing', async () => {
+		const conversation = createTestConversation(1);
+		const request = createMockChatRequest();
+
+		mockChatHookService.setHookResults('Stop', [
+			{
+				resultKind: 'success',
+				output: {
+					hookSpecificOutput: {
+						decision: 'block',
+						// no reason
+					},
+				},
+			},
+		]);
+
+		const loop = instantiationService.createInstance(
+			TestToolCallingLoop,
+			{ conversation, toolCallLimit: 10, request }
+		);
+		disposables.add(loop);
+
+		const result = await loop.testExecuteStopHook({ stop_hook_active: false }, 'session-1', tokenSource.token);
+		expect(result.shouldContinue).toBe(false);
+	});
+
+	it('should collect blocking reasons from multiple hooks', async () => {
+		const conversation = createTestConversation(1);
+		const request = createMockChatRequest();
+
+		mockChatHookService.setHookResults('Stop', [
+			{
+				resultKind: 'success',
+				output: {
+					hookSpecificOutput: {
+						decision: 'block',
+						reason: 'Tests are failing.',
+					},
+				},
+			},
+			{
+				resultKind: 'success',
+				output: {
+					hookSpecificOutput: {
+						decision: 'block',
+						reason: 'Lint errors found.',
+					},
+				},
+			},
+		]);
+
+		const loop = instantiationService.createInstance(
+			TestToolCallingLoop,
+			{ conversation, toolCallLimit: 10, request }
+		);
+		disposables.add(loop);
+
+		const result = await loop.testExecuteStopHook({ stop_hook_active: false }, 'session-1', tokenSource.token);
+		expect(result.shouldContinue).toBe(true);
+		expect(result.reasons).toContain('Tests are failing.');
+		expect(result.reasons).toContain('Lint errors found.');
+	});
+
+	it('should collect error results as blocking reasons', async () => {
+		const conversation = createTestConversation(1);
+		const request = createMockChatRequest();
+
+		mockChatHookService.setHookResults('Stop', [
+			{
+				resultKind: 'error',
+				output: 'Hook script failed with exit code 2',
+			},
+		]);
+
+		const loop = instantiationService.createInstance(
+			TestToolCallingLoop,
+			{ conversation, toolCallLimit: 10, request }
+		);
+		disposables.add(loop);
+
+		const result = await loop.testExecuteStopHook({ stop_hook_active: false }, 'session-1', tokenSource.token);
+		expect(result.shouldContinue).toBe(true);
+		expect(result.reasons).toEqual(['Hook script failed with exit code 2']);
+	});
+
+	it('should handle hook service errors gracefully', async () => {
+		const conversation = createTestConversation(1);
+		const request = createMockChatRequest();
+
+		mockChatHookService.setHookError('Stop', new Error('Service unavailable'));
+
+		const loop = instantiationService.createInstance(
+			TestToolCallingLoop,
+			{ conversation, toolCallLimit: 10, request }
+		);
+		disposables.add(loop);
+
+		const result = await loop.testExecuteStopHook({ stop_hook_active: false }, 'session-1', tokenSource.token);
+		expect(result.shouldContinue).toBe(false);
+	});
+});
+
+describe('ToolCallingLoop SubagentStop hook', () => {
+	let disposables: DisposableStore;
+	let instantiationService: IInstantiationService;
+	let mockChatHookService: MockChatHookService;
+	let tokenSource: CancellationTokenSource;
+
+	beforeEach(() => {
+		disposables = new DisposableStore();
+		mockChatHookService = new MockChatHookService();
+
+		const serviceCollection = disposables.add(createExtensionUnitTestingServices());
+		serviceCollection.define(IChatHookService, mockChatHookService);
+		serviceCollection.define(IOTelService, new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })));
+
+		const accessor = serviceCollection.createTestingAccessor();
+		instantiationService = accessor.get(IInstantiationService);
+
+		tokenSource = new CancellationTokenSource();
+		disposables.add(tokenSource);
+	});
+
+	afterEach(() => {
+		disposables.dispose();
+		vi.restoreAllMocks();
+	});
+
+	it('should block when SubagentStop hook returns decision=block with hookSpecificOutput wrapper', async () => {
+		const conversation = createTestConversation(1);
+		const request = createMockChatRequest();
+
+		mockChatHookService.setHookResults('SubagentStop', [
+			{
+				resultKind: 'success',
+				output: {
+					hookSpecificOutput: {
+						hookEventName: 'SubagentStop',
+						decision: 'block',
+						reason: 'Subagent has not completed its task.',
+					},
+				},
+			},
+		]);
+
+		const loop = instantiationService.createInstance(
+			TestToolCallingLoop,
+			{ conversation, toolCallLimit: 10, request }
+		);
+		disposables.add(loop);
+
+		const result = await loop.testExecuteSubagentStopHook(
+			{ agent_id: 'agent-1', agent_type: 'execution', stop_hook_active: false },
+			'session-1',
+			tokenSource.token
+		);
+		expect(result.shouldContinue).toBe(true);
+		expect(result.reasons).toEqual(['Subagent has not completed its task.']);
+	});
+
+	it('should allow stopping when SubagentStop hookSpecificOutput is missing', async () => {
+		const conversation = createTestConversation(1);
+		const request = createMockChatRequest();
+
+		mockChatHookService.setHookResults('SubagentStop', [
+			{
+				resultKind: 'success',
+				output: {},
+			},
+		]);
+
+		const loop = instantiationService.createInstance(
+			TestToolCallingLoop,
+			{ conversation, toolCallLimit: 10, request }
+		);
+		disposables.add(loop);
+
+		const result = await loop.testExecuteSubagentStopHook(
+			{ agent_id: 'agent-1', agent_type: 'execution', stop_hook_active: false },
+			'session-1',
+			tokenSource.token
+		);
+		expect(result.shouldContinue).toBe(false);
+	});
+
+	it('should handle SubagentStop hook service errors gracefully', async () => {
+		const conversation = createTestConversation(1);
+		const request = createMockChatRequest();
+
+		mockChatHookService.setHookError('SubagentStop', new Error('Service unavailable'));
+
+		const loop = instantiationService.createInstance(
+			TestToolCallingLoop,
+			{ conversation, toolCallLimit: 10, request }
+		);
+		disposables.add(loop);
+
+		const result = await loop.testExecuteSubagentStopHook(
+			{ agent_id: 'agent-1', agent_type: 'execution', stop_hook_active: false },
+			'session-1',
+			tokenSource.token
+		);
+		expect(result.shouldContinue).toBe(false);
 	});
 });

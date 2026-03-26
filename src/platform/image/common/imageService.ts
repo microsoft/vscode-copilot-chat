@@ -20,11 +20,21 @@ export interface IImageService {
 	 * @returns Promise<URI> The URI of the uploaded image
 	 */
 	uploadChatImageAttachment(binaryData: Uint8Array, name: string, mimeType: string | undefined, token: string | undefined): Promise<URI>;
+
+	/**
+	 * Resize an image to reduce token consumption when sending to language models.
+	 * Returns the original data and MIME type unchanged if resizing is not available or fails.
+	 * The output MIME type may differ from the input (e.g. GIF/WebP inputs are re-encoded as PNG).
+	 */
+	resizeImage(data: Uint8Array, mimeType: string): Promise<{ data: Uint8Array; mimeType: string }>;
 }
 
 export const nullImageService: IImageService = {
 	_serviceBrand: undefined,
 	async uploadChatImageAttachment(): Promise<URI> {
 		throw new Error('Image service not implemented');
+	},
+	async resizeImage(data: Uint8Array, mimeType: string): Promise<{ data: Uint8Array; mimeType: string }> {
+		return { data, mimeType };
 	}
 };

@@ -18,7 +18,7 @@ export class NullBaseOctoKitService extends BaseOctoKitService {
 		return undefined;
 	}
 
-	override async _makeGHAPIRequest(routeSlug: string, method: 'GET' | 'POST', token: string, body?: { [key: string]: any }) {
+	override async _makeGHAPIRequest(routeSlug: string, method: 'GET' | 'POST', token: string, body?: { [key: string]: any }, options?: { silent404?: boolean }, callSite?: string) {
 		return undefined;
 	}
 

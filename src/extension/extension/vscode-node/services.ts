@@ -11,6 +11,7 @@ import { createStaticGitHubTokenProvider, getOrCreateTestingCopilotTokenManager 
 import { AuthenticationService } from '../../../platform/authentication/vscode-node/authenticationService';
 import { VSCodeCopilotTokenManager } from '../../../platform/authentication/vscode-node/copilotTokenManager';
 import { IChatAgentService } from '../../../platform/chat/common/chatAgents';
+import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { IChatHookService } from '../../../platform/chat/common/chatHookService';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { IHookExecutor } from '../../../platform/chat/common/hookExecutor';
@@ -33,13 +34,15 @@ import { INativeEnvService, isScenarioAutomation } from '../../../platform/env/c
 import { NativeEnvServiceImpl } from '../../../platform/env/vscode-node/nativeEnvServiceImpl';
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
+import { IGitService } from '../../../platform/git/common/gitService';
+import { GitServiceImpl } from '../../../platform/git/vscode-node/gitServiceImpl';
 import { GithubApiFetcherService, IGithubApiFetcherService } from '../../../platform/github/common/githubApiFetcherService';
 import { IGithubRepositoryService } from '../../../platform/github/common/githubService';
 import { GithubRepositoryService } from '../../../platform/github/node/githubRepositoryService';
 import { IIgnoreService, NullIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { VsCodeIgnoreService } from '../../../platform/ignore/vscode-node/ignoreService';
 import { IImageService } from '../../../platform/image/common/imageService';
-import { ImageServiceImpl } from '../../../platform/image/node/imageServiceImpl';
+import { VSCodeImageServiceImpl } from '../../../platform/image/vscode-node/imageServiceImpl';
 import { IInlineEditsModelService, IUndesiredModelsManager } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { InlineEditsModelService, UndesiredModels } from '../../../platform/inlineEdits/node/inlineEditsModelService';
 import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
@@ -49,9 +52,9 @@ import { CompletionsFetchService } from '../../../platform/nesFetch/node/complet
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { ChatWebSocketManager, IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
-import { NoopOTelService } from '../../../platform/otel/common/noopOtelService';
 import { resolveOTelConfig } from '../../../platform/otel/common/otelConfig';
 import { IOTelService } from '../../../platform/otel/common/otelService';
+import { InMemoryOTelService } from '../../../platform/otel/node/inMemoryOTelService';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { ParserServiceImpl } from '../../../platform/parser/node/parserServiceImpl';
 import { IProxyModelsService } from '../../../platform/proxyModels/common/proxyModelsService';
@@ -86,11 +89,10 @@ import { IWorkspaceChunkSearchService, WorkspaceChunkSearchService } from '../..
 import { IWorkspaceFileIndex, WorkspaceFileIndex } from '../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
 import { IInstantiationServiceBuilder } from '../../../util/common/services';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
-import { IAgentDebugEventService } from '../../agentDebug/common/agentDebugEventService';
 import { IToolResultContentRenderer } from '../../agentDebug/common/toolResultRenderer';
-import { AgentDebugEventServiceImpl } from '../../agentDebug/node/agentDebugEventServiceImpl';
 import { ToolResultContentRenderer } from '../../agentDebug/vscode-node/toolResultContentRenderer';
 import { GitHubOrgChatResourcesService, IGitHubOrgChatResourcesService } from '../../agents/vscode-node/githubOrgChatResourcesService';
+import { ChatDebugFileLoggerService } from '../../chat/vscode-node/chatDebugFileLoggerService';
 import { ChatHookService } from '../../chat/vscode-node/chatHookService';
 import { HooksOutputChannel } from '../../chat/vscode-node/hooksOutputChannel';
 import { SessionTranscriptService } from '../../chat/vscode-node/sessionTranscriptService';
@@ -169,7 +171,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IFetcherService, new SyncDescriptor(FetcherService, [undefined]));
 	builder.define(IDomainService, new SyncDescriptor(DomainService));
 	builder.define(ICAPIClientService, new SyncDescriptor(CAPIClientImpl));
-	builder.define(IImageService, new SyncDescriptor(ImageServiceImpl));
+	builder.define(IImageService, new SyncDescriptor(VSCodeImageServiceImpl));
 
 	builder.define(ITelemetryUserConfig, new SyncDescriptor(TelemetryUserConfigImpl, [undefined, undefined]));
 	const internalAIKey = extensionContext.extension.packageJSON.internalAIKey ?? '';
@@ -211,6 +213,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ISetupTestsDetector, new SyncDescriptor(SetupTestsDetector));
 	builder.define(IWorkspaceMutationManager, new SyncDescriptor(WorkspaceMutationManager));
 	builder.define(IScopeSelector, new SyncDescriptor(ScopeSelectorImpl));
+	builder.define(IGitService, new SyncDescriptor(GitServiceImpl));
 	builder.define(IGitDiffService, new SyncDescriptor(GitDiffService));
 	builder.define(IGitCommitMessageService, new SyncDescriptor(GitCommitMessageServiceImpl));
 	builder.define(IGithubRepositoryService, new SyncDescriptor(GithubRepositoryService));
@@ -221,6 +224,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IHookExecutor, new SyncDescriptor(NodeHookExecutor));
 	builder.define(IHooksOutputChannel, new SyncDescriptor(HooksOutputChannel));
 	builder.define(ISessionTranscriptService, new SyncDescriptor(SessionTranscriptService));
+	builder.define(IChatDebugFileLoggerService, new SyncDescriptor(ChatDebugFileLoggerService));
 	builder.define(ILinkifyService, new SyncDescriptor(LinkifyService));
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
 	builder.define(IChatWebSocketManager, new SyncDescriptor(ChatWebSocketManager));
@@ -256,7 +260,6 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ISimilarFilesContextService, new SyncDescriptor(SimilarFilesContextService));
 	builder.define(IGitHubOrgChatResourcesService, new SyncDescriptor(GitHubOrgChatResourcesService));
 	builder.define(ITrajectoryLogger, new SyncDescriptor(TrajectoryLogger));
-	builder.define(IAgentDebugEventService, new SyncDescriptor(AgentDebugEventServiceImpl));
 	builder.define(IToolResultContentRenderer, new SyncDescriptor(ToolResultContentRenderer));
 
 	// OTel service — resolve config from env + settings, create appropriate impl
@@ -283,7 +286,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 		};
 		builder.define(IOTelService, new NodeOTelService(otelConfig, logFn));
 	} else {
-		builder.define(IOTelService, new NoopOTelService(otelConfig));
+		builder.define(IOTelService, new InMemoryOTelService(otelConfig));
 	}
 }
 

@@ -3,8 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Emitter, type Event } from '../../../util/vs/base/common/event';
+import { GenAiAttr, GenAiOperationName } from '../common/genAiAttributes';
 import type { OTelConfig } from '../common/otelConfig';
-import { type IOTelService, type ISpanHandle, type SpanOptions, type TraceContext, SpanKind, SpanStatusCode } from '../common/otelService';
+import { type ICompletedSpanData, type IOTelService, type ISpanEventData, type ISpanEventRecord, type ISpanHandle, SpanKind, type SpanOptions, SpanStatusCode, type TraceContext } from '../common/otelService';
 
 // Type-only imports — erased by esbuild, zero bundle impact
 import type { Attributes, Context, Meter, Span, SpanContext, Tracer } from '@opentelemetry/api';
@@ -25,6 +27,8 @@ const noopSpanHandle: ISpanHandle = {
 	setAttributes() { },
 	setStatus() { },
 	recordException() { },
+	addEvent() { },
+	getSpanContext() { return undefined; },
 	end() { },
 };
 
@@ -53,6 +57,16 @@ export class NodeOTelService implements IOTelService {
 	private _initFailed = false;
 	private static readonly _MAX_BUFFER_SIZE = 1000;
 	private readonly _log: OTelLogFn;
+
+	// Event emitters for span lifecycle
+	private readonly _onDidCompleteSpan = new Emitter<ICompletedSpanData>();
+	readonly onDidCompleteSpan: Event<ICompletedSpanData> = this._onDidCompleteSpan.event;
+	private readonly _onDidEmitSpanEvent = new Emitter<ISpanEventData>();
+	readonly onDidEmitSpanEvent: Event<ISpanEventData> = this._onDidEmitSpanEvent.event;
+
+	injectCompletedSpan(span: ICompletedSpanData): void {
+		try { this._onDidCompleteSpan.fire(span); } catch { /* emitter may be disposed */ }
+	}
 
 	// Buffer events until SDK is ready
 	private readonly _buffer: Array<() => void> = [];
@@ -264,7 +278,7 @@ export class NodeOTelService implements IOTelService {
 				spanOpts,
 				parentCtx,
 				async (span: Span) => {
-					const handle = new RealSpanHandle(span);
+					const handle = new RealSpanHandle(span, this._onDidCompleteSpan, this._onDidEmitSpanEvent, options?.attributes, options.parentTraceContext!.spanId);
 					try {
 						return await fn(handle);
 					} finally {
@@ -274,11 +288,12 @@ export class NodeOTelService implements IOTelService {
 			);
 		}
 
+		const activeParentId = this._getActiveParentSpanId();
 		return this._tracer.startActiveSpan(
 			name,
 			spanOpts,
 			async (span: Span) => {
-				const handle = new RealSpanHandle(span);
+				const handle = new RealSpanHandle(span, this._onDidCompleteSpan, this._onDidEmitSpanEvent, options?.attributes, activeParentId);
 				try {
 					return await fn(handle);
 				} finally {
@@ -365,11 +380,20 @@ export class NodeOTelService implements IOTelService {
 	}
 
 	private _createSpan(name: string, options?: SpanOptions): ISpanHandle {
+		const parentSpanId = this._getActiveParentSpanId();
 		const span = this._tracer!.startSpan(name, {
 			kind: toOTelSpanKind(options?.kind),
 			attributes: options?.attributes as Attributes,
 		});
-		return new RealSpanHandle(span);
+		return new RealSpanHandle(span, this._onDidCompleteSpan, this._onDidEmitSpanEvent, options?.attributes, parentSpanId);
+	}
+
+	private _getActiveParentSpanId(): string | undefined {
+		if (!this._otelApi) { return undefined; }
+		const activeSpan = this._otelApi.trace.getSpan(this._otelApi.context.active());
+		if (!activeSpan) { return undefined; }
+		const ctx = activeSpan.spanContext();
+		return ctx.spanId || undefined;
 	}
 
 	// ── Metric API ──
@@ -461,6 +485,9 @@ export class NodeOTelService implements IOTelService {
 			apiLogs.logs.disable();
 		} catch {
 			// Swallow shutdown errors
+		} finally {
+			this._onDidCompleteSpan.dispose();
+			this._onDidEmitSpanEvent.dispose();
 		}
 	}
 }
@@ -468,9 +495,33 @@ export class NodeOTelService implements IOTelService {
 // ── Span Handle Implementations ──
 
 class RealSpanHandle implements ISpanHandle {
-	constructor(private readonly _span: Span) { }
+	private readonly _attributes: Record<string, string | number | boolean | string[]> = {};
+	private readonly _events: ISpanEventRecord[] = [];
+	private _statusCode = SpanStatusCode.UNSET;
+	private _statusMessage?: string;
+	private readonly _startTime = Date.now();
+	private _ended = false;
+	private readonly _parentSpanId: string | undefined;
+
+	constructor(
+		private readonly _span: Span,
+		private readonly _onDidCompleteSpan: Emitter<ICompletedSpanData>,
+		private readonly _onDidEmitSpanEvent: Emitter<ISpanEventData>,
+		initialAttributes?: Record<string, string | number | boolean | string[]>,
+		parentSpanId?: string,
+	) {
+		this._parentSpanId = parentSpanId;
+		if (initialAttributes) {
+			for (const k in initialAttributes) {
+				if (Object.prototype.hasOwnProperty.call(initialAttributes, k)) {
+					this._attributes[k] = initialAttributes[k];
+				}
+			}
+		}
+	}
 
 	setAttribute(key: string, value: string | number | boolean | string[]): void {
+		this._attributes[key] = value;
 		this._span.setAttribute(key, value);
 	}
 
@@ -479,6 +530,7 @@ class RealSpanHandle implements ISpanHandle {
 			if (Object.prototype.hasOwnProperty.call(attrs, k)) {
 				const v = attrs[k];
 				if (v !== undefined) {
+					this._attributes[k] = v;
 					this._span.setAttribute(k, v);
 				}
 			}
@@ -486,6 +538,8 @@ class RealSpanHandle implements ISpanHandle {
 	}
 
 	setStatus(code: SpanStatusCode, message?: string): void {
+		this._statusCode = code;
+		this._statusMessage = message;
 		const otelCode = code === SpanStatusCode.OK ? 1 : code === SpanStatusCode.ERROR ? 2 : 0;
 		this._span.setStatus({ code: otelCode, message });
 	}
@@ -498,8 +552,52 @@ class RealSpanHandle implements ISpanHandle {
 		}
 	}
 
+	addEvent(name: string, attributes?: Record<string, string | number | boolean | string[]>): void {
+		const timestamp = Date.now();
+		const record: ISpanEventRecord = { name, timestamp, attributes };
+		this._events.push(record);
+		this._span.addEvent(name, attributes);
+
+		// Fire real-time span event notification (guard against disposed emitter)
+		try {
+			const ctx = this._span.spanContext();
+			this._onDidEmitSpanEvent.fire({
+				spanId: ctx.spanId,
+				traceId: ctx.traceId,
+				parentSpanId: this._parentSpanId,
+				eventName: name,
+				attributes: attributes ?? {},
+				timestamp,
+			});
+		} catch { /* emitter may be disposed after shutdown */ }
+	}
+
+	getSpanContext(): TraceContext | undefined {
+		const ctx = this._span.spanContext();
+		return ctx.traceId && ctx.spanId ? { traceId: ctx.traceId, spanId: ctx.spanId } : undefined;
+	}
+
 	end(): void {
+		if (this._ended) {
+			return;
+		}
+		this._ended = true;
 		this._span.end();
+
+		try {
+			const ctx = this._span.spanContext();
+			this._onDidCompleteSpan.fire({
+				name: (this._span as unknown as { name?: string }).name ?? '',
+				spanId: ctx.spanId,
+				traceId: ctx.traceId,
+				parentSpanId: this._parentSpanId,
+				startTime: this._startTime,
+				endTime: Date.now(),
+				status: { code: this._statusCode, message: this._statusMessage },
+				attributes: { ...this._attributes },
+				events: [...this._events],
+			});
+		} catch { /* emitter may be disposed after shutdown */ }
 	}
 }
 
@@ -510,8 +608,6 @@ class BufferedSpanHandle implements ISpanHandle {
 	private static readonly _MAX_OPS = 200;
 	private readonly _ops: Array<(span: ISpanHandle) => void> = [];
 	private _real: ISpanHandle | undefined;
-
-	constructor() { }
 
 	setAttribute(key: string, value: string | number | boolean | string[]): void {
 		if (this._real) { this._real.setAttribute(key, value); return; }
@@ -541,6 +637,17 @@ class BufferedSpanHandle implements ISpanHandle {
 		}
 	}
 
+	addEvent(name: string, attributes?: Record<string, string | number | boolean | string[]>): void {
+		if (this._real) { this._real.addEvent(name, attributes); return; }
+		if (this._ops.length < BufferedSpanHandle._MAX_OPS) {
+			this._ops.push(s => s.addEvent(name, attributes));
+		}
+	}
+
+	getSpanContext(): TraceContext | undefined {
+		return this._real?.getSpanContext();
+	}
+
 	end(): void {
 		if (this._real) { this._real.end(); return; }
 		// Always buffer end() regardless of cap — it's critical for span lifecycle
@@ -565,8 +672,26 @@ function toOTelSpanKind(kind: SpanKind | undefined): number {
 }
 
 /**
+ * Operation names that follow the GenAI semantic conventions and should be
+ * exported to the user's OTLP endpoint. Debug-panel-only spans (e.g.,
+ * `content_event`, `user_message`) are excluded from external export but
+ * still visible in the in-memory span store for the Agent Debug Log panel.
+ */
+const EXPORTABLE_OPERATION_NAMES: ReadonlySet<string> = new Set([
+	GenAiOperationName.CHAT,
+	GenAiOperationName.INVOKE_AGENT,
+	GenAiOperationName.EXECUTE_TOOL,
+	GenAiOperationName.EMBEDDINGS,
+	GenAiOperationName.EXECUTE_HOOK,
+]);
+
+/**
  * Wraps a SpanExporter to log diagnostic info about export results.
  * Logs once on first successful export (info), and on every failure (warn).
+ *
+ * Also filters out debug-panel-only spans (those with non-standard
+ * `gen_ai.operation.name` values) so they don't appear in the user's
+ * configured OTel collector.
  */
 class DiagnosticSpanExporter implements SpanExporter {
 	private _firstSuccessLogged = false;
@@ -583,12 +708,25 @@ class DiagnosticSpanExporter implements SpanExporter {
 	}
 
 	export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
-		this._inner.export(spans, result => {
+		// Filter out debug-panel-only spans — only export standard GenAI operations
+		const exportable = spans.filter(span => {
+			const opName = span.attributes[GenAiAttr.OPERATION_NAME];
+			// If no operation name set, export it (safety: don't drop unknown spans)
+			if (opName === undefined) {
+				return true;
+			}
+			return EXPORTABLE_OPERATION_NAMES.has(String(opName));
+		});
+		if (exportable.length === 0) {
+			resultCallback({ code: 0 }); // ExportResultCode.SUCCESS
+			return;
+		}
+		this._inner.export(exportable, result => {
 			// ExportResultCode.SUCCESS === 0
 			if (result.code === 0) {
 				if (!this._firstSuccessLogged) {
 					this._firstSuccessLogged = true;
-					this._log('info', `[OTel] First span batch exported successfully via ${this._exporterType} (${spans.length} spans)`);
+					this._log('info', `[OTel] First span batch exported successfully via ${this._exporterType} (${exportable.length} spans)`);
 				}
 			} else {
 				// Rate-limit failure logging to avoid flooding stdout

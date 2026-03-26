@@ -5,7 +5,10 @@
 
 import type { LanguageModelChat } from 'vscode';
 import { getCachedSha256Hash } from '../../../util/common/crypto';
+import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import type { IChatEndpoint } from '../../networking/common/networking';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 
 const HIDDEN_MODEL_A_HASHES = [
 	'a99dd17dfee04155d863268596b7f6dd36d0a6531cd326348dbe7416142a21a3',
@@ -47,6 +50,8 @@ const HIDDEN_MODEL_F_HASHES: string[] = [
 const HIDDEN_MODEL_J_HASHES: string[] = [
 	'0a4346f806b28b3ce94905c3ac56fcd5ee2337d8613161696aba52eb0c3551cc',
 	'2a7b79b0151aa44a0abee17adc0e18df1c07d8d15d7affa989c3b3afb6bee0a0',
+	'f3c2984127dd2db50a555194925ca0d55c3c7b676e889c9406b2e6875a67e29c',
+	'5a81e6aa7556585ba7c569881d1103683adc9e0124ff7952df423afba2f167b5',
 ];
 
 function getModelId(model: LanguageModelChat | IChatEndpoint): string {
@@ -75,9 +80,28 @@ export function isHiddenModelG(model: LanguageModelChat | IChatEndpoint) {
 }
 
 
-export function isHiddenModelJ(model: LanguageModelChat | IChatEndpoint | string) {
+export function isGpt54(model: LanguageModelChat | IChatEndpoint | string) {
 	const h = getCachedSha256Hash(typeof model === 'string' ? model : model.family);
-	return HIDDEN_MODEL_J_HASHES.includes(h);
+	const family = typeof model === 'string' ? model : model.family;
+	return family.startsWith('gpt-5.4') || HIDDEN_MODEL_J_HASHES.includes(h);
+}
+
+export function isGpt54ConcisePromptExp(
+	accessor: ServicesAccessor,
+	model: LanguageModelChat | IChatEndpoint | string,
+) {
+	const configurationService = accessor.get(IConfigurationService);
+	const experimentationService = accessor.get(IExperimentationService);
+	return isGpt54(model) && configurationService.getExperimentBasedConfig(ConfigKey.EnableGpt54ConcisePromptExp, experimentationService);
+}
+
+export function isGpt54LargePromptExp(
+	accessor: ServicesAccessor,
+	model: LanguageModelChat | IChatEndpoint | string,
+) {
+	const configurationService = accessor.get(IConfigurationService);
+	const experimentationService = accessor.get(IExperimentationService);
+	return isGpt54(model) && configurationService.getExperimentBasedConfig(ConfigKey.EnableGpt54LargePromptExp, experimentationService);
 }
 
 
@@ -146,7 +170,7 @@ export function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint
 		|| isVSCModelA(model)
 		|| isVSCModelB(model)
 		|| isGpt52Family(model.family)
-		|| isHiddenModelJ(model);
+		|| isGpt54(model);
 }
 
 /**
@@ -158,14 +182,14 @@ export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat 
 		|| isGpt52CodexFamily(model.family)
 		|| isGpt53Codex(model.family)
 		|| isGpt52Family(model.family)
-		|| isHiddenModelJ(model);
+		|| isGpt54(model);
 }
 
 /**
  * Model supports replace_string_in_file as an edit tool.
  */
 export function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.toLowerCase().includes('gemini') || model.family.includes('grok-code') || modelSupportsMultiReplaceString(model) || isHiddenModelF(model);
+	return model.family.toLowerCase().includes('gemini') || model.family.includes('grok-code') || modelSupportsMultiReplaceString(model) || isHiddenModelF(model) || isMinimaxFamily(model);
 }
 
 /**
@@ -180,7 +204,7 @@ export function modelSupportsMultiReplaceString(model: LanguageModelChat | IChat
  * without needing insert_edit_into_file.
  */
 export function modelCanUseReplaceStringExclusively(model: LanguageModelChat | IChatEndpoint): boolean {
-	return isAnthropicFamily(model) || model.family.includes('grok-code') || isHiddenModelE(model) || model.family.toLowerCase().includes('gemini-3') || isVSCModelC(model) || isHiddenModelF(model);
+	return isAnthropicFamily(model) || model.family.includes('grok-code') || isHiddenModelE(model) || model.family.toLowerCase().includes('gemini-3') || isVSCModelC(model) || isHiddenModelF(model) || isMinimaxFamily(model);
 }
 
 /**
@@ -203,6 +227,13 @@ export function modelCanUseMcpResultImageURL(model: LanguageModelChat | IChatEnd
  */
 export function modelCanUseImageURL(model: LanguageModelChat | IChatEndpoint): boolean {
 	return true;
+}
+
+/**
+ * The model supports native PDF document processing via document content parts.
+ */
+export function modelSupportsPDFDocuments(model: LanguageModelChat | IChatEndpoint): boolean {
+	return isAnthropicFamily(model);
 }
 
 /**

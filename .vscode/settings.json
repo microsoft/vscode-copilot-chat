@@ -153,5 +153,10 @@
 	"python-envs.pythonProjects": [],
 	"chat.tools.terminal.autoApprove": {
 		"npx vitest": true
+	},
+	"chat.agentSkillsLocations": {
+		".github/skills/.local": true,
+		".agents/skills/.local": true,
+		".claude/skills/.local": true,
 	}
 }

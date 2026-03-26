@@ -1,3 +1,32 @@
+## 0.40 (2026-03-18)
+
+GitHub Copilot updates for [VS Code 1.112](https://code.visualstudio.com/updates/v1_112):
+
+- Message steering and queueing in Copilot CLI
+- Preview changes before delegating to Copilot CLI
+- Clickable file links in Copilot CLI terminal output
+- Permissions levels in Copilot CLI
+- Troubleshoot agent behavior with /troubleshoot (Preview)
+- Export and import agent debug logs (Preview)
+- Image and binary file support for agents
+- Automatic symbol references on paste in chat
+- Customizations discovery in parent repositories
+- Sandbox locally running MCP servers (Linux and macOS)
+- Improved UI for MCP Elicitation
+- Enable or disable plugins and MCP servers
+- Automatic plugin updates
+
+
+## 0.39 (2026-03-09)
+
+GitHub Copilot updates for [VS Code 1.111](https://code.visualstudio.com/updates/v1_111):
+
+- Autopilot and agent permissions
+- Agent-scoped hooks (Preview)
+- Debug events snapshot
+- Chat tip improvements
+- AI CLI profile group in terminal dropdown (Experimental)
+
 ## 0.38 (2026-03-05)
 
 GitHub Copilot updates from [February 2026](https://code.visualstudio.com/updates/v1_110):

@@ -16,11 +16,10 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IFileSystemService } from '../../../filesystem/common/fileSystemService';
 import { FileType } from '../../../filesystem/common/fileTypes';
-import { CodeSearchResult } from '../../../remoteCodeSearch/common/remoteCodeSearch';
 import { ISearchService } from '../../../search/common/searchService';
 import { createPlatformServices, TestingServiceCollection } from '../../../test/node/services';
 import { IWorkspaceService, NullWorkspaceService } from '../../../workspace/common/workspaceService';
-import { ExternalIngestClient, ExternalIngestFile, IExternalIngestClient } from '../../node/codeSearch/externalIngestClient';
+import { ExternalIngestClient, ExternalIngestFile, ExternalIngestUpdateIndexResult, IExternalIngestClient } from '../../node/codeSearch/externalIngestClient';
 import { ExternalIngestIndex } from '../../node/codeSearch/externalIngestIndex';
 
 const emptyProgressCb: (message: string) => void = () => { };
@@ -41,11 +40,11 @@ function createMockExternalIngestClient(options?: {
 			return Array.from(ingestedFiles.values());
 		},
 		searchCalls,
-		async updateIndex(_filesetName: string, _currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, _callTracker: CallTracker, _token: CancellationToken, _onProgress?: (message: string) => void): Promise<Result<{ checkpoint: string }, Error>> {
+		async updateIndex(_filesetName: string, _currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, _callTracker: CallTracker, _token: CancellationToken, _onProgress?: (message: string) => void): Promise<Result<ExternalIngestUpdateIndexResult, Error>> {
 			for await (const file of allFiles) {
 				ingestedFiles.set(file.uri, file);
 			}
-			return Result.ok({ checkpoint: 'mock-checkpoint' });
+			return Result.ok({ checkpoint: 'mock-checkpoint', totalFileCount: ingestedFiles.size, updatedFileCount: ingestedFiles.size });
 		},
 		async listFilesets(_callTracker: CallTracker, _token: CancellationToken): Promise<string[]> {
 			return [];
@@ -53,9 +52,9 @@ function createMockExternalIngestClient(options?: {
 		async deleteFileset(_filesetName: string, _callTracker: CallTracker, _token: CancellationToken): Promise<void> {
 			// no-op
 		},
-		async searchFilesets(filesetName: string, _rootUri: URI, prompt: string, _limit: number, _callTracker: CallTracker, _token: CancellationToken): Promise<CodeSearchResult> {
+		async searchFilesets(filesetName: string, prompt: string, _limit: number, _callTracker: CallTracker, _token: CancellationToken): Promise<undefined> {
 			searchCalls.push({ filesetName, prompt });
-			return { chunks: [], outOfSync: false };
+			return undefined;
 		},
 		canIngestPathAndSize(filePath: string, size: number): boolean {
 			return options?.canIngestPathAndSize?.(filePath, size) ?? true;

@@ -113,6 +113,8 @@ export enum ChatFetchResponseType {
 	Success = 'success'
 }
 
+export const RESPONSE_CONTAINED_NO_CHOICES = 'Response contained no choices.';
+
 export type ChatFetchError =
 	/**
 	 * We requested conversation, but the message was deemed off topic by the intent classifier.
@@ -147,7 +149,7 @@ export type ChatFetchError =
 	/**
 	 * We requested conversation, but didn't come up with any results because the rate limit was exceeded.
 	 */
-	| { type: ChatFetchResponseType.RateLimited; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined; retryAfter: number | undefined; rateLimitKey: string; capiError?: { code?: string; message?: string } }
+	| { type: ChatFetchResponseType.RateLimited; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined; retryAfter: number | undefined; rateLimitKey: string; isAuto: boolean; capiError?: { code?: string; message?: string } }
 	/**
 	 * We requested conversation, but didn't come up with any results because the free tier quota was exceeded.
 	 */
@@ -196,39 +198,85 @@ export type ChatResponse = FetchResponse<string>;
 
 export type ChatResponses = FetchResponse<string[]>;
 
-function getRateLimitMessage(fetchResult: ChatFetchError, hideRateLimitTimeEstimate?: boolean): string {
+function getRateLimitMessage(fetchResult: ChatFetchError): string {
 	if (fetchResult.type !== ChatFetchResponseType.RateLimited) {
 		throw new Error('Expected RateLimited error');
 	}
-	if (fetchResult.capiError?.code === 'agent_mode_limit_exceeded') { // Rate limited in agent mode
-		return l10n.t('Sorry, you have exceeded the agent mode rate limit. Please switch to ask mode and try again later.');
-	}
-	if (fetchResult.capiError?.code === 'upstream_provider_rate_limit') {
-		return l10n.t('Sorry, the upstream model provider is currently experiencing high demand. Please try again later or consider switching to Auto.');
-	}
-	// Split rate limit key on comma as multiple headers can come in at once
-	const rateLimitKeyParts = fetchResult.rateLimitKey.split(',').map(part => part.trim());
-	const globalTPSRateLimit = rateLimitKeyParts.some(part => /^global-user(-[^-]+)?-tps-\d{4}-\d{2}-\d{2}$/.test(part));
-	const retryAfterString = (!hideRateLimitTimeEstimate && fetchResult.retryAfter) ? secondsToHumanReadableTime(fetchResult.retryAfter) : 'a moment';
-
-	if (fetchResult?.capiError?.code && fetchResult?.capiError?.message) {
+	const retryAfterString = fetchResult.retryAfter ? secondsToHumanReadableTime(fetchResult.retryAfter) : 'a moment';
+	if (fetchResult.capiError?.code?.startsWith('agent_mode_limit_exceeded')) { // Rate limited in agent mode
 		return l10n.t({
-			message: 'Sorry, you have been rate-limited. Please wait {0} before trying again. [Learn More]({1})\n\nServer Error: {2}\nError Code: {3}',
-			args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error', fetchResult.capiError.message, fetchResult.capiError.code],
+			message: 'Sorry, you have exceeded the agent mode rate limit. Please switch to ask mode and try again in {0}. [Learn More]({1})',
+			args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error'],
 			comment: [`{Locked=']({'}`]
 		});
 	}
-
-	if (!globalTPSRateLimit) {
+	if (fetchResult.capiError?.code?.startsWith('model_overloaded') || fetchResult.capiError?.code?.startsWith('upstream_provider_rate_limit')) {
+		if (fetchResult.isAuto) {
+			return l10n.t({
+				message: 'Sorry, the upstream model provider is currently experiencing high demand. Please try again in {0}. [Learn More]({1})',
+				args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error'],
+				comment: [`{Locked=']({'}`]
+			});
+		}
 		return l10n.t({
-			message: 'Sorry, you have exhausted this model\'s rate limit. Please wait {0} before trying again, or switch to Auto. [Learn More]({1})',
+			message: 'Sorry, the upstream model provider is currently experiencing high demand. Please try again in {0} or consider switching to Auto. [Learn More]({1})',
+			args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error'],
+			comment: [`{Locked=']({'}`]
+		});
+	}
+	if (fetchResult.capiError?.code?.startsWith('user_global_rate_limited')) {
+		return l10n.t({
+			message: 'You\'ve hit your global rate limit. Please upgrade your plan or wait {0} for your limit to reset. [Learn More]({1})',
+			args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error'],
+			comment: [`{Locked=']({'}`]
+		});
+	}
+	if (fetchResult.capiError?.code?.startsWith('user_model_rate_limited')) {
+		if (fetchResult.isAuto) {
+			return l10n.t({
+				message: 'You\'ve hit the rate limit for this model. Please try again in {0}. [Learn More]({1})',
+				args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error'],
+				comment: [`{Locked=']({'}`]
+			});
+		}
+		return l10n.t({
+			message: 'You\'ve hit the rate limit for this model. Please try switching to Auto or try again in {0}. [Learn More]({1})',
+			args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error'],
+			comment: [`{Locked=']({'}`]
+		});
+	}
+	if (fetchResult.capiError?.code?.startsWith('integration_rate_limited')) {
+		return l10n.t({
+			message: 'Sorry, GitHub Copilot Chat is currently experiencing high demand. Please try again in {0}. [Learn More]({1})',
 			args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error'],
 			comment: [`{Locked=']({'}`]
 		});
 	}
 
+	if (fetchResult?.capiError?.code && fetchResult?.capiError?.message) {
+		if (fetchResult.isAuto) {
+			return l10n.t({
+				message: 'Sorry, you have been rate-limited. Please wait {0} before trying again. [Learn More]({1})\n\nServer Error: {2}\nError Code: {3}',
+				args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error', fetchResult.capiError.message, fetchResult.capiError.code],
+				comment: [`{Locked=']({'}`]
+			});
+		}
+		return l10n.t({
+			message: 'Sorry, you have been rate-limited. Please wait {0} before trying again or consider switching to Auto. [Learn More]({1})\n\nServer Error: {2}\nError Code: {3}',
+			args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error', fetchResult.capiError.message, fetchResult.capiError.code],
+			comment: [`{Locked=']({'}`]
+		});
+	}
+
+	if (fetchResult.isAuto) {
+		return l10n.t({
+			message: 'Sorry, your request was rate-limited. Please wait {0} before trying again. [Learn More]({1})',
+			args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error'],
+			comment: [`{Locked=']({'}`]
+		});
+	}
 	return l10n.t({
-		message: 'Sorry, your request was rate-limited. Please wait {0} before trying again. [Learn More]({1})',
+		message: 'Sorry, your request was rate-limited. Please wait {0} before trying again or consider switching to Auto. [Learn More]({1})',
 		args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error'],
 		comment: [`{Locked=']({'}`]
 	});
@@ -269,36 +317,11 @@ function getQuotaHitMessage(fetchResult: ChatFetchError, copilotPlan: string | u
 	}
 }
 
-export function getErrorDetailsFromChatFetchError(fetchResult: ChatFetchError, copilotPlan: string, gitHubOutageStatus: GitHubOutageStatus, hideRateLimitTimeEstimate?: boolean): ChatErrorDetails {
-	return { code: fetchResult.type, ...getErrorDetailsFromChatFetchErrorInner(fetchResult, copilotPlan, gitHubOutageStatus, hideRateLimitTimeEstimate) };
+export function getErrorDetailsFromChatFetchError(fetchResult: ChatFetchError, copilotPlan: string, gitHubOutageStatus: GitHubOutageStatus): ChatErrorDetails {
+	return { code: fetchResult.type, ...getErrorDetailsFromChatFetchErrorInner(fetchResult, copilotPlan, gitHubOutageStatus) };
 }
 
-function getOutageMessage(gitHubOutageStatus: GitHubOutageStatus): string | undefined {
-	switch (gitHubOutageStatus) {
-		case GitHubOutageStatus.Minor:
-			return l10n.t({
-				message: 'Note: GitHub is currently experiencing minor service disruptions. Check [GitHub Status]({0}) for details.',
-				args: ['https://www.githubstatus.com'],
-				comment: [`{Locked=']({'}`]
-			});
-		case GitHubOutageStatus.Major:
-			return l10n.t({
-				message: 'Note: GitHub is currently experiencing a major service outage. This may be affecting Copilot. Check [GitHub Status]({0}) for details.',
-				args: ['https://www.githubstatus.com'],
-				comment: [`{Locked=']({'}`]
-			});
-		case GitHubOutageStatus.Critical:
-			return l10n.t({
-				message: 'Note: GitHub is currently experiencing a critical service outage which is likely affecting Copilot. Check [GitHub Status]({0}) for details.',
-				args: ['https://www.githubstatus.com'],
-				comment: [`{Locked=']({'}`]
-			});
-		default:
-			return undefined;
-	}
-}
-
-function getErrorDetailsFromChatFetchErrorInner(fetchResult: ChatFetchError, copilotPlan: string, gitHubOutageStatus: GitHubOutageStatus, hideRateLimitTimeEstimate?: boolean): ChatErrorDetails {
+function getErrorDetailsFromChatFetchErrorInner(fetchResult: ChatFetchError, copilotPlan: string, gitHubOutageStatus: GitHubOutageStatus): ChatErrorDetails {
 	let details: ChatErrorDetails;
 	switch (fetchResult.type) {
 		case ChatFetchResponseType.OffTopic:
@@ -309,7 +332,7 @@ function getErrorDetailsFromChatFetchErrorInner(fetchResult: ChatFetchError, cop
 			break;
 		case ChatFetchResponseType.RateLimited:
 			details = {
-				message: getRateLimitMessage(fetchResult, hideRateLimitTimeEstimate),
+				message: getRateLimitMessage(fetchResult),
 				level: ChatErrorLevel.Info,
 				isRateLimited: true
 			};
@@ -361,8 +384,13 @@ function getErrorDetailsFromChatFetchErrorInner(fetchResult: ChatFetchError, cop
 			break;
 	}
 
-	const outageMsg = getOutageMessage(gitHubOutageStatus);
-	if (outageMsg) {
+	if (gitHubOutageStatus !== GitHubOutageStatus.None) {
+		const outageMsg = l10n.t({
+			message: 'Note: GitHub is currently experiencing a service disruption. This may be affecting Copilot. Check [GitHub Status]({0}) for details.',
+			args: ['https://www.githubstatus.com'],
+			comment: [`{Locked=']({'}`]
+		});
+
 		details = { ...details, message: `${details.message}\n\n${outageMsg}` };
 	}
 

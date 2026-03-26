@@ -25,6 +25,7 @@ export interface AnthropicMessagesTool {
 		required?: string[];
 	};
 	defer_loading?: boolean;
+	cache_control?: { type: 'ephemeral' };
 }
 
 export interface ToolReference {
@@ -74,6 +75,14 @@ export const TOOL_SEARCH_TOOL_TYPE = 'tool_search_tool_regex_20251119';
 /** Name for the custom client-side embeddings-based tool search tool. Must not use copilot_/vscode_ prefix — those are reserved for static package.json declarations and will be rejected by vscode.lm.registerToolDefinition. */
 export const CUSTOM_TOOL_SEARCH_NAME = 'tool_search';
 
+/** Model ID prefixes that support tool search tools. Used by isAnthropicToolSearchEnabled() and the tool registration's model selector. */
+export const TOOL_SEARCH_SUPPORTED_MODELS = [
+	'claude-sonnet-4.5',
+	'claude-sonnet-4.6',
+	'claude-opus-4.5',
+	'claude-opus-4.6',
+] as const;
+
 export const nonDeferredToolNames = new Set([
 	// Read/navigate
 	'read_file',
@@ -97,6 +106,7 @@ export const nonDeferredToolNames = new Set([
 	// Subagent tools
 	'runSubagent',
 	'search_subagent',
+	'execution_subagent',
 	// Testing
 	'runTests',
 	// Misc
@@ -106,6 +116,8 @@ export const nonDeferredToolNames = new Set([
 	'task_complete',
 	// Custom tool search (must always be available so the model can search for deferred tools)
 	CUSTOM_TOOL_SEARCH_NAME,
+	'view_image',
+	'fetch_webpage'
 ]);
 
 /**
@@ -173,6 +185,10 @@ export interface ContextManagementResponse {
 export function modelSupportsContextEditing(modelId: string): boolean {
 	// Normalize: lowercase and replace dots with dashes so "4.5" matches "4-5"
 	const normalized = modelId.toLowerCase().replace(/\./g, '-');
+	// The 1M context variant doesn't need context editing
+	if (normalized.includes('1m')) {
+		return false;
+	}
 	return normalized.startsWith('claude-haiku-4-5') ||
 		normalized.startsWith('claude-sonnet-4-6') ||
 		normalized.startsWith('claude-sonnet-4-5') ||
@@ -181,24 +197,6 @@ export function modelSupportsContextEditing(modelId: string): boolean {
 		normalized.startsWith('claude-opus-4-5') ||
 		normalized.startsWith('claude-opus-4-1') ||
 		normalized.startsWith('claude-opus-4');
-}
-
-/**
- * Tool search is supported by:
- * - Claude Sonnet 4.6 (claude-sonnet-4-6-* or claude-sonnet-4.6-*)
- * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
- * - Claude Opus 4.6 (claude-opus-4-6-* or claude-opus-4.6-*)
- * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
- * @param modelId The model ID to check
- * @returns true if the model supports tool search
- */
-export function modelSupportsToolSearch(modelId: string): boolean {
-	// Normalize: lowercase and replace dots with dashes so "4.5" matches "4-5"
-	const normalized = modelId.toLowerCase().replace(/\./g, '-');
-	return normalized.startsWith('claude-sonnet-4-6') ||
-		normalized.startsWith('claude-sonnet-4-5') ||
-		normalized.startsWith('claude-opus-4-6') ||
-		normalized.startsWith('claude-opus-4-5');
 }
 
 /**
@@ -250,7 +248,7 @@ export function isAnthropicToolSearchEnabled(
 ): boolean {
 
 	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
-	if (!modelSupportsToolSearch(effectiveModelId)) {
+	if (!TOOL_SEARCH_SUPPORTED_MODELS.some(prefix => effectiveModelId.toLowerCase().startsWith(prefix))) {
 		return false;
 	}
 

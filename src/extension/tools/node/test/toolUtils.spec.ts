@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { afterAll, beforeAll, beforeEach, describe, expect, suite, test, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, suite, test } from 'vitest';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
@@ -11,14 +11,15 @@ import { MockFileSystemService } from '../../../../platform/filesystem/node/test
 import { IIgnoreService, NullIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
-import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { posix } from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { assertFileOkForTool, isDirExternalAndNeedsConfirmation, isFileExternalAndNeedsConfirmation } from '../toolUtils';
 import { encodeUrlHostname } from '../../common/toolUtils';
+import { assertFileOkForTool, inputGlobToPattern, isDirExternalAndNeedsConfirmation, isFileExternalAndNeedsConfirmation } from '../toolUtils';
 
 class TestIgnoreService extends NullIgnoreService {
 	private readonly _ignoredUris = new Set<string>();
@@ -445,5 +446,130 @@ describe('encodeUrlHostname', () => {
 			expect(result.isDifferent).toBe(true);
 			expect(result.encoded).toContain('xn--');
 		});
+	});
+});
+
+class MultiRootWorkspaceService extends NullWorkspaceService {
+	override getWorkspaceFolderName(workspaceFolderUri: URI): string {
+		return posix.basename(workspaceFolderUri.path);
+	}
+}
+
+describe('inputGlobToPattern - multi-root workspace', () => {
+	const folder1 = URI.file('/workspace/vscode');
+	const folder2 = URI.file('/workspace/vscode-copilot-chat');
+	const workspaceService = new MultiRootWorkspaceService([folder1, folder2]);
+
+	// Absolute path cases
+	test('absolute path to workspace folder root resolves to empty relative pattern', () => {
+		const result = inputGlobToPattern('/workspace/vscode', workspaceService, undefined);
+		expect(result.patterns).toHaveLength(1);
+		expect(result.patterns[0]).toMatchObject({ baseUri: folder1, pattern: '' });
+		expect(result.folderName).toBe('vscode');
+		expect(result.folderRelativePattern).toBe('');
+	});
+
+	test('absolute path to workspace folder root with trailing slash', () => {
+		const result = inputGlobToPattern('/workspace/vscode/', workspaceService, undefined);
+		expect(result.patterns).toHaveLength(1);
+		expect(result.patterns[0]).toMatchObject({ pattern: '' });
+		expect(result.folderName).toBe('vscode');
+	});
+
+	test('absolute path with subdirectory', () => {
+		const result = inputGlobToPattern('/workspace/vscode/src', workspaceService, undefined);
+		expect(result.patterns).toHaveLength(1);
+		expect(result.patterns[0]).toMatchObject({ baseUri: folder1, pattern: 'src' });
+		expect(result.folderName).toBe('vscode');
+		expect(result.folderRelativePattern).toBe('src');
+	});
+
+	test('absolute path with glob pattern', () => {
+		const result = inputGlobToPattern('/workspace/vscode/src/**/*.ts', workspaceService, undefined);
+		expect(result.patterns).toHaveLength(1);
+		expect(result.patterns[0]).toMatchObject({ baseUri: folder1, pattern: 'src/**/*.ts' });
+		expect(result.folderName).toBe('vscode');
+		expect(result.folderRelativePattern).toBe('src/**/*.ts');
+	});
+
+	// Folder name cases (multi-root only)
+	test('bare folder name resolves to ** pattern', () => {
+		const result = inputGlobToPattern('vscode', workspaceService, undefined);
+		expect(result.patterns).toHaveLength(1);
+		expect(result.patterns[0]).toMatchObject({ baseUri: folder1, pattern: '**' });
+		expect(result.folderName).toBe('vscode');
+	});
+
+	test('folder name with glob suffix', () => {
+		const result = inputGlobToPattern('vscode/**', workspaceService, undefined);
+		expect(result.patterns).toHaveLength(1);
+		expect(result.patterns[0]).toMatchObject({ baseUri: folder1, pattern: '**' });
+		expect(result.folderName).toBe('vscode');
+	});
+
+	test('folder name with subdirectory pattern', () => {
+		const result = inputGlobToPattern('vscode/src/**/*.ts', workspaceService, undefined);
+		expect(result.patterns).toHaveLength(1);
+		expect(result.patterns[0]).toMatchObject({ baseUri: folder1, pattern: 'src/**/*.ts' });
+		expect(result.folderName).toBe('vscode');
+		expect(result.folderRelativePattern).toBe('src/**/*.ts');
+	});
+
+	test('**/folderName resolves to folder', () => {
+		const result = inputGlobToPattern('**/vscode', workspaceService, undefined);
+		expect(result.patterns).toHaveLength(1);
+		expect(result.patterns[0]).toMatchObject({ baseUri: folder1, pattern: '**' });
+		expect(result.folderName).toBe('vscode');
+	});
+
+	test('**/folderName/rest resolves to folder with pattern', () => {
+		const result = inputGlobToPattern('**/vscode/src/**/*.ts', workspaceService, undefined);
+		expect(result.patterns).toHaveLength(1);
+		expect(result.patterns[0]).toMatchObject({ baseUri: folder1, pattern: 'src/**/*.ts' });
+		expect(result.folderName).toBe('vscode');
+	});
+
+	test('second folder name resolves correctly', () => {
+		const result = inputGlobToPattern('vscode-copilot-chat/src/**', workspaceService, undefined);
+		expect(result.patterns).toHaveLength(1);
+		expect(result.patterns[0]).toMatchObject({ baseUri: folder2, pattern: 'src/**' });
+		expect(result.folderName).toBe('vscode-copilot-chat');
+	});
+
+	// Non-folder cases
+	test('does not rewrite when folder name is unknown', () => {
+		const result = inputGlobToPattern('**/unknown-folder/src/**', workspaceService, undefined);
+		expect(result.patterns).toHaveLength(1);
+		expect(result.patterns[0]).toBe('**/unknown-folder/src/**');
+		expect(result.folderName).toBeUndefined();
+	});
+
+	test('does not rewrite wildcard-only patterns', () => {
+		const result = inputGlobToPattern('**/*.ts', workspaceService, undefined);
+		expect(result.patterns).toHaveLength(1);
+		expect(result.patterns[0]).toBe('**/*.ts');
+		expect(result.folderName).toBeUndefined();
+	});
+
+	test('does not rewrite folder names in single-root workspace', () => {
+		const singleRoot = new MultiRootWorkspaceService([folder1]);
+		const result = inputGlobToPattern('**/vscode/src/**', singleRoot, undefined);
+		expect(result.patterns).toHaveLength(1);
+		expect(result.patterns[0]).toBe('**/vscode/src/**');
+		expect(result.folderName).toBeUndefined();
+	});
+
+	test('absolute path outside workspace is not rewritten', () => {
+		const result = inputGlobToPattern('/other/path', workspaceService, undefined);
+		expect(result.patterns).toHaveLength(1);
+		expect(result.patterns[0]).toBe('/other/path');
+		expect(result.folderName).toBeUndefined();
+	});
+
+	test('plain glob pattern passes through', () => {
+		const result = inputGlobToPattern('src/**/*.ts', workspaceService, undefined);
+		expect(result.patterns).toHaveLength(1);
+		expect(result.patterns[0]).toBe('src/**/*.ts');
+		expect(result.folderName).toBeUndefined();
 	});
 });

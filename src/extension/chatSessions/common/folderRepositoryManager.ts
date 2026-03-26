@@ -5,20 +5,26 @@
 
 import type * as vscode from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { ChatSessionWorktreeProperties } from './chatSessionWorktreeService';
+import { IWorkspaceInfo } from './workspaceInfo';
 
 /**
  * The isolation mode for a chat session.
  * - `worktree`: Creates an isolated git worktree for the session.
  * - `workspace`: Works directly in the workspace directory without isolation.
+ * Do not change these values, they are stored in global storage.
  */
-export type IsolationMode = 'worktree' | 'workspace';
+export enum IsolationMode {
+	Workspace = 'workspace',
+	Worktree = 'worktree',
+}
+
 
 /**
  * Options for initializing a folder/repository for a session.
  */
 export interface InitializeFolderRepositoryOptions {
 	readonly branch?: string;
+	readonly folder: vscode.Uri | undefined;
 	readonly isolation?: IsolationMode;
 	readonly stream: vscode.ChatResponseStream;
 	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
@@ -27,30 +33,7 @@ export interface InitializeFolderRepositoryOptions {
 /**
  * Result of folder/repository resolution for a chat session.
  */
-export interface FolderRepositoryInfo {
-	/**
-	 * The folder URI selected for this session.
-	 * This could be a workspace folder or a git repository root.
-	 */
-	readonly folder: vscode.Uri | undefined;
-
-	/**
-	 * The git repository root URI if the selected folder contains a git repository.
-	 * `undefined` if the folder is not a git repository.
-	 */
-	readonly repository: vscode.Uri | undefined;
-
-	/**
-	 * The worktree path if a worktree was created for this session.
-	 * `undefined` if no worktree exists (e.g., plain folder or worktree creation failed).
-	 */
-	readonly worktree: vscode.Uri | undefined;
-
-	/**
-	 * The worktree properties associated with this session.
-	 */
-	readonly worktreeProperties: ChatSessionWorktreeProperties | undefined;
-
+export interface FolderRepositoryInfo extends IWorkspaceInfo {
 	/**
 	 * Trust status of the folder/repository.
 	 * - `true`: The folder/repository is trusted
@@ -108,19 +91,14 @@ export interface IFolderRepositoryManager {
 	readonly _serviceBrand: undefined;
 
 	/**
-	 * Track the selected folder for an untitled session.
+	 * @deprecated
 	 */
-	setUntitledSessionFolder(sessionId: string, folderUri: vscode.Uri): void;
-
-	/**
-	 * Get the selected folder URI for an untitled session.
-	 */
-	getUntitledSessionFolder(sessionId: string): vscode.Uri | undefined;
+	setNewSessionFolder(sessionId: string, folderUri: vscode.Uri): void;
 
 	/**
 	 * Delete the tracked folder for an untitled session.
 	 */
-	deleteUntitledSessionFolder(sessionId: string): void;
+	deleteNewSessionFolder(sessionId: string): void;
 
 	/**
 	 * Get folder/repository/worktree/trust information for a session.
@@ -188,12 +166,4 @@ export interface IFolderRepositoryManager {
 	 * Delete an entry from the MRU list.
 	 */
 	deleteMRUEntry(folder: vscode.Uri): Promise<void>;
-
-	/**
-	 * Get the last used folder ID in untitled workspace.
-	 * Used for defaulting the selection in the folder dropdown.
-	 *
-	 * @returns The folder path string or undefined if none was used
-	 */
-	getLastUsedFolderIdInUntitledWorkspace(): string | undefined;
 }

@@ -3,14 +3,9 @@ trigger:
   branches:
     include:
       - main
-
-schedules:
-  - cron: "0 7 * * *"
-    displayName: 🌙 Nightly prerelease build
-    branches:
-      include:
-        - main
-    always: true
+  tags:
+    include:
+      - v*
 
 pr: [main]
 
@@ -74,13 +69,25 @@ extends:
           - script: npm test
             displayName: 🧪 Run chat-lib tests
             workingDirectory: chat-lib
-        ${{ if or(eq(parameters.nextVersion, 'prerelease'), eq(variables['Build.Reason'], 'Schedule')) }}:
+        # Tag-triggered: date-stamped patch (e.g., v0.40.2026031601) → publish to next
+        ${{ if and(startsWith(variables['Build.SourceBranch'], 'refs/tags/v'), gt(length(variables['Build.SourceBranchName']), 13)) }}:
+          publishPackage: true
+          publishRequiresApproval: false
+          nextVersion: ${{ replace(variables['Build.SourceBranchName'], 'v', '') }}
+          tag: next
+        # Tag-triggered: short patch (e.g., v0.39.1) → publish to latest
+        ${{ elseif startsWith(variables['Build.SourceBranch'], 'refs/tags/v') }}:
+          publishPackage: true
+          publishRequiresApproval: false
+          nextVersion: ${{ replace(variables['Build.SourceBranchName'], 'v', '') }}
+        ${{ elseif eq(parameters.nextVersion, 'none') }}:
+          publishPackage: false
+        # Manual prerelease → publish to next
+        ${{ elseif eq(parameters.nextVersion, 'prerelease') }}:
           publishPackage: true
           publishRequiresApproval: false
           nextVersion: prerelease
           tag: next
-        ${{ elseif eq(parameters.nextVersion, 'none') }}:
-          publishPackage: false
         ${{ else }}:
           publishPackage: true
           nextVersion: ${{ parameters.nextVersion }}
