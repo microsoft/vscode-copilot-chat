@@ -256,7 +256,7 @@ export class ClaudeLanguageModelServer extends Disposable {
 			let mappedModel = requestedModel;
 			if (requestedModel.startsWith('claude-')) {
 				const parts = requestedModel.split('-');
-				if (parts.length = 4) {
+				if (parts.length === 4) {
 					// claude-sonnet-4-20250514 -> ['claude', 'sonnet', '4', '20250514']
 					const [claude, model, major, minor] = parts;
 					mappedModel = `${claude}-${model}-${major}.${minor}`;
