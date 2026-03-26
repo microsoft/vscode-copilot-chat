@@ -4105,16 +4105,6 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.workspace.enableFullWorkspace": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.workspace.enableFullWorkspace%",
-						"tags": [
-							"advanced",
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.workspace.enableCodeSearch": {
 						"type": "boolean",
 						"default": true,
@@ -4125,10 +4115,10 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.workspace.enableEmbeddingsSearch": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.workspace.enableEmbeddingsSearch%",
+					"github.copilot.chat.workspace.maxDiffSizeBeforeUsingExternalIngest": {
+						"type": "number",
+						"default": 100,
+						"markdownDescription": "%github.copilot.config.workspace.maxDiffSizeBeforeUsingExternalIngest%",
 						"tags": [
 							"advanced",
 							"experimental",
