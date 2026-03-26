@@ -413,7 +413,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			workspaceFolderService,
 			telemetry,
 			logger,
-			new PromptsServiceImpl(new NullWorkspaceService()),
+			new PromptsServiceImpl(new NullWorkspaceService(), fileSystem),
 			delegationService,
 			folderRepositoryManager,
 			configurationService,
@@ -758,7 +758,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			workspaceFolderService,
 			telemetry,
 			logService,
-			new PromptsServiceImpl(new NullWorkspaceService()),
+			new PromptsServiceImpl(new NullWorkspaceService(), new MockFileSystemService()),
 			new class extends mock<IChatDelegationSummaryService>() {
 				override async summarize(_context: vscode.ChatContext, _token: vscode.CancellationToken): Promise<string | undefined> {
 					return undefined;
@@ -1903,7 +1903,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				workspaceFolderService,
 				telemetry,
 				logService,
-				new PromptsServiceImpl(new NullWorkspaceService()),
+				new PromptsServiceImpl(new NullWorkspaceService(), new MockFileSystemService()),
 				nullDelegationService,
 				folderRepositoryManager,
 				configurationService,
