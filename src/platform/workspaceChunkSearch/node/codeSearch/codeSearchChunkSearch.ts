@@ -7,7 +7,6 @@ import * as l10n from '@vscode/l10n';
 import { shouldInclude } from '../../../../util/common/glob';
 import { Result } from '../../../../util/common/result';
 import { CallTracker, TelemetryCorrelationId } from '../../../../util/common/telemetryCorrelationId';
-import { TokenizerType } from '../../../../util/common/tokenizer';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { raceCancellationError, raceTimeout } from '../../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
@@ -42,8 +41,7 @@ import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../workspace/common/workspaceService';
 import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId } from '../../common/workspaceChunkSearch';
 import { EmbeddingsChunkSearch } from '../embeddingsChunkSearch';
-import { TfidfChunkSearch } from '../tfidfChunkSearch';
-import { TfIdfWithSemanticChunkSearch } from '../tfidfWithSemanticChunkSearch';
+
 import { WorkspaceChunkEmbeddingsIndex } from '../workspaceChunkEmbeddingsIndex';
 import { IWorkspaceFileIndex } from '../workspaceFileIndex';
 import { AdoCodeSearchRepo, BuildIndexTriggerReason, CodeSearchRepo, CodeSearchRepoStatus, GithubCodeSearchRepo, TriggerIndexingError, TriggerRemoteIndexingError } from './codeSearchRepo';
@@ -94,21 +92,14 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	readonly id = WorkspaceChunkSearchStrategyId.CodeSearch;
 
 	/**
-	 * Maximum number of locally changed, un-updated files that we should still use embeddings search for
-	 */
-	private readonly maxEmbeddingsDiffSize = 300;
-
-	/**
-	 * Maximum number of files that have changed from what code search has indexed
-	 *
+	 * Maximum number of files that have changed from what code search has indexed.
 	 * This is used to avoid doing code search when the diff is too large.
 	 */
 	private readonly maxDiffSize = 2000;
 
 	/**
 	 * Maximum percent of files that have changed from what code search has indexed.
-	 *
-	 * If a majority of files have been changed there's no point to doing a code search
+	 * If a majority of files have been changed there's no point to doing a code search.
 	 */
 	private readonly maxDiffPercentage = 0.70;
 
@@ -117,15 +108,9 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	 */
 	private readonly localDiffSearchTimeout = 15_000;
 
-	/**
-	 * How long we should wait for the embeddings search before falling back to tfidf.
-	 */
-	private readonly embeddingsSearchFallbackTimeout = 8_000;
-
 	private readonly _workspaceDiffTracker: Lazy<CodeSearchWorkspaceDiffTracker>;
 
 	private readonly _embeddingsChunkSearch: EmbeddingsChunkSearch;
-	private readonly _tfIdfSemanticChunkSearch: TfIdfWithSemanticChunkSearch;
 
 	private readonly _onDidChangeIndexState = this._register(new Emitter<void>());
 	public readonly onDidChangeIndexState = this._onDidChangeIndexState.event;
@@ -168,8 +153,6 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 		this._embeddingsIndex = this._register(instantiationService.createInstance(WorkspaceChunkEmbeddingsIndex, this._embeddingType));
 		this._embeddingsChunkSearch = this._register(instantiationService.createInstance(EmbeddingsChunkSearch, this._embeddingsIndex));
-		const tfIdfChunkSearch = this._register(instantiationService.createInstance(TfidfChunkSearch, { tokenizer: TokenizerType.O200K })); // TODO mjbvz: remove hardcoding
-		this._tfIdfSemanticChunkSearch = this._register(instantiationService.createInstance(TfIdfWithSemanticChunkSearch, tfIdfChunkSearch, this._embeddingsIndex));
 
 		this._repoTracker = this._register(instantiationService.createInstance(CodeSearchRepoTracker));
 		this._externalIngestIndex = new Lazy(() => {
@@ -554,34 +537,18 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				})
 				: Promise.resolve({ chunks: [], outOfSync: false });
 
-			// Also search external ingest for files not in code search repos (if enabled)
-			const externalIngestOperation = this.isExternalIngestEnabled()
-				? this._externalIngestIndex.value.search(sizing, query, innerTelemetryInfo.callTracker, token).catch(e => {
-					if (!isCancellationError(e)) {
-						this._logService.warn(`External ingest search failed: ${e}`);
-					}
-					return [];
-				})
-				: Promise.resolve([]);
-
 			const localSearchOperation = raceTimeout(this.searchLocalDiff(diffArray, sizing, query, options, innerTelemetryInfo, localSearchCts.token), this.localDiffSearchTimeout, () => {
 				localSearchCts.cancel();
 			});
 
 			let codeSearchResults: CodeSearchResult | undefined;
-			let externalIngestResults: readonly FileChunkAndScore[] | undefined = undefined;
 			let localResults: DiffSearchResult | undefined;
 			try {
-				// Await code search and external ingest in parallel
-				[codeSearchResults, externalIngestResults] = await Promise.all([
-					raceCancellationError(codeSearchOperation, token),
-					raceCancellationError(externalIngestOperation, token),
-				]);
-
-				if (codeSearchResults || (externalIngestResults && externalIngestResults.length > 0)) {
+				codeSearchResults = await raceCancellationError(codeSearchOperation, token);
+				if (codeSearchResults) {
 					localResults = await raceCancellationError(localSearchOperation, token);
 				} else {
-					// No need to do local search if both searches failed
+					// No need to do local search if code search failed
 					localSearchCts.cancel();
 				}
 			} finally {
@@ -596,7 +563,6 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 					"workspaceSearchCorrelationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Correlation id for the search" },
 					"diffSearchStrategy": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Search strategy for the diff" },
 					"chunkCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of returned chunks just from code search" },
-					"externalIngestChunkCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of returned chunks from external ingest" },
 					"locallyChangedFileCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of files that are different than the code search index" },
 					"codeSearchOutOfSync": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Tracks if the local commit we think code search has indexed matches what code search actually has indexed" },
 					"embeddingsRecomputedFileCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of files that needed to have their embeddings recomputed. Only logged when embeddings search is used" }
@@ -608,27 +574,24 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				diffSearchStrategy: localResults?.strategyId ?? 'none',
 			}, {
 				chunkCount: codeSearchResults?.chunks.length ?? 0,
-				externalIngestChunkCount: externalIngestResults?.length ?? 0,
 				locallyChangedFileCount: diffArray.length,
 				codeSearchOutOfSync: codeSearchResults?.outOfSync ? 1 : 0,
 				embeddingsRecomputedFileCount: localResults?.embeddingsComputeInfo?.recomputedFileCount ?? 0,
 			});
 
-			this._logService.trace(`CodeSearchChunkSearch.searchWorkspace: codeSearchResults: ${codeSearchResults?.chunks.length}, externalIngestResults: ${externalIngestResults?.length}, localResults: ${localResults?.chunks.length}`);
+			this._logService.trace(`CodeSearchChunkSearch.searchWorkspace: codeSearchResults: ${codeSearchResults?.chunks.length}, localResults: ${localResults?.chunks.length}`);
 
-			// If neither code search nor external ingest returned results, bail
-			if (!codeSearchResults && (!externalIngestResults || externalIngestResults.length === 0)) {
+			// If neither code search nor local diff search returned results, bail
+			if (!codeSearchResults && !localResults) {
 				return;
 			}
 
-			// Merge results from code search, external ingest, and local diff search
+			// Merge results from code search and local diff search
 			const mergedChunks: readonly FileChunkAndScore[] = [
 				// Code search results (excluding diffed files if we have local results)
 				...(codeSearchResults?.chunks ?? [])
 					.filter(x => !localResults || shouldInclude(x.chunk.file, { exclude: diffFilePattern })),
-				// External ingest results (excluding diffed files if we have local results)
-				...(externalIngestResults ?? [])
-					.filter(x => !localResults || shouldInclude(x.chunk.file, { exclude: diffFilePattern })),
+
 				// Local diff results
 				...(localResults?.chunks ?? [])
 					.filter(x => shouldInclude(x.chunk.file, { include: diffFilePattern })),
@@ -683,6 +646,23 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	private async searchLocalDiff(diffArray: readonly URI[], sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<DiffSearchResult | undefined> {
+		const innerTelemetryInfo = telemetryInfo.addCaller('CodeSearchChunkSearch::searchLocalDiff');
+
+		// If external ingest is enabled, we always want to search it as well as it tracks files outside of the code search repos
+		if (this.isExternalIngestEnabled()) {
+			// Also force it to search the local diff too so we can can override stale code-search results.
+			await raceCancellationError(this._externalIngestIndex.value.updateForceIncludeFiles(diffArray, token), token);
+
+			const externalResult = await this._externalIngestIndex.value.search(sizing, query, innerTelemetryInfo.callTracker, token);
+			if (externalResult) {
+				const diffFilePattern = diffArray.map(uri => new RelativePattern(uri, '*'));
+				const filtered = externalResult.filter(x => shouldInclude(x.chunk.file, { include: diffFilePattern }));
+				return { chunks: filtered, strategyId: 'externalIngest' };
+			}
+			return undefined;
+		}
+
+		// Otherwise, the fallback to local searching using embeddings
 		if (!diffArray.length) {
 			return { chunks: [], strategyId: 'skipped' };
 		}
@@ -695,30 +675,17 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			}
 		};
 
-		const innerTelemetryInfo = telemetryInfo.addCaller('CodeSearchChunkSearch::searchLocalDiff');
+		const embeddingsMaxFiles = this._configService.getExperimentBasedConfig(ConfigKey.Advanced.WorkspaceMaxDiffSizeBeforeUsingExternalIngest, this._experimentationService);
 
-		const outdatedFiles = await raceCancellationError(this.getLocalDiff(), token);
-		if (outdatedFiles.length > this.maxEmbeddingsDiffSize) {
-			// Too many files, only do tfidf search
-			const result = await this._tfIdfSemanticChunkSearch.searchSubsetOfFiles(sizing, query, diffArray, subSearchOptions, innerTelemetryInfo, token);
-			return { ...result, strategyId: this._tfIdfSemanticChunkSearch.id };
+		if (diffArray.length <= embeddingsMaxFiles) {
+			const batchInfo = new ComputeBatchInfo();
+			const result = await this._embeddingsChunkSearch.searchSubsetOfFiles(sizing, query, diffArray, subSearchOptions, { info: innerTelemetryInfo, batchInfo }, token);
+			return { ...result, strategyId: this._embeddingsChunkSearch.id, embeddingsComputeInfo: batchInfo };
+		} else {
+			// No way to search out-of-sync files; caller will use code search results alone and warn the user
+			this._logService.debug(`CodeSearchChunkSearch.searchLocalDiff: ${diffArray.length} out-of-sync files exceeds threshold (${embeddingsMaxFiles}), skipping local diff search`);
+			return undefined;
 		}
-
-		// Kick off embeddings search of diff
-		const batchInfo = new ComputeBatchInfo();
-		const embeddingsSearch = this._embeddingsChunkSearch.searchSubsetOfFiles(sizing, query, diffArray, subSearchOptions, { info: innerTelemetryInfo, batchInfo }, token)
-			.then((result): DiffSearchResult => ({ ...result, strategyId: this._embeddingsChunkSearch.id, embeddingsComputeInfo: batchInfo }));
-
-		const embeddingsSearchResult = await raceCancellationError(raceTimeout(embeddingsSearch, this.embeddingsSearchFallbackTimeout), token);
-		if (embeddingsSearchResult) {
-			return embeddingsSearchResult;
-		}
-
-		// Start tfidf too but keep embeddings search running in parallel
-		const tfIdfSearch = this._tfIdfSemanticChunkSearch.searchSubsetOfFiles(sizing, query, diffArray, subSearchOptions, innerTelemetryInfo, token)
-			.then((result): DiffSearchResult => ({ ...result, strategyId: this._tfIdfSemanticChunkSearch.id }));
-
-		return Promise.race([embeddingsSearch, tfIdfSearch]);
 	}
 
 	@LogExecTime(self => self._logService, 'CodeSearchChunkSearch::doCodeSearch', function (execTime, status) {
