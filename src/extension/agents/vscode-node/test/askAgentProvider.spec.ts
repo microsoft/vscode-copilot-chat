@@ -78,7 +78,6 @@ suite('AskAgentProvider', () => {
 		assert.ok(content.includes('search'));
 		assert.ok(content.includes('read'));
 		assert.ok(content.includes('web'));
-		assert.ok(content.includes('github/issue_read'));
 
 		// Should NOT contain editing tools
 

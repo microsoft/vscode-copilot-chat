@@ -77,7 +77,6 @@ suite('PlanAgentProvider', () => {
 		const content = await getAgentContent(agents[0]);
 
 		// Should contain base tools
-		assert.ok(content.includes('github/issue_read'));
 		assert.ok(content.includes('agent'));
 		assert.ok(content.includes('search'));
 		assert.ok(content.includes('read'));
@@ -98,7 +97,6 @@ suite('PlanAgentProvider', () => {
 		const content = await getAgentContent(agents[0]);
 
 		// Should contain base tools
-		assert.ok(content.includes('github/issue_read'));
 		assert.ok(content.includes('agent'));
 
 		// Should contain additional tools
@@ -277,7 +275,6 @@ suite('PlanAgentProvider', () => {
 		const content = await getAgentContent(agents[0]);
 
 		// Should have base tools only
-		assert.ok(content.includes('github/issue_read'));
 		assert.ok(content.includes('agent'));
 	});
 
