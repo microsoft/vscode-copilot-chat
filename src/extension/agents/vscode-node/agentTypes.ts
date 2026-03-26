@@ -42,9 +42,6 @@ export const DEFAULT_READ_TOOLS: readonly string[] = [
 	'read',
 	'web',
 	'vscode/memory',
-	'github/issue_read',
-	'github.vscode-pull-request-github/issue_fetch',
-	'github.vscode-pull-request-github/activePullRequest',
 	'execute/getTerminalOutput',
 	'execute/testFailure'
 ];
