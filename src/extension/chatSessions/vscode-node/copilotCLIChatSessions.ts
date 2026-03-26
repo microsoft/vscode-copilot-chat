@@ -180,6 +180,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	constructor(
 		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
 		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
+		@IChatSessionMetadataStore private readonly chatSessionMetadataStore: IChatSessionMetadataStore,
 		@IChatSessionWorktreeService private readonly copilotCLIWorktreeManagerService: IChatSessionWorktreeService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
@@ -370,8 +371,12 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
 
 		// Metadata
-		const metadata = worktreeProperties
-			? {
+		let metadata: { readonly [key: string]: unknown };
+
+		if (worktreeProperties) {
+			// Worktree
+			metadata = {
+				autoCommit: worktreeProperties.autoCommit !== false,
 				baseCommit: worktreeProperties?.baseCommit,
 				baseBranchProtected: worktreeProperties.version === 2
 					? worktreeProperties.baseBranchProtected === true
@@ -395,11 +400,26 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				lastCheckpointRef: worktreeProperties.version === 2
 					? worktreeProperties.lastCheckpointRef
 					: undefined
-			} satisfies { readonly [key: string]: unknown }
-			: {
-				isolationMode: IsolationMode.Workspace,
-				workingDirectoryPath: workingDirectory?.fsPath
 			} satisfies { readonly [key: string]: unknown };
+		} else {
+			// Workspace
+			const sessionRequestDetails = await this.chatSessionMetadataStore.getRequestDetails(session.id);
+
+			let lastCheckpointRef: string | undefined;
+			for (let i = sessionRequestDetails.length - 1; i >= 0; i--) {
+				const checkpointRef = sessionRequestDetails[i]?.checkpointRef;
+				if (checkpointRef !== undefined) {
+					lastCheckpointRef = checkpointRef;
+					break;
+				}
+			}
+
+			metadata = {
+				isolationMode: IsolationMode.Workspace,
+				workingDirectoryPath: workingDirectory?.fsPath,
+				lastCheckpointRef
+			} satisfies { readonly [key: string]: unknown };
+		}
 
 		const item = this.controller.createChatSessionItem(resource, label);
 		item.badge = badge;

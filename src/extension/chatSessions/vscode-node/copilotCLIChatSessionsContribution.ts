@@ -320,10 +320,19 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			// Workspace
 			const sessionRequestDetails = await this.chatSessionMetadataStore.getRequestDetails(session.id);
 
+			let lastCheckpointRef: string | undefined;
+			for (let i = sessionRequestDetails.length - 1; i >= 0; i--) {
+				const checkpointRef = sessionRequestDetails[i]?.checkpointRef;
+				if (checkpointRef !== undefined) {
+					lastCheckpointRef = checkpointRef;
+					break;
+				}
+			}
+
 			metadata = {
 				isolationMode: IsolationMode.Workspace,
 				workingDirectoryPath: workingDirectory?.fsPath,
-				lastCheckpointRef: sessionRequestDetails.at(-1)?.checkpointRef
+				lastCheckpointRef
 			} satisfies { readonly [key: string]: unknown };
 		}
 
