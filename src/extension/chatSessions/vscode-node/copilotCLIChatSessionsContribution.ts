@@ -15,8 +15,8 @@ import { IFileSystemService } from '../../../platform/filesystem/common/fileSyst
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { getGitHubRepoInfoFromContext, IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
-import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { derivePullRequestState } from '../../../platform/github/common/githubAPI';
+import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -30,6 +30,7 @@ import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } fr
 import { relative } from '../../../util/vs/base/common/path';
 import { basename, dirname, extUri, isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
+import { LanguageModelToolMCPSource } from '../../../vscodeTypes';
 import { EXTENSION_ID } from '../../common/constants';
 import { ChatVariablesCollection, isPromptFile } from '../../prompt/common/chatVariablesCollection';
 import { IToolsService } from '../../tools/common/toolsService';
@@ -47,6 +48,7 @@ import { ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK, isWelcomeView } f
 import { CopilotCLIPromptResolver } from '../copilotcli/node/copilotcliPromptResolver';
 import { builtinSlashSCommands, CopilotCLICommand, copilotCLICommands, ICopilotCLISession } from '../copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
+import { ICopilotCLIMCPHandler } from '../copilotcli/node/mcpHandler';
 import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
 import { ICopilotCLIChatSessionItemProvider } from './copilotCLIChatSessions';
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
@@ -1142,6 +1144,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		@IChatSessionMetadataStore private readonly chatSessionMetadataStore: IChatSessionMetadataStore,
 		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
+		@ICopilotCLIMCPHandler private readonly mcpHandler: ICopilotCLIMCPHandler,
 	) {
 		super();
 	}
@@ -1672,11 +1675,54 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				if (tools.length > 0) {
 					customAgent.tools = tools;
 				}
+				await this.translateToolReferences(customAgent, request);
 				return customAgent;
 			}
 		}
 		const sessionAgent = sessionId ? await this.chatSessionMetadataStore.getSessionAgent(sessionId) : undefined;
 		return sessionAgent ? await this.copilotCLIAgents.resolveAgent(sessionAgent) : undefined;
+	}
+
+	private async translateToolReferences(customAgent: SweCustomAgent, request: vscode.ChatRequest) {
+		if (!customAgent.tools?.length) {
+			return;
+		}
+		const { mcpConfig } = await this.mcpHandler.loadMcpConfig();
+		const mcpServerDisplayNameToNames = new Map<string, string>();
+		if (mcpConfig) {
+			Object.entries(mcpConfig).forEach(([key, server]) => {
+				if (server.displayName) {
+					mcpServerDisplayNameToNames.set(server.displayName, key);
+				}
+			});
+		}
+		const tools = Array.from(request.tools.keys());
+		console.log('Tools in request:', tools);
+		const toolReferenceNameMapping = new Map<string, string>();
+		request.tools.forEach((shouldBeUsed, tool) => {
+			if (!shouldBeUsed) {
+				return;
+			}
+			if (!tool.source || !tool.fullReferenceName || !(tool.source instanceof LanguageModelToolMCPSource)) {
+				return;
+			}
+			if (tool.fullReferenceName.includes('/')) {
+				const serverName = tool.fullReferenceName.split('/')[0];
+				const toolName = tool.fullReferenceName.split('/')[1];
+				const mcpServerName = mcpServerDisplayNameToNames.get(tool.source.label) ?? mcpServerDisplayNameToNames.get(serverName);
+				if (mcpServerName) {
+					toolReferenceNameMapping.set(tool.fullReferenceName, `${mcpServerName}/${toolName}`);
+				} else {
+					toolReferenceNameMapping.set(tool.fullReferenceName, tool.name);
+				}
+			} else {
+				toolReferenceNameMapping.set(tool.fullReferenceName, tool.name);
+			}
+		});
+
+		customAgent.tools = customAgent.tools.map(toolName => {
+			return toolReferenceNameMapping.get(toolName) ?? toolName;
+		});
 	}
 
 	private async getPromptInfoFromRequest(request: vscode.ChatRequest, token: vscode.CancellationToken): Promise<ParsedPromptFile | undefined> {

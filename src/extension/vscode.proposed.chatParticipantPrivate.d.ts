@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-// version: 15
+// version: 16
 
 declare module 'vscode' {
 
@@ -48,12 +48,6 @@ declare module 'vscode' {
 		readonly cell: TextDocument;
 
 		constructor(cell: TextDocument);
-	}
-
-	export interface ChatRequestSessionGrouping {
-		readonly id: string;
-		readonly order: number;
-		readonly kind?: string;
 	}
 
 	export interface ChatRequest {
@@ -121,11 +115,6 @@ declare module 'vscode' {
 		 * The request ID of the parent request that invoked this subagent.
 		 */
 		readonly parentRequestId?: string;
-
-		/**
-		 * Optional metadata used to group related requests together in the UI.
-		 */
-		readonly sessionGrouping?: ChatRequestSessionGrouping;
 
 		/**
 		 * The permission level for tool auto-approval in this request.
@@ -426,4 +415,17 @@ declare module 'vscode' {
 	}
 
 	// #endregion
+
+	export interface LanguageModelToolInformation {
+		/**
+		 * The full reference name of this tool as used in agent definition files.
+		 *
+		 * For MCP tools, this is the canonical name in the format `serverShortName/toolReferenceName`
+		 * (e.g., `github/search_issues`). This can be used to map between the tool names specified
+		 * in agent `.md` files and the tool's internal {@link LanguageModelToolInformation.name id}.
+		 *
+		 * This property is only set for MCP tools. For other tool types, it is `undefined`.
+		 */
+		readonly fullReferenceName?: string;
+	}
 }
