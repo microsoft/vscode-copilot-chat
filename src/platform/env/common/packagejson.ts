@@ -7,6 +7,7 @@ export interface PackageJSONShape {
 	isPreRelease?: boolean;
 	buildType: 'prod' | 'dev';
 	version: string;
+	completionsCoreVersion: string;
 	build: string;
 	publisher: string;
 	name: string;

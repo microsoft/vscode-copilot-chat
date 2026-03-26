@@ -15,7 +15,7 @@ const layers = new Set([
 	'vscode-worker',
 ])
 
-export = new class NoUnlayeredFiles implements eslint.Rule.RuleModule {
+export default new class NoUnlayeredFiles implements eslint.Rule.RuleModule {
 
 	create(context: eslint.Rule.RuleContext): eslint.Rule.RuleListener {
 

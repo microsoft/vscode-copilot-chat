@@ -6,18 +6,18 @@
 import { describe, expect, test } from 'vitest';
 import { DiffServiceImpl } from '../../../../platform/diff/node/diffServiceImpl';
 import { ILogger, ILogService } from '../../../../platform/log/common/logService';
+import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
+import { AsyncIterableObject } from '../../../../util/vs/base/common/async';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { NotebookCellKind, NotebookEdit } from '../../../../vscodeTypes';
 import { IAlternativeNotebookContentService } from '../../common/alternativeContent';
 import { AlternativeNotebookContentEditGenerator } from '../../common/alternativeContentEditGenerator';
 import { BaseAlternativeNotebookContentProvider } from '../../common/alternativeContentProvider';
 import { AlternativeJsonNotebookContentProvider } from '../../common/alternativeContentProvider.json';
 import { AlternativeTextNotebookContentProvider } from '../../common/alternativeContentProvider.text';
 import { AlternativeXmlNotebookContentProvider } from '../../common/alternativeContentProvider.xml';
-import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
-import { AsyncIterableObject } from '../../../../util/vs/base/common/async';
-import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
-import { NotebookCellKind, NotebookEdit } from '../../../../vscodeTypes';
-import { fixture, loadFile, loadNotebook } from './utils';
 import { LineOfText } from '../../common/helpers';
+import { fixture, loadFile, loadNotebook } from './utils';
 
 describe('Alternative Content Edit Generator', () => {
 	[
@@ -31,7 +31,9 @@ describe('Alternative Content Edit Generator', () => {
 			info: () => { /* no-op */ },
 			debug: () => { /* no-op */ },
 			trace: () => { /* no-op */ },
-			show: () => { /* no-op */ }
+			show: () => { /* no-op */ },
+			createSubLogger(): ILogger { return mockLogger; },
+			withExtraTarget(): ILogger { return mockLogger; }
 		};
 		function getEditGenerator(provider: BaseAlternativeNotebookContentProvider) {
 			return new AlternativeNotebookContentEditGenerator(new class implements IAlternativeNotebookContentService {
@@ -53,6 +55,12 @@ describe('Alternative Content Edit Generator', () => {
 				error = mockLogger.error;
 				show(preserveFocus?: boolean): void {
 					//
+				}
+				createSubLogger(): ILogger {
+					return this;
+				}
+				withExtraTarget(): ILogger {
+					return this;
 				}
 			}(), new NullTelemetryService());
 		}

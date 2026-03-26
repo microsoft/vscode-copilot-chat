@@ -56,7 +56,7 @@ export class PromptWorkspaceLabels implements IPromptWorkspaceLabels {
 	}
 
 	public async collectContext(): Promise<void> {
-		const expandedLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.ProjectLabelsExpanded, this._experimentationService);
+		const expandedLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ProjectLabelsExpanded, this._experimentationService);
 		this.strategy = expandedLabels ? PromptWorkspaceLabelsStrategy.Expanded : PromptWorkspaceLabelsStrategy.Basic;
 		await this.workspaceLabels.collectContext();
 

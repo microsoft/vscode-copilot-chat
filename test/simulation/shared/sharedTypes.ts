@@ -92,7 +92,7 @@ export type ISerialisedChatResponse = {
 		prompt_tokens: number;
 		completion_tokens: number;
 		total_tokens: number;
-		prompt_tokens_details: {
+		prompt_tokens_details?: {
 			cached_tokens: number;
 		};
 	};
@@ -116,12 +116,13 @@ export class InterceptedRequest {
 		public readonly response: ISerialisedChatResponse,
 		public readonly cacheKey: string | undefined,
 		public readonly model: string | undefined,
+		public readonly duration?: number
 	) {
 		// console.log('InterceptedRequest', requestMessages, requestOptions, response, cacheKey, model);
 	}
 
 	static fromJSON(json: any): InterceptedRequest {
-		const request = new InterceptedRequest(json.requestMessages, json.requestOptions, json.response, json.cacheKey, json.model);
+		const request = new InterceptedRequest(json.requestMessages, json.requestOptions, json.response, json.cacheKey, json.model, json.duration);
 		return request;
 	}
 
@@ -132,6 +133,7 @@ export class InterceptedRequest {
 			response: this.response,
 			cacheKey: this.cacheKey,
 			model: this.model,
+			duration: this.duration
 		};
 	}
 }
@@ -337,10 +339,11 @@ export type IWorkspaceState = IInitialWorkspaceState | IInteractionWorkspaceStat
  * Generates a unique output folder name based on the current date and time.
  * @returns A string representing the output folder name.
  */
-export function generateOutputFolderName(): string {
+export function generateOutputFolderName(prefix?: string): string {
 	const twodigits = (n: number) => String(n).padStart(2, '0');
 	const d = new Date();
 	const date = `${d.getFullYear()}${twodigits(d.getMonth() + 1)}${twodigits(d.getDate())}`;
 	const time = `${twodigits(d.getHours())}${twodigits(d.getMinutes())}${twodigits(d.getSeconds())}`;
-	return `out-${date}-${time}`;
+	const prefixPart = prefix ? `${prefix}-` : '';
+	return `out-${prefixPart}${date}-${time}`;
 }

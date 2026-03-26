@@ -22,6 +22,16 @@ import { TestRun } from './testRun';
 
 const SIMULATION_FOLDER_PATH = path.join(REPO_ROOT, SIMULATION_FOLDER_NAME);
 
+export interface RunConfig {
+	grep: string;
+	cacheMode: CacheMode;
+	n: number;
+	noFetch: boolean;
+	additionalArgs: string;
+	/** NES external scenarios path. When set, `--nes=external` and `--external-scenarios` are added. */
+	nesExternalScenariosPath?: string;
+}
+
 export const enum StateKind {
 	Initializing,
 	Running,
@@ -177,7 +187,7 @@ export class SimulationRunner extends Disposable {
 		});
 	}
 
-	public startRunning(runConfig: { grep: string; cacheMode: CacheMode; n: number; noFetch: boolean; additionalArgs: string }): Result<string, 'AlreadyRunning'> {
+	public startRunning(runConfig: RunConfig): Result<string, 'AlreadyRunning'> {
 		return this._simulationExecutor.startRunning(runConfig);
 	}
 
@@ -331,6 +341,9 @@ class SimulationExecutor {
 	@mobx.observable
 	public runningTestStatus: Map<string, RunnerTestStatus> = new Map<string, RunnerTestStatus>();
 
+	/** Tests registered for the current run via `initialTestSummary`. Used to scope incompleteness checks. */
+	private currentRunTests: Set<string> = new Set();
+
 	@mobx.computed
 	public get testStatus(): Result<readonly RunnerTestStatus[], Error> {
 		return Result.ok(Array.from(this.runningTestStatus.values()));
@@ -342,18 +355,19 @@ class SimulationExecutor {
 		mobx.makeObservable(this);
 	}
 
-	public startRunning(runConfig: { grep: string; cacheMode: CacheMode; n: number; noFetch: boolean; additionalArgs: string }): Result<string, 'AlreadyRunning'> {
+	public startRunning(runConfig: RunConfig): Result<string, 'AlreadyRunning'> {
 		if (this.state.kind === StateKind.Running) {
 			return Result.error('AlreadyRunning');
 		}
-		const outputFolder = path.join(REPO_ROOT, SIMULATION_FOLDER_NAME, generateOutputFolderName());
+		const isNesExternal = !!runConfig.nesExternalScenariosPath;
+		const outputFolder = path.join(REPO_ROOT, SIMULATION_FOLDER_NAME, generateOutputFolderName(isNesExternal ? 'external' : undefined));
 		const stdoutFile = path.join(outputFolder, STDOUT_FILENAME);
 
 		this.currentCancellationTokenSource = new CancellationTokenSource();
 		mobx.runInAction(() => {
 			this.state = State.Running();
-			this.runningTestStatus = new Map<string, RunnerTestStatus>();
 			this.terminationReason = undefined;
+			this.currentRunTests = new Set();
 			this._selectedRun.set(path.basename(outputFolder), false);
 		});
 
@@ -379,6 +393,10 @@ class SimulationExecutor {
 			args.push(`--no-fetch`);
 		}
 		args.push(`--output=${outputFolder}`);
+		if (runConfig.nesExternalScenariosPath) {
+			args.push(`--nes=external`);
+			args.push(`--external-scenarios=${runConfig.nesExternalScenariosPath}`);
+		}
 		Object.entries(minimist(runConfig.additionalArgs.split(' '))).filter(([k]) => k !== '_' && k !== '--').forEach(([k, v]) => {
 			args.push(v !== undefined ? `--${k}=${v}` : `--${k}`);
 		});
@@ -418,6 +436,22 @@ class SimulationExecutor {
 			}
 		} catch (e) {
 			console.error('interpretOutput', JSON.stringify(e, null, '\t'));
+			mobx.runInAction(() => {
+				const hasIncompleteTests = this.currentRunTests.size === 0 || Array.from(this.currentRunTests).some(
+					name => {
+						const status = this.runningTestStatus.get(name);
+						return !status || status.runs.length < status.expectedRuns;
+					}
+				);
+				if (hasIncompleteTests) {
+					this.terminationReason = typeof e === 'string' ? e : e instanceof Error ? (e.stack ?? e.message) : String(e);
+				}
+				for (const [_, status] of this.runningTestStatus) {
+					if (status.runs.length < status.expectedRuns) {
+						status.isCancelled = true;
+					}
+				}
+			});
 		} finally {
 			await fs.promises.writeFile(stdoutFile, JSON.stringify(entries, null, '\t'));
 			this.currentCancellationTokenSource = undefined;
@@ -432,6 +466,7 @@ class SimulationExecutor {
 		switch (entry.type) {
 			case OutputType.initialTestSummary:
 				for (const testName of entry.testsToRun) {
+					this.currentRunTests.add(testName);
 					this.runningTestStatus.set(testName, new RunnerTestStatus(testName, entry.nRuns, []));
 				}
 				return;

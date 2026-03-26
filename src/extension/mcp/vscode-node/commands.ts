@@ -9,6 +9,7 @@ import { JsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { createSha256Hash } from '../../../util/common/crypto';
 import { extractCodeBlocks } from '../../../util/common/markdown';
 import { mapFindFirst } from '../../../util/vs/base/common/arraysFind';
 import { DeferredPromise, raceCancellation } from '../../../util/vs/base/common/async';
@@ -17,15 +18,14 @@ import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle
 import { cloneAndChange } from '../../../util/vs/base/common/objects';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatLocation as VsCodeChatLocation } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { McpToolCallingLoop } from './mcpToolCallingLoop';
 import { McpPickRef } from './mcpToolCallingTools';
-import { NuGetMcpSetup } from './nuget';
+import { IInstallableMcpServer, IMcpServerVariable, IMcpStdioServerConfiguration, NuGetMcpSetup } from './nuget';
 
-type PackageType = 'npm' | 'pip' | 'docker' | 'nuget';
+export type PackageType = 'npm' | 'pip' | 'docker' | 'nuget';
 
 export interface IValidatePackageArgs {
 	type: PackageType;
@@ -45,7 +45,7 @@ export interface IPendingSetupArgs {
 	name: string;
 	version?: string;
 	readme?: string;
-	getServerManifest?(installConsent: Promise<void>): Promise<any>;
+	getMcpServer?(installConsent: Promise<void>): Promise<Omit<IInstallableMcpServer, 'name'> | undefined>;
 }
 
 export const enum ValidatePackageErrorType {
@@ -68,15 +68,16 @@ export type ValidatePackageResult =
 	| { state: 'error'; error: string; helpUri?: string; helpUriLabel?: string; errorType: ValidatePackageErrorType };
 
 type AssistedServerConfiguration = {
-	type: 'vscode';
+	type: 'assisted';
 	name?: string;
 	server: any;
 	inputs: PromptStringInputInfo[];
 	inputValues: Record<string, string> | undefined;
 } | {
-	type: 'server.json';
+	type: 'mapped';
 	name?: string;
-	server: any;
+	server: Omit<IMcpStdioServerConfiguration, 'type'>;
+	inputs?: IMcpServerVariable[];
 };
 
 interface NpmPackageResponse {
@@ -128,7 +129,7 @@ export class McpSetupCommands extends Disposable {
 				// allow case-insensitive comparison
 				if (this.pendingSetup?.pendingArgs.name.toUpperCase() !== args.name.toUpperCase()) {
 					finalState = FlowFinalState.NameMismatch;
-					vscode.window.showErrorMessage(localize("mcp.setup.nameMismatch", "Failed to generate MCP server configuration with a matching package name. Expected '{0}' but got '{1}' from generated configuration.", args.name, this.pendingSetup?.pendingArgs.name));
+					vscode.window.showErrorMessage(vscode.l10n.t("Failed to generate MCP server configuration with a matching package name. Expected '{0}' but got '{1}' from generated configuration.", args.name, this.pendingSetup?.pendingArgs.name ?? ''));
 					return undefined;
 				}
 
@@ -153,7 +154,7 @@ export class McpSetupCommands extends Disposable {
 					finalState: finalState,
 					configurationType: result?.type,
 					packageType: this.pendingSetup?.validateArgs.type,
-					packageName: this.pendingSetup?.pendingArgs.name,
+					packageName: await this.lowerHash(this.pendingSetup?.pendingArgs.name || args.name),
 					packageVersion: this.pendingSetup?.pendingArgs.version,
 				}, {
 					durationMs: this.pendingSetup?.stopwatch.elapsed() ?? -1
@@ -182,8 +183,18 @@ export class McpSetupCommands extends Disposable {
 			this.telemetryService.sendMSFTTelemetryEvent(
 				'mcp.setup.validatePackage',
 				result.state === 'ok' ?
-					{ state: result.state, packageType: args.type, packageName: result.name ?? args.name, packageVersion: result.version } :
-					{ state: result.state, packageType: args.type, packageName: args.name, errorType: result.errorType },
+					{
+						state: result.state,
+						packageType: args.type,
+						packageName: await this.lowerHash(result.name || args.name),
+						packageVersion: result.version
+					} :
+					{
+						state: result.state,
+						packageType: args.type,
+						packageName: await this.lowerHash(args.name),
+						errorType: result.errorType
+					},
 				{ durationMs: sw.elapsed() });
 
 			// return the minimal result to avoid leaking implementation details
@@ -197,6 +208,10 @@ export class McpSetupCommands extends Disposable {
 		}));
 	}
 
+	private async lowerHash(input: string | undefined) {
+		return input ? await createSha256Hash(input.toLowerCase()) : undefined;
+	}
+
 	private async enqueuePendingSetup(validateArgs: IValidatePackageArgs, pendingArgs: IPendingSetupArgs, sw: StopWatch) {
 		const cts = new CancellationTokenSource();
 		const canPrompt = new DeferredPromise<void>();
@@ -206,20 +221,21 @@ export class McpSetupCommands extends Disposable {
 		const done = (async () => {
 
 			// if the package has a server manifest, we can fetch it and use it instead of a tool loop
-			if (pendingArgs.getServerManifest) {
-				let serverManifest;
+			if (pendingArgs.getMcpServer) {
+				let mcpServer: Omit<IInstallableMcpServer, 'name'> | undefined;
 				try {
-					serverManifest = await pendingArgs.getServerManifest(canPrompt.p);
+					mcpServer = await pendingArgs.getMcpServer(canPrompt.p);
 				} catch (error) {
-					this.logService.warn(`Unable to fetch server manifest for ${validateArgs.type} package ${pendingArgs.name}@${pendingArgs.version}. Configuration will be generated from the package README.
+					this.logService.warn(`Unable to fetch MCP server configuration for ${validateArgs.type} package ${pendingArgs.name}@${pendingArgs.version}. Configuration will be generated from the package README.
 Error: ${error}`);
 				}
 
-				if (serverManifest) {
+				if (mcpServer) {
 					return {
-						type: "server.json" as const,
+						type: 'mapped' as const,
 						name: pendingArgs.name,
-						server: serverManifest
+						server: mcpServer.config as Omit<IMcpStdioServerConfiguration, 'type'>,
+						inputs: mcpServer.inputs
 					};
 				}
 			}
@@ -242,7 +258,10 @@ Error: ${error}`);
 					toolInvocationToken: generateUuid() as never,
 					toolReferences: [],
 					tools: new Map(),
-					id: '1'
+					id: '1',
+					sessionId: '',
+					sessionResource: vscode.Uri.parse('chat:/1'),
+					hasHooksEnabled: false,
 				},
 				props: {
 					targetSchema: validateArgs.targetConfig,
@@ -256,7 +275,7 @@ Error: ${error}`);
 
 			const toolCallLoopResult = await mcpLoop.run(undefined, cts.token);
 			if (toolCallLoopResult.response.type !== ChatFetchResponseType.Success) {
-				vscode.window.showErrorMessage(localize("mcp.setup.failed", "Failed to generate MCP configuration for {0}: {1}", validateArgs.name, toolCallLoopResult.response.reason));
+				vscode.window.showErrorMessage(vscode.l10n.t("Failed to generate MCP configuration for {0}: {1}", validateArgs.name, toolCallLoopResult.response.reason));
 				return undefined;
 			}
 
@@ -291,7 +310,7 @@ Error: ${error}`);
 				}
 			});
 
-			return { type: "vscode" as const, name, server: extracted, inputs, inputValues };
+			return { type: 'assisted' as const, name, server: extracted, inputs, inputValues };
 		})().finally(() => {
 			cts.dispose();
 			pickRef.dispose();
@@ -301,12 +320,12 @@ Error: ${error}`);
 		this.pendingSetup = { cts, canPrompt, done, validateArgs, pendingArgs, stopwatch: sw };
 	}
 
-	public static async validatePackageRegistry(args: { type: PackageType; name: string }, logService: ILogService, fetcherServer: IFetcherService): Promise<ValidatePackageResult> {
+	public static async validatePackageRegistry(args: { type: PackageType; name: string }, logService: ILogService, fetcherService: IFetcherService): Promise<ValidatePackageResult> {
 		try {
 			if (args.type === 'npm') {
-				const response = await fetcherServer.fetch(`https://registry.npmjs.org/${encodeURIComponent(args.name)}`, { method: 'GET' });
+				const response = await fetcherService.fetch(`https://registry.npmjs.org/${encodeURIComponent(args.name)}`, { method: 'GET', callSite: 'mcp-npm-registry' });
 				if (!response.ok) {
-					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.npmPackageNotFound", "Package {0} not found in npm registry", args.name) };
+					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: vscode.l10n.t("Package {0} not found in npm registry", args.name) };
 				}
 				const data = await response.json() as NpmPackageResponse;
 				const version = data['dist-tags']?.latest;
@@ -318,9 +337,9 @@ Error: ${error}`);
 					readme: data.readme,
 				};
 			} else if (args.type === 'pip') {
-				const response = await fetcherServer.fetch(`https://pypi.org/pypi/${encodeURIComponent(args.name)}/json`, { method: 'GET' });
+				const response = await fetcherService.fetch(`https://pypi.org/pypi/${encodeURIComponent(args.name)}/json`, { method: 'GET', callSite: 'mcp-pypi-registry' });
 				if (!response.ok) {
-					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.pythonPackageNotFound", "Package {0} not found in PyPI registry", args.name) };
+					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: vscode.l10n.t("Package {0} not found in PyPI registry", args.name) };
 				}
 				const data = await response.json() as PyPiPackageResponse;
 				const publisher = data.info?.author || data.info?.author_email || 'unknown';
@@ -334,7 +353,7 @@ Error: ${error}`);
 					readme: data.info?.description
 				};
 			} else if (args.type === 'nuget') {
-				const nuGetMcpSetup = new NuGetMcpSetup(logService);
+				const nuGetMcpSetup = new NuGetMcpSetup(logService, fetcherService);
 				return await nuGetMcpSetup.getNuGetPackageMetadata(args.name);
 			} else if (args.type === 'docker') {
 				// Docker Hub API uses namespace/repository format
@@ -343,9 +362,9 @@ Error: ${error}`);
 					? args.name.split('/', 2)
 					: ['library', args.name];
 
-				const response = await fetcherServer.fetch(`https://hub.docker.com/v2/repositories/${encodeURIComponent(namespace)}/${encodeURIComponent(repository)}`, { method: 'GET' });
+				const response = await fetcherService.fetch(`https://hub.docker.com/v2/repositories/${encodeURIComponent(namespace)}/${encodeURIComponent(repository)}`, { method: 'GET', callSite: 'mcp-docker-registry' });
 				if (!response.ok) {
-					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.dockerRepositoryNotFound", "Docker image {0} not found in Docker Hub registry", args.name) };
+					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: vscode.l10n.t("Docker image {0} not found in Docker Hub registry", args.name) };
 				}
 				const data = await response.json() as DockerHubResponse;
 				return {
@@ -355,9 +374,9 @@ Error: ${error}`);
 					readme: data.full_description || data.description,
 				};
 			}
-			return { state: 'error', error: localize("mcp.setup.unknownPackageType", "Unsupported package type: {0}", args.type), errorType: ValidatePackageErrorType.UnknownPackageType };
+			return { state: 'error', error: vscode.l10n.t("Unsupported package type: {0}", args.type), errorType: ValidatePackageErrorType.UnknownPackageType };
 		} catch (error) {
-			return { state: 'error', error: localize("mcp.setup.errorQueryingPackage", "Error querying package: {0}", (error as Error).message), errorType: ValidatePackageErrorType.UnhandledError };
+			return { state: 'error', error: vscode.l10n.t("Error querying package: {0}", (error as Error).message), errorType: ValidatePackageErrorType.UnhandledError };
 		}
 	}
 }

@@ -103,13 +103,13 @@ describe('DebuggableCommandIdentifier', () => {
 	});
 
 	it('returns treatment value 1', async () => {
-		accessor.get(IConfigurationService).setConfig(ConfigKey.Internal.TerminalToDebuggerPatterns, ['othert']);
+		accessor.get(IConfigurationService).setConfig(ConfigKey.Advanced.TerminalToDebuggerPatterns, ['othert']);
 		const result = await debuggableCommandIdentifier.isDebuggable(undefined, 'othert hello', CancellationToken.None);
 		expect(result).to.be.true;
 	});
 
 	it('return treatment value 2', async () => {
-		accessor.get(IConfigurationService).setConfig(ConfigKey.Internal.TerminalToDebuggerPatterns, ['!mytool']);
+		accessor.get(IConfigurationService).setConfig(ConfigKey.Advanced.TerminalToDebuggerPatterns, ['!mytool']);
 		const result = await debuggableCommandIdentifier.isDebuggable(undefined, 'mytool hello', CancellationToken.None);
 		expect(result).to.be.false;
 	});

@@ -1,6 +1,6 @@
 [
     {
-        "question": "@workspace /new create a ReactJS app that connects to Azure Cosmos DB NoSQL",
+        "question": "/new create a ReactJS app that connects to Azure Cosmos DB NoSQL",
         "stateFile": "./workspaceState.state.json"
     }
 ]

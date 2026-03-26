@@ -1,7 +1,7 @@
 [
   {
     "name": "phpLaravelApp",
-    "question": "@workspace /setupTests",
+    "question": "/setupTests",
     "keywords": {
       "anyOf": [
         "phpunit",

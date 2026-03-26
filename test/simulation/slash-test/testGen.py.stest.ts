@@ -140,8 +140,8 @@ ssuite({ title: '/tests', location: 'inline', language: 'python', }, () => {
 					assert.strictEqual(outcome.files.length, 1, 'Expected one file to be created');
 					assert.ok(outcome.files[0].hasOwnProperty('uri'));
 					const relFile = <IQualifiedFile>outcome.files[0];
-					assert.ok(relFile.uri.fsPath.endsWith("/tests/"), 'Expected test file to be in the existing test folder');
-					assert.ok(relFile.uri.fsPath.endsWith("/tests/measure_test.py"), 'Expected test file to be named in the same style as existing test files');
+					assert.ok(relFile.uri.fsPath.endsWith('/tests/'), 'Expected test file to be in the existing test folder');
+					assert.ok(relFile.uri.fsPath.endsWith('/tests/measure_test.py'), 'Expected test file to be named in the same style as existing test files');
 
 					assert.ok(getFileContent(outcome.files[0]).includes('from src.measure import cm_to_inches'), 'Expected correct import to be generated');
 					assert.ok(getFileContent(outcome.files[0]).includes('cm_to_inches'), 'Expected function to be tested to be included in the test file');
@@ -199,8 +199,8 @@ ssuite({ title: '/tests', location: 'inline', language: 'python', }, () => {
 				validate: async (outcome, workspace, accessor) => {
 					assertWorkspaceEdit(outcome);
 					// check that the import statement is updated when a new function is being added as a reference in the test file
-					assert.ok(outcome.files[0].hasOwnProperty('fileName'), "Expect new file created, which makes it a IRelativeFile with a fileName");
-					assert.ok((getFileContent(outcome.files[0]).includes("from src.ex import fraction_to_decimal, decimal_to_fraction")) || (getFileContent(outcome.files[0]).includes("from .ex import fraction_to_decimal, decimal_to_fraction")), 'Expected import statement to be updated with newest function.');
+					assert.ok(outcome.files[0].hasOwnProperty('fileName'), 'Expect new file created, which makes it a IRelativeFile with a fileName');
+					assert.ok((getFileContent(outcome.files[0]).includes('from src.ex import fraction_to_decimal, decimal_to_fraction')) || (getFileContent(outcome.files[0]).includes('from .ex import fraction_to_decimal, decimal_to_fraction')), 'Expected import statement to be updated with newest function.');
 				}
 			}],
 		});

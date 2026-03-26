@@ -56,11 +56,13 @@
 	{
 		"name": "/doc [inline] [typescript] - doc explain ts code",
 		"requests": [
-			"299fbb6baba2d695650c2c6759756840db6f1fc94b10aaf055fe2510e7687498",
-			"54bcf95f2d6d42b12f8e0dc6efcbee18331c231b06eebdc45bf9da5f39cfb7ca",
-			"64de94ac9167bd5138c18abaf2038c6ff568a982626e72a0493f891b39e1d66e",
-			"782d0d78c8801fddb0870fc86db76a6f583ea1a047ba1c050ed713aff6b0d5b2",
-			"af282c783dbf9c5a89b34d89bebfaef85f875398de3c26118a8d4ca1df9614a3"
+			"27cf63dd3f26ebadd14db7b2a8dd89d579db289863f9f3af52370d6a34d8ac26",
+			"5454ec9fdc3d6ae3bac306ff979b156d57ce549e4210df18f0df73c2e44a11de",
+			"573d76cf53b16efb551e6012460eed7e01b189f7095626a93aec5100ebee0ad8",
+			"6986ca9577091076d616804d400055568dfbb59f95de7bc5992fb6de993af3b0",
+			"af282c783dbf9c5a89b34d89bebfaef85f875398de3c26118a8d4ca1df9614a3",
+			"c676c5d4af9b82709dc19dbe2a0729ebf634f4e8b79bd54d0b7341772e5c5a4b",
+			"e753338eb60c95d6dd2ee3a19ab8c7464fecb70379c52fd40fe6bcf0c46733dd"
 		]
 	},
 	{
@@ -78,8 +80,8 @@
 	{
 		"name": "/doc [inline] [typescript] - issue #3692: add jsdoc comment - colors.ts",
 		"requests": [
-			"6c59d686d0fd07289c6711f49b5bf990d5fd870fb00b19099fd6b5f2327dc42f",
-			"a7c944f6eb6dde06ccfdaba18dec65dd029ee322af8786f2ce37318d68c23492"
+			"2137b8033afb4a7fb557f4713856e76f580f2202b380567a967061f1b1237fe0",
+			"6c59d686d0fd07289c6711f49b5bf990d5fd870fb00b19099fd6b5f2327dc42f"
 		]
 	},
 	{
@@ -91,7 +93,7 @@
 	{
 		"name": "/doc [inline] [typescript] - issue #3763: doc everywhere",
 		"requests": [
-			"5e912c726c42acc96c73e61dbd091b4366d550dea8cee33cb39e50a37ea04bd2",
+			"34c6feac98ec95dd6f1603183b274d8127b14533b182eb822eede24deae6750f",
 			"8f7bc68446f782b3430375d0494054b77237d57e9d4b044ebd7525a47936f1c5"
 		]
 	},

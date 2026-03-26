@@ -21,7 +21,7 @@ import { Schemas } from '../../../util/vs/base/common/network';
 import { autorun, autorunWithStore, derived, observableFromEvent, observableSignal, waitForState } from '../../../util/vs/base/common/observable';
 import { basename, join } from '../../../util/vs/base/common/path';
 import { startsWithIgnoreCase } from '../../../util/vs/base/common/strings';
-import { editFromTextDocumentContentChangeEvents } from '../../inlineEdits/vscode-node/parts/vscodeWorkspace';
+import { editFromTextDocumentContentChangeEvents } from '../../inlineEdits/vscode-node/parts/common';
 import { VirtualTextDocumentProvider } from '../../inlineEdits/vscode-node/utils/virtualTextDocumentProvider';
 import { JSONL } from '../common/jsonlUtil';
 import { IRecordableEditorLogEntry, IRecordableLogEntry, IWorkspaceListenerService } from '../common/workspaceListenerService';
@@ -31,7 +31,7 @@ import { WorkspaceRecorder } from './workspaceRecorder';
 
 export class WorkspaceRecorderFeature extends Disposable {
 	private readonly _gitApi = observableFromEvent(this, (listener) => this._gitExtensionService.onDidChange(listener), () => this._gitExtensionService.getExtensionApi());
-	private readonly _workspaceRecordingEnabled = this._configurationService.getConfigObservable(ConfigKey.Internal.WorkspaceRecordingEnabled);
+	private readonly _workspaceRecordingEnabled = this._configurationService.getConfigObservable(ConfigKey.Advanced.WorkspaceRecordingEnabled);
 
 	constructor(
 		@IVSCodeExtensionContext private readonly _vscodeExtensionContext: IVSCodeExtensionContext,
@@ -176,7 +176,7 @@ class InitializedWorkspaceRecorderFeature extends Disposable {
 			const workspaceRecorder = this.getWorkspaceRecorder(docUri);
 			if (workspaceRecorder) {
 				const edit = editFromTextDocumentContentChangeEvents(e.contentChanges);
-				workspaceRecorder.handleOnDidChangeTextDocument(docUri, edit, e.document.version);
+				workspaceRecorder.handleOnDidChangeTextDocument(docUri, edit, e.document.version, e.detailedReason?.metadata);
 			}
 		}));
 

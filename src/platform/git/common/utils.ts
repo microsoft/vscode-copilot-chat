@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type * as vscode from 'vscode';
 import { Remote } from '../vscode/git';
 
 interface GitConfigSection {
@@ -64,4 +65,40 @@ export function parseGitRemotes(raw: string): Remote[] {
 	}
 
 	return remotes;
+}
+
+export interface GitUriParams {
+	path: string;
+	ref: string;
+	submoduleOf?: string;
+}
+
+export interface GitUriOptions {
+	scheme?: string;
+	replaceFileExtension?: boolean;
+	submoduleOf?: string;
+}
+
+// As a mitigation for extensions like ESLint showing warnings and errors
+// for git URIs, let's change the file extension of these uris to .git,
+// when `replaceFileExtension` is true.
+export function toGitUri(uri: vscode.Uri, ref: string, options: GitUriOptions = {}): vscode.Uri {
+	const params: GitUriParams = {
+		path: uri.fsPath,
+		ref
+	};
+
+	if (options.submoduleOf) {
+		params.submoduleOf = options.submoduleOf;
+	}
+
+	let path = uri.path;
+
+	if (options.replaceFileExtension) {
+		path = `${path}.git`;
+	} else if (options.submoduleOf) {
+		path = `${path}.diff`;
+	}
+
+	return uri.with({ scheme: options.scheme ?? 'git', path, query: JSON.stringify(params) });
 }

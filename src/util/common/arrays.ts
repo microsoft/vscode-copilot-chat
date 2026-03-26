@@ -79,3 +79,13 @@ export function min(array: number[]): number {
 	}
 	return min;
 }
+
+/**
+ * 
+ * Last batch may not match batch size.
+ */
+export function* batchArrayElements<T>(array: T[], batchSize: number): Iterable<T[]> {
+	for (let i = 0; i < array.length; i += batchSize) {
+		yield array.slice(i, i + batchSize);
+	}
+}

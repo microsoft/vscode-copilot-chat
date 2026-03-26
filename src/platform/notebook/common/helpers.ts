@@ -118,11 +118,30 @@ export function normalizeCellId(cellId: string): string {
 	if (cellId.startsWith('VSC-')) {
 		return `#${cellId}`;
 	}
+	if (cellId.startsWith('#V-') && cellId.length === (CELL_ID_HASH_LENGTH + 3)) {
+		return `${CELL_ID_PREFIX}${cellId.substring(3)}`;
+	}
+	if (cellId.toLowerCase().startsWith('vscode-') && cellId.length === (CELL_ID_HASH_LENGTH + 7)) {
+		return `${CELL_ID_PREFIX}${cellId.substring(7)}`;
+	}
 	if (cellId.startsWith('-')) {
 		return `#VSC${cellId}`;
 	}
 	// Possible case where the cellId is just a hash without the prefix
 	return cellId.length === CELL_ID_HASH_LENGTH ? `${CELL_ID_PREFIX}${cellId}` : cellId;
+}
+
+const notebookIdCache = new WeakMap<NotebookDocument, string>();
+export function getNotebookId(notebook: NotebookDocument): string {
+	let id = notebookIdCache.get(notebook);
+	if (id) {
+		return id;
+	}
+	const hash = new StringSHA1();
+	hash.update(notebook.uri.toString());
+	id = hash.digest();
+	notebookIdCache.set(notebook, id);
+	return id;
 }
 
 /**

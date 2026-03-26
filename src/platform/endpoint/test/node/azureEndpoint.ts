@@ -3,17 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { OpenAI } from '@vscode/prompt-tsx';
 import { TokenizerType } from '../../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
-import { CHAT_MODEL } from '../../../configuration/common/configurationService';
-import { IEnvService } from '../../../env/common/envService';
+import { CHAT_MODEL, IConfigurationService } from '../../../configuration/common/configurationService';
+import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody } from '../../../networking/common/networking';
+import { RawMessageConversionCallback } from '../../../networking/common/openai';
+import { IChatWebSocketManager } from '../../../networking/node/chatWebSocketManager';
+import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
-import { IThinkingDataService } from '../../../thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../../common/capiClient';
 import { IDomainService } from '../../common/domainService';
@@ -27,16 +28,19 @@ export class AzureTestEndpoint extends ChatEndpoint {
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClient: ICAPIClientService,
 		@IFetcherService fetcherService: IFetcherService,
-		@IEnvService envService: IEnvService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IAuthenticationService authService: IAuthenticationService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService private instantiationService: IInstantiationService,
-		@IThinkingDataService private thinkingDataService: IThinkingDataService
+		@IConfigurationService configurationService: IConfigurationService,
+		@IExperimentationService experimentationService: IExperimentationService,
+		@IChatWebSocketManager chatWebSocketService: IChatWebSocketManager,
+		@ILogService logService: ILogService
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: _azureModel,
+			vendor: 'Microsoft Azure',
 			name: 'Azure Test',
 			version: '1.0',
 			model_picker_enabled: false,
@@ -56,14 +60,13 @@ export class AzureTestEndpoint extends ChatEndpoint {
 		super(
 			modelInfo,
 			domainService,
-			capiClient,
-			fetcherService,
-			envService,
-			telemetryService,
-			authService,
 			chatMLFetcher,
 			tokenizerProvider,
-			instantiationService
+			instantiationService,
+			configurationService,
+			experimentationService,
+			chatWebSocketService,
+			logService
 		);
 		this.isThinkingModel = false; // Set to true if testing a thinking model
 	}
@@ -97,12 +100,12 @@ export class AzureTestEndpoint extends ChatEndpoint {
 		return 'Bearer ' + this.getSecretKey();
 	}
 
-	public getExtraHeaders(): Record<string, string> {
+	public override getExtraHeaders(): Record<string, string> {
 		return {
 			'Authorization': this.getAuthHeader(),
 			'ocp-apim-subscription-key': this.getSecretKey(),
 			'api-key': this.getSecretKey(),
-			'x-policy-id': "nil"
+			'x-policy-id': 'nil'
 		};
 	}
 
@@ -112,24 +115,6 @@ export class AzureTestEndpoint extends ChatEndpoint {
 			delete body.snippy;
 			delete body.intent;
 
-			if (body.messages) {
-				const newMessages = body.messages.map((message: OpenAI.ChatMessage) => {
-					if (message.role === OpenAI.ChatRole.Assistant && message.tool_calls && message.tool_calls.length > 0) {
-						const id = message.tool_calls[0].id;
-						const thinking = this.thinkingDataService.get(id);
-						if (thinking?.id) {
-							return {
-								...message,
-								cot_id: thinking.id,
-								cot_summary: thinking.text,
-							};
-						}
-					}
-					return message;
-				});
-				body.messages = newMessages;
-			}
-
 			if (body && this.isThinkingModel) {
 				delete body.temperature;
 				body['max_completion_tokens'] = body.max_tokens;
@@ -138,11 +123,16 @@ export class AzureTestEndpoint extends ChatEndpoint {
 		}
 	}
 
-	override async acceptChatPolicy(): Promise<boolean> {
-		return true;
-	}
-
 	override cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {
 		return this.instantiationService.createInstance(AzureTestEndpoint, this._azureModel);
+	}
+
+	protected override getCompletionsCallback(): RawMessageConversionCallback | undefined {
+		return (out, data) => {
+			if (data && data.id) {
+				out.cot_id = data.id;
+				out.cot_summary = Array.isArray(data.text) ? data.text.join('') : data.text;
+			}
+		};
 	}
 }

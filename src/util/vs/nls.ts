@@ -1,17 +1,19 @@
 //!!! DO NOT modify, this file was COPIED from 'microsoft/vscode'
 
-declare var document: any;
-
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-// eslint-disable-next-line local/code-import-patterns
-import { getNLSLanguage, getNLSMessages } from './nls.messages';
-// eslint-disable-next-line local/code-import-patterns
-export { getNLSLanguage, getNLSMessages } from './nls.messages';
+export function getNLSMessages(): string[] {
+	return globalThis._VSCODE_NLS_MESSAGES;
+}
 
+export function getNLSLanguage(): string | undefined {
+	return globalThis._VSCODE_NLS_LANGUAGE;
+}
+
+declare const document: { location?: { hash?: string } } | undefined;
 const isPseudo = getNLSLanguage() === 'pseudo' || (typeof document !== 'undefined' && document.location && typeof document.location.hash === 'string' && document.location.hash.indexOf('pseudo=true') >= 0);
 
 export interface ILocalizeInfo {

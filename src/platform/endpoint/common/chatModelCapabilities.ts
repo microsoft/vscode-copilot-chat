@@ -4,16 +4,139 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelChat } from 'vscode';
+import { getCachedSha256Hash } from '../../../util/common/crypto';
+import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import type { IChatEndpoint } from '../../networking/common/networking';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
+
+const HIDDEN_MODEL_A_HASHES = [
+	'a99dd17dfee04155d863268596b7f6dd36d0a6531cd326348dbe7416142a21a3',
+	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95'
+];
+
+const VSC_MODEL_HASHES_A = [
+	'6db59e9bfe6e2ce608c0ee0ade075c64e4d054f05305e3034481234703381bb5',
+];
+
+const VSC_MODEL_HASHES_B = [
+	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95',
+	'7b667eee9b3517fb9aae7061617fd9cec524859fcd6a20a605bfb142a6b0f14e',
+	'1d28f8e6e5af58c60e9a52385314a3c7bc61f7226e1444e31fe60c58c30e8235',
+	'e7cfc1a7adaf9e419044e731b7a9e21940a5280a438b472db0c46752dd70eab3',
+	'3104045f9b69dbb7a3d76cc8a0aa89eb05e10677c4dd914655ea87f4be000f4e',
+];
 
 
-function getSha256Hash(text: string): Promise<string> {
-	const encoder = new TextEncoder();
-	const data = encoder.encode(text);
-	return crypto.subtle.digest('SHA-256', data).then(hashBuffer => {
-		const hashArray = Array.from(new Uint8Array(hashBuffer));
-		return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-	});
+// subset to allow replace string instead of apply patch.
+const VSC_MODEL_HASHES_SUBSET_C = [
+	'6db59e9bfe6e2ce608c0ee0ade075c64e4d054f05305e3034481234703381bb5',
+	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95',
+	'7b667eee9b3517fb9aae7061617fd9cec524859fcd6a20a605bfb142a6b0f14e',
+	'1d28f8e6e5af58c60e9a52385314a3c7bc61f7226e1444e31fe60c58c30e8235',
+	'e7cfc1a7adaf9e419044e731b7a9e21940a5280a438b472db0c46752dd70eab3',
+	'3104045f9b69dbb7a3d76cc8a0aa89eb05e10677c4dd914655ea87f4be000f4e',
+];
+
+const HIDDEN_MODEL_E_HASHES: string[] = [
+	'6013de0381f648b7f21518885c02b40b7583adfb33c6d9b64d3aed52c3934798'
+];
+
+const HIDDEN_MODEL_F_HASHES: string[] = [
+	'ab45e8474269b026f668d49860b36850122e18a50d5ea38f3fefdae08261865c',
+	'9542d5c077c2bc379f92be32272b14be8b94a8841323465db0d5b3d6f4f0dab0',
+];
+
+const HIDDEN_MODEL_J_HASHES: string[] = [
+	'0a4346f806b28b3ce94905c3ac56fcd5ee2337d8613161696aba52eb0c3551cc',
+	'2a7b79b0151aa44a0abee17adc0e18df1c07d8d15d7affa989c3b3afb6bee0a0',
+	'f3c2984127dd2db50a555194925ca0d55c3c7b676e889c9406b2e6875a67e29c',
+	'5a81e6aa7556585ba7c569881d1103683adc9e0124ff7952df423afba2f167b5',
+];
+
+function getModelId(model: LanguageModelChat | IChatEndpoint): string {
+	return 'id' in model ? model.id : model.model;
+}
+
+export function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
+	const h = getCachedSha256Hash(model.family);
+	return HIDDEN_MODEL_A_HASHES.includes(h);
+}
+
+
+export function isHiddenModelE(model: LanguageModelChat | IChatEndpoint) {
+	const h = getCachedSha256Hash(model.family);
+	return HIDDEN_MODEL_E_HASHES.includes(h);
+}
+
+export function isHiddenModelF(model: LanguageModelChat | IChatEndpoint) {
+	const h = getCachedSha256Hash(model.family);
+	return HIDDEN_MODEL_F_HASHES.includes(h);
+}
+
+export function isHiddenModelG(model: LanguageModelChat | IChatEndpoint) {
+	const family_hash = getCachedSha256Hash(model.family);
+	return family_hash === '0d90e0e579352b8502fc2a46b40961ee941adc26ce67c2b1438f0e4ea97d932f';
+}
+
+
+export function isGpt54(model: LanguageModelChat | IChatEndpoint | string) {
+	const h = getCachedSha256Hash(typeof model === 'string' ? model : model.family);
+	const family = typeof model === 'string' ? model : model.family;
+	return family.startsWith('gpt-5.4') || HIDDEN_MODEL_J_HASHES.includes(h);
+}
+
+export function isGpt54ConcisePromptExp(
+	accessor: ServicesAccessor,
+	model: LanguageModelChat | IChatEndpoint | string,
+) {
+	const configurationService = accessor.get(IConfigurationService);
+	const experimentationService = accessor.get(IExperimentationService);
+	return isGpt54(model) && configurationService.getExperimentBasedConfig(ConfigKey.EnableGpt54ConcisePromptExp, experimentationService);
+}
+
+export function isGpt54LargePromptExp(
+	accessor: ServicesAccessor,
+	model: LanguageModelChat | IChatEndpoint | string,
+) {
+	const configurationService = accessor.get(IConfigurationService);
+	const experimentationService = accessor.get(IExperimentationService);
+	return isGpt54(model) && configurationService.getExperimentBasedConfig(ConfigKey.EnableGpt54LargePromptExp, experimentationService);
+}
+
+
+export function isGpt53Codex(model: LanguageModelChat | IChatEndpoint | string) {
+	const family = typeof model === 'string' ? model : model.family;
+	return family.startsWith('gpt-5.3-codex');
+}
+
+export function isVSCModelA(model: LanguageModelChat | IChatEndpoint) {
+
+	const ID_hash = getCachedSha256Hash(getModelId(model));
+	const family_hash = getCachedSha256Hash(model.family);
+	return VSC_MODEL_HASHES_A.includes(ID_hash) || VSC_MODEL_HASHES_A.includes(family_hash);
+}
+
+export function isVSCModelB(model: LanguageModelChat | IChatEndpoint) {
+	const ID_hash = getCachedSha256Hash(getModelId(model));
+	const family_hash = getCachedSha256Hash(model.family);
+	return VSC_MODEL_HASHES_B.includes(ID_hash) || VSC_MODEL_HASHES_B.includes(family_hash);
+}
+
+export function isVSCModelC(model: LanguageModelChat | IChatEndpoint) {
+	const ID_hash = getCachedSha256Hash(getModelId(model));
+	const family_hash = getCachedSha256Hash(model.family);
+	return VSC_MODEL_HASHES_SUBSET_C.includes(ID_hash) || VSC_MODEL_HASHES_SUBSET_C.includes(family_hash);
+}
+
+export function isGpt52CodexFamily(model: LanguageModelChat | IChatEndpoint | string): boolean {
+	const family = typeof model === 'string' ? model : model.family;
+	return family === 'gpt-5.2-codex';
+}
+
+export function isGpt52Family(model: LanguageModelChat | IChatEndpoint | string): boolean {
+	const family = typeof model === 'string' ? model : model.family;
+	return family === 'gpt-5.2';
 }
 
 /**
@@ -35,25 +158,45 @@ export function modelPrefersInstructionsAfterHistory(modelFamily: string) {
 /**
  * Model supports apply_patch as an edit tool.
  */
-export async function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	if (model.family === 'gpt-4.1' || model.family === 'o4-mini' || model.family.startsWith('gpt-5')) {
-		return true;
+export function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint): boolean {
+	// only using replace string as edit tool, disable apply_patch for VSC Model C
+	if (isVSCModelC(model)) {
+		return false;
 	}
-	return await getSha256Hash(model.family) === 'a99dd17dfee04155d863268596b7f6dd36d0a6531cd326348dbe7416142a21a3';
+	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o'))
+		|| model.family === 'o4-mini'
+		|| isGpt52CodexFamily(model.family)
+		|| isGpt53Codex(model.family)
+		|| isVSCModelA(model)
+		|| isVSCModelB(model)
+		|| isGpt52Family(model.family)
+		|| isGpt54(model);
 }
 
 /**
  * Model prefers JSON notebook representation.
  */
 export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family === 'gpt-4.1' || model.family === 'o4-mini' || model.family.startsWith('gpt-5');
+	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o'))
+		|| model.family === 'o4-mini'
+		|| isGpt52CodexFamily(model.family)
+		|| isGpt53Codex(model.family)
+		|| isGpt52Family(model.family)
+		|| isGpt54(model);
 }
 
 /**
  * Model supports replace_string_in_file as an edit tool.
  */
 export function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('gemini');
+	return model.family.toLowerCase().includes('gemini') || model.family.includes('grok-code') || modelSupportsMultiReplaceString(model) || isHiddenModelF(model) || isMinimaxFamily(model);
+}
+
+/**
+ * Model supports multi_replace_string_in_file as an edit tool.
+ */
+export function modelSupportsMultiReplaceString(model: LanguageModelChat | IChatEndpoint): boolean {
+	return isAnthropicFamily(model) || isHiddenModelE(model) || isVSCModelC(model);
 }
 
 /**
@@ -61,7 +204,48 @@ export function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpo
  * without needing insert_edit_into_file.
  */
 export function modelCanUseReplaceStringExclusively(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic');
+	return isAnthropicFamily(model) || model.family.includes('grok-code') || isHiddenModelE(model) || model.family.toLowerCase().includes('gemini-3') || isVSCModelC(model) || isHiddenModelF(model) || isMinimaxFamily(model);
+}
+
+/**
+ * We should attempt to automatically heal incorrect edits the model may emit.
+ * @note whether this is respected is currently controlled via EXP
+ */
+export function modelShouldUseReplaceStringHealing(model: LanguageModelChat | IChatEndpoint) {
+	return model.family.includes('gemini-2');
+}
+
+/**
+ * The model can accept image urls as the `image_url` parameter in mcp tool results.
+ */
+export function modelCanUseMcpResultImageURL(model: LanguageModelChat | IChatEndpoint): boolean {
+	return !isAnthropicFamily(model) && !isHiddenModelE(model);
+}
+
+/**
+ * The model can accept image urls as the `image_url` parameter in requests.
+ */
+export function modelCanUseImageURL(model: LanguageModelChat | IChatEndpoint): boolean {
+	return true;
+}
+
+/**
+ * The model supports native PDF document processing via document content parts.
+ */
+export function modelSupportsPDFDocuments(model: LanguageModelChat | IChatEndpoint): boolean {
+	return isAnthropicFamily(model);
+}
+
+/**
+ * The model is capable of using apply_patch as an edit tool exclusively,
+ * without needing insert_edit_into_file.
+ */
+export function modelCanUseApplyPatchExclusively(model: LanguageModelChat | IChatEndpoint): boolean {
+	// only using replace string as edit tool, disable apply_patch for VSC Model C
+	if (isVSCModelC(model)) {
+		return false;
+	}
+	return isGpt5PlusFamily(model) || isVSCModelA(model) || isVSCModelB(model);
 }
 
 /**
@@ -70,5 +254,89 @@ export function modelCanUseReplaceStringExclusively(model: LanguageModelChat | I
  * replace_string.
  */
 export function modelNeedsStrongReplaceStringHint(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.toLowerCase().includes('gemini');
+	return model.family.toLowerCase().includes('gemini') || isHiddenModelF(model);
+}
+
+/**
+ * Model can take the simple, modern apply_patch instructions.
+ */
+export function modelSupportsSimplifiedApplyPatchInstructions(model: LanguageModelChat | IChatEndpoint): boolean {
+	return isGpt5PlusFamily(model) || isVSCModelA(model) || isVSCModelB(model);
+}
+
+export function isAnthropicFamily(model: LanguageModelChat | IChatEndpoint): boolean {
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || isHiddenModelG(model);
+}
+
+export function isGeminiFamily(model: LanguageModelChat | IChatEndpoint): boolean {
+	return model.family.toLowerCase().startsWith('gemini');
+}
+
+export function isMinimaxFamily(model: LanguageModelChat | IChatEndpoint): boolean {
+	return model.family.toLowerCase().includes('minimax');
+}
+
+export function isGpt5PlusFamily(model: LanguageModelChat | IChatEndpoint | string | undefined): boolean {
+	if (!model) {
+		return false;
+	}
+
+	const family = typeof model === 'string' ? model : model.family;
+	return !!family.startsWith('gpt-5');
+}
+
+/**
+ * Matches gpt-5-codex, gpt-5.1-codex, gpt-5.1-codex-mini, and any future models in this general family
+ */
+export function isGptCodexFamily(model: LanguageModelChat | IChatEndpoint | string | undefined): boolean {
+	if (!model) {
+		return false;
+	}
+
+	const family = typeof model === 'string' ? model : model.family;
+	return (!!family.startsWith('gpt-') && family.includes('-codex'));
+}
+
+/**
+ * GPT-5, -mini, -codex, not 5.1+
+ */
+export function isGpt5Family(model: LanguageModelChat | IChatEndpoint | string | undefined): boolean {
+	if (!model) {
+		return false;
+	}
+
+	const family = typeof model === 'string' ? model : model.family;
+	return family === 'gpt-5' || family === 'gpt-5-mini' || family === 'gpt-5-codex';
+}
+
+export function isGptFamily(model: LanguageModelChat | IChatEndpoint | string | undefined): boolean {
+	if (!model) {
+		return false;
+	}
+
+	const family = typeof model === 'string' ? model : model.family;
+	return !!family.startsWith('gpt-');
+}
+
+/**
+ * Any GPT-5.1+ model
+ */
+export function isGpt51Family(model: LanguageModelChat | IChatEndpoint | string | undefined): boolean {
+	if (!model) {
+		return false;
+	}
+
+	const family = typeof model === 'string' ? model : model.family;
+	return !!family.startsWith('gpt-5.1');
+}
+
+/**
+ * This takes a sync shortcut and should only be called when a model hash would have already been computed while rendering the prompt.
+ */
+export function getVerbosityForModelSync(model: IChatEndpoint): 'low' | 'medium' | 'high' | undefined {
+	if (model.family === 'gpt-5.1' || model.family === 'gpt-5-mini') {
+		return 'low';
+	}
+
+	return undefined;
 }

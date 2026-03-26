@@ -101,7 +101,7 @@ export function registerLinkCommands(
 		// Command used when we have already resolved the link to a location.
 		// This is currently used by the inline code linkifier for links such as `symbolName`
 		vscode.commands.registerCommand(openSymbolFromReferencesCommand, async (...[_word, locations, requestId]: OpenSymbolFromReferencesCommandArgs) => {
-			const dest = await resolveSymbolFromReferences(locations, CancellationToken.None);
+			const dest = await resolveSymbolFromReferences(locations, undefined, CancellationToken.None);
 
 			/* __GDPR__
 				"panel.action.openSymbolFromReferencesLink" : {
@@ -136,11 +136,31 @@ function toLocationLink(def: vscode.Location | vscode.LocationLink): vscode.Loca
 	}
 }
 
-export async function resolveSymbolFromReferences(locations: ReadonlyArray<{ uri: UriComponents; pos: vscode.Position }>, token: CancellationToken) {
+function findSymbolByName(symbols: Array<vscode.SymbolInformation | vscode.DocumentSymbol>, symbolName: string, maxDepth: number = 5): vscode.SymbolInformation | vscode.DocumentSymbol | undefined {
+	for (const symbol of symbols) {
+		if (symbol.name === symbolName) {
+			return symbol;
+		}
+		// Check children if it's a DocumentSymbol and we haven't exceeded max depth
+		if (maxDepth > 0 && 'children' in symbol && symbol.children) {
+			const found = findSymbolByName(symbol.children, symbolName, maxDepth - 1);
+			if (found) {
+				return found;
+			}
+		}
+	}
+	return undefined;
+}
+
+export async function resolveSymbolFromReferences(locations: ReadonlyArray<{ uri: UriComponents; pos: vscode.Position }>, symbolText: string | undefined, token: CancellationToken) {
 	let dest: {
 		type: 'definition' | 'firstOccurrence' | 'unresolved';
 		loc: vscode.LocationLink;
 	} | undefined;
+
+	// Extract the rightmost part from qualified symbol like "TextModel.undo()"
+	const symbolParts = symbolText ? Array.from(symbolText.matchAll(/[#\w$][\w\d$]*/g), x => x[0]) : [];
+	const targetSymbolName = symbolParts.length >= 2 ? symbolParts[symbolParts.length - 1] : undefined;
 
 	// TODO: These locations may no longer be valid if the user has edited the file since the references were found.
 	for (const loc of locations) {
@@ -151,9 +171,37 @@ export async function resolveSymbolFromReferences(locations: ReadonlyArray<{ uri
 			}
 
 			if (def) {
+				const defLoc = toLocationLink(def);
+
+				// If we have a qualified name like "TextModel.undo()", try to find the specific symbol in the file
+				if (targetSymbolName && symbolParts.length >= 2) {
+					try {
+						const symbols = await vscode.commands.executeCommand<Array<vscode.SymbolInformation | vscode.DocumentSymbol> | undefined>('vscode.executeDocumentSymbolProvider', defLoc.targetUri);
+						if (symbols) {
+							// Search for the target symbol in the document symbols
+							const targetSymbol = findSymbolByName(symbols, targetSymbolName);
+							if (targetSymbol) {
+								let targetRange: vscode.Range;
+								if ('selectionRange' in targetSymbol) {
+									targetRange = targetSymbol.selectionRange;
+								} else {
+									targetRange = targetSymbol.location.range;
+								}
+								dest = {
+									type: 'definition',
+									loc: { targetUri: defLoc.targetUri, targetRange: targetRange, targetSelectionRange: targetRange },
+								};
+								break;
+							}
+						}
+					} catch {
+						// Failed to find symbol, fall through to use the first definition
+					}
+				}
+
 				dest = {
 					type: 'definition',
-					loc: toLocationLink(def),
+					loc: defLoc,
 				};
 				break;
 			}

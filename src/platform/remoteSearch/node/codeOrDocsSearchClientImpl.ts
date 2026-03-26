@@ -3,18 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { RequestMetadata, RequestType } from '@vscode/copilot-api';
-import { createRequestHMAC } from '../../../util/common/crypto';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { IDomainService } from '../../endpoint/common/domainService';
-import { IEnvService } from '../../env/common/envService';
 import { LogExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
-import { IFetcherService } from '../../networking/common/fetcherService';
 import { IEndpoint, postRequest } from '../../networking/common/networking';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICodeOrDocsSearchBaseScopingQuery, ICodeOrDocsSearchItem, ICodeOrDocsSearchMultiRepoScopingQuery, ICodeOrDocsSearchOptions, ICodeOrDocsSearchResult, ICodeOrDocsSearchSingleRepoScopingQuery, IDocsSearchClient } from '../common/codeOrDocsSearchClient';
@@ -57,18 +53,15 @@ export class DocsSearchClient implements IDocsSearchClient {
 	private readonly slug = 'docs';
 
 	constructor(
-		@IDomainService private readonly _domainService: IDomainService,
-		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@IFetcherService private readonly _fetcherService: IFetcherService,
-		@IEnvService private readonly _envService: IEnvService,
 		@ILogService private readonly _logService: ILogService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) { }
 
 	search(query: string, scopingQuery: ICodeOrDocsSearchSingleRepoScopingQuery, options?: ICodeOrDocsSearchOptions, token?: CancellationToken): Promise<ICodeOrDocsSearchItem[]>;
 	search(query: string, scopingQuery: ICodeOrDocsSearchMultiRepoScopingQuery, options?: ICodeOrDocsSearchOptions, token?: CancellationToken): Promise<ICodeOrDocsSearchResult>;
-	@LogExecTime(self => self._logService, 'CodeOrDocsSearchClientImpl.search')
+	@LogExecTime(self => self._logService, 'CodeOrDocsSearchClientImpl::search')
 	async search(
 		query: string,
 		scopingQuery: ICodeOrDocsSearchSingleRepoScopingQuery | ICodeOrDocsSearchMultiRepoScopingQuery,
@@ -116,7 +109,7 @@ export class DocsSearchClient implements IDocsSearchClient {
 		options: ICodeOrDocsSearchOptions,
 		token: CancellationToken
 	): Promise<IDocsSearchResponse> {
-		const authToken = (await this._authenticationService.getPermissiveGitHubSession({ silent: true }))?.accessToken ?? (await this._authenticationService.getAnyGitHubSession({ silent: true }))?.accessToken;
+		const authToken = (await this._authenticationService.getGitHubSession('permissive', { silent: true }))?.accessToken ?? (await this._authenticationService.getGitHubSession('any', { silent: true }))?.accessToken;
 		if (token.isCancellationRequested) {
 			throw new CancellationError();
 		}
@@ -196,26 +189,19 @@ export class DocsSearchClient implements IDocsSearchClient {
 				return headers;
 			},
 		};
-		const response = await postRequest(
-			this._fetcherService,
-			this._envService,
-			this._telemetryService,
-			this._domainService,
-			this._capiClientService,
-			endpointInfo,
-			authToken ?? '',
-			await createRequestHMAC(process.env.HMAC_SECRET),
-			'codesearch',
-			generateUuid(),
-			{
+		const response = await this._instantiationService.invokeFunction(postRequest, {
+			endpointOrUrl: endpointInfo,
+			secretKey: authToken ?? '',
+			intent: 'codesearch',
+			requestId: generateUuid(),
+			body: {
 				query,
 				scopingQuery: formatScopingQuery(scopingQuery),
 				similarity,
 				limit
 			},
-			undefined,
-			cancellationToken
-		);
+			cancelToken: cancellationToken,
+		});
 
 		const text = await response.text();
 		if (response.status === 404 || (response.status === 400 && text.includes('unknown integration'))) {

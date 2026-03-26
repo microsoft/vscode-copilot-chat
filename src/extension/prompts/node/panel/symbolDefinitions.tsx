@@ -6,6 +6,7 @@
 import { PromptElement, PromptElementProps, PromptPiece, PromptSizing, UserMessage } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
+import { isScenarioAutomation } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILanguageFeaturesService } from '../../../../platform/languages/common/languageFeaturesService';
@@ -82,7 +83,7 @@ export class SymbolDefinitions extends PromptElement<Props, State> {
 			return { ...emptyState, isIgnored: true };
 		}
 
-		const timeout = this.extensionContext.extensionMode === ExtensionMode.Test
+		const timeout = this.extensionContext.extensionMode === ExtensionMode.Test && !isScenarioAutomation
 			? 0
 			: (this.props.timeoutMs === undefined ? SymbolDefinitions.DEFAULT_TIMEOUT_MS : this.props.timeoutMs);
 

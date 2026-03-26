@@ -7,8 +7,8 @@ import { assert } from '../../../../util/vs/base/common/assert';
 import { StringEdit } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { EventLogEntryData, LogEntry } from '../workspaceLog';
-import { DocumentRecording } from "./documentHistory";
-import { DocumentId, DocumentStateId, InlineCompletionFetchRequest, Operation, OperationKind } from "./operation";
+import { DocumentRecording } from './documentHistory';
+import { DocumentId, DocumentStateId, InlineCompletionFetchRequest, Operation, OperationKind } from './operation';
 
 export class RecordingData {
 	public static create(logEntries: readonly LogEntry[]): RecordingData {
@@ -68,8 +68,8 @@ export class ResolvedRecording {
 				const data = e.data as EventLogEntryData;
 
 				switch (data.sourceId) {
-					case "InlineCompletions.fetch": {
-						assert(data.kind === "end");
+					case 'InlineCompletions.fetch': {
+						assert(data.kind === 'end');
 						const req = fetchRequests.get(data.requestId);
 						if (req) {
 							req.result = data;

@@ -29,7 +29,8 @@ import { summarizeDocuments, SummarizeDocumentsItem } from '../../prompts/node/i
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { checkCancellation, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
+import { formatUriForFileWidget } from '../common/toolUtils';
+import { checkCancellation, resolveToolInputPath } from './toolUtils';
 
 
 interface IFindTestFilesToolsParams {
@@ -145,7 +146,7 @@ class FindTestFilesTool extends Disposable implements ICopilotTool<IFindTestFile
 	}
 
 	private formatURIs(uris: URI[]): string {
-		return uris.map(formatUriForFileWidget).join(', ');
+		return uris.map(uri => formatUriForFileWidget(uri)).join(', ');
 	}
 
 	async provideInput(promptContext: IBuildPromptContext): Promise<IFindTestFilesToolsParams | undefined> {

@@ -5,7 +5,7 @@
 
 import * as eslint from 'eslint';
 
-export = new class NoBadGDPRComment implements eslint.Rule.RuleModule {
+export default new class NoBadGDPRComment implements eslint.Rule.RuleModule {
 	readonly meta: eslint.Rule.RuleMetaData = {
 		type: 'problem',
 		docs: {

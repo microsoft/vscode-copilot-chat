@@ -6,13 +6,17 @@
 import * as l10n from '@vscode/l10n';
 import type { CancellationToken, ChatPromptReference, ChatRequest, ChatResponseStream, ChatResult } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { IChatHookService } from '../../../../platform/chat/common/chatHookService';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../../platform/chat/common/conversationOptions';
+import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
 import { IEditSurvivalTrackerService } from '../../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
+import { IOctoKitService } from '../../../../platform/github/common/githubService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IChatWebSocketManager } from '../../../../platform/networking/node/chatWebSocketManager';
 import { IRequestLogger } from '../../../../platform/requestLogger/node/requestLogger';
 import { ISurveyService } from '../../../../platform/survey/common/surveyService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
@@ -20,7 +24,6 @@ import { ISetupTestsDetector, isStartSetupTestConfirmation, SetupTestActionType 
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { getLanguage } from '../../../../util/common/languages';
 import { isUri } from '../../../../util/common/types';
-import { Event } from '../../../../util/vs/base/common/event';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { Position, Range, Selection } from '../../../../vscodeTypes';
@@ -57,8 +60,8 @@ export class TestsIntent implements IIntent {
 		@ILogService private readonly logService: ILogService,
 	) { }
 
-	handleRequest(conversation: Conversation, request: ChatRequest, stream: ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<ChatResult> {
-		return this.instantiationService.createInstance(RequestHandler, this, conversation, request, stream, token, documentContext, location, chatTelemetry, onPaused).getResult();
+	handleRequest(conversation: Conversation, request: ChatRequest, stream: ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, location: ChatLocation, chatTelemetry: ChatTelemetryBuilder): Promise<ChatResult> {
+		return this.instantiationService.createInstance(RequestHandler, this, conversation, request, stream, token, documentContext, location, chatTelemetry).getResult();
 	}
 
 	async invoke(invocationContext: IIntentInvocationContext): Promise<IIntentInvocation> {
@@ -229,7 +232,6 @@ class RequestHandler extends DefaultIntentRequestHandler {
 		documentContext: IDocumentContext | undefined,
 		location: ChatLocation,
 		chatTelemetry: ChatTelemetryBuilder,
-		onPaused: Event<boolean>,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConversationOptions conversationOptions: IConversationOptions,
 		@ITelemetryService telemetryService: ITelemetryService,
@@ -239,8 +241,12 @@ class RequestHandler extends DefaultIntentRequestHandler {
 		@IRequestLogger requestLogger: IRequestLogger,
 		@IEditSurvivalTrackerService editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@IAuthenticationService authenticationService: IAuthenticationService,
+		@IChatHookService chatHookService: IChatHookService,
+		@IChatWebSocketManager webSocketManager: IChatWebSocketManager,
+		@IOctoKitService octoKitService: IOctoKitService,
+		@IConfigurationService configurationService: IConfigurationService,
 	) {
-		super(intent, conversation, request, stream, token, documentContext, location, chatTelemetry, undefined, onPaused, instantiationService, conversationOptions, telemetryService, logService, surveyService, requestLogger, editSurvivalTrackerService, authenticationService);
+		super(intent, conversation, request, stream, token, documentContext, location, chatTelemetry, undefined, undefined, instantiationService, conversationOptions, telemetryService, logService, surveyService, requestLogger, editSurvivalTrackerService, authenticationService, chatHookService, webSocketManager, octoKitService, configurationService);
 	}
 
 	/**

@@ -32,12 +32,13 @@ export enum RemoteCacheType {
 	Api = 'api',
 	Extensions = 'extensions',
 	ProjectTemplates = 'project-templates',
+	Tools = 'tools'
 }
 
 // These values are the blob storage container names where we publish computed embeddings
 enum RemoteEmbeddingsContainer {
-	TEXT3SMALL = "text-3-small",
-	METIS_1024_I16_BINARY = "metis-1024-I16-Binary"
+	TEXT3SMALL = 'text-3-small',
+	METIS_1024_I16_BINARY = 'metis-1024-I16-Binary'
 }
 
 function embeddingsModelToRemoteContainer(embeddingType: EmbeddingType): RemoteEmbeddingsContainer {
@@ -274,7 +275,7 @@ export class RemoteEmbeddingsCache implements IEmbeddingsCache {
 		const remoteCacheURL = await this.getRemoteCacheURL();
 		try {
 			const remoteCacheURL = await this.getRemoteCacheURL();
-			const response = await this.fetcherService.fetch(remoteCacheURL, { method: 'GET' });
+			const response = await this.fetcherService.fetch(remoteCacheURL, { method: 'GET', callSite: 'embeddings-remote-cache' });
 			if (response.ok) {
 				this._remoteCacheEntries = (await response.json()) as EmbeddingCacheEntries;
 				return this._remoteCacheEntries;
@@ -293,7 +294,7 @@ export class RemoteEmbeddingsCache implements IEmbeddingsCache {
 	protected async fetchRemoteCacheLatest(): Promise<string | undefined> {
 		const remoteCacheLatestUpdateURL = await this.getRemoteCacheLatestUpdateURL();
 		try {
-			const response = await this.fetcherService.fetch(remoteCacheLatestUpdateURL, { method: 'GET' });
+			const response = await this.fetcherService.fetch(remoteCacheLatestUpdateURL, { method: 'GET', callSite: 'embeddings-remote-cache-latest' });
 			if (response.ok) {
 				return response.text();
 			} else {
@@ -388,7 +389,7 @@ export class RemoteEmbeddingsExtensionCache extends RemoteEmbeddingsCache {
 		const baseExtensionCDNURL = await this.getBaseExtensionCDNURL();
 		const extensionUrl = `${baseExtensionCDNURL}/${extensionId}.json`;
 		try {
-			const response = await this.fetcherService.fetch(extensionUrl, { method: 'GET' });
+			const response = await this.fetcherService.fetch(extensionUrl, { method: 'GET', callSite: 'embeddings-extension-cache' });
 			if (response.ok) {
 				return (await response.json()) as EmbeddingCacheEntries;
 			} else {

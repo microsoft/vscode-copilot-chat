@@ -56,7 +56,6 @@ export enum WorkspaceChunkSearchStrategyId {
 	Embeddings = 'ada',// Do not change value as it's used for telemetry
 	CodeSearch = 'codesearch',
 	Tfidf = 'tfidf',
-	FullWorkspace = 'fullWorkspace'
 }
 
 /**
@@ -70,6 +69,7 @@ export interface StrategySearchSizing {
 
 export interface WorkspaceChunkSearchOptions {
 	readonly globPatterns?: GlobIncludeOptions;
+	readonly enableRerank?: boolean;
 }
 
 export interface StrategySearchResult {

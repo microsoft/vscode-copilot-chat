@@ -31,7 +31,7 @@ ssuite({ title: 'semanticSearchView', location: 'panel' }, (inputPath) => {
 
 	for (const scenario of scenarios) {
 		for (const testCase of scenario) {
-			stest({ description: "Semantic search view: " + testCase.question }, async (testingServiceCollection: TestingServiceCollection) => {
+			stest({ description: 'Semantic search view: ' + testCase.question }, async (testingServiceCollection: TestingServiceCollection) => {
 				const workspaceState = testCase.getState ? testCase.getState() : undefined;
 				testingServiceCollection.define(IConversationOptions, fetchConversationOptions());
 				const simulationWorkspace = new SimulationWorkspace();

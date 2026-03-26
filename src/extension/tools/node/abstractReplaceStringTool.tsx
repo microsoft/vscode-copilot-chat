@@ -4,40 +4,44 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
-import { CHAT_MODEL } from '../../../platform/configuration/common/configurationService';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
+import { modelShouldUseReplaceStringHealing } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { IAlternativeNotebookContentEditGenerator, NotebookEditGenerationTelemtryOptions, NotebookEditGenrationSource } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
-import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, multiplexProperties } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { removeLeadingFilepathComment } from '../../../util/common/markdown';
 import { timeout } from '../../../util/vs/base/common/async';
 import { Iterable } from '../../../util/vs/base/common/iterator';
-import { ResourceMap } from '../../../util/vs/base/common/map';
+import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
+import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
+import { isDefined } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseTextEditPart, EndOfLine, LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../vscodeTypes';
+import { ChatRequestEditorData, ChatResponseTextEditPart, EndOfLine, ExtendedLanguageModelToolResult, Position as ExtPosition, LanguageModelPromptTsxPart, LanguageModelToolResult, TextEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { CellOrNotebookEdit, processFullRewriteNotebookEdits } from '../../prompts/node/codeMapper/codeMapper';
+import { EditTools, IEditToolLearningService } from '../common/editToolLearningService';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { ActionType } from './applyPatch/parser';
 import { CorrectedEditResult, healReplaceStringParams } from './editFileHealing';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
-import { EditError, NoChangeError, NoMatchError, applyEdit } from './editFileToolUtils';
+import { applyEdit, canExistingFileBeEdited, createEditConfirmation, EditError, formatDiffAsUnified, getDisallowedEditUriError, logEditToolResult, NoChangeError, NoMatchError, openDocumentAndSnapshot } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
-import { assertFileOkForTool, resolveToolInputPath } from './toolUtils';
+import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
 export interface IAbstractReplaceStringInput {
 	filePath: string;
@@ -46,16 +50,21 @@ export interface IAbstractReplaceStringInput {
 }
 
 export interface IPrepareEdit {
-	document: NotebookDocumentSnapshot | TextDocumentSnapshot;
+	document: NotebookDocumentSnapshot | TextDocumentSnapshot | undefined;
 	uri: URI;
-	didHeal: boolean;
+	healed?: IAbstractReplaceStringInput;
 	input: IAbstractReplaceStringInput;
-	generatedEdit: { success: true; textEdits: vscode.TextEdit[]; notebookEdits?: CellOrNotebookEdit[] } | { success: false; errorMessage: string };
+	generatedEdit:
+	| { success: true; textEdits: vscode.TextEdit[]; notebookEdits?: CellOrNotebookEdit[]; updated: NotebookDocumentSnapshot | TextDocumentSnapshot | undefined }
+	| { success: false; errorMessage: string };
 }
 
 
 export abstract class AbstractReplaceStringTool<T extends { explanation: string }> implements ICopilotTool<T> {
 	protected _promptContext: IBuildPromptContext | undefined;
+
+	// Cache for ReplaceStringsOperation instances
+	private lastOperation?: { inputKey: string; operation: Promise<IPrepareEdit[]> } | undefined;
 
 	constructor(
 		@IPromptPathRepresentationService protected readonly promptPathRepresentationService: IPromptPathRepresentationService,
@@ -64,23 +73,100 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		@IToolsService protected readonly toolsService: IToolsService,
 		@INotebookService protected readonly notebookService: INotebookService,
 		@IFileSystemService protected readonly fileSystemService: IFileSystemService,
-		@IAlternativeNotebookContentService private readonly alternativeNotebookContent: IAlternativeNotebookContentService,
+		@IAlternativeNotebookContentService protected readonly alternativeNotebookContent: IAlternativeNotebookContentService,
 		@IAlternativeNotebookContentEditGenerator private readonly alternativeNotebookEditGenerator: IAlternativeNotebookContentEditGenerator,
 		@IEditSurvivalTrackerService private readonly _editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
 		@ITelemetryService protected readonly telemetryService: ITelemetryService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
-		@IExperimentationService private readonly experimentationService: IExperimentationService
+		@IConfigurationService protected readonly configurationService: IConfigurationService,
+		@IEditToolLearningService private readonly editToolLearningService: IEditToolLearningService,
+		@ILogService private readonly logService: ILogService,
 	) { }
 
 	public abstract invoke(options: vscode.LanguageModelToolInvocationOptions<T>, token: vscode.CancellationToken): Promise<LanguageModelToolResult>;
 
 	protected abstract toolName(): ToolName;
 
-	protected async prepareEditsForFile(options: vscode.LanguageModelToolInvocationOptions<T>, input: IAbstractReplaceStringInput, token: vscode.CancellationToken): Promise<IPrepareEdit> {
+	/**
+	 * Extract one or more IAbstractReplaceStringInput from the tool's input type T.
+	 * For single-file tools, return an array with one element.
+	 * For multi-file tools, return an array with multiple elements.
+	 */
+	protected abstract extractReplaceInputs(input: T): IAbstractReplaceStringInput[];
+
+	protected prepareEdits(options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>, token: vscode.CancellationToken): Promise<IPrepareEdit[]> {
+		const input = this.extractReplaceInputs(options.input);
+		const cacheKey = JSON.stringify(input);
+		if (this.lastOperation?.inputKey !== cacheKey) {
+			this.lastOperation = {
+				inputKey: cacheKey,
+				operation: this._prepareEdits(options, input, token)
+			};
+		}
+
+		return this.lastOperation.operation;
+	}
+
+	private async _prepareEdits(options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>, input: IAbstractReplaceStringInput[], token: vscode.CancellationToken) {
+		const results = await Promise.all(input.map(i => this._prepareEditsForFile(options, i, token)));
+		this._errorConflictingEdits(results);
+		return results;
+	}
+
+	private _errorConflictingEdits(results: IPrepareEdit[]) {
+		for (let i = 1; i < results.length; i++) {
+			const current = results[i];
+			if (!current.generatedEdit.success) {
+				continue;
+			}
+
+			for (let k = 0; k < i; k++) {
+				const other = results[k];
+				if (!other.generatedEdit.success || !extUriBiasedIgnorePathCase.isEqual(current.uri, other.uri)) {
+					continue;
+				}
+
+				const allEdits = [
+					...current.generatedEdit.textEdits,
+					...other.generatedEdit.textEdits,
+				].sort((a, b) => a.range.start.compareTo(b.range.start));
+
+				const hasOverlap = allEdits.some((e2, i) => {
+					if (i === 0) { return false; }
+					const e1 = allEdits[i - 1];
+					return !e1.range.end.isBeforeOrEqual(e2.range.start);
+				});
+
+				if (hasOverlap) {
+					current.generatedEdit = {
+						success: false,
+						errorMessage: `Edit at index ${i} conflicts with another replacement in ${this.promptPathRepresentationService.getFilePath(current.uri)}. You can make another call to try again.`
+					};
+					break;
+				}
+			}
+		}
+	}
+
+	private async _prepareEditsForFile(options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>, input: IAbstractReplaceStringInput, token: vscode.CancellationToken): Promise<IPrepareEdit> {
 		const uri = resolveToolInputPath(input.filePath, this.promptPathRepresentationService);
+
+		const disallowedUriError = getDisallowedEditUriError(uri, this._promptContext?.allowedEditUris, this.promptPathRepresentationService);
+		if (disallowedUriError) {
+			return {
+				uri,
+				document: undefined,
+				generatedEdit: {
+					success: false,
+					errorMessage: disallowedUriError
+				},
+				input,
+			};
+		}
+
 		try {
-			await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri));
+			await this.instantiationService.invokeFunction(accessor => assertFileNotContentExcluded(accessor, uri));
 		} catch (error) {
 			this.sendReplaceTelemetry('invalidFile', options, input, undefined, undefined, undefined);
 			throw error;
@@ -92,12 +178,23 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 			throw new Error('Invalid input');
 		}
 
-		const isNotebook = this.notebookService.hasSupportedNotebooks(uri);
-		const document = isNotebook ?
-			await this.workspaceService.openNotebookDocumentAndSnapshot(uri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model)) :
-			await this.workspaceService.openTextDocumentAndSnapshot(uri);
+		// Sometimes the model replaces an empty string in a new file to create it. Allow that pattern.
+		const exists = await this.instantiationService.invokeFunction(canExistingFileBeEdited, uri);
+		if (!exists) {
+			return {
+				uri,
+				document: undefined,
+				generatedEdit: input.oldString
+					? { success: false, errorMessage: `File does not exist: ${input.filePath}. Use the ${ToolName.CreateFile} tool to create it, or correct your filepath.` }
+					: { success: true, textEdits: [TextEdit.insert(new ExtPosition(0, 0), input.newString)], updated: undefined },
+				input,
+			};
+		}
 
-		const didHealRef = { didHeal: false };
+		const isNotebook = this.notebookService.hasSupportedNotebooks(uri);
+		const document = await this.instantiationService.invokeFunction(openDocumentAndSnapshot, this._promptContext, uri);
+
+		const didHealRef: { healed?: IAbstractReplaceStringInput } = {};
 		try {
 			if (input.oldString === input.newString) {
 				throw new NoChangeError('Input and output are identical', input.filePath);
@@ -105,19 +202,30 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 
 			const { updatedFile, edits } = await this.generateEdit(uri, document, options, input, didHealRef, token);
 			let notebookEdits: (vscode.NotebookEdit | [URI, vscode.TextEdit[]])[] | undefined;
+			let updated: NotebookDocumentSnapshot | TextDocumentSnapshot;
 			if (document instanceof NotebookDocumentSnapshot) {
+				const model = await this.modelForTelemetry(options);
 				const telemetryOptions: NotebookEditGenerationTelemtryOptions = {
-					model: options.model ? this.endpointProvider.getChatEndpoint(options.model).then(m => m.name) : undefined,
+					model,
 					requestId: this._promptContext.requestId,
 					source: NotebookEditGenrationSource.stringReplace,
 				};
 
 				notebookEdits = await Iterable.asyncToArray(processFullRewriteNotebookEdits(document.document, updatedFile, this.alternativeNotebookEditGenerator, telemetryOptions, token));
-				sendEditNotebookTelemetry(this.telemetryService, this.endpointProvider, 'stringReplace', document.uri, this._promptContext.requestId, options.model ?? this._promptContext.request?.model);
+				sendEditNotebookTelemetry(this.telemetryService, this.endpointProvider, 'stringReplace', document.uri, this._promptContext.requestId, model || 'unknown');
+				updated = NotebookDocumentSnapshot.fromNewText(updatedFile, document);
+			} else {
+				updated = TextDocumentSnapshot.fromNewText(updatedFile, document);
 			}
 
-			void this.sendReplaceTelemetry('success', options, input, document.getText(), isNotebook, didHealRef.didHeal);
-			return { document, uri, input, didHeal: didHealRef.didHeal, generatedEdit: { success: true, textEdits: edits, notebookEdits } };
+			void this.sendReplaceTelemetry('success', options, input, document.getText(), isNotebook, !!didHealRef.healed);
+			return {
+				document,
+				uri,
+				input,
+				healed: didHealRef.healed,
+				generatedEdit: { success: true, textEdits: edits, notebookEdits, updated }
+			};
 		} catch (error) {
 			// Enhanced error message with more helpful details
 			let errorMessage = 'String replacement failed: ';
@@ -140,9 +248,9 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 				errorMessage += `${error.message}`;
 			}
 
-			void this.sendReplaceTelemetry(outcome, options, input, document.getText(), isNotebook, didHealRef.didHeal);
+			void this.sendReplaceTelemetry(outcome, options, input, document.getText(), isNotebook, !!didHealRef.healed);
 
-			return { document, uri, input, didHeal: didHealRef.didHeal, generatedEdit: { success: false, errorMessage } };
+			return { document, uri, input, healed: didHealRef.healed, generatedEdit: { success: false, errorMessage } };
 		}
 	}
 
@@ -151,14 +259,16 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 			throw new Error('no prompt context found');
 		}
 
+		logEditToolResult(this.logService, options.chatRequestId, ...edits.map(e => ({ input: e.input, success: e.generatedEdit.success, healed: e.healed })));
+
 		const fileResults: IEditedFile[] = [];
 		const existingDiagnosticMap = new ResourceMap<vscode.Diagnostic[]>();
 
-		for (const { document, uri, generatedEdit } of edits) {
-			if (!existingDiagnosticMap.has(document.uri)) {
+		for (const { document, uri, generatedEdit, healed } of edits) {
+			if (document && !existingDiagnosticMap.has(document.uri)) {
 				existingDiagnosticMap.set(document.uri, this.languageDiagnosticsService.getDiagnostics(document.uri));
 			}
-			const existingDiagnostics = existingDiagnosticMap.get(document.uri)!;
+			const existingDiagnostics = document ? existingDiagnosticMap.get(document.uri)! : [];
 			const isNotebook = this.notebookService.hasSupportedNotebooks(uri);
 
 			if (!generatedEdit.success) {
@@ -181,15 +291,16 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 			this._promptContext.stream.codeblockUri(uri, true);
 
 			if (generatedEdit.notebookEdits) {
-				this._promptContext.stream.notebookEdit(document.uri, []);
+				const uriToEdit = document?.uri ?? uri;
+				this._promptContext.stream.notebookEdit(uriToEdit, []);
 				for (const edit of generatedEdit.notebookEdits) {
 					if (edit instanceof Array) {
 						this._promptContext.stream.textEdit(edit[0], edit[1]);
 					} else {
-						this._promptContext.stream.notebookEdit(document.uri, edit);
+						this._promptContext.stream.notebookEdit(uriToEdit, edit);
 					}
 				}
-				this._promptContext.stream.notebookEdit(document.uri, true);
+				this._promptContext.stream.notebookEdit(uriToEdit, true);
 			} else {
 				for (const edit of generatedEdit.textEdits) {
 					responseStream.textEdit(uri, edit);
@@ -205,7 +316,9 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 								"owner": "aeschli",
 								"comment": "Tracks how much percent of the AI edits survived after 5 minutes of accepting",
 								"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn." },
+								"speculationRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the speculation request." },
 								"requestSource": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source from where the request was made" },
+								"chatRequestModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model used for the base chat request to generate the edit object." },
 								"mapper": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The code mapper used: One of 'fast', 'fast-lora', 'full' and 'patch'" },
 								"survivalRateFourGram": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The rate between 0 and 1 of how much of the AI edit is still present in the document." },
 								"survivalRateNoRevert": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The rate between 0 and 1 of how much of the ranges the AI touched ended up being reverted." },
@@ -219,21 +332,57 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 							timeDelayMs: res.timeDelayMs,
 							didBranchChange: res.didBranchChange ? 1 : 0,
 						});
+						res.telemetryService.sendInternalMSFTTelemetryEvent('codeMapper.trackEditSurvival', {
+							requestId: this._promptContext?.requestId,
+							requestSource: 'agent',
+							mapper: 'stringReplaceTool',
+							textBeforeAiEdits: res.textBeforeAiEdits ? JSON.stringify(res.textBeforeAiEdits) : undefined,
+							textAfterAiEdits: res.textAfterAiEdits ? JSON.stringify(res.textAfterAiEdits) : undefined,
+							textAfterUserEdits: res.textAfterUserEdits ? JSON.stringify(res.textAfterUserEdits) : undefined,
+						}, {
+							survivalRateFourGram: res.fourGram,
+							survivalRateNoRevert: res.noRevert,
+							timeDelayMs: res.timeDelayMs,
+							didBranchChange: res.didBranchChange ? 1 : 0,
+						});
+						res.telemetryService.sendGHTelemetryEvent('replaceString/trackEditSurvival', {
+							headerRequestId: this._promptContext?.requestId,
+							requestSource: 'agent',
+							mapper: 'stringReplaceTool'
+						}, {
+							survivalRateFourGram: res.fourGram,
+							survivalRateNoRevert: res.noRevert,
+							timeDelayMs: res.timeDelayMs,
+							didBranchChange: res.didBranchChange ? 1 : 0,
+						});
 					});
 				});
 
-				fileResults.push({ operation: ActionType.UPDATE, uri, isNotebook, existingDiagnostics });
+				fileResults.push({
+					operation: ActionType.UPDATE,
+					uri,
+					isNotebook,
+					existingDiagnostics,
+					healed: healed ? JSON.stringify({ oldString: healed.oldString, newString: healed.newString }, null, 2) : undefined
+				});
 			}
 
 			this._promptContext.stream.markdown('\n```\n');
+
+			if (generatedEdit.updated) {
+				this._promptContext.turnEditedDocuments ??= new ResourceMap();
+				this._promptContext.turnEditedDocuments.set(uri, generatedEdit.updated);
+			}
 		}
 
-		return new LanguageModelToolResult([
+		const isInlineChat = this._promptContext.request?.location2 instanceof ChatRequestEditorData;
+
+		const result = new ExtendedLanguageModelToolResult([
 			new LanguageModelPromptTsxPart(
 				await renderPromptElementJSON(
 					this.instantiationService,
 					EditFileResult,
-					{ files: fileResults, diagnosticsTimeout: 2000, toolName: this.toolName(), requestId: options.chatRequestId, model: options.model },
+					{ files: fileResults, diagnosticsTimeout: isInlineChat ? -1 : 2000, toolName: this.toolName(), requestId: options.chatRequestId, model: options.model },
 					// If we are not called with tokenization options, have _some_ fake tokenizer
 					// otherwise we end up returning the entire document
 					options.tokenizationOptions ?? {
@@ -244,9 +393,25 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 				),
 			)
 		]);
+
+		result.hasError = fileResults.some(f => f.error);
+		return result;
 	}
 
-	private async generateEdit(uri: URI, document: TextDocumentSnapshot | NotebookDocumentSnapshot, options: vscode.LanguageModelToolInvocationOptions<T>, input: IAbstractReplaceStringInput, didHealRef: { didHeal: boolean }, token: vscode.CancellationToken) {
+	protected doGenerateEdit(uri: URI, oldString: string, newString: string, options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>) {
+		return applyEdit(
+			uri,
+			oldString,
+			newString,
+			this.workspaceService,
+			this.notebookService,
+			this.alternativeNotebookContent,
+			this._promptContext?.request?.model
+		);
+	}
+
+	private async generateEdit(uri: URI, document: TextDocumentSnapshot | NotebookDocumentSnapshot, options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>, input: IAbstractReplaceStringInput, didHealRef: { healed?: IAbstractReplaceStringInput }, token: vscode.CancellationToken) {
+		const model = this.modelObjectForTelemetry(options);
 		const filePath = this.promptPathRepresentationService.getFilePath(document.uri);
 		const eol = document instanceof TextDocumentSnapshot && document.eol === EndOfLine.CRLF ? '\r\n' : '\n';
 		const oldString = removeLeadingFilepathComment(input.oldString, document.languageId, filePath).replace(/\r?\n/g, eol);
@@ -256,32 +421,24 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		let updatedFile: string;
 		let edits: vscode.TextEdit[] = [];
 		try {
-			const result = await applyEdit(
-				uri,
-				oldString,
-				newString,
-				this.workspaceService,
-				this.notebookService,
-				this.alternativeNotebookContent,
-				this._promptContext?.request?.model
-			);
+			const result = await this.doGenerateEdit(uri, oldString, newString, options);
 			updatedFile = result.updatedFile;
 			edits = result.edits;
+			this.recordEditSuccess(options, true);
 		} catch (e) {
 			if (!(e instanceof NoMatchError)) {
 				throw e;
 			}
+			this.recordEditSuccess(options, false);
 
-			if (this.experimentationService.getTreatmentVariable<boolean>('vscode', 'copilotchat.disableReplaceStringHealing') === true) {
-				throw e; // failsafe for next release.
+			if (model && !modelShouldUseReplaceStringHealing(model)) {
+				throw e;
 			}
-
-			didHealRef.didHeal = true;
 
 			let healed: CorrectedEditResult;
 			try {
 				healed = await healReplaceStringParams(
-					options.model,
+					model,
 					document.getText(),
 					{
 						explanation: options.input.explanation,
@@ -290,7 +447,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 						newString,
 					},
 					eol,
-					await this.endpointProvider.getChatEndpoint(CHAT_MODEL.GPT4OMINI),
+					await this.endpointProvider.getChatEndpoint('copilot-fast'),
 					token
 				);
 				if (healed.params.oldString === healed.params.newString) {
@@ -300,6 +457,8 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 				this.sendHealingTelemetry(options, String(e2), undefined);
 				throw e; // original error
 			}
+
+			didHealRef.healed = healed.params;
 
 			try {
 				const result = await applyEdit(
@@ -322,7 +481,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		return { edits, updatedFile };
 	}
 
-	private async sendReplaceTelemetry(outcome: string, options: vscode.LanguageModelToolInvocationOptions<T>, input: IAbstractReplaceStringInput, file: string | undefined, isNotebookDocument: boolean | undefined, didHeal: boolean | undefined) {
+	private async sendReplaceTelemetry(outcome: string, options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>, input: IAbstractReplaceStringInput, file: string | undefined, isNotebookDocument: boolean | undefined, didHeal: boolean | undefined) {
 		const model = await this.modelForTelemetry(options);
 		const isNotebook = isNotebookDocument ? 1 : (isNotebookDocument === false ? 0 : -1);
 		const isMulti = this.toolName() === ToolName.MultiReplaceString ? 1 : 0;
@@ -357,7 +516,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		}), { isNotebook });
 	}
 
-	private async sendHealingTelemetry(options: vscode.LanguageModelToolInvocationOptions<T>, healError: string | undefined, applicationError: string | undefined) {
+	private async sendHealingTelemetry(options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>, healError: string | undefined, applicationError: string | undefined) {
 		/* __GDPR__
 			"replaceStringHealingStat" : {
 				"owner": "roblourens",
@@ -382,8 +541,21 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		);
 	}
 
-	protected async modelForTelemetry(options: vscode.LanguageModelToolInvocationOptions<T>) {
-		return options.model && (await this.endpointProvider.getChatEndpoint(options.model)).model;
+	protected async modelForTelemetry(options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>) {
+		const model = this.modelObjectForTelemetry(options);
+		return model && (await this.endpointProvider.getChatEndpoint(model)).model;
+	}
+
+	protected modelObjectForTelemetry(options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>) {
+		const model = 'model' in options ? options.model : this._promptContext?.request?.model;
+		return model;
+	}
+
+	private async recordEditSuccess(options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>, success: boolean) {
+		const model = this.modelObjectForTelemetry(options);
+		if (model) {
+			this.editToolLearningService.didMakeEdit(model, this.toolName() as EditTools, success);
+		}
 	}
 
 	async resolveInput(input: T, promptContext: IBuildPromptContext): Promise<T> {
@@ -391,9 +563,54 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		return input;
 	}
 
-	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<T>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
-		return {
-			presentation: 'hidden'
-		};
+	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<T>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
+		// Extract all replace inputs from the tool input
+		const replaceInputs = this.extractReplaceInputs(options.input);
+		const allUris = replaceInputs.map(input => resolveToolInputPath(input.filePath, this.promptPathRepresentationService));
+
+		return this.instantiationService.invokeFunction(
+			createEditConfirmation,
+			allUris,
+			this._promptContext?.allowedEditUris,
+			(urisNeedingConfirmation) => this.generateConfirmationDetails(replaceInputs, urisNeedingConfirmation, options, token),
+			options.forceConfirmationReason
+		);
+	}
+
+	private async generateConfirmationDetails(
+		replaceInputs: IAbstractReplaceStringInput[],
+		urisNeedingConfirmation: readonly URI[],
+		options: vscode.LanguageModelToolInvocationPrepareOptions<T>,
+		token: vscode.CancellationToken
+	): Promise<string> {
+		const urisNeedingConfirmationSet = new ResourceSet(urisNeedingConfirmation);
+
+		const allPreparedEdits = await this.prepareEdits(options, token);
+
+		// Generate diffs only for files needing confirmation
+		const diffResults = await Promise.all(
+			allPreparedEdits.map(async (preparedEdit) => {
+				const uri = preparedEdit.uri;
+
+				// Only show diff if this URI needs confirmation
+				if (!urisNeedingConfirmationSet.has(uri)) {
+					return;
+				}
+
+				if (preparedEdit.generatedEdit.success) {
+					const oldContent = preparedEdit.document?.getText() || '';
+					const newContent = preparedEdit.generatedEdit.updated?.getText() || '';
+
+					return await this.instantiationService.invokeFunction(
+						formatDiffAsUnified,
+						uri,
+						oldContent,
+						newContent
+					);
+				}
+			})
+		);
+
+		return diffResults.filter(isDefined).join('\n\n');
 	}
 }

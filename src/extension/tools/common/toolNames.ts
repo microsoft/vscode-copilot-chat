@@ -5,24 +5,35 @@
 
 import { cloneAndChange } from '../../../util/vs/base/common/objects';
 
+/**
+ * Categories for tool grouping in the virtual tools system
+ */
+export enum ToolCategory {
+	JupyterNotebook = 'Jupyter Notebook Tools',
+	WebInteraction = 'Web Interaction',
+	VSCodeInteraction = 'VS Code Interaction',
+	Testing = 'Testing',
+	RedundantButSpecific = 'Redundant but Specific',
+	// Core tools that should not be grouped
+	Core = 'Core'
+}
+
 export enum ToolName {
 	ApplyPatch = 'apply_patch',
 	Codebase = 'semantic_search',
 	VSCodeAPI = 'get_vscode_api',
 	TestFailure = 'test_failure',
-	RunTests = 'run_tests',
 	FindFiles = 'file_search',
 	FindTextInFiles = 'grep_search',
 	ReadFile = 'read_file',
+	ViewImage = 'view_image',
 	ListDirectory = 'list_dir',
 	GetErrors = 'get_errors',
 	GetScmChanges = 'get_changed_files',
-	UpdateUserPreferences = 'update_user_preferences',
 	ReadProjectStructure = 'read_project_structure',
 	CreateNewWorkspace = 'create_new_workspace',
 	CreateNewJupyterNotebook = 'create_new_jupyter_notebook',
 	SearchWorkspaceSymbols = 'search_workspace_symbols',
-	Usages = 'list_code_usages',
 	EditFile = 'insert_edit_into_file',
 	CreateFile = 'create_file',
 	ReplaceString = 'replace_string_in_file',
@@ -32,17 +43,14 @@ export enum ToolName {
 	GetNotebookSummary = 'copilot_getNotebookSummary',
 	ReadCellOutput = 'read_notebook_cell_output',
 	InstallExtension = 'install_extension',
-	Think = 'think',
 	FetchWebPage = 'fetch_webpage',
+	Memory = 'memory',
 	FindTestFiles = 'test_search',
 	GetProjectSetupInfo = 'get_project_setup_info',
 	SearchViewResults = 'get_search_view_results',
-	DocInfo = 'get_doc_info',
 	GithubRepo = 'github_repo',
-	SimpleBrowser = 'open_simple_browser',
 	CreateDirectory = 'create_directory',
 	RunVscodeCmd = 'run_vscode_command',
-	GetTaskOutput = 'get_task_output',
 	CoreManageTodoList = 'manage_todo_list',
 	CoreRunInTerminal = 'run_in_terminal',
 	CoreGetTerminalOutput = 'get_terminal_output',
@@ -52,14 +60,24 @@ export enum ToolName {
 	CoreRunTask = 'run_task',
 	CoreGetTaskOutput = 'get_task_output',
 	CoreRunTest = 'runTests',
+	ToolReplay = 'tool_replay',
+	EditFilesPlaceholder = 'edit_files',
+	CoreRunSubagent = 'runSubagent',
+	CoreConfirmationTool = 'vscode_get_confirmation',
+	CoreConfirmationToolWithOptions = 'vscode_get_confirmation_with_options',
+	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation',
+	SearchSubagent = 'search_subagent',
+	CoreAskQuestions = 'vscode_askQuestions',
+	SwitchAgent = 'switch_agent',
+	ToolSearch = 'tool_search',
+	ResolveMemoryFileUri = 'resolve_memory_file_uri',
+	ExecutionSubagent = 'execution_subagent',
 }
 
 export enum ContributedToolName {
 	ApplyPatch = 'copilot_applyPatch',
 	Codebase = 'copilot_searchCodebase',
 	SearchWorkspaceSymbols = 'copilot_searchWorkspaceSymbols',
-	Usages = 'copilot_listCodeUsages',
-	UpdateUserPreferences = 'copilot_updateUserPreferences',
 	VSCodeAPI = 'copilot_getVSCodeAPI',
 	TestFailure = 'copilot_testFailure',
 	/** @deprecated moving to core soon */
@@ -67,9 +85,9 @@ export enum ContributedToolName {
 	FindFiles = 'copilot_findFiles',
 	FindTextInFiles = 'copilot_findTextInFiles',
 	ReadFile = 'copilot_readFile',
+	ViewImage = 'copilot_viewImage',
 	ListDirectory = 'copilot_listDirectory',
 	GetErrors = 'copilot_getErrors',
-	DocInfo = 'copilot_getDocInfo',
 	GetScmChanges = 'copilot_getChangedFiles',
 	ReadProjectStructure = 'copilot_readProjectStructure',
 	CreateNewWorkspace = 'copilot_createNewWorkspace',
@@ -83,17 +101,27 @@ export enum ContributedToolName {
 	GetNotebookSummary = 'copilot_getNotebookSummary',
 	ReadCellOutput = 'copilot_readNotebookCellOutput',
 	InstallExtension = 'copilot_installExtension',
-	Think = 'copilot_think',
 	FetchWebPage = 'copilot_fetchWebPage',
+	Memory = 'copilot_memory',
 	FindTestFiles = 'copilot_findTestFiles',
 	GetProjectSetupInfo = 'copilot_getProjectSetupInfo',
 	SearchViewResults = 'copilot_getSearchResults',
 	GithubRepo = 'copilot_githubRepo',
 	CreateAndRunTask = 'copilot_createAndRunTask',
-	SimpleBrowser = 'copilot_openSimpleBrowser',
 	CreateDirectory = 'copilot_createDirectory',
 	RunVscodeCmd = 'copilot_runVscodeCommand',
+	ToolReplay = 'copilot_toolReplay',
+	EditFilesPlaceholder = 'copilot_editFiles',
+	SwitchAgent = 'copilot_switchAgent',
+	ResolveMemoryFileUri = 'copilot_resolveMemoryFileUri',
 }
+
+export const byokEditToolNamesToToolNames = {
+	'find-replace': ToolName.ReplaceString,
+	'multi-find-replace': ToolName.MultiReplaceString,
+	'apply-patch': ToolName.ApplyPatch,
+	'code-rewrite': ToolName.EditFile,
+} as const;
 
 const toolNameToContributedToolNames = new Map<ToolName, ContributedToolName>();
 const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>();
@@ -123,4 +151,105 @@ export function mapContributedToolNamesInString(str: string): string {
 
 export function mapContributedToolNamesInSchema(inputSchema: object): object {
 	return cloneAndChange(inputSchema, value => typeof value === 'string' ? mapContributedToolNamesInString(value) : undefined);
+}
+
+/**
+ * Type-safe mapping of all ToolName enum values to their categories.
+ * This ensures that every tool is properly categorized and provides compile-time safety.
+ * When new tools are added to ToolName, they must be added here or TypeScript will error.
+ */
+export const toolCategories: Record<ToolName, ToolCategory> = {
+	// Core tools (not grouped - expanded by default)
+	[ToolName.Codebase]: ToolCategory.Core,
+	[ToolName.FindTextInFiles]: ToolCategory.Core,
+	[ToolName.ReadFile]: ToolCategory.Core,
+	[ToolName.ViewImage]: ToolCategory.Core,
+	[ToolName.CreateFile]: ToolCategory.Core,
+	[ToolName.ApplyPatch]: ToolCategory.Core,
+	[ToolName.ReplaceString]: ToolCategory.Core,
+	[ToolName.EditFile]: ToolCategory.Core,
+	[ToolName.CoreRunInTerminal]: ToolCategory.Core,
+	[ToolName.ListDirectory]: ToolCategory.Core,
+	[ToolName.CoreGetTerminalOutput]: ToolCategory.Core,
+	[ToolName.CoreManageTodoList]: ToolCategory.Core,
+	[ToolName.MultiReplaceString]: ToolCategory.Core,
+	[ToolName.FindFiles]: ToolCategory.Core,
+	[ToolName.CreateDirectory]: ToolCategory.Core,
+	[ToolName.ReadProjectStructure]: ToolCategory.Core,
+	[ToolName.CoreRunSubagent]: ToolCategory.Core,
+	[ToolName.SearchSubagent]: ToolCategory.Core,
+	[ToolName.ExecutionSubagent]: ToolCategory.Core,
+
+	// already enabled only when tasks are enabled
+	[ToolName.CoreRunTask]: ToolCategory.Core,
+	[ToolName.CoreGetTaskOutput]: ToolCategory.Core,
+	// never enabled, so it doesn't matter where it's categorized
+	[ToolName.EditFilesPlaceholder]: ToolCategory.Core,
+
+
+	// Jupyter Notebook Tools
+	[ToolName.CreateNewJupyterNotebook]: ToolCategory.JupyterNotebook,
+	[ToolName.EditNotebook]: ToolCategory.JupyterNotebook,
+	[ToolName.RunNotebookCell]: ToolCategory.JupyterNotebook,
+	[ToolName.GetNotebookSummary]: ToolCategory.JupyterNotebook,
+	[ToolName.ReadCellOutput]: ToolCategory.JupyterNotebook,
+
+	// Web Interaction
+	[ToolName.FetchWebPage]: ToolCategory.WebInteraction,
+	[ToolName.GithubRepo]: ToolCategory.WebInteraction,
+
+	// VS Code Interaction
+	[ToolName.SearchWorkspaceSymbols]: ToolCategory.VSCodeInteraction,
+	[ToolName.GetErrors]: ToolCategory.VSCodeInteraction,
+	[ToolName.VSCodeAPI]: ToolCategory.VSCodeInteraction,
+	[ToolName.GetScmChanges]: ToolCategory.VSCodeInteraction,
+	[ToolName.CreateNewWorkspace]: ToolCategory.VSCodeInteraction,
+	[ToolName.InstallExtension]: ToolCategory.VSCodeInteraction,
+	[ToolName.GetProjectSetupInfo]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreCreateAndRunTask]: ToolCategory.VSCodeInteraction,
+	[ToolName.RunVscodeCmd]: ToolCategory.VSCodeInteraction,
+	[ToolName.SearchViewResults]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreTerminalSelection]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreTerminalLastCommand]: ToolCategory.VSCodeInteraction,
+
+	// Testing
+	[ToolName.TestFailure]: ToolCategory.Testing,
+	[ToolName.FindTestFiles]: ToolCategory.Testing,
+	[ToolName.CoreRunTest]: ToolCategory.Testing,
+
+	// Other tools - categorize appropriately
+	[ToolName.ToolReplay]: ToolCategory.RedundantButSpecific,
+	[ToolName.CoreConfirmationTool]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreConfirmationToolWithOptions]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreTerminalConfirmationTool]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreAskQuestions]: ToolCategory.VSCodeInteraction,
+	[ToolName.SwitchAgent]: ToolCategory.VSCodeInteraction,
+	[ToolName.Memory]: ToolCategory.VSCodeInteraction,
+	[ToolName.ToolSearch]: ToolCategory.Core,
+	[ToolName.ResolveMemoryFileUri]: ToolCategory.Core,
+} as const;
+
+
+
+/**
+ * Get the category for a tool, checking both ToolName enum and external tools.
+ */
+export function getToolCategory(toolName: string): ToolCategory | undefined {
+	return toolCategories.hasOwnProperty(toolName) ? toolCategories[toolName as ToolName] : undefined;
+}
+
+/**
+ * Get all tools for a specific category.
+ */
+export function getToolsForCategory(category: ToolCategory): string[] {
+	const result: string[] = [];
+
+	// Add tools from ToolName enum
+	for (const [toolName, toolCategory] of Object.entries(toolCategories)) {
+		if (toolCategory === category) {
+			result.push(toolName);
+		}
+	}
+
+	return result;
 }

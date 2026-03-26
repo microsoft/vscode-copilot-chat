@@ -91,7 +91,7 @@ export class SurveyService implements ISurveyService {
 		const isEligible = hasNotBeenActiveInLast14Days && isOldEnough && isCooldownOver;
 
 		if (isEligible) {
-			const sessionProbability = await this.experimentationService.getTreatmentVariableAsync<number>('vscode', 'copilotchat.feedback.sessionProbability.inactive') ?? DEFAULT_SESSION_PROBABILITY_INACTIVE;
+			const sessionProbability = this.experimentationService.getTreatmentVariable<number>('copilotchat.feedback.sessionProbability.inactive') ?? DEFAULT_SESSION_PROBABILITY_INACTIVE;
 			return (this.sessionSeed < sessionProbability / 100);
 		}
 
@@ -112,9 +112,9 @@ export class SurveyService implements ISurveyService {
 		const isEligible = hasEnoughUsage && isOldEnough && isCooldownOver;
 
 		if (isEligible) {
-			const sessionProbability = await this.experimentationService.getTreatmentVariableAsync<number>('vscode', 'copilotchat.feedback.sessionProbability') ?? DEFAULT_SESSION_PROBABILITY;
+			const sessionProbability = this.experimentationService.getTreatmentVariable<number>('copilotchat.feedback.sessionProbability') ?? DEFAULT_SESSION_PROBABILITY;
 			if (this.sessionSeed < sessionProbability / 100) {
-				const notificationProbability = await this.experimentationService.getTreatmentVariableAsync<number>('vscode', 'copilotchat.feedback.notificationProbability') ?? DEFAULT_NOTIFICATION_PROBABILITY;
+				const notificationProbability = this.experimentationService.getTreatmentVariable<number>('copilotchat.feedback.notificationProbability') ?? DEFAULT_NOTIFICATION_PROBABILITY;
 				const seed = Math.random();
 				return seed < notificationProbability / 100;
 			}

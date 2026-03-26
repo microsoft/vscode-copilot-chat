@@ -40,7 +40,7 @@ interface FileTreeDataWithContent extends vscode.ChatResponseFileTree {
 
 export const INewWorkspacePreviewContentManager = createServiceIdentifier<INewWorkspacePreviewContentManager>('INewWorkspacePreviewContentManager');
 export interface INewWorkspacePreviewContentManager {
-	_serviceBrand: undefined;
+	readonly _serviceBrand: undefined;
 	set(responseId: string, projectName: string, fileTree: ChatResponseFileTreePart, serviceArgs: any): void;
 	get(uri: Uri): FileTreeDataWithContent | undefined;
 	getFileTree(responseId: string): ChatResponseFileTreePart | undefined;
@@ -560,7 +560,7 @@ class NewWorkspaceResponseProcessor {
 			outputStream.button(createProjectCommand(chatResponseTree, workspaceFolders.length > 0 ? workspaceFolders[0] : undefined));
 
 			this.newWorkspacePreviewContentManager.set(turn.id, projectName, chatResponseTree, this.githubContentMetadata);
-			const query = encodeURIComponent(`["@workspace /${newId} ${turn.request.message}"]`);
+			const query = encodeURIComponent(`["/${newId} ${turn.request.message}"]`);
 			const markdownString = new MarkdownString(l10n.t(`Hint: You can [regenerate this project without using this sample](command:workbench.action.chat.open?{0}) or use this [setting](command:workbench.action.openSettings?%5B%22github.copilot.chat.useProjectTemplates%22%5D) to configure the behavior.`, query));
 			markdownString.isTrusted = { enabledCommands: ['workbench.action.openSettings', 'workbench.action.chat.open'] };
 			outputStream.markdown(markdownString);

@@ -10,10 +10,11 @@ import { getLanguage, getLanguageForResource, ILanguage } from '../../../util/co
 import { getLanguageId } from '../../../util/common/markdown';
 import { ExtHostNotebookDocumentData } from '../../../util/common/test/shims/notebookDocument';
 import { ExtHostNotebookEditor } from '../../../util/common/test/shims/notebookEditor';
-import { ExtHostDocumentData } from '../../../util/common/test/shims/textDocument';
+import { createTextDocumentData, IExtHostDocumentData, setDocText } from '../../../util/common/test/shims/textDocument';
 import { ExtHostTextEditor } from '../../../util/common/test/shims/textEditor';
 import { isUri } from '../../../util/common/types';
 import { Emitter } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import * as path from '../../../util/vs/base/common/path';
@@ -113,14 +114,14 @@ export function isNotebook(file: string | vscode.Uri | vscode.TextDocument) {
 	return file.uri.scheme === Schemas.vscodeNotebookCell || file.uri.fsPath.endsWith('.ipynb');
 }
 
-export class SimulationWorkspace {
+export class SimulationWorkspace extends Disposable {
 
-	private readonly _onDidChangeDiagnostics = new Emitter<vscode.DiagnosticChangeEvent>();
+	private readonly _onDidChangeDiagnostics = this._register(new Emitter<vscode.DiagnosticChangeEvent>());
 	public readonly onDidChangeDiagnostics = this._onDidChangeDiagnostics.event;
 
 	private _workspaceState: IDeserializedWorkspaceState | undefined;
 	private _workspaceFolders: Uri[] | undefined;
-	private readonly _docs = new ResourceMap<ExtHostDocumentData>();
+	private readonly _docs = new ResourceMap<IExtHostDocumentData>();
 	private readonly _notebooks = new ResourceMap<ExtHostNotebookDocumentData>();
 	private _diagnostics = new ResourceMap<vscode.Diagnostic[]>();
 	private currentEditor: ExtHostTextEditor | undefined = undefined;
@@ -138,7 +139,7 @@ export class SimulationWorkspace {
 	public get testFailures() { return this._workspaceState?.testFailures; }
 	public get workspaceFolderPath() { return this._workspaceState?.workspaceFolderPath; }
 
-	public get documents(): ExtHostDocumentData[] {
+	public get documents(): IExtHostDocumentData[] {
 		return Array.from(this._docs.values());
 	}
 
@@ -163,6 +164,12 @@ export class SimulationWorkspace {
 	}
 
 	constructor() {
+		super();
+		this._clear();
+	}
+
+	public override dispose(): void {
+		super.dispose();
 		this._clear();
 	}
 
@@ -214,7 +221,7 @@ export class SimulationWorkspace {
 			this._workspaceFolders = workspaceState.workspaceFolders;
 			if (workspaceState.activeTextEditor) {
 				const sourceDoc = workspaceState.activeTextEditor.document;
-				const doc = ExtHostDocumentData.create(sourceDoc.uri, sourceDoc.getText(), sourceDoc.languageId);
+				const doc = createTextDocumentData(sourceDoc.uri, sourceDoc.getText(), sourceDoc.languageId);
 				this.addDocument(doc);
 				this.setCurrentDocument(doc.document.uri);
 				this.setCurrentSelection(workspaceState.activeTextEditor.selection);
@@ -225,7 +232,7 @@ export class SimulationWorkspace {
 					if (workspaceState.workspaceFolderPath && workspaceState.workspaceFolders) {
 						const fileContents = fs.readFileSync(path.join(workspaceState.workspaceFolderPath, filePath), 'utf8');
 						const documentUri = URI.joinPath(workspaceState.workspaceFolders[0], filePath);
-						const doc = ExtHostDocumentData.create(documentUri, fileContents, getLanguageId(documentUri));
+						const doc = createTextDocumentData(documentUri, fileContents, getLanguageId(documentUri));
 						this.addDocument(doc);
 					}
 				}
@@ -263,7 +270,7 @@ export class SimulationWorkspace {
 					this._setNotebookFile(file.uri, file.fileContents);
 				} else {
 					const language = file.languageId ? getLanguage(file.languageId) : getLanguageForFile(file);
-					const doc = ExtHostDocumentData.create(
+					const doc = createTextDocumentData(
 						file.uri,
 						file.fileContents,
 						language.languageId
@@ -274,7 +281,7 @@ export class SimulationWorkspace {
 				this._setNotebookFile(this.getUriFromFilePath(file.fileName), file.fileContents);
 			} else {
 				const language = getLanguageForFile(file);
-				const doc = ExtHostDocumentData.create(
+				const doc = createTextDocumentData(
 					this.getUriFromFilePath(file.fileName),
 					file.fileContents,
 					language.languageId
@@ -292,7 +299,7 @@ export class SimulationWorkspace {
 		}
 		this._notebooks.set(notebook.uri, notebook);
 
-		const doc = ExtHostDocumentData.create(
+		const doc = createTextDocumentData(
 			uri,
 			contents,
 			'json'
@@ -353,7 +360,11 @@ export class SimulationWorkspace {
 		return this._diagnostics.get(uri) ?? [];
 	}
 
-	public getDocument(filePathOrUri: string | vscode.Uri): ExtHostDocumentData {
+	public getAllDiagnostics(): [vscode.Uri, vscode.Diagnostic[]][] {
+		return Array.from(this._diagnostics.entries());
+	}
+
+	public getDocument(filePathOrUri: string | vscode.Uri): IExtHostDocumentData {
 		const queryUri = typeof filePathOrUri === 'string' ? this.getUriFromFilePath(filePathOrUri) : filePathOrUri;
 		const candidateFile = this._docs.get(queryUri);
 		if (!candidateFile) {
@@ -366,7 +377,7 @@ export class SimulationWorkspace {
 		return this._docs.has(uri);
 	}
 
-	public addDocument(doc: ExtHostDocumentData): void {
+	public addDocument(doc: IExtHostDocumentData): void {
 		this._docs.set(doc.document.uri, doc);
 	}
 
@@ -382,7 +393,7 @@ export class SimulationWorkspace {
 		this._notebooks.set(notebook.uri, notebook);
 	}
 
-	public getNotebook(filePathOrUri: string | vscode.Uri): ExtHostNotebookDocumentData {
+	public tryGetNotebook(filePathOrUri: string | vscode.Uri): ExtHostNotebookDocumentData | undefined {
 		const queryUri = typeof filePathOrUri === 'string' ? this.getUriFromFilePath(filePathOrUri) : filePathOrUri;
 		if (queryUri.scheme === Schemas.vscodeNotebookCell) {
 			// loop through notebooks to find the one matching the path
@@ -394,7 +405,11 @@ export class SimulationWorkspace {
 			}
 		}
 
-		const candidateFile = this._notebooks.get(queryUri);
+		return this._notebooks.get(queryUri);
+	}
+
+	public getNotebook(filePathOrUri: string | vscode.Uri): ExtHostNotebookDocumentData {
+		const candidateFile = this.tryGetNotebook(filePathOrUri);
 		if (!candidateFile) {
 			throw new Error(`Missing file ${JSON.stringify(filePathOrUri, null, '\t')}\n\nHave ${Array.from(this._docs.keys()).map(k => k.toString()).join('\n')}`);
 		}
@@ -472,8 +487,8 @@ export class SimulationWorkspace {
 /**
  * Apply edits to `file` and return the new range and the new selection.
  */
-function applyEdits(
-	doc: ExtHostDocumentData,
+export function applyEdits(
+	doc: IExtHostDocumentData,
 	edits: vscode.TextEdit[],
 	range: vscode.Range,
 	selection: vscode.Range
@@ -494,28 +509,12 @@ function applyEdits(
 		convertRangeToOffsetBasedRange(doc.document, range),
 		convertRangeToOffsetBasedRange(doc.document, selection)
 	);
-	const lineCount = doc.document.lineCount;
-	const editRange = new Range(0, 0, lineCount - 1, doc.document.lineAt(lineCount - 1).text.length);
-	doc.onEvents({
-		changes: [
-			{
-				range: {
-					startLineNumber: editRange.start.line + 1,
-					startColumn: editRange.start.character + 1,
-					endLineNumber: editRange.end.line + 1,
-					endColumn: editRange.end.character + 1,
-				},
-				text: newFileContents,
-			},
-		],
-		versionId: doc.document.version + 1,
-	});
+	setDocText(doc, newFileContents);
 	return {
 		range: convertOffsetBasedRangeToSelection(doc.document, newRange),
 		selection: convertOffsetBasedRangeToSelection(doc.document, newSelection),
 	};
 }
-
 
 /**
  * Apply edits to `notebook`.

@@ -16,11 +16,11 @@ export const AMLPicker = mobxlite.observer(({ amlProvider }: { amlProvider: AMLP
 
 	return (
 		<div style={{ display: 'flex' }}>
-			<div className="external-toolbar-aml-picker">
-				<label className="title"> AML Run </label>
+			<div className='external-toolbar-aml-picker'>
+				<label className='title'> AML Run </label>
 				<select
 					onChange={mobx.action(e => amlProvider.selectedName.value = e.target.value)}
-					className="items"
+					className='items'
 					value={amlProvider.selectedName.value}
 				>
 					<option key='none' value=''> None </option>
@@ -32,10 +32,10 @@ export const AMLPicker = mobxlite.observer(({ amlProvider }: { amlProvider: AMLP
 				</select>
 			</div>
 			<div>
-				<label className="title"> Compare against </label>
+				<label className='title'> Compare against </label>
 				<select
 					onChange={mobx.action(e => amlProvider.compareAgainstRunName.value = e.target.value)}
-					className="items"
+					className='items'
 					value={amlProvider.compareAgainstRunName.value}
 				>
 					{

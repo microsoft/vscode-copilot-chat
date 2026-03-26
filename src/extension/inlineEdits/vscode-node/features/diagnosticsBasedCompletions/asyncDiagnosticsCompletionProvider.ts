@@ -5,7 +5,7 @@
 
 import { CodeActionData } from '../../../../../platform/inlineEdits/common/dataTypes/codeActionData';
 import { LanguageId } from '../../../../../platform/inlineEdits/common/dataTypes/languageId';
-import { ITracer } from '../../../../../util/common/tracing';
+import { ILogger } from '../../../../../platform/log/common/logService';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { TextReplacement } from '../../../../../util/vs/editor/common/core/edits/textEdit';
 import { Position } from '../../../../../util/vs/editor/common/core/position';
@@ -31,7 +31,7 @@ export class AsyncDiagnosticCompletionProvider implements IDiagnosticCompletionP
 
 	public readonly providerName = 'async';
 
-	constructor(private readonly _tracer: ITracer) { }
+	constructor(private readonly _logger: ILogger) { }
 
 	public providesCompletionsForDiagnostic(workspaceDocument: IVSCodeObservableDocument, diagnostic: Diagnostic, language: LanguageId, pos: Position): boolean {
 		if (!AsyncDiagnosticCompletionProvider.SupportedLanguages.has(language)) {
@@ -54,20 +54,20 @@ export class AsyncDiagnosticCompletionProvider implements IDiagnosticCompletionP
 		// fetch code actions for missing async
 		const availableCodeActions = await workspaceDocument.getCodeActions(missingAsyncDiagnostic.range, 3, token);
 		if (availableCodeActions === undefined) {
-			log(`Fetching code actions likely timed out for \`${missingAsyncDiagnostic.message}\``, logContext, this._tracer);
+			log(`Fetching code actions likely timed out for \`${missingAsyncDiagnostic.message}\``, logContext, this._logger);
 			return null;
 		}
 
 		const asyncCodeActions = getAsyncCodeActions(availableCodeActions, workspaceDocument);
 		if (asyncCodeActions.length === 0) {
-			log('No async code actions found in the available code actions', logContext, this._tracer);
+			log('No async code actions found in the available code actions', logContext, this._logger);
 			return null;
 		}
 
 		const asyncCodeActionToShow = asyncCodeActions[0];
 		const item = new AsyncDiagnosticCompletionItem(missingAsyncDiagnostic, asyncCodeActionToShow.edit, workspaceDocument);
 
-		log(`Created async completion item for: \`${missingAsyncDiagnostic.toString()}\``, logContext, this._tracer);
+		log(`Created async completion item for: \`${missingAsyncDiagnostic.toString()}\``, logContext, this._logger);
 
 		return item;
 	}

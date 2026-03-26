@@ -5,8 +5,9 @@
 
 import * as l10n from '@vscode/l10n';
 import type { ChatRequest, ChatRequestTurn2, ChatResponseStream, ChatResult, Location } from 'vscode';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
-import { getChatParticipantIdFromName, getChatParticipantNameFromId, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
+import { getChatParticipantNameFromId } from '../../../platform/chat/common/chatAgents';
 import { CanceledMessage, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
@@ -19,7 +20,6 @@ import { fileTreePartToMarkdown } from '../../../util/common/fileTree';
 import { isLocation, isSymbolInformation } from '../../../util/common/types';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { Event } from '../../../util/vs/base/common/event';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { mixin } from '../../../util/vs/base/common/objects';
 import { isEqual } from '../../../util/vs/base/common/resources';
@@ -34,7 +34,7 @@ import { IIntentService } from '../../intents/node/intentService';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ContributedToolName } from '../../tools/common/toolNames';
 import { ChatVariablesCollection } from '../common/chatVariablesCollection';
-import { Conversation, GlobalContextMessageMetadata, ICopilotChatResult, ICopilotChatResultIn, normalizeSummariesOnRounds, RenderedUserMessageMetadata, Turn, TurnStatus } from '../common/conversation';
+import { AnthropicTokenUsageMetadata, Conversation, getGlobalContextCacheKey, GlobalContextMessageMetadata, ICopilotChatResult, ICopilotChatResultIn, normalizeSummariesOnRounds, RenderedUserMessageMetadata, Turn, TurnStatus } from '../common/conversation';
 import { InternalToolReference } from '../common/intents';
 import { ChatTelemetryBuilder } from './chatParticipantTelemetry';
 import { DefaultIntentRequestHandler } from './defaultIntentRequestHandler';
@@ -72,7 +72,8 @@ export class ChatParticipantRequestHandler {
 		stream: ChatResponseStream,
 		private readonly token: CancellationToken,
 		private readonly chatAgentArgs: IChatAgentArgs,
-		private readonly onPaused: Event<boolean>,
+		private readonly yieldRequested: () => boolean,
+		telemetryMessageId: string | undefined,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@ICommandService private readonly _commandService: ICommandService,
@@ -81,6 +82,7 @@ export class ChatParticipantRequestHandler {
 		@IConversationStore private readonly _conversationStore: IConversationStore,
 		@ITabsAndEditorsService tabsAndEditorsService: ITabsAndEditorsService,
 		@ILogService private readonly _logService: ILogService,
+		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService,
 	) {
 		this.location = this.getLocation(request);
@@ -107,7 +109,8 @@ export class ChatParticipantRequestHandler {
 
 		const { turns, sessionId } = _instantiationService.invokeFunction(accessor => addHistoryToConversation(accessor, rawHistory));
 		normalizeSummariesOnRounds(turns);
-		const actualSessionId = sessionId ?? generateUuid();
+		// Use session ID from history, then VS Code's request.sessionId, then fallback to UUID
+		const actualSessionId = sessionId ?? request.sessionId ?? generateUuid();
 
 		this.documentContext = IDocumentContext.inferDocumentContext(request, tabsAndEditorsService.activeTextEditor, turns);
 
@@ -116,16 +119,13 @@ export class ChatParticipantRequestHandler {
 			actualSessionId,
 			this.documentContext,
 			turns.length === 0,
-			this.request
+			this.request,
+			telemetryMessageId
 		);
 
-		const latestTurn = new Turn(
+		const latestTurn = Turn.fromRequest(
 			this.chatTelemetry.telemetryMessageId,
-			{ message: request.prompt, type: 'user' },
-			new ChatVariablesCollection(request.references),
-			request.toolReferences.map(InternalToolReference.from),
-			request.editedFileEvents,
-		);
+			this.request);
 
 		this.conversation = new Conversation(actualSessionId, turns.concat(latestTurn));
 
@@ -192,8 +192,7 @@ export class ChatParticipantRequestHandler {
 		}
 
 		// Only ask for confirmation if we're invoking the codebase tool or workspace chat participant
-		const isWorkspaceCall = this.request.toolReferences.some(ref => ref.name === ContributedToolName.Codebase) ||
-			this.chatAgentArgs.agentId === getChatParticipantIdFromName(workspaceAgentName);
+		const isWorkspaceCall = this.request.toolReferences.some(ref => ref.name === ContributedToolName.Codebase);
 		// and only if we can't access all repos in the workspace
 		if (isWorkspaceCall && await this._authenticationUpgradeService.shouldRequestPermissiveSessionUpgrade()) {
 			this._authenticationUpgradeService.showPermissiveSessionUpgradeInChat(this.stream, this.request);
@@ -237,9 +236,9 @@ export class ChatParticipantRequestHandler {
 
 				let chatResult: Promise<ChatResult>;
 				if (typeof intent.handleRequest === 'function') {
-					chatResult = intent.handleRequest(this.conversation, this.request, this.stream, this.token, this.documentContext, this.chatAgentArgs.agentName, this.location, this.chatTelemetry, this.onPaused);
+					chatResult = intent.handleRequest(this.conversation, this.request, this.stream, this.token, this.documentContext, this.chatAgentArgs.agentName, this.location, this.chatTelemetry, this.yieldRequested);
 				} else {
-					const intentHandler = this._instantiationService.createInstance(DefaultIntentRequestHandler, intent, this.conversation, this.request, this.stream, this.token, this.documentContext, this.location, this.chatTelemetry, undefined, this.onPaused);
+					const intentHandler = this._instantiationService.createInstance(DefaultIntentRequestHandler, intent, this.conversation, this.request, this.stream, this.token, this.documentContext, this.location, this.chatTelemetry, undefined, this.yieldRequested);
 					chatResult = intentHandler.getResult();
 				}
 
@@ -256,7 +255,9 @@ export class ChatParticipantRequestHandler {
 
 				result = await chatResult;
 				const endpoint = await this._endpointProvider.getChatEndpoint(this.request);
-				result.details = `${endpoint.name} • ${endpoint.multiplier ?? 0}x`;
+				result.details = this._authService.copilotToken?.isNoAuthUser ?
+					`${endpoint.name}` :
+					`${endpoint.name} • ${endpoint.multiplier ?? 0}x`;
 			}
 
 			this._conversationStore.addConversation(this.turn.id, this.conversation);
@@ -325,9 +326,7 @@ export class ChatParticipantRequestHandler {
 
 
 export function addHistoryToConversation(accessor: ServicesAccessor, history: ReadonlyArray<ChatRequestTurn | ChatResponseTurn>): { turns: Turn[]; sessionId: string | undefined } {
-	const commandService = accessor.get(ICommandService);
-	const conversationStore = accessor.get(IConversationStore);
-	const workspaceService = accessor.get(IWorkspaceService);
+	const instaService = accessor.get(IInstantiationService);
 
 	const turns: Turn[] = [];
 	let sessionId: string | undefined;
@@ -339,12 +338,12 @@ export function addHistoryToConversation(accessor: ServicesAccessor, history: Re
 		if (entry instanceof ChatRequestTurn) {
 			previousChatRequestTurn = entry;
 		} else {
-			const existingTurn = findExistingTurnFromVSCodeChatHistoryTurn(conversationStore, entry);
+			const existingTurn = instaService.invokeFunction(findExistingTurnFromVSCodeChatHistoryTurn, entry);
 			if (existingTurn) {
 				turns.push(existingTurn);
 			} else {
 				if (previousChatRequestTurn) {
-					const deserializedTurn = createTurnFromVSCodeChatHistoryTurns(previousChatRequestTurn, entry, commandService, workspaceService);
+					const deserializedTurn = instaService.invokeFunction(createTurnFromVSCodeChatHistoryTurns, previousChatRequestTurn, entry);
 					previousChatRequestTurn = undefined;
 					turns.push(deserializedTurn);
 				}
@@ -363,7 +362,8 @@ export function addHistoryToConversation(accessor: ServicesAccessor, history: Re
 /**
  * Try to find an existing `Turn` instance that we created previously based on the responseId of a vscode turn.
  */
-function findExistingTurnFromVSCodeChatHistoryTurn(conversationStore: IConversationStore, turn: ChatRequestTurn | ChatResponseTurn): Turn | undefined {
+function findExistingTurnFromVSCodeChatHistoryTurn(accessor: ServicesAccessor, turn: ChatRequestTurn | ChatResponseTurn): Turn | undefined {
+	const conversationStore = accessor.get(IConversationStore);
 	const responseId = getResponseIdFromVSCodeChatHistoryTurn(turn);
 	const conversation = responseId ? conversationStore.getConversation(responseId) : undefined;
 	return conversation?.turns.find(turn => turn.id === responseId);
@@ -381,17 +381,21 @@ function getResponseIdFromVSCodeChatHistoryTurn(turn: ChatRequestTurn | ChatResp
  * Try as best as possible to create a `Turn` object from data that comes from vscode.
  */
 function createTurnFromVSCodeChatHistoryTurns(
-	chatRequestTurn: ChatRequestTurn2,
-	chatResponseTurn: ChatResponseTurn,
-	commandService: ICommandService,
-	workspaceService: IWorkspaceService
+	accessor: ServicesAccessor,
+	chatRequestTurn: ChatRequestTurn,
+	chatResponseTurn: ChatResponseTurn
 ): Turn {
+	const commandService = accessor.get(ICommandService);
+	const workspaceService = accessor.get(IWorkspaceService);
+	const instaService = accessor.get(IInstantiationService);
+
+	const chatRequestAsTurn2 = chatRequestTurn as ChatRequestTurn2;
 	const currentTurn = new Turn(
 		undefined,
 		{ message: chatRequestTurn.prompt, type: 'user' },
 		new ChatVariablesCollection(chatRequestTurn.references),
 		chatRequestTurn.toolReferences.map(InternalToolReference.from),
-		chatRequestTurn.editedFileEvents
+		chatRequestAsTurn2.editedFileEvents
 	);
 
 	// Take just the content messages
@@ -428,10 +432,14 @@ function createTurnFromVSCodeChatHistoryTurns(
 	currentTurn.setResponse(status, { message: content, type: 'model', name: command?.commandId || UnknownIntent.ID }, undefined, chatResponseTurn.result);
 	const turnMetadata = (chatResponseTurn.result as ICopilotChatResultIn).metadata;
 	if (turnMetadata?.renderedGlobalContext) {
-		currentTurn.setMetadata(new GlobalContextMessageMetadata(turnMetadata?.renderedGlobalContext));
+		const cacheKey = turnMetadata.globalContextCacheKey ?? instaService.invokeFunction(getGlobalContextCacheKey);
+		currentTurn.setMetadata(new GlobalContextMessageMetadata(turnMetadata?.renderedGlobalContext, cacheKey));
 	}
 	if (turnMetadata?.renderedUserMessage) {
 		currentTurn.setMetadata(new RenderedUserMessageMetadata(turnMetadata.renderedUserMessage));
+	}
+	if (turnMetadata?.promptTokens && turnMetadata?.outputTokens) {
+		currentTurn.setMetadata(new AnthropicTokenUsageMetadata(turnMetadata.promptTokens, turnMetadata.outputTokens));
 	}
 
 	return currentTurn;
@@ -443,10 +451,12 @@ function anchorPartToMarkdown(workspaceService: IWorkspaceService, anchor: ChatR
 
 	if (URI.isUri(anchor.value)) {
 		path = getWorkspaceFileDisplayPath(workspaceService, anchor.value);
-		text = `\`${path}\``;
+		const label = anchor.title ?? path;
+		text = `\`${label}\``;
 	} else if (isLocation(anchor.value)) {
 		path = getWorkspaceFileDisplayPath(workspaceService, anchor.value.uri);
-		text = `\`${path}\``;
+		const label = anchor.title ?? `${path}#L${anchor.value.range.start.line + 1}${anchor.value.range.start.line === anchor.value.range.end.line ? '' : `-${anchor.value.range.end.line + 1}`}`;
+		text = `\`${label}\``;
 	} else if (isSymbolInformation(anchor.value)) {
 		path = getWorkspaceFileDisplayPath(workspaceService, anchor.value.location.uri);
 		text = `\`${anchor.value.name}\``;

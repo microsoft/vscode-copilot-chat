@@ -214,7 +214,7 @@ async function assertfindFixRangeOfInterestAsync(accessor: ITestingServicesAcces
 	});
 	const treeSitterAST = accessor.get(IParserService).getTreeSitterAST(document);
 	assert(treeSitterAST);
-	const diagnostics: Diagnostic[] = [new Diagnostic(new Range(startPosition, endPosition), "placeholder")];
+	const diagnostics: Diagnostic[] = [new Diagnostic(new Range(startPosition, endPosition), 'placeholder')];
 	const diagnosticsRange = rangeSpanningDiagnostics(diagnostics);
 	const rangeOfInterest = await findFixRangeOfInterest(treeSitterAST, diagnosticsRange, maximumNumberOfLines);
 	assert.deepStrictEqual(rangeOfInterest!.start.line, expectedLineRange[0]);

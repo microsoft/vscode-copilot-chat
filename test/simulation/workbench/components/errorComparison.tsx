@@ -25,26 +25,26 @@ export const ErrorComparison = mobxlite.observer(
 		const [expanded, setExpanded] = React.useState(false);
 
 		return (
-			<div className="error-comparison">
+			<div className='error-comparison'>
 				{'\n'}
-				<div className="title" onClick={() => setExpanded(!expanded)}>
+				<div className='title' onClick={() => setExpanded(!expanded)}>
 					{expanded ? '▼' : '▶'} Error Comparison
 				</div>{' '}
 				{!expanded ? null : (
 					<div>
 						<p>
-							<span className="category">{`- Source: `}</span>
+							<span className='category'>{`- Source: `}</span>
 							{errorsOnlyInBefore[0].tool}
 						</p>
 						<p>
-							<span className="category">{`- Number of errors that appear in the diagnostics strictly only before the change: `}</span>
+							<span className='category'>{`- Number of errors that appear in the diagnostics strictly only before the change: `}</span>
 							{errorsOnlyInBefore.length}
 						</p>
 						<p>
-							<span className="category">{`- Number of errors that appear in the diagnostics strictly only after the change: `}</span>
+							<span className='category'>{`- Number of errors that appear in the diagnostics strictly only after the change: `}</span>
 							{errorsOnlyInAfter.length}
 						</p>
-						<span className="category">{`- Diff of errors before and after : `}</span>
+						<span className='category'>{`- Diff of errors before and after : `}</span>
 						<DiffEditor
 							original={errorText(errorsOnlyInBefore)}
 							modified={errorText(errorsOnlyInAfter)}

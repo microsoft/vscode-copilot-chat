@@ -4,10 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 import { CancellationToken, Progress, SettingsSearchProviderOptions, SettingsSearchResult, SettingsSearchResultKind } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { EmbeddingType, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
+import { Embeddings, EmbeddingType, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { ICombinedEmbeddingIndex, SettingListItem } from '../../../platform/embeddings/common/vscodeIndex';
 import { ChatEndpointFamily, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ISettingsEditorSearchService } from '../../../platform/settingsEditor/common/settingsEditorSearchService';
+import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { SettingsEditorSearchResultsSelector } from '../node/settingsEditorSearchResultsSelector';
 
@@ -28,29 +29,22 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 			return;
 		}
 
-		const canceledBundle: SettingsSearchResult = {
-			query,
-			kind: SettingsSearchResultKind.CANCELED,
-			settings: []
-		};
-
-		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [query], {}, token);
-		if (token.isCancellationRequested) {
-			progress.report(canceledBundle);
+		// Start searching for embedding results.
+		let embeddingResult: Embeddings;
+		try {
+			embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [query], {}, new TelemetryCorrelationId('SettingsEditorSearchServiceImpl::provideSettingsSearchResults'), token);
+		} catch {
+			this.reportEmptyEmbeddingsResult(query, progress);
+			if (!options.embeddingsOnly) {
+				this.reportEmptyLLMRankedResult(query, progress);
+			}
 			return;
 		}
-		if (!embeddingResult || embeddingResult.values.length === 0) {
-			progress.report({
-				query,
-				kind: SettingsSearchResultKind.EMBEDDED,
-				settings: []
-			});
+
+		if (token.isCancellationRequested || !embeddingResult || embeddingResult.values.length === 0) {
+			this.reportEmptyEmbeddingsResult(query, progress);
 			if (!options.embeddingsOnly) {
-				progress.report({
-					query,
-					kind: SettingsSearchResultKind.LLM_RANKED,
-					settings: []
-				});
+				this.reportEmptyLLMRankedResult(query, progress);
 			}
 			return;
 		}
@@ -58,9 +52,14 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 		await this.embeddingIndex.loadIndexes();
 		const embeddingSettings: SettingListItem[] = this.embeddingIndex.settingsIndex.nClosestValues(embeddingResult.values[0], 25);
 		if (token.isCancellationRequested) {
-			progress.report(canceledBundle);
+			this.reportEmptyEmbeddingsResult(query, progress);
+			if (!options.embeddingsOnly) {
+				this.reportEmptyLLMRankedResult(query, progress);
+			}
 			return;
 		}
+
+		// Report final embedding results.
 		progress.report({
 			query,
 			kind: SettingsSearchResultKind.EMBEDDED,
@@ -71,13 +70,10 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 			return;
 		}
 
+		// Start searching LLM-ranked results.
 		const copilotToken = await this.authenticationService.getCopilotToken();
-		if (embeddingSettings.length === 0 || copilotToken.isFreeUser) {
-			progress.report({
-				query,
-				kind: SettingsSearchResultKind.LLM_RANKED,
-				settings: []
-			});
+		if (embeddingSettings.length === 0 || copilotToken.isFreeUser || copilotToken.isNoAuthUser) {
+			this.reportEmptyLLMRankedResult(query, progress);
 			return;
 		}
 
@@ -86,13 +82,31 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 		const generator = this.instantiationService.createInstance(SettingsEditorSearchResultsSelector);
 		const llmSearchSuggestions = await generator.selectTopSearchResults(endpoint, query, embeddingSettings, token);
 		if (token.isCancellationRequested) {
-			progress.report(canceledBundle);
+			this.reportEmptyLLMRankedResult(query, progress);
 			return;
 		}
+
+		// Report final LLM-ranked results.
 		progress.report({
 			query,
 			kind: SettingsSearchResultKind.LLM_RANKED,
 			settings: llmSearchSuggestions
+		});
+	}
+
+	private reportEmptyEmbeddingsResult(query: string, progress: Progress<SettingsSearchResult>): void {
+		progress.report({
+			query,
+			kind: SettingsSearchResultKind.EMBEDDED,
+			settings: []
+		});
+	}
+
+	private reportEmptyLLMRankedResult(query: string, progress: Progress<SettingsSearchResult>): void {
+		progress.report({
+			query,
+			kind: SettingsSearchResultKind.LLM_RANKED,
+			settings: []
 		});
 	}
 }

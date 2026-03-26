@@ -5,6 +5,7 @@
 
 import { IDisposable } from 'monaco-editor';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
+import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { BaseGHTelemetrySender } from './ghTelemetrySender';
 import { BaseMsftTelemetrySender } from './msftTelemetrySender';
 import { ITelemetryService, TelemetryDestination, TelemetryEventMeasurements, TelemetryEventProperties } from './telemetry';
@@ -14,9 +15,12 @@ export class BaseTelemetryService implements ITelemetryService {
 	// Properties that are applied to all telemetry events (currently only used by the exp service
 	// TODO @lramos15 extend further to include more
 	private _sharedProperties: Record<string, string> = {};
+	private _originalExpAssignments: string | undefined;
+	private _additionalExpAssignments: string[] = [];
 	private _disposables: IDisposable[] = [];
 	constructor(
 		protected readonly _tokenStore: ICopilotTokenStore,
+		private readonly _capiClientService: ICAPIClientService,
 		protected readonly _microsoftTelemetrySender: BaseMsftTelemetrySender,
 		protected readonly _ghTelemetrySender: BaseGHTelemetrySender,
 	) {
@@ -30,7 +34,6 @@ export class BaseTelemetryService implements ITelemetryService {
 				"token" : {
 					"owner": "digitarald",
 					"comment": "Copilot token received from the service.",
-					"chatEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Indicates if the token enabled chat." },
 					"snippyEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the block setting for public suggestions is enabled." },
 					"telemetryEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the subscription has telemetry enabled." },
 					"mcpEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the token has MCP features enabled." },
@@ -39,7 +42,6 @@ export class BaseTelemetryService implements ITelemetryService {
 				}
 			*/
 			this.sendMSFTTelemetryEvent('token', undefined, {
-				chatEnabled: token.isChatEnabled() ? 1 : 0,
 				snippyEnabled: token.isPublicSuggestionsEnabled() ? 1 : 0,
 				telemetryEnabled: token.isTelemetryEnabled() ? 1 : 0,
 				mcpEnabled: token.isMcpEnabled() ? 1 : 0,
@@ -62,7 +64,13 @@ export class BaseTelemetryService implements ITelemetryService {
 	}
 
 	sendGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {
-		this.sendTelemetryEvent(eventName, { github: true, microsoft: false }, properties, measurements);
+		// Add SKU to GitHub telemetry events specifically
+		const sku = this._tokenStore.copilotToken?.sku;
+		const enrichedProperties = {
+			...properties,
+			sku: sku ?? ''
+		};
+		this.sendTelemetryEvent(eventName, { github: true, microsoft: false }, enrichedProperties, measurements);
 	}
 
 	sendGHTelemetryErrorEvent(eventName: string, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {
@@ -117,6 +125,27 @@ export class BaseTelemetryService implements ITelemetryService {
 		}
 	}
 
+	private _setOriginalExpAssignments(value: string) {
+		this._originalExpAssignments = value;
+		this._updateExpAssignmentsSharedProperty();
+	}
+
+	setAdditionalExpAssignments(expAssignments: string[]): void {
+		this._additionalExpAssignments = expAssignments;
+		this._updateExpAssignmentsSharedProperty();
+	}
+
+	private _updateExpAssignmentsSharedProperty() {
+		let value = this._originalExpAssignments || '';
+		for (const assignment of this._additionalExpAssignments) {
+			if (!value.includes(assignment)) {
+				value += `;${assignment}`;
+			}
+		}
+		this._capiClientService.abExpContext = value;
+		this._sharedProperties['abexp.assignmentcontext'] = value;
+	}
+
 	setSharedProperty(name: string, value: string): void {
 		/* __GDPR__
 			"query-expfeature" : {
@@ -128,6 +157,10 @@ export class BaseTelemetryService implements ITelemetryService {
 				"errortype": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth"}
 			}
 		*/
+		if (name === 'abexp.assignmentcontext') {
+			this._setOriginalExpAssignments(value);
+			return;
+		}
 		this._sharedProperties[name] = value;
 	}
 

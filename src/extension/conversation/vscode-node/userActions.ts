@@ -6,7 +6,6 @@
 
 import * as vscode from 'vscode';
 import { editsAgentName, getChatParticipantIdFromName } from '../../../platform/chat/common/chatAgents';
-import { ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { EditSurvivalResult } from '../../../platform/editSurvivalTracking/common/editSurvivalReporter';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IMultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
@@ -23,9 +22,9 @@ import { CopilotInteractiveEditorResponse, InteractionOutcome } from '../../inli
 import { participantIdToModeName } from '../../intents/common/intents';
 import { EditCodeStepTurnMetaData } from '../../intents/node/editCodeStep';
 import { Conversation, ICopilotChatResultIn } from '../../prompt/common/conversation';
-import { IntentInvocationMetadata } from '../../prompt/node/conversation';
 import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
 import { sendUserActionTelemetry } from '../../prompt/node/telemetry';
+import { resolveModelIdForTelemetry } from './resolveModelId';
 
 export const IUserFeedbackService = createServiceIdentifier<IUserFeedbackService>('IUserFeedbackService');
 export interface IUserFeedbackService {
@@ -55,8 +54,8 @@ export class UserFeedbackService implements IUserFeedbackService {
 		const result = e.result as ICopilotChatResultIn;
 		const conversation = result.metadata?.responseId && this.conversationStore.getConversation(result.metadata.responseId);
 
-		if (typeof conversation === 'object' && conversation.getLatestTurn().getMetadata(IntentInvocationMetadata)?.value?.location === ChatLocation.Editor) {
-			this._handleChatUserAction(result.metadata?.sessionId, agentId, conversation, e, undefined);
+		if (typeof conversation === 'object' && conversation.getLatestTurn().getMetadata(CopilotInteractiveEditorResponse)) {
+			this._handleChatUserAction(result.metadata?.sessionId, conversation, e);
 			return;
 		}
 
@@ -176,6 +175,31 @@ export class UserFeedbackService implements IUserFeedbackService {
 						isNotebookCell: e.action.uri.scheme === Schemas.vscodeNotebookCell ? 1 : 0
 					});
 
+					this.telemetryService.sendGHTelemetryEvent('panel.edit.feedback', {
+						languageId: document?.languageId,
+						requestId: result.metadata?.responseId,
+						participant: agentId,
+						command: result.metadata?.command,
+						outcome: outcomes.get(e.action.outcome) ?? 'unknown',
+						hasRemainingEdits: String(e.action.hasRemainingEdits),
+					}, {
+						isNotebook: this.notebookService.hasSupportedNotebooks(e.action.uri) ? 1 : 0,
+						isNotebookCell: e.action.uri.scheme === Schemas.vscodeNotebookCell ? 1 : 0
+					});
+
+
+					this.telemetryService.sendInternalMSFTTelemetryEvent('panel.edit.feedback', {
+						languageId: document?.languageId,
+						requestId: result.metadata?.responseId,
+						participant: agentId,
+						command: result.metadata?.command,
+						outcome: outcomes.get(e.action.outcome) ?? 'unknown',
+						hasRemainingEdits: String(e.action.hasRemainingEdits),
+					}, {
+						isNotebook: this.notebookService.hasSupportedNotebooks(e.action.uri) ? 1 : 0,
+						isNotebookCell: e.action.uri.scheme === Schemas.vscodeNotebookCell ? 1 : 0
+					});
+
 					if (result.metadata?.responseId
 						&& (e.action.outcome === vscode.ChatEditingSessionActionOutcome.Accepted
 							|| e.action.outcome === vscode.ChatEditingSessionActionOutcome.Rejected)
@@ -254,7 +278,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 					headerRequestId: result.metadata?.responseId ?? '',
 					participant: agentId,
 					languageId: e.action.languageId ?? '',
-					modelId: e.action.modelId ?? '',
+					modelId: resolveModelIdForTelemetry(e.action.modelId ?? '', result.metadata?.resolvedModel),
 					comp_type: compType,
 					mode: participantIdToModeName(agentId),
 				},
@@ -279,7 +303,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 				headerRequestId: result.metadata?.responseId ?? '',
 				participant: agentId,
 				languageId: e.languageId ?? '',
-				modelId: e.modelId,
+				modelId: resolveModelIdForTelemetry(e.modelId, result.metadata?.resolvedModel),
 				mode: participantIdToModeName(agentId),
 			},
 			{
@@ -294,14 +318,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 		const document = vscode.window.activeTextEditor?.document;
 
 		const result = e.result as ICopilotChatResultIn;
-		const conversation = result.metadata?.responseId && this.conversationStore.getConversation(result.metadata.responseId);
 
-		if (typeof conversation === 'object' && conversation.getLatestTurn().getMetadata(CopilotInteractiveEditorResponse)) {
-			this._handleChatUserAction(result.metadata?.sessionId, agentId, conversation, undefined, e);
-			return;
-		}
-
-		// Note- we can get the agentId from a cancelled request, but not the command, because it can only be retrieved from the result
 		/* __GDPR__
 		"panel.action.vote" : {
 			"owner": "digitarald",
@@ -311,7 +328,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 			"direction": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the vote was positive or negative." },
 			"participant": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "The name of the chat participant for this message." },
 			"command": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "The command used for the chat participant." },
-			"reason": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "Preset value for why the user found the response unhelpful." }
+			"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the conversation." }
 		}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent('panel.action.vote', {
@@ -319,7 +336,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 			requestId: result.metadata?.responseId,
 			participant: agentId,
 			command: result.metadata?.command,
-			reason: e.unhelpfulReason
+			conversationId: result.metadata?.sessionId
 		}, {
 			direction: e.kind === vscode.ChatResultFeedbackKind.Helpful ? 1 : 2, // map to previous enum values
 		});
@@ -331,7 +348,6 @@ export class UserFeedbackService implements IUserFeedbackService {
 				rating: e.kind === vscode.ChatResultFeedbackKind.Helpful ? 'positive' : 'negative',
 				messageId: result.metadata?.modelMessageId ?? '',
 				headerRequestId: result.metadata?.responseId ?? '',
-				reason: e.unhelpfulReason ?? ''
 			},
 			{},
 			'conversation.messageRating'
@@ -341,11 +357,9 @@ export class UserFeedbackService implements IUserFeedbackService {
 	// --- inline
 
 
-	private _handleChatUserAction(sessionId: string | undefined, _agentId: string, conversation: Conversation, event: vscode.ChatUserActionEvent | undefined, feedback: vscode.ChatResultFeedback | undefined) {
+	private _handleChatUserAction(sessionId: string | undefined, conversation: Conversation, event: vscode.ChatUserActionEvent) {
 
 		enum InteractiveEditorResponseFeedbackKind {
-			Unhelpful = 0,
-			Helpful = 1,
 			Undone = 2,
 			Accepted = 3,
 			Bug = 4
@@ -355,46 +369,39 @@ export class UserFeedbackService implements IUserFeedbackService {
 			return;
 		}
 
-		const response = conversation.getLatestTurn().getMetadata(CopilotInteractiveEditorResponse);
-		if (!response) {
-			return;
-		}
-
-		const interactionOutcome = conversation.getLatestTurn().getMetadata(InteractionOutcome);
-		if (!interactionOutcome) {
-			return;
-		}
-
 		let kind: InteractiveEditorResponseFeedbackKind | undefined;
-		if (event?.action.kind === 'editor') {
+		if (event.action.kind === 'editor') {
 			kind = event.action.accepted ? InteractiveEditorResponseFeedbackKind.Accepted : InteractiveEditorResponseFeedbackKind.Undone;
-		} else if (event?.action.kind === 'bug') {
+		} else if (event.action.kind === 'bug') {
 			kind = InteractiveEditorResponseFeedbackKind.Bug;
-		} else if (feedback?.kind === vscode.ChatResultFeedbackKind.Helpful) {
-			kind = InteractiveEditorResponseFeedbackKind.Helpful;
-		} else if (feedback?.kind === vscode.ChatResultFeedbackKind.Unhelpful) {
-			kind = InteractiveEditorResponseFeedbackKind.Unhelpful;
 		}
 
 		if (kind === undefined) {
 			return;
 		}
 
+		const response = conversation.getLatestTurn().getMetadata(CopilotInteractiveEditorResponse);
+		if (!response) {
+			return;
+		}
+
+		let interactionOutcome = conversation.getLatestTurn().getMetadata(InteractionOutcome);
+		if (!interactionOutcome) {
+			interactionOutcome = new InteractionOutcome(!response.telemetry?.editCount ? 'none' : 'inlineEdit', []);
+		}
 
 		if (kind === InteractiveEditorResponseFeedbackKind.Bug && conversation) {
 			this.feedbackReporter.reportInline(conversation, response.promptQuery, interactionOutcome);
 			return;
 		}
 
-		const userActionProperties: { messageId: string; rating?: string; action?: 'undo' | 'accept' } = {
+		const userActionProperties: { messageId: string; action?: 'undo' | 'accept' } = {
 			messageId: response.messageId,
 		};
 		let telemetryEventName: string;
 
 		const { selection, wholeRange, intent, query } = response.promptQuery;
 
-		// For panel requests, conversation.getLatestTurn() refers to the turn that was voted on
-		// (i.e. last message in the conversation _up to this point_), not the last message shown in the panel.
 		const requestId = conversation?.getLatestTurn().id;
 		const intentId = intent?.id;
 		const languageId = response.promptQuery.document.languageId;
@@ -407,7 +414,6 @@ export class UserFeedbackService implements IUserFeedbackService {
 		);
 		const isNotebookDocument = isNotebookCellOrNotebookChatInput(response.promptQuery.document.uri) ? 1 : 0;
 
-		// TODO: Fix the telemetry event name. This is hit by both inline and panel requests.
 		this.surveyService.signalUsage(`inline.${intentId ?? 'default'}`, languageId);
 
 		const sharedProps = {
@@ -431,98 +437,51 @@ export class UserFeedbackService implements IUserFeedbackService {
 			selectionDiagnosticsCount: diagnosticsTelemetryData?.selectionDiagnosticsTelemetry.diagnosticsCount ?? 0,
 		};
 
-		const sendInternalTelemetryEvent = (eventName: string, measurement: { vote: number } | { accepted: number }) => {
-			this.telemetryService.sendInternalMSFTTelemetryEvent(eventName, {
-				language: languageId,
-				intent: intentId,
-				query: query,
-				conversationId: sessionId,
-				requestId: requestId,
-				replyType: interactionOutcome.kind,
-				problems: diagnosticsTelemetryData?.fileDiagnosticsTelemetry.problems ?? '',
-				selectionProblems: diagnosticsTelemetryData?.selectionDiagnosticsTelemetry.problems ?? '',
-				diagnosticCodes: diagnosticsTelemetryData?.fileDiagnosticsTelemetry.diagnosticCodes ?? '',
-				selectionDiagnosticCodes: diagnosticsTelemetryData?.selectionDiagnosticsTelemetry.diagnosticCodes ?? '',
-			}, { isNotebook: isNotebookDocument, ...measurement });
-		};
-
 		if (kind === InteractiveEditorResponseFeedbackKind.Accepted && response.editSurvivalTracker) {
 			response.editSurvivalTracker.startReporter(res => reportInlineEditSurvivalEvent(res, sharedProps, sharedMeasures));
 		}
 		(response as any).editSurvivalTracker = undefined; // TODO@jrieken
 
-		if (kind === InteractiveEditorResponseFeedbackKind.Helpful || kind === InteractiveEditorResponseFeedbackKind.Unhelpful) {
-			const vote = (kind === InteractiveEditorResponseFeedbackKind.Helpful) ? 1 : 0;
-			/* __GDPR__
-				"inline.action.vote" : {
-					"owner": "digitarald",
-					"comment": "Metadata about votes on inline code conversations",
-					"languageId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The current file language." },
-					"replyType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "How response is shown in the interface." },
-					"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the inline assistant conversation." },
-					"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn." },
-					"command": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The command which was used in providing the response." },
-					"reason": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "Preset value for why the user found the response unhelpful." },
-					"vote": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the user found the response helpful." },
-					"selectionLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many lines are in the current selection." },
-					"wholeRangeLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many lines are in the expanded whole range." },
-					"editCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many edits are suggested." },
-					"editLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many lines are in all suggested edits." },
-					"problemsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many problems are in the current code." },
-					"selectionProblemsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many problems are in the current selected code." },
-					"diagnosticsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many diagnostic codes are in the current code." },
-					"selectionDiagnosticsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many diagnostic codes are in the current selected code." },
-					"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the document is a notebook" }
-				}
-			*/
-			// TODO: Fix the telemetry event name. This is hit by both inline and panel requests.
-			this.telemetryService.sendMSFTTelemetryEvent('inline.action.vote', {
-				...sharedProps,
-				reason: feedback?.unhelpfulReason,
-			}, {
-				...sharedMeasures, vote
-			});
-			sendInternalTelemetryEvent('interactiveSessionVote', { vote });
-		} else if (kind === InteractiveEditorResponseFeedbackKind.Undone || kind === InteractiveEditorResponseFeedbackKind.Accepted) {
-			const accepted = (kind === InteractiveEditorResponseFeedbackKind.Accepted) ? 1 : 0;
-			/* __GDPR__
-				"inline.done" : {
-					"owner": "digitarald",
-					"comment": "Metadata about an inline code suggestion being accepted or undone",
-					"languageId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The current file language." },
-					"replyType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "How response is shown in the interface." },
-					"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the inline assistant conversation." },
-					"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn." },
-					"command": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The command which was used in providing the response." },
-					"accepted": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the user accepted the suggested code or discarded it." },
-					"selectionLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many lines are in the current selection." },
-					"wholeRangeLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many lines are in the expanded whole range." },
-					"editCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many edits are suggested." },
-					"editLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many lines are in all suggested edits." },
-					"problemsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many problems are in the current code." },
-					"selectionProblemsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many problems are in the current selected code." },
-					"diagnosticsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many diagnostic codes are in the current code." },
-					"selectionDiagnosticsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many diagnostic codes are in the current code." },
-					"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the document is a notebook." }
-				}
-			*/
-			// TODO: Fix the telemetry event name. This may be hit by both inline and panel requests.
-			this.telemetryService.sendMSFTTelemetryEvent('inline.done', sharedProps, {
-				...sharedMeasures, accepted
-			});
-			sendInternalTelemetryEvent('interactiveSessionDone', { accepted });
-		}
+		const accepted = (kind === InteractiveEditorResponseFeedbackKind.Accepted) ? 1 : 0;
+		/* __GDPR__
+			"inline.done" : {
+				"owner": "digitarald",
+				"comment": "Metadata about an inline code suggestion being accepted or undone",
+				"languageId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The current file language." },
+				"replyType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "How response is shown in the interface." },
+				"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the inline assistant conversation." },
+				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn." },
+				"command": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The command which was used in providing the response." },
+				"accepted": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the user accepted the suggested code or discarded it." },
+				"selectionLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many lines are in the current selection." },
+				"wholeRangeLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many lines are in the expanded whole range." },
+				"editCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many edits are suggested." },
+				"editLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many lines are in all suggested edits." },
+				"problemsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many problems are in the current code." },
+				"selectionProblemsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many problems are in the current selected code." },
+				"diagnosticsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many diagnostic codes are in the current code." },
+				"selectionDiagnosticsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many diagnostic codes are in the current code." },
+				"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the document is a notebook." }
+			}
+		*/
+		this.telemetryService.sendMSFTTelemetryEvent('inline.done', sharedProps, {
+			...sharedMeasures, accepted
+		});
 
-		// TODO: Fix the telemetry event name. This is hit by both inline and panel requests.
+		this.telemetryService.sendInternalMSFTTelemetryEvent('interactiveSessionDone', {
+			language: languageId,
+			intent: intentId,
+			query: query,
+			conversationId: sessionId,
+			requestId: requestId,
+			replyType: interactionOutcome.kind,
+			problems: diagnosticsTelemetryData?.fileDiagnosticsTelemetry.problems ?? '',
+			selectionProblems: diagnosticsTelemetryData?.selectionDiagnosticsTelemetry.problems ?? '',
+			diagnosticCodes: diagnosticsTelemetryData?.fileDiagnosticsTelemetry.diagnosticCodes ?? '',
+			selectionDiagnosticCodes: diagnosticsTelemetryData?.selectionDiagnosticsTelemetry.diagnosticCodes ?? '',
+		}, { isNotebook: isNotebookDocument, accepted });
+
 		switch (kind) {
-			case InteractiveEditorResponseFeedbackKind.Helpful:
-				userActionProperties['rating'] = 'positive';
-				telemetryEventName = 'inlineConversation.messageRating';
-				break;
-			case InteractiveEditorResponseFeedbackKind.Unhelpful:
-				userActionProperties['rating'] = 'negative';
-				telemetryEventName = 'inlineConversation.messageRating';
-				break;
 			case InteractiveEditorResponseFeedbackKind.Undone:
 				userActionProperties['action'] = 'undo';
 				telemetryEventName = 'inlineConversation.undo';
@@ -532,7 +491,6 @@ export class UserFeedbackService implements IUserFeedbackService {
 				telemetryEventName = 'inlineConversation.accept';
 				break;
 			case InteractiveEditorResponseFeedbackKind.Bug:
-				// internal
 				telemetryEventName = '';
 				break;
 		}

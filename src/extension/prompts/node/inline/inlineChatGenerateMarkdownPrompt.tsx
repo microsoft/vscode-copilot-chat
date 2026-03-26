@@ -5,7 +5,6 @@
 
 import { PromptElement, PromptElementProps, PromptReference, PromptSizing, SystemMessage, TextChunk, UserMessage } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
-import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { isNotebookCellOrNotebookChatInput } from '../../../../util/common/notebooks';
 import { illegalArgument } from '../../../../util/vs/base/common/errors';
@@ -22,7 +21,6 @@ import { HistoryWithInstructions } from '../panel/conversationHistory';
 import { CustomInstructions } from '../panel/customInstructions';
 import { SafePromptElement } from '../panel/safeElements';
 import { SummarizedDocumentSplit } from './promptingSummarizedDocument';
-import { TemporalContext } from './temporalContext';
 
 export interface InlineChatGenerateMarkdownPromptProps extends GenericInlinePromptProps {
 }
@@ -94,7 +92,6 @@ export class InlineChatGenerateMarkdownPrompt extends PromptElement<InlineChatGe
 				</HistoryWithInstructions>
 				<UserMessage priority={725}>
 					<CustomInstructions languageId={languageId} chatVariables={chatVariables} />
-					<TemporalContext context={[document]} location={ChatLocation.Editor} />
 				</UserMessage>
 				<ChatToolReferences priority={750} promptContext={this.props.promptContext} flexGrow={1} embeddedInsideUserMessage={false} />
 				<ChatVariables priority={750} chatVariables={chatVariables} embeddedInsideUserMessage={false} />

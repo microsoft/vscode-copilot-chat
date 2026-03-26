@@ -93,6 +93,10 @@ export interface IObservableDocument {
 	 * `selection` is an array because of `multi-cursor` support.
 	 */
 	readonly selection: IObservable<readonly OffsetRange[]>;
+	/**
+	 * 0-based line number of the primary cursor.
+	 */
+	readonly primarySelectionLine: IObservable<number | undefined>;
 	readonly visibleRanges: IObservable<readonly OffsetRange[]>;
 	readonly languageId: IObservable<LanguageId>;
 	readonly diagnostics: IObservable<readonly DiagnosticData[]>;
@@ -112,10 +116,6 @@ export class MutableObservableWorkspace extends ObservableWorkspace {
 	public readonly openDocuments = this._openDocuments;
 
 	private readonly _documents = new Map<DocumentId, MutableObservableDocument>();
-
-	constructor() {
-		super();
-	}
 
 	/**
 	 * Dispose to remove.
@@ -170,6 +170,9 @@ export class MutableObservableDocument extends Disposable implements IObservable
 	private readonly _selection: ISettableObservable<readonly OffsetRange[]>;
 	public get selection(): IObservable<readonly OffsetRange[]> { return this._selection; }
 
+	private readonly _primarySelectionLine: ISettableObservable<number | undefined>;
+	public get primarySelectionLine(): IObservable<number | undefined> { return this._primarySelectionLine; }
+
 	private readonly _visibleRanges: ISettableObservable<readonly OffsetRange[]>;
 	public get visibleRanges(): IObservable<readonly OffsetRange[]> { return this._visibleRanges; }
 
@@ -195,6 +198,7 @@ export class MutableObservableDocument extends Disposable implements IObservable
 
 		this._value = observableValue(this, value);
 		this._selection = observableValue(this, selection);
+		this._primarySelectionLine = observableValue(this, undefined);
 		this._visibleRanges = observableValue(this, []);
 		this._languageId = observableValue(this, languageId);
 		this._version = observableValue(this, versionId);
@@ -203,8 +207,9 @@ export class MutableObservableDocument extends Disposable implements IObservable
 		this._register(toDisposable(onDispose));
 	}
 
-	setSelection(selection: readonly OffsetRange[], tx: ITransaction | undefined = undefined): void {
+	setSelection(selection: readonly OffsetRange[], tx: ITransaction | undefined = undefined, primaryLine?: number): void {
 		this._selection.set(selection, tx);
+		this._primarySelectionLine.set(primaryLine, tx);
 	}
 
 	setVisibleRange(visibleRanges: readonly OffsetRange[], tx: ITransaction | undefined = undefined): void {
@@ -220,8 +225,9 @@ export class MutableObservableDocument extends Disposable implements IObservable
 		});
 	}
 
-	updateSelection(selection: readonly OffsetRange[], tx: ITransaction | undefined = undefined): void {
+	updateSelection(selection: readonly OffsetRange[], tx: ITransaction | undefined = undefined, primaryLine?: number): void {
 		this._selection.set(selection, tx);
+		this._primarySelectionLine.set(primaryLine, tx);
 	}
 
 	setValue(value: StringText, tx: ITransaction | undefined = undefined, newVersion: number | undefined = undefined): void {

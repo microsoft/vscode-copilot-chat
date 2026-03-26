@@ -11,25 +11,14 @@ export function nesOptionsToConfigurations(options: SimulationOptions): Configur
 
 	if (options.nesUrl) {
 		configs.push({
-			key: ConfigKey.Internal.InlineEditsXtabProviderUrl,
+			key: ConfigKey.TeamInternal.InlineEditsXtabProviderUrl,
 			value: options.nesUrl,
 		});
 	}
 	if (options.nesApiKey) {
 		configs.push({
-			key: ConfigKey.Internal.InlineEditsXtabProviderApiKey,
+			key: ConfigKey.TeamInternal.InlineEditsXtabProviderApiKey,
 			value: options.nesApiKey,
-		});
-	}
-
-	if (options.nesUnifiedModel) {
-		configs.push({
-			key: ConfigKey.Internal.InlineEditsXtabUseUnifiedModel,
-			value: options.nesUnifiedModel,
-		});
-		configs.push({
-			key: ConfigKey.Internal.InlineEditsXtabProviderModelName,
-			value: 'xtab-unified-v2',
 		});
 	}
 

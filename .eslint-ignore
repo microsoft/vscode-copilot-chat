@@ -10,6 +10,9 @@ test/simulation/fixtures/**
 test/scenarios/**
 .simulation/**
 .eslintplugin/**
+chat-lib/**
+test/aml/out/**
+.vscode-test/**
 
 # ignore vs
 src/util/vs/**

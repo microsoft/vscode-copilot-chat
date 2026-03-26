@@ -7,8 +7,8 @@ import { t } from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../authentication/common/authenticationUpgrade';
+import { ResolvedRepoRemoteInfo } from '../../git/common/gitService';
 import { ICodeSearchAuthenticationService } from '../node/codeSearchRepoAuth';
-import { ResolvedRepoEntry } from '../node/codeSearchRepoTracker';
 
 
 export class VsCodeCodeSearchAuthenticationService implements ICodeSearchAuthenticationService {
@@ -20,8 +20,8 @@ export class VsCodeCodeSearchAuthenticationService implements ICodeSearchAuthent
 		@IAuthenticationChatUpgradeService private readonly _authUpgradeService: IAuthenticationChatUpgradeService,
 	) { }
 
-	async tryAuthenticating(repo: ResolvedRepoEntry | undefined): Promise<void> {
-		const fetchUrl = repo?.remoteInfo.fetchUrl;
+	async tryAuthenticating(repo: ResolvedRepoRemoteInfo | undefined): Promise<void> {
+		const fetchUrl = repo?.fetchUrl;
 
 		const signInButton: vscode.MessageItem = {
 			title: t`Sign In`,
@@ -31,7 +31,7 @@ export class VsCodeCodeSearchAuthenticationService implements ICodeSearchAuthent
 			isCloseAffordance: true
 		};
 
-		if (repo?.remoteInfo.repoId.type === 'ado') {
+		if (repo?.repoId.type === 'ado') {
 			const result = await vscode.window.showWarningMessage(t`Sign in to use remote index`, {
 				modal: true,
 				detail: fetchUrl
@@ -52,14 +52,14 @@ export class VsCodeCodeSearchAuthenticationService implements ICodeSearchAuthent
 			}, signInButton, cancelButton);
 
 			if (result === signInButton) {
-				await this._authService.getAnyGitHubSession({ createIfNone: true });
+				await this._authService.getGitHubSession('any', { createIfNone: true });
 				return;
 			}
 		}
 	}
 
-	async tryReauthenticating(repo: ResolvedRepoEntry | undefined): Promise<void> {
-		const fetchUrl = repo?.remoteInfo.fetchUrl;
+	async tryReauthenticating(repo: ResolvedRepoRemoteInfo | undefined): Promise<void> {
+		const fetchUrl = repo?.fetchUrl;
 
 		const signInButton: vscode.MessageItem = {
 			title: t`Sign In`,
@@ -69,7 +69,7 @@ export class VsCodeCodeSearchAuthenticationService implements ICodeSearchAuthent
 			isCloseAffordance: true
 		};
 
-		if (repo?.remoteInfo.repoId.type === 'ado') {
+		if (repo?.repoId.type === 'ado') {
 			const result = await vscode.window.showWarningMessage(t`Reauthenticate to use remote workspace index`, {
 				modal: true,
 				detail: fetchUrl

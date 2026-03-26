@@ -5,6 +5,7 @@
 
 import type { CancellationToken } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
+import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 
 /**
  * Fully qualified type of the embedding.
@@ -76,6 +77,23 @@ export interface Embedding {
 	readonly value: EmbeddingVector;
 }
 
+export function isValidEmbedding(value: unknown): value is Embedding {
+	if (typeof value !== 'object' || value === null) {
+		return false;
+	}
+
+	const asEmbedding = value as Embedding;
+	if (!asEmbedding.type) {
+		return false;
+	}
+
+	if (!Array.isArray(asEmbedding.value) || asEmbedding.value.length === 0) {
+		return false;
+	}
+
+	return true;
+}
+
 export interface Embeddings {
 	readonly type: EmbeddingType;
 	readonly values: readonly Embedding[];
@@ -88,9 +106,10 @@ export interface EmbeddingDistance {
 
 export const IEmbeddingsComputer = createServiceIdentifier<IEmbeddingsComputer>('IEmbeddingsComputer');
 
+export type EmbeddingInputType = 'document' | 'query';
+
 export type ComputeEmbeddingsOptions = {
-	readonly inputType?: 'document' | 'query';
-	readonly parallelism?: number;
+	readonly inputType?: EmbeddingInputType;
 };
 
 export interface IEmbeddingsComputer {
@@ -108,8 +127,9 @@ export interface IEmbeddingsComputer {
 		type: EmbeddingType,
 		inputs: readonly string[],
 		options?: ComputeEmbeddingsOptions,
+		telemetryInfo?: TelemetryCorrelationId,
 		token?: CancellationToken,
-	): Promise<Embeddings | undefined>;
+	): Promise<Embeddings>;
 }
 
 function dotProduct(a: EmbeddingVector, b: EmbeddingVector): number {

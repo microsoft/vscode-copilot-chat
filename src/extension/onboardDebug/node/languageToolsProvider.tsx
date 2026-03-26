@@ -15,7 +15,7 @@ import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 const LIST_RE = /\s*(?:. )?([a-z0-9_-]+)\s*/;
 
 export interface ILanguageToolsProvider {
-	_serviceBrand: undefined;
+	readonly _serviceBrand: undefined;
 
 	getToolsForLanguages(languages: string[], token: CancellationToken): Promise<{ ok: boolean; commands: string[] }>;
 }
@@ -30,7 +30,7 @@ export class LanguageToolsProvider {
 	}
 
 	public async getToolsForLanguages(languages: string[], token: CancellationToken) {
-		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4.1');
+		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-base');
 		const promptRenderer = PromptRenderer.create(
 			this.instantiationService,
 			endpoint,

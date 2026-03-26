@@ -4,15 +4,15 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelToolInformation } from 'vscode';
-import { ISummarizedToolCategory } from './virtualToolTypes';
 
 export const VIRTUAL_TOOL_NAME_PREFIX = 'activate_';
+export const EMBEDDINGS_GROUP_NAME = VIRTUAL_TOOL_NAME_PREFIX + 'embeddings';
 
 export interface IVirtualToolMetadata {
-	toolsetKey: string;
+	wasEmbeddingsMatched?: boolean;
+	wasExpandedByDefault?: boolean;
+	canBeCollapsed?: boolean;
 	possiblePrefix?: string;
-	groups: ISummarizedToolCategory[];
-	preExpanded?: boolean;
 }
 
 export class VirtualTool {
@@ -30,8 +30,18 @@ export class VirtualTool {
 		}
 	}
 
-	public cloneWithPrefix(prefix: string) {
-		return new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX + prefix + this.name.slice(VIRTUAL_TOOL_NAME_PREFIX.length), this.description, this.lastUsedOnTurn, { ...this.metadata, possiblePrefix: undefined }, this.contents);
+	public cloneWithNewName(name: string) {
+		const vt = new VirtualTool(name, this.description, this.lastUsedOnTurn, { ...this.metadata }, this.contents);
+		vt.isExpanded = this.isExpanded;
+		return vt;
+	}
+
+	public copyStateFrom(other: VirtualTool) {
+		this.isExpanded = other.isExpanded;
+		this.metadata.wasExpandedByDefault = other.metadata.wasExpandedByDefault;
+		this.metadata.canBeCollapsed = other.metadata.canBeCollapsed;
+		this.metadata.wasEmbeddingsMatched = other.metadata.wasEmbeddingsMatched;
+		this.lastUsedOnTurn = other.lastUsedOnTurn;
 	}
 
 	/**

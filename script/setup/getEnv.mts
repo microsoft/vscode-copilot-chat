@@ -51,22 +51,21 @@ async function fetchSecret(secretClient: SecretClient, secretName: string): Prom
 }
 
 async function fetchSecrets(): Promise<{ [key: string]: string | undefined }> {
-	const developmentSecretClient = await setupSecretClient("https://copilot-development.vault.azure.net/");
+	const keyVaultClient = await setupSecretClient("https://copilot-automation.vault.azure.net/");
 
 	const secrets: { [key: string]: string | undefined } = {};
-	secrets["HMAC_SECRET"] = await fetchSecret(developmentSecretClient, "hmac-secret");
-	secrets["XTAB_KEY"] = await fetchSecret(developmentSecretClient, "xtab-mass-swc");
+	secrets["HMAC_SECRET"] = await fetchSecret(keyVaultClient, "hmac-secret");
 
 	if (!process.stdin.isTTY) { // only in automation
-		const automationVaultClient = await setupSecretClient("https://copilot-automation.vault.azure.net/");
-		secrets["GITHUB_OAUTH_TOKEN"] = await fetchSecret(automationVaultClient, "capi-oauth");
-		secrets["GHCR_PAT"] = await fetchSecret(automationVaultClient, "ghcr-pat");
-		secrets["BLACKBIRD_EMBEDDINGS_KEY"] = await fetchSecret(automationVaultClient, "vsc-aoai-key");
-		secrets["BLACKBIRD_REDIS_CACHE_KEY"] = await fetchSecret(automationVaultClient, "blackbird-redis-cache-key");
+		secrets["GITHUB_OAUTH_TOKEN"] = await fetchSecret(keyVaultClient, "capi-oauth");
+		secrets["VSCODE_COPILOT_CHAT_TOKEN"] = await fetchSecret(keyVaultClient, "copilot-token");
+		secrets["GHCR_PAT"] = await fetchSecret(keyVaultClient, "ghcr-pat");
+		secrets["BLACKBIRD_EMBEDDINGS_KEY"] = await fetchSecret(keyVaultClient, "vsc-aoai-key");
+		secrets["BLACKBIRD_REDIS_CACHE_KEY"] = await fetchSecret(keyVaultClient, "blackbird-redis-cache-key");
 
 		try {
-			secrets["ANTHROPIC_API_KEY"] = await fetchSecret(automationVaultClient, "anthropic-key");
-			secrets["DEEPSEEK_API_KEY"] = await fetchSecret(automationVaultClient, "deepseek-key");
+			secrets["ANTHROPIC_API_KEY"] = await fetchSecret(keyVaultClient, "anthropic-key");
+			secrets["DEEPSEEK_API_KEY"] = await fetchSecret(keyVaultClient, "deepseek-key");
 		} catch (error) {
 			console.log(red(`Failed to fetch optional evaluation tokens. Skipping...`));
 		}

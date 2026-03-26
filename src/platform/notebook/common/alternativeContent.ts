@@ -67,7 +67,7 @@ export class AlternativeNotebookContentService implements IAlternativeNotebookCo
 			return 'json';
 		}
 
-		return this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.NotebookAlternativeDocumentFormat, this.experimentationService);
+		return this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.NotebookAlternativeDocumentFormat, this.experimentationService);
 	}
 
 	create(format: AlternativeContentFormat): BaseAlternativeNotebookContentProvider {

@@ -5,7 +5,7 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import type { ChatResponseFileTree } from 'vscode';
-import { ExtHostDocumentData } from '../../src/util/common/test/shims/textDocument';
+import { createTextDocumentData } from '../../src/util/common/test/shims/textDocument';
 import { URI } from '../../src/util/vs/base/common/uri';
 import { rubric } from '../base/rubric';
 import { ssuite, stest } from '../base/stest';
@@ -24,7 +24,7 @@ ssuite({ title: 'setupTests - recommend', location: 'panel' }, () => {
 					setupCase(accessor, workspace) {
 						const files = (tcase.json as any).files || [];
 						for (const file of files) {
-							workspace.addDocument(ExtHostDocumentData.create(
+							workspace.addDocument(createTextDocumentData(
 								URI.joinPath(workspace.workspaceFolders[0], file),
 								'',
 								''
@@ -60,7 +60,7 @@ ssuite({ title: 'setupTests - invoke', location: 'panel' }, () => {
 					setupCase(accessor, workspace) {
 						const files = (tcase.json as any).files || [];
 						for (const file of files) {
-							workspace.addDocument(ExtHostDocumentData.create(
+							workspace.addDocument(createTextDocumentData(
 								URI.joinPath(workspace.workspaceFolders[0], file),
 								'',
 								''

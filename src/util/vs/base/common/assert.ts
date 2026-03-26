@@ -31,6 +31,10 @@ export function assertNever(value: never, message = 'Unreachable'): never {
 	throw new Error(message);
 }
 
+export function softAssertNever(value: never): void {
+	// no-op
+}
+
 /**
  * Asserts that a condition is `truthy`.
  *

@@ -26,7 +26,7 @@ export class CopilotExtensionApi implements ICopilotExtensionApi {
 		return this._scopeSelector.selectEnclosingScope(editor, options);
 	}
 
-	getContextProviderApi(): Copilot.ContextProviderApiV1 {
+	getContextProviderAPI(_version: 'v1'): Copilot.ContextProviderApiV1 {
 		return new VSCodeContextProviderApiV1(this._languageContextProviderService);
 	}
 }

@@ -1,6 +1,6 @@
 [
     {
-        "question": "@workspace /new create a Blazor WebAssembly app",
+        "question": "/new create a Blazor WebAssembly app",
         "stateFile": "./workspaceState.state.json"
     }
 ]

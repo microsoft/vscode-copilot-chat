@@ -31,7 +31,7 @@ export const DraggableBottomBorder: React.FC<DraggableBottomBorderProps> = ({ he
 
 	return (
 		<div
-			className="file-editor-draggable-border"
+			className='file-editor-draggable-border'
 			onMouseDown={handleMouseDown}
 		></div>
 	);

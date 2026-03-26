@@ -7,9 +7,9 @@
 		"experimentalDecorators": true
 	},
 	"include": [
-		"../../../src/util/vs/**/*",
 		"**/*",
-		"../../../src/extension/vscode.d.ts"
+		"../../../src/extension/vscode.d.ts",
+		"../../../src/util/vs/*.d.ts"
 	],
 	"exclude": ["../fixtures/**/*", "../shims/vscodeTypesShim.ts"]
 }

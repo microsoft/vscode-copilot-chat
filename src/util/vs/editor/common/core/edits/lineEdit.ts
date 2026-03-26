@@ -8,12 +8,12 @@
 import { compareBy, groupAdjacentBy, numberComparator } from '../../../../base/common/arrays';
 import { assert, checkAdjacentItems } from '../../../../base/common/assert';
 import { splitLines } from '../../../../base/common/strings';
+import { LineRange } from '../ranges/lineRange';
+import { BaseStringEdit, StringEdit, StringReplacement } from './stringEdit';
 import { Position } from '../position';
 import { Range } from '../range';
-import { LineRange } from '../ranges/lineRange';
+import { TextReplacement, TextEdit } from './textEdit';
 import { AbstractText } from '../text/abstractText';
-import { BaseStringEdit, StringEdit, StringReplacement } from './stringEdit';
-import { TextEdit, TextReplacement } from './textEdit';
 
 export class LineEdit {
 	public static readonly empty = new LineEdit([]);
@@ -22,7 +22,7 @@ export class LineEdit {
 		return new LineEdit(data.map(e => LineReplacement.deserialize(e)));
 	}
 
-	public static fromEdit(edit: BaseStringEdit, initialValue: AbstractText): LineEdit {
+	public static fromStringEdit(edit: BaseStringEdit, initialValue: AbstractText): LineEdit {
 		const textEdit = TextEdit.fromStringEdit(edit, initialValue);
 		return LineEdit.fromTextEdit(textEdit, initialValue);
 	}
@@ -61,18 +61,18 @@ export class LineEdit {
 		/**
 		 * Have to be sorted by start line number and non-intersecting.
 		*/
-		public readonly edits: readonly LineReplacement[]
+		public readonly replacements: readonly LineReplacement[]
 	) {
-		assert(checkAdjacentItems(edits, (i1, i2) => i1.lineRange.endLineNumberExclusive <= i2.lineRange.startLineNumber));
+		assert(checkAdjacentItems(replacements, (i1, i2) => i1.lineRange.endLineNumberExclusive <= i2.lineRange.startLineNumber));
 	}
 
 	public isEmpty(): boolean {
-		return this.edits.length === 0;
+		return this.replacements.length === 0;
 	}
 
 	public toEdit(initialValue: AbstractText): StringEdit {
 		const edits: StringReplacement[] = [];
-		for (const edit of this.edits) {
+		for (const edit of this.replacements) {
 			const singleEdit = edit.toSingleEdit(initialValue);
 			edits.push(singleEdit);
 		}
@@ -80,17 +80,17 @@ export class LineEdit {
 	}
 
 	public toString(): string {
-		return this.edits.map(e => e.toString()).join(',');
+		return this.replacements.map(e => e.toString()).join(',');
 	}
 
 	public serialize(): SerializedLineEdit {
-		return this.edits.map(e => e.serialize());
+		return this.replacements.map(e => e.serialize());
 	}
 
 	public getNewLineRanges(): LineRange[] {
 		const ranges: LineRange[] = [];
 		let offset = 0;
-		for (const e of this.edits) {
+		for (const e of this.replacements) {
 			ranges.push(LineRange.ofLength(e.lineRange.startLineNumber + offset, e.newLines.length),);
 			offset += e.newLines.length - e.lineRange.length;
 		}
@@ -99,7 +99,7 @@ export class LineEdit {
 
 	public mapLineNumber(lineNumber: number): number {
 		let lineDelta = 0;
-		for (const e of this.edits) {
+		for (const e of this.replacements) {
 			if (e.lineRange.endLineNumberExclusive > lineNumber) {
 				break;
 			}
@@ -124,12 +124,12 @@ export class LineEdit {
 	}
 
 	public touches(other: LineEdit): boolean {
-		return this.edits.some(e1 => other.edits.some(e2 => e1.lineRange.intersect(e2.lineRange)));
+		return this.replacements.some(e1 => other.replacements.some(e2 => e1.lineRange.intersect(e2.lineRange)));
 	}
 
 	public rebase(base: LineEdit): LineEdit {
 		return new LineEdit(
-			this.edits.map(e => new LineReplacement(base.mapLineRange(e.lineRange), e.newLines)),
+			this.replacements.map(e => new LineReplacement(base.mapLineRange(e.lineRange), e.newLines)),
 		);
 	}
 
@@ -156,7 +156,7 @@ export class LineEdit {
 		let lineDelta = 0;
 		let first = true;
 
-		for (const edits of groupAdjacentBy(this.edits, (e1, e2) => e1.lineRange.distanceToRange(e2.lineRange) <= 5)) {
+		for (const edits of groupAdjacentBy(this.replacements, (e1, e2) => e1.lineRange.distanceToRange(e2.lineRange) <= 5)) {
 			if (!first) {
 				pushSeperator();
 			} else {
@@ -199,7 +199,7 @@ export class LineEdit {
 
 		let currentLineIndex = 0;
 
-		for (const edit of this.edits) {
+		for (const edit of this.replacements) {
 			while (currentLineIndex < edit.lineRange.startLineNumber - 1) {
 				result.push(lines[currentLineIndex]);
 				currentLineIndex++;
@@ -222,7 +222,7 @@ export class LineEdit {
 
 	public inverse(originalLines: string[]): LineEdit {
 		const newRanges = this.getNewLineRanges();
-		return new LineEdit(this.edits.map((e, idx) => new LineReplacement(
+		return new LineEdit(this.replacements.map((e, idx) => new LineReplacement(
 			newRanges[idx],
 			originalLines.slice(e.lineRange.startLineNumber - 1, e.lineRange.endLineNumberExclusive - 1),
 		)));
@@ -408,7 +408,7 @@ export namespace SerializedLineReplacement {
 			&& typeof thing[0] === 'number'
 			&& typeof thing[1] === 'number'
 			&& Array.isArray(thing[2])
-			&& thing[2].every((e: any) => typeof e === 'string')
+			&& thing[2].every((e: unknown) => typeof e === 'string')
 		);
 	}
 }

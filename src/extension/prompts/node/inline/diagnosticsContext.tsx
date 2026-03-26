@@ -85,19 +85,16 @@ class DiagnosticDescription extends PromptElement<DiagnosticDescriptionProps> {
 		const code = (content.length > this.props.maxLength) ?
 			content.slice(0, this.props.maxLength) + ' (truncated…)' :
 			content;
-		if (code) {
-			return <>
-				This code at line {range.start.line + 1}<br />
-				<CodeBlock code={code} uri={document.uri} shouldTrim={false} /><br />
-				<>
-					has the problem reported:<br />
-					<Tag name='compileError'>
-						{d.message}
-					</Tag>
-				</>
-			</>;
-		}
-		return <></>;
+		return <>
+			{code
+				? <>This code at line {range.start.line + 1}<br />
+					<CodeBlock code={code} uri={document.uri} shouldTrim={false} /><br /></>
+				: <>At line {range.start.line + 1}<br /></>}
+			has the problem reported:<br />
+			<Tag name='compileError'>
+				{d.message}
+			</Tag>
+		</>;
 	}
 }
 
@@ -218,11 +215,11 @@ export class DiagnosticRelatedInfo extends PromptElement<DiagnosticRelatedInfoPr
 
 // #region DiagnosticSuggestedFix
 
-interface DiagnosticSuggestedFixProps extends BasePromptElementProps {
+export interface DiagnosticSuggestedFixProps extends BasePromptElementProps {
 	readonly cookbook: Cookbook;
 }
 
-class DiagnosticSuggestedFix extends PromptElement<DiagnosticSuggestedFixProps> {
+export class DiagnosticSuggestedFix extends PromptElement<DiagnosticSuggestedFixProps> {
 
 	render(state: void, sizing: PromptSizing) {
 		const suggestedFixes = this.props.cookbook.fixes;

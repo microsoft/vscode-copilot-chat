@@ -49,7 +49,7 @@ export class VSCodeFileSystemService implements IFileSystemService {
 		return !!vscode.workspace.fs.isWritableFileSystem(scheme);
 	}
 
-	createFileSystemWatcher(glob: string): vscode.FileSystemWatcher {
+	createFileSystemWatcher(glob: string | vscode.RelativePattern): vscode.FileSystemWatcher {
 		return vscode.workspace.createFileSystemWatcher(glob);
 	}
 }

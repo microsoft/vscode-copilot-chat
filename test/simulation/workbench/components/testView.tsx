@@ -9,10 +9,13 @@ import * as mobx from 'mobx';
 import * as mobxlite from 'mobx-react-lite';
 import * as React from 'react';
 import { OutputAnnotation } from '../../shared/sharedTypes';
+import { NesExternalOptions } from '../stores/nesExternalOptions';
 import { RunnerOptions } from '../stores/runnerOptions';
+import { RunnerTestStatus } from '../stores/runnerTestStatus';
 import { SimulationRunner, StateKind } from '../stores/simulationRunner';
 import { ISimulationTest } from '../stores/simulationTestsProvider';
 import { TestRun } from '../stores/testRun';
+import { TestSource, TestSourceValue } from '../stores/testSource';
 import { DisplayOptions } from './app';
 import { useContextMenu } from './contextMenu';
 import { OpenInVSCodeButton } from './openInVSCode';
@@ -22,10 +25,12 @@ type Props = {
 	readonly test: ISimulationTest;
 	readonly runner: SimulationRunner;
 	readonly runnerOptions: RunnerOptions;
+	readonly nesExternalOptions: NesExternalOptions;
+	readonly testSource: TestSourceValue;
 	readonly displayOptions: DisplayOptions;
 };
 
-export const TestView = mobxlite.observer(({ test, runner, runnerOptions, displayOptions }: Props) => {
+export const TestView = mobxlite.observer(({ test, runner, runnerOptions, nesExternalOptions, testSource, displayOptions }: Props) => {
 
 	// Set the default open status for test runs. If there is is only one test run, the open status is `true`.
 	// Otherwise, they are `false`.
@@ -69,13 +74,21 @@ export const TestView = mobxlite.observer(({ test, runner, runnerOptions, displa
 				n: parseInt(runnerOptions.n.value),
 				noFetch: runnerOptions.noFetch.value,
 				additionalArgs: runnerOptions.additionalArgs.value,
+				nesExternalScenariosPath: testSource.value === TestSource.NesExternal ? nesExternalOptions.externalScenariosPath.value || undefined : undefined,
 			}),
 		},
 		{
 			label: `Run test (grep update)`,
 			onClick: () => {
 				mobx.runInAction(() => runnerOptions.grep.value = testName);
-				runner.startRunningFromRunnerOptions();
+				runner.startRunning({
+					grep: testName,
+					cacheMode: runnerOptions.cacheMode.value,
+					n: parseInt(runnerOptions.n.value),
+					noFetch: runnerOptions.noFetch.value,
+					additionalArgs: runnerOptions.additionalArgs.value,
+					nesExternalScenariosPath: testSource.value === TestSource.NesExternal ? nesExternalOptions.externalScenariosPath.value || undefined : undefined,
+				});
 			},
 		},
 		{
@@ -86,6 +99,7 @@ export const TestView = mobxlite.observer(({ test, runner, runnerOptions, displa
 				n: 1,
 				noFetch: runnerOptions.noFetch.value,
 				additionalArgs: runnerOptions.additionalArgs.value,
+				nesExternalScenariosPath: testSource.value === TestSource.NesExternal ? nesExternalOptions.externalScenariosPath.value || undefined : undefined,
 			}),
 		},
 		{
@@ -97,13 +111,14 @@ export const TestView = mobxlite.observer(({ test, runner, runnerOptions, displa
 	return (
 		<TreeItem itemType={'branch'} className='test-runs-container'>
 			<TreeItemLayout className='test-renderer'
-				iconBefore={<StatusIcon runner={runner} runnerOptions={runnerOptions} test={test} />}
+				iconBefore={<StatusIcon runner={runner} runnerOptions={runnerOptions} nesExternalOptions={nesExternalOptions} testSource={testSource} test={test} />}
 				iconAfter={test.runnerStatus && <RunsSummaryBadge runs={test.runnerStatus.runs} />}
 				onAuxClick={(e) => showMenu(e, testNameContextMenuEntries(test.name))}
 			>
 				<Score test={test} />
 				{displayOptions.testsKind.value === 'suiteList' ? null : <Text weight='semibold'>{test.suiteName}</Text>}
 				<Text>{test.suiteName ? test.name.replace(test.suiteName, '') : test.name}</Text>
+				<InlineTestError runnerStatus={test.runnerStatus} />
 			</TreeItemLayout>
 			<Tree>
 				{
@@ -135,7 +150,7 @@ export const TestView = mobxlite.observer(({ test, runner, runnerOptions, displa
 											>
 												<TreeItemLayout
 													className={highlightedIndices[idx] ? 'fade-out-background' : undefined}
-													iconBefore={run.explicitScore === undefined ? undefined : <Badge title="Test Run Score (range [0, 1])" color="informative" size="small">{run.explicitScore}</Badge>}
+													iconBefore={run.explicitScore === undefined ? undefined : <Badge title='Test Run Score (range [0, 1])' color='informative' size='small'>{run.explicitScore}</Badge>}
 													iconAfter={<RunSummaryBadge run={run} baseline={baseline} />}
 												>
 													Test Run # {idx + 1}
@@ -166,18 +181,18 @@ export const TestView = mobxlite.observer(({ test, runner, runnerOptions, displa
 });
 
 const redIconStyleProps: FluentIconsProps = {
-	primaryFill: "red",
+	primaryFill: 'red',
 };
 
 const greenIconStyleProps: FluentIconsProps = {
-	primaryFill: "green",
+	primaryFill: 'green',
 };
 
 const RunSummaryBadge = ({ run, baseline }: { run: TestRun; baseline: TestRun | undefined }) => (
 	<>
 		<RunAndBaselineOutcomeBadge run={run} baseline={baseline} /> {/* show a "X" icon if run validation function failed */}
 		<CacheMisses cacheMissCount={run.hasCacheMiss ? 1 : 0} /> {/* shows a "cache miss" icon if a cache miss happens */}
-		<TotalDuration title="Total request run duration" timeInMs={run.averageRequestDuration && run.requestCount ? run.averageRequestDuration * run.requestCount : undefined} />
+		<TotalDuration title='Total request run duration' timeInMs={run.averageRequestDuration && run.requestCount ? run.averageRequestDuration * run.requestCount : undefined} />
 		<AnnotationBadges annotations={run.annotations} />
 	</>
 );
@@ -249,9 +264,9 @@ const RunsSummaryBadge = ({ runs }: { runs: TestRun[] }) => {
 
 	return <>
 		{failingRunsCount ? <Dismiss20Filled {...redIconStyleProps} /> : null}
-		{failingRunsCount ? <CounterBadge count={failingRunsCount} color="danger" size="small" /> : null}
+		{failingRunsCount ? <CounterBadge count={failingRunsCount} color='danger' size='small' /> : null}
 		<CacheMisses cacheMissCount={cacheMissCount} />
-		{runs.length ? <TotalDuration title="Average request duration" timeInMs={totalDurations / runs.length} /> : null}
+		{runs.length ? <TotalDuration title='Average request duration' timeInMs={totalDurations / runs.length} /> : null}
 		<AnnotationBadges annotations={infos} />
 	</>;
 };
@@ -268,7 +283,7 @@ const AnnotationBadges = ({ annotations }: { annotations: OutputAnnotation[] }) 
 		for (const info of annotations) {
 			if (!annotationCounts.has(info.label)) {
 				annotationCounts.add(info.label);
-				badges.push(<Badge key={info.label} title={info.message} color={colors[info.severity] ?? 'informative'} shape="square" appearance='outline' size='small'>{info.label}</Badge>);
+				badges.push(<Badge key={info.label} title={info.message} color={colors[info.severity] ?? 'informative'} shape='square' appearance='outline' size='small'>{info.label}</Badge>);
 			}
 		}
 		return <>{badges}</>;
@@ -285,7 +300,7 @@ const CacheMisses = ({ cacheMissCount }: { cacheMissCount: number }) => {
 
 const TotalDuration = ({ timeInMs: timeInMillis, title }: { timeInMs: number | undefined; title: string }) => {
 	if (timeInMillis !== undefined) {
-		return <Badge title={title} color="informative" size="small">{+((timeInMillis / 1000).toFixed(2))}s</Badge>;
+		return <Badge title={title} color='informative' size='small'>{+((timeInMillis / 1000).toFixed(2))}s</Badge>;
 	}
 	return null;
 };
@@ -402,8 +417,9 @@ const Score = mobxlite.observer(({ test }: { test: ISimulationTest }) => {
 	);
 });
 
-const StatusIcon = mobxlite.observer(({ runner, runnerOptions, test }: { runner: SimulationRunner; runnerOptions: RunnerOptions; test: ISimulationTest }) => {
-	const runTest = mobx.action(async () => {
+const StatusIcon = mobxlite.observer(({ runner, runnerOptions, nesExternalOptions, testSource, test }: { runner: SimulationRunner; runnerOptions: RunnerOptions; nesExternalOptions: NesExternalOptions; testSource: TestSourceValue; test: ISimulationTest }) => {
+	const runTest = (e: React.MouseEvent) => {
+		e.stopPropagation();
 		if (runner.state.kind !== StateKind.Running) {
 			runner.startRunning({
 				grep: test.name,
@@ -411,16 +427,18 @@ const StatusIcon = mobxlite.observer(({ runner, runnerOptions, test }: { runner:
 				n: parseInt(runnerOptions.n.value),
 				noFetch: runnerOptions.noFetch.value,
 				additionalArgs: runnerOptions.additionalArgs.value,
+				nesExternalScenariosPath: testSource.value === TestSource.NesExternal ? nesExternalOptions.externalScenariosPath.value || undefined : undefined,
 			});
-			await mobx.when(() => runner.state.kind === StateKind.Stopped);
 		}
-	});
+	};
 
 	const runnerStatus = test.runnerStatus;
 
 	if (runnerStatus) {
 		if (runnerStatus.isSkipped) {
 			return <span title='Test is skipped'>⏭️</span>;
+		} else if (runnerStatus.isCancelled && runner.terminationReason) {
+			return <span title='Simulation terminated early due to an error, click to run again.' onClick={runTest}>❌</span>;
 		} else if (runnerStatus.isCancelled) {
 			return <span title='Test is cancelled, click to run again.' onClick={runTest}>⭕️</span>;
 		} else if (runnerStatus.isNowRunning > 0) {
@@ -428,9 +446,35 @@ const StatusIcon = mobxlite.observer(({ runner, runnerOptions, test }: { runner:
 		} else if (runnerStatus.runs.length < runnerStatus.expectedRuns) {
 			return <span title='Test is queued to be run'>⏳</span>;
 		} else {
+			const failCount = runnerStatus.runs.filter(r => !r.pass).length;
+			if (failCount === runnerStatus.runs.length) {
+				return <span title='All runs failed, click to run again.' onClick={runTest}>❌</span>;
+			} else if (failCount > 0) {
+				return <span title={`${failCount} of ${runnerStatus.runs.length} runs failed, click to run again.`} onClick={runTest}>⚠️</span>;
+			}
 			return <span title='Test is complete, click to run again.' onClick={runTest}>🏁</span>;
 		}
 	}
 	return <span title='Test has not been run, click to run.' onClick={runTest}>🔘</span>;
+});
+
+const InlineTestError = mobxlite.observer(({ runnerStatus }: { runnerStatus: RunnerTestStatus | undefined }) => {
+	if (!runnerStatus) {
+		return null;
+	}
+	const failedRuns = runnerStatus.runs.filter(r => !r.pass && r.error);
+	if (failedRuns.length === 0) {
+		return null;
+	}
+	const firstError = failedRuns[0].error!;
+	const firstLine = firstError.split(/\r?\n/)[0];
+	const label = failedRuns.length > 1
+		? `${firstLine} (+${failedRuns.length - 1} more)`
+		: firstLine;
+	return (
+		<Tooltip content={firstError} relationship='description'>
+			<Text style={{ color: 'var(--colorPaletteRedForeground1)', marginLeft: '8px', fontSize: '12px' }}>{label}</Text>
+		</Tooltip>
+	);
 });
 

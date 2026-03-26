@@ -7,7 +7,7 @@
 
 import { BugIndicatingError } from '../../../../base/common/errors';
 import { OffsetRange } from './offsetRange';
-import { Range } from '../range';
+import { IRange, Range } from '../range';
 import { findFirstIdxMonotonousOrArrLen, findLastIdxMonotonous, findLastMonotonous } from '../../../../base/common/arraysFind';
 import { Comparator, compareBy, numberComparator } from '../../../../base/common/arrays';
 
@@ -19,11 +19,11 @@ export class LineRange {
 		return new LineRange(startLineNumber, startLineNumber + length);
 	}
 
-	public static fromRange(range: Range): LineRange {
+	public static fromRange(range: IRange): LineRange {
 		return new LineRange(range.startLineNumber, range.endLineNumber);
 	}
 
-	public static fromRangeInclusive(range: Range): LineRange {
+	public static fromRangeInclusive(range: IRange): LineRange {
 		return new LineRange(range.startLineNumber, range.endLineNumber + 1);
 	}
 

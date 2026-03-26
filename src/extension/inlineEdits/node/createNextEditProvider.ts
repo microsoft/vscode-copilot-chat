@@ -7,13 +7,11 @@ import { registerNextEditProviderId, XTabProviderId } from '../../../platform/co
 import { IStatelessNextEditProvider } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { XtabProvider } from '../../xtab/node/xtabProvider';
-import { ServerPoweredInlineEditProvider } from './serverPoweredInlineEditProvider';
 
 export const defaultNextEditProviderId = XTabProviderId;
 
 export const supportedProviderIds = {
 	[registerNextEditProviderId(XtabProvider.ID)]: XtabProvider,
-	[registerNextEditProviderId(ServerPoweredInlineEditProvider.ID)]: ServerPoweredInlineEditProvider,
 };
 
 export function createNextEditProvider(nextEditProviderId: string | undefined, instantiationService: IInstantiationService): IStatelessNextEditProvider {

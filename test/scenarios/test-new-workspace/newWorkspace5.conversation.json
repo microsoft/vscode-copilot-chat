@@ -1,6 +1,6 @@
 [
     {
-        "question": "@workspace /new create C# command line app that can run on .NET on Windows, Linux and MacOS",
+        "question": "/new create C# command line app that can run on .NET on Windows, Linux and MacOS",
         "stateFile": "./workspaceState.state.json"
     }
 ]

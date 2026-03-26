@@ -10,6 +10,7 @@ import * as mobxlite from 'mobx-react-lite';
 import * as React from 'react';
 import { InitArgs } from '../initArgs';
 import { AMLProvider } from '../stores/amlSimulations';
+import { NesExternalOptions } from '../stores/nesExternalOptions';
 import { RunnerOptions } from '../stores/runnerOptions';
 import { SimulationRunsProvider } from '../stores/simulationBaseline';
 import { SimulationRunner } from '../stores/simulationRunner';
@@ -29,6 +30,7 @@ type Props = {
 	testsProvider: SimulationTestsProvider;
 	runner: SimulationRunner;
 	runnerOptions: RunnerOptions;
+	nesExternalOptions: NesExternalOptions;
 	simulationRunsProvider: SimulationRunsProvider;
 	amlProvider: AMLProvider;
 	displayOptions: DisplayOptions;
@@ -37,7 +39,7 @@ type Props = {
 export type ThemeKind = 'light' | 'dark';
 
 export const App = mobxlite.observer(
-	({ initArgs, testsProvider, runner, runnerOptions, simulationRunsProvider, amlProvider, displayOptions }: Props) => {
+	({ initArgs, testsProvider, runner, runnerOptions, nesExternalOptions, simulationRunsProvider, amlProvider, displayOptions }: Props) => {
 
 		const [theme, setTheme] = useLocalStorageState<ThemeKind>('appTheme', undefined, 'light');
 
@@ -58,6 +60,7 @@ export const App = mobxlite.observer(
 							initArgs={initArgs}
 							runner={runner}
 							runnerOptions={runnerOptions}
+							nesExternalOptions={nesExternalOptions}
 							simulationRunsProvider={simulationRunsProvider}
 							simulationTestsProvider={testsProvider}
 							amlProvider={amlProvider}
@@ -73,21 +76,21 @@ export const App = mobxlite.observer(
 						{testsProvider.testSource.value === TestSource.External && (
 							<ScorecardByLanguage amlProvider={amlProvider} />
 						)}
-						{testsProvider.testSource.value === TestSource.Local && <TerminationMessageBar runner={runner} />}
+						{(testsProvider.testSource.value === TestSource.Local || testsProvider.testSource.value === TestSource.NesExternal) && <TerminationMessageBar runner={runner} />}
 						<div style={{ margin: '5px', display: 'flex', justifyContent: 'space-between' }}>
 							<div style={{ textAlign: 'left' }}>
 								<TestsInfo tests={testsProvider.tests} displayedTests={displayedTests} />
 							</div>
 							<div style={{ textAlign: 'right' }}>
 								<Checkbox
-									label="Expand prompts"
+									label='Expand prompts'
 									defaultChecked={displayOptions.expandPrompts.value}
 									onChange={mobx.action(() => displayOptions.expandPrompts.value = !displayOptions.expandPrompts.value)}
 								/>
 								<DisplayToggle displayOptions={displayOptions} />
 							</div>
 						</div>
-						<TestList tests={displayedTests} runner={runner} runnerOptions={runnerOptions} displayOptions={displayOptions} />
+						<TestList tests={displayedTests} runner={runner} runnerOptions={runnerOptions} nesExternalOptions={nesExternalOptions} testSource={testsProvider.testSource} displayOptions={displayOptions} />
 					</div>
 				</ContextMenuProvider>
 			</FluentProvider>
@@ -109,7 +112,7 @@ const TerminationMessageBar = mobxlite.observer(({ runner }: { runner: Simulatio
 );
 
 const DisplayToggle = mobxlite.observer(({ displayOptions }: { displayOptions: DisplayOptions }) => (
-	<Tooltip content="Show all tests or by suites" relationship="label">
+	<Tooltip content='Show all tests or by suites' relationship='label'>
 		<ToggleButton
 			icon={displayOptions.testsKind.value === 'suiteList' ? <ListBarTree20Filled /> : <ListBar20Filled />}
 			onClick={mobx.action(() => displayOptions.testsKind.value = displayOptions.testsKind.value === 'suiteList' ? 'testList' : 'suiteList')}

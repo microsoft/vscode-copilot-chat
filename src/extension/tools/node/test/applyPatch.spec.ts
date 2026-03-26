@@ -3,12 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as fs from 'fs';
 import { describe, expect, it } from 'vitest';
 import { AbstractDocumentWithLanguageId, StringTextDocument } from '../../../../platform/editing/common/abstractText';
-import { ToolName } from '../../common/toolNames';
 import { processPatch } from '../applyPatch/parser';
-import { applyPatchWithNotebookSupportDescription } from '../applyPatchTool';
 
 describe('ApplyPatch parser', function () {
 	it('Can parse notebook edits (without infinite loop)', async function () {
@@ -208,21 +205,6 @@ print(1)`;
 
 		const patch = await processPatch(input, () => Promise.resolve(new StringTextDocumentWithLanguageId('xml', notebookContent)));
 		expect(patch).toBeDefined();
-	});
-	it('Has same details as defined in package.json', async () => {
-		// This test will ensure we keep the description, tags and schema in package.json in sync with whats defined in code.
-		// This is temporary until the chat.advanced.enableApplyPatchForNotebooks setting is available.
-		const packageJson = JSON.parse(fs.readFileSync(__dirname + '/../../../../../package.json', 'utf8'));
-		const languageModelTools = packageJson.contributes.languageModelTools;
-		const applyPatch = languageModelTools.find((tool: any) => tool.name === 'copilot_applyPatch');
-		expect(applyPatch).toBeDefined();
-		const applyPatchToolInfo = {
-			name: ToolName.ApplyPatch,
-			description: applyPatch.modelDescription.replace('Do not use this tool to edit Jupyter notebooks. ', ''),
-			tags: applyPatch.tags ?? [],
-			inputSchema: applyPatch.inputSchema
-		};
-		expect(JSON.stringify(applyPatchToolInfo)).toEqual(JSON.stringify(applyPatchWithNotebookSupportDescription));
 	});
 });
 

@@ -4,21 +4,26 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
-import type { Diagnostic, InlineCompletionContext, Uri } from 'vscode';
+import type { InlineCompletionContext } from 'vscode';
 import * as yaml from 'yaml';
-import * as errors from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
+import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { ThemeIcon } from '../../../util/vs/base/common/themables';
 import { SerializedLineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { SerializedEdit } from './dataTypes/editUtils';
 import { FetchCancellationError } from './dataTypes/fetchCancellationError';
-import { LanguageContextResponse, SerializedContextResponse, SerializedDiagnostic, serializeFileDiagnostics, serializeLanguageContext } from './dataTypes/languageContext';
+import { LanguageContextResponse, SerializedContextResponse, serializeLanguageContext } from './dataTypes/languageContext';
 import { RootedLineEdit } from './dataTypes/rootedLineEdit';
 import { DebugRecorderBookmark } from './debugRecorderBookmark';
 import { ISerializedNextEditRequest, StatelessNextEditRequest } from './statelessNextEditProvider';
 import { stringifyChatMessages } from './utils/stringifyChatMessages';
 import { Icon, now } from './utils/utils';
 import { HistoryContext } from './workspaceEditTracker/historyContextProvider';
+
+export interface MarkdownLoggable {
+	toMarkdown(): string;
+}
 
 export class InlineEditRequestLogContext {
 
@@ -35,6 +40,22 @@ export class InlineEditRequestLogContext {
 		return this._isVisible;
 	}
 
+	private _isCompleted: boolean = false;
+
+	/** Mark this request as completed (no longer in progress). */
+	markCompleted(): void {
+		this._isCompleted = true;
+		this.fireDidChange();
+	}
+
+	private readonly _onDidChange = new Emitter<void>();
+	/** Fires when state changes, allowing live log entries to refresh their content. */
+	public readonly onDidChange: Event<void> = this._onDidChange.event;
+
+	protected fireDidChange(): void {
+		this._onDidChange.fire();
+	}
+
 	constructor(
 		public readonly filePath: string,
 		public readonly version: number,
@@ -46,6 +67,10 @@ export class InlineEditRequestLogContext {
 	toLogDocument(): string {
 		const lines: string[] = [];
 		lines.push('# ' + this.getMarkdownTitle() + ` (Request #${this.requestId})`);
+
+		if (!this._isCompleted) {
+			lines.push('\n⏳ **In progress…**\n');
+		}
 
 		lines.push('💡 Tip: double-click anywhere to open this file as text to copy-paste content into an issue.\n');
 
@@ -65,77 +90,101 @@ export class InlineEditRequestLogContext {
 		lines.push(`URL: ${this._endpointInfo?.url ?? '<NOT-SET>'}`);
 		lines.push('```');
 
-		const isCachedStr = this._logContextOfCachedEdit ? `(cached #${this._logContextOfCachedEdit.requestId})` : '(not cached)';
+		const fromCacheStatus = this._logContextOfCachedEdit ? `(cached #${this._logContextOfCachedEdit.requestId})` : '(not cached)';
+
+		lines.push(`Opportunity ID: ${this._context ? this._context.requestUuid : '<NOT-SET>'}`);
+		if (this.headerRequestId) {
+			lines.push('');
+			lines.push(`Header Request ID: ${this.headerRequestId} ${fromCacheStatus}`);
+		}
 
 		if (this._nextEditRequest) {
-			lines.push(`## Latest user edits ${isCachedStr}`);
-			lines.push("<details open><summary>Edit</summary>\n");
+			lines.push(`## Latest user edits ${fromCacheStatus}`);
+			lines.push('<details open><summary>Edit</summary>\n');
 			lines.push(this._nextEditRequest.toMarkdown());
-			lines.push("\n</details>\n");
+			lines.push('\n</details>\n');
 		}
 
 		if (this._diagnosticsResultEdit) {
-			lines.push(`## Proposed diagnostics edits ${this._nesTypePicked === 'diagnostics' ? '(Picked)' : '(Not Picked)'}`);
-			lines.push("<details open><summary>Edit</summary>\n");
-			lines.push("``` patch");
+			lines.push(`## Proposed diagnostics suggestion ${this._nesTypePicked === 'diagnostics' ? '(Picked)' : '(Not Picked)'}`);
+			lines.push('<details open><summary>Edit</summary>\n');
+			lines.push('``` patch');
 			lines.push(this._diagnosticsResultEdit.toString());
-			lines.push("```");
-			lines.push("\n</details>\n");
+			lines.push('```');
+			lines.push('\n</details>\n');
 		}
 
 		if (this._resultEdit) {
-			lines.push(`## Proposed next edits ${isCachedStr}`);
-			lines.push("<details open><summary>Edit</summary>\n");
-			lines.push("``` patch");
+			lines.push(`## Proposed inline suggestion ${fromCacheStatus}`);
+			lines.push('<details open><summary>Edit</summary>\n');
+			lines.push('``` patch');
 			lines.push(this._resultEdit.toString());
-			lines.push("```");
-			lines.push("\n</details>\n");
+			lines.push('```');
+			lines.push('\n</details>\n');
 		}
 
 		if (this.prompt) {
-			lines.push(`## Prompt ${isCachedStr}`);
-			lines.push("<details><summary>Click to view</summary>\n");
+			lines.push(`## Prompt ${fromCacheStatus}`);
+			lines.push('<details><summary>Click to view</summary>\n');
 			const e = this.prompt;
-			lines.push("````");
+			lines.push('````');
 			lines.push(...e.split('\n'));
-			lines.push("````");
-			lines.push("\n</details>\n");
+			lines.push('````');
+			lines.push('\n</details>\n');
 		}
 
 		if (this.error) {
-			lines.push(`## Error ${isCachedStr}`);
-			lines.push("```");
-			lines.push(errors.toString(errors.fromUnknown(this.error)));
-			lines.push("```");
+			lines.push(`## Error ${fromCacheStatus}`);
+			lines.push('```');
+			lines.push(ErrorUtils.toString(ErrorUtils.fromUnknown(this.error)));
+			lines.push('```');
 		}
 
 		if (this.response) {
-			lines.push(`## Response ${isCachedStr}`);
-			lines.push("<details><summary>Click to view</summary>\n");
-			lines.push("````");
+			lines.push(`## Response ${fromCacheStatus}`);
+			lines.push('<details><summary>Click to view</summary>\n');
+			lines.push('````');
 			lines.push(this.response);
-			lines.push("````");
-			lines.push("\n</details>\n");
+			lines.push('````');
+			lines.push('\n</details>\n');
 		}
 
 		if (this._responseResults) {
-			lines.push(`## Response Results ${isCachedStr}`);
-			lines.push("<details><summary>Click to view</summary>\n");
-			lines.push("```");
+			lines.push(`## Response Results ${fromCacheStatus}`);
+			lines.push('<details><summary>Click to view</summary>\n');
+			lines.push('```');
 			lines.push(yaml.stringify(this._responseResults, null, '\t'));
-			lines.push("```");
-			lines.push("\n</details>\n");
+			lines.push('```');
+			lines.push('\n</details>\n');
 		}
 
 		if (this._isAccepted !== undefined) {
 			lines.push(`## Accepted : ${this._isAccepted ? 'Yes' : 'No'}`);
 		}
 
+		if (this._rebaseFailure) {
+			lines.push('## Rebase Failure');
+			lines.push('<details><summary>Click to view</summary>\n');
+			lines.push(this._rebaseFailure.toMarkdown());
+			lines.push('\n</details>\n');
+		}
+
 		if (this._logs.length > 0) {
-			lines.push("## Logs");
-			lines.push("<details open><summary>Logs</summary>\n");
+			lines.push('## Logs');
+			lines.push('<details open><summary>Logs</summary>\n');
 			lines.push(...this._logs);
-			lines.push("\n</details>\n");
+			lines.push('\n</details>\n');
+		}
+
+		lines.push(...this._renderTraceDiagram());
+
+		if (this._trace.length > 0) {
+			lines.push('## Trace');
+			lines.push('<details><summary>Trace</summary>\n');
+			lines.push('```');
+			lines.push(...this._trace);
+			lines.push('```');
+			lines.push('\n</details>\n');
 		}
 
 		return lines.join('\n');
@@ -147,23 +196,27 @@ export class InlineEditRequestLogContext {
 
 		if (this._nesTypePicked === 'diagnostics' && this._diagnosticsResultEdit) {
 			lines.push(`## Result (Diagnostics):`);
-			lines.push("``` patch");
+			lines.push('``` patch');
 			lines.push(this._diagnosticsResultEdit.toString());
-			lines.push("```");
+			lines.push('```');
 		} else if (this._nesTypePicked === 'llm' && this._resultEdit) {
 			lines.push(`## Result:`);
-			lines.push("``` patch");
-			lines.push(this._resultEdit.toString());
-			lines.push("```");
+			lines.push('``` patch');
+			if (typeof this._resultEdit === 'string') {
+				lines.push(this._resultEdit);
+			} else {
+				lines.push(this._resultEdit.toString());
+			}
+			lines.push('```');
 		} else {
 			lines.push(`## Result: <NOT-SET>`);
 		}
 
 		if (this.error) {
 			lines.push(`## Error:`);
-			lines.push("```");
-			lines.push(errors.toString(errors.fromUnknown(this.error)));
-			lines.push("```");
+			lines.push('```');
+			lines.push(ErrorUtils.toString(ErrorUtils.fromUnknown(this.error)));
+			lines.push('```');
 		}
 
 		lines.push(`### Info:`);
@@ -187,13 +240,15 @@ export class InlineEditRequestLogContext {
 	setRequestInput(nextEditRequest: StatelessNextEditRequest): void {
 		this._isVisible = true;
 		this._nextEditRequest = nextEditRequest;
+		this.fireDidChange();
 	}
 
-	private _resultEdit: RootedLineEdit | undefined = undefined;
+	private _resultEdit: RootedLineEdit | string | undefined = undefined;
 
-	setResult(resultEdit: RootedLineEdit) {
+	setResult(resultEditOrPatchString: RootedLineEdit | string) {
 		this._isVisible = true;
-		this._resultEdit = resultEdit;
+		this._resultEdit = resultEditOrPatchString;
+		this.fireDidChange();
 	}
 
 	protected _diagnosticsResultEdit: RootedLineEdit | undefined = undefined;
@@ -201,6 +256,7 @@ export class InlineEditRequestLogContext {
 	setDiagnosticsResult(resultEdit: RootedLineEdit) {
 		this._isVisible = true;
 		this._diagnosticsResultEdit = resultEdit;
+		this.fireDidChange();
 	}
 
 	private _nesTypePicked: 'llm' | 'diagnostics' | undefined;
@@ -232,6 +288,9 @@ export class InlineEditRequestLogContext {
 			if (logContextOfCachedEdit._endpointInfo) {
 				this.setEndpointInfo(logContextOfCachedEdit._endpointInfo.url, logContextOfCachedEdit._endpointInfo.modelName);
 			}
+			if (logContextOfCachedEdit.headerRequestId) {
+				this.setHeaderRequestId(logContextOfCachedEdit.headerRequestId);
+			}
 			if (logContextOfCachedEdit.prompt) {
 				this.setPrompt(logContextOfCachedEdit.prompt);
 			}
@@ -251,12 +310,27 @@ export class InlineEditRequestLogContext {
 
 		this._isVisible = true;
 		this._icon = Icon.database;
+		this.fireDidChange();
 	}
 
 	private _endpointInfo: { url: string; modelName: string } | undefined;
 
 	public setEndpointInfo(url: string, modelName: string): void {
 		this._endpointInfo = { url, modelName };
+		this.fireDidChange();
+	}
+
+	public get endpointInfo(): { url: string; modelName: string } | undefined {
+		return this._endpointInfo;
+	}
+
+	private _headerRequestId: string | undefined = undefined;
+	public setHeaderRequestId(headerRequestId: string): void {
+		this._headerRequestId = headerRequestId;
+		this.fireDidChange();
+	}
+	get headerRequestId(): string | undefined {
+		return this._headerRequestId;
 	}
 
 	public _prompt: string | undefined = undefined;
@@ -272,6 +346,7 @@ export class InlineEditRequestLogContext {
 		} else {
 			this._prompt = stringifyChatMessages(prompt);
 		}
+		this.fireDidChange();
 	}
 
 	private _icon: Icon.t | undefined;
@@ -283,11 +358,19 @@ export class InlineEditRequestLogContext {
 	public setIsSkipped() {
 		this._isVisible = false;
 		this._icon = Icon.skipped;
+		this.fireDidChange();
+	}
+
+	public markAsFromCache() {
+		this._isVisible = true;
+		this._icon = Icon.database;
+		this.fireDidChange();
 	}
 
 	public markAsNoSuggestions() {
 		this._isVisible = true;
 		this._icon = Icon.circleSlash;
+		this.fireDidChange();
 	}
 
 	private error: unknown | undefined = undefined;
@@ -302,6 +385,7 @@ export class InlineEditRequestLogContext {
 		} else {
 			this._icon = Icon.error;
 		}
+		this.fireDidChange();
 	}
 
 	/**
@@ -311,6 +395,7 @@ export class InlineEditRequestLogContext {
 	setResponse(v: string): void {
 		this._isVisible = true;
 		this.response = v;
+		this.fireDidChange();
 	}
 
 	private fullResponsePromise: Promise<string | undefined> | undefined = undefined;
@@ -327,21 +412,25 @@ export class InlineEditRequestLogContext {
 	private providerStartTime: number | undefined = undefined;
 	setProviderStartTime(): void {
 		this.providerStartTime = Date.now();
+		this.fireDidChange();
 	}
 
 	private providerEndTime: number | undefined = undefined;
 	setProviderEndTime(): void {
 		this.providerEndTime = Date.now();
+		this.fireDidChange();
 	}
 
 	private fetchStartTime: number | undefined = undefined;
 	setFetchStartTime(): void {
 		this.fetchStartTime = Date.now();
+		this.fireDidChange();
 	}
 
 	private fetchEndTime: number | undefined = undefined;
 	setFetchEndTime(): void {
 		this.fetchEndTime = Date.now();
+		this.fireDidChange();
 	}
 
 	/**
@@ -356,7 +445,8 @@ export class InlineEditRequestLogContext {
 	setResponseResults(v: readonly unknown[]): void {
 		this._isVisible = true;
 		this._responseResults = v;
-		this._icon = Icon.lightbulbFull;
+		this._icon ??= Icon.lightbulbFull;
+		this.fireDidChange();
 	}
 
 	getDebugName(): string {
@@ -374,9 +464,160 @@ export class InlineEditRequestLogContext {
 		this._recentEdit = edit;
 	}
 
+	private _trace: string[] = [];
+	trace(msg: string): void {
+		this._trace.push(msg);
+		this.fireDidChange();
+	}
+
+	private _renderTraceDiagram(): string[] {
+		if (this._trace.length === 0) {
+			return [];
+		}
+
+		const lines: string[] = [];
+		lines.push('## Trace Diagram');
+		lines.push('<details open><summary>Trace Diagram</summary>\n');
+		lines.push('```');
+
+		// Parse trace lines into structured data
+		const parsedTraces = this._trace.map(line => {
+			const timeMatch = line.match(/^\[\s*(\d+)ms\]/);
+			const timestamp = timeMatch ? parseInt(timeMatch[1], 10) : 0;
+
+			// Extract the bracketed path segments and the message
+			const afterTime = line.replace(/^\[\s*\d+ms\]\s*/, '');
+			const segments: string[] = [];
+			let remaining = afterTime;
+			let bracketMatch;
+			while ((bracketMatch = remaining.match(/^\[([^\]]+)\]/))) {
+				segments.push(bracketMatch[1]);
+				remaining = remaining.slice(bracketMatch[0].length);
+			}
+			const message = remaining.trim();
+
+			return { timestamp, segments, message };
+		});
+
+		if (parsedTraces.length === 0) {
+			lines.push('(no trace data)');
+			lines.push('```');
+			lines.push('\n</details>\n');
+			return lines;
+		}
+
+		// Find the maximum timestamp for time width calculation
+		const maxTime = Math.max(...parsedTraces.map(t => t.timestamp));
+		const timeWidth = Math.max(6, String(maxTime).length + 3);
+
+		// Build a map of segment paths to track when they start/end
+		const activeSegments = new Map<string, { startTime: number; depth: number }>();
+		const segmentLifetimes: { path: string; startTime: number; endTime: number; depth: number; name: string }[] = [];
+
+		parsedTraces.forEach((trace, idx) => {
+			const currentPath = trace.segments.join('|');
+
+			// Check for segments that are no longer active
+			for (const [path, info] of activeSegments) {
+				if (!currentPath.startsWith(path) && currentPath !== path) {
+					segmentLifetimes.push({
+						path,
+						startTime: info.startTime,
+						endTime: trace.timestamp,
+						depth: info.depth,
+						name: path.split('|').pop() || ''
+					});
+					activeSegments.delete(path);
+				}
+			}
+
+			// Add new segments
+			let pathSoFar = '';
+			trace.segments.forEach((segment, depth) => {
+				pathSoFar = pathSoFar ? `${pathSoFar}|${segment}` : segment;
+				if (!activeSegments.has(pathSoFar)) {
+					activeSegments.set(pathSoFar, { startTime: trace.timestamp, depth });
+				}
+			});
+		});
+
+		// Close any remaining active segments
+		const lastTimestamp = parsedTraces[parsedTraces.length - 1]?.timestamp || 0;
+		for (const [path, info] of activeSegments) {
+			segmentLifetimes.push({
+				path,
+				startTime: info.startTime,
+				endTime: lastTimestamp,
+				depth: info.depth,
+				name: path.split('|').pop() || ''
+			});
+		}
+
+		// Render timeline header
+		lines.push('');
+		lines.push('Timeline (nested call hierarchy):');
+		lines.push('─'.repeat(60));
+
+		// Track what's currently shown at each depth to avoid redundant output
+		const currentAtDepth: string[] = [];
+
+		for (const trace of parsedTraces) {
+			const timeStr = `[${String(trace.timestamp).padStart(timeWidth - 3)}ms]`;
+			const indentUnit = '│   ';
+			const newBranchUnit = '├── ';
+
+			// Determine which segments are new vs continuing
+			let indent = '';
+			let displaySegment = '';
+			let hasNewSegment = false;
+
+			for (let d = 0; d < trace.segments.length; d++) {
+				const seg = trace.segments[d];
+				if (currentAtDepth[d] !== seg) {
+					// This is a new segment at this depth
+					hasNewSegment = true;
+					currentAtDepth[d] = seg;
+					// Clear deeper levels
+					currentAtDepth.length = d + 1;
+					displaySegment = seg;
+					indent = indentUnit.repeat(d);
+					break;
+				}
+				indent = indentUnit.repeat(d + 1);
+			}
+
+			if (hasNewSegment) {
+				// Show the new segment
+				const prefix = indent + newBranchUnit;
+				lines.push(`${timeStr} ${prefix}[${displaySegment}]`);
+				if (trace.message) {
+					const msgIndent = indentUnit.repeat(trace.segments.length);
+					lines.push(`${' '.repeat(timeWidth + 1)} ${msgIndent}↳ ${trace.message}`);
+				}
+			} else if (trace.message) {
+				// Just a message at the current depth
+				const msgIndent = indentUnit.repeat(trace.segments.length);
+				lines.push(`${timeStr} ${msgIndent}↳ ${trace.message}`);
+			}
+		}
+
+		lines.push('─'.repeat(60));
+		lines.push('```');
+		lines.push('\n</details>\n');
+
+		return lines;
+	}
+
 	private _logs: string[] = [];
 	addLog(content: string): void {
 		this._logs.push(content.replace('\n', '\\n').replace('\t', '\\t').replace('`', '\`') + '\n');
+		this.fireDidChange();
+	}
+
+	private _rebaseFailure: MarkdownLoggable | undefined;
+
+	setRebaseFailure(failure: MarkdownLoggable): void {
+		this._rebaseFailure = failure;
 	}
 
 
@@ -393,21 +634,14 @@ export class InlineEditRequestLogContext {
 		this._logs.push(`\`\`\`${language}\n${code}\n\`\`\`\n`);
 	}
 
-	private _fileDiagnostics: [Uri, Diagnostic[]][] | undefined;
-	setFileDiagnostics(fileDiagnostics: [Uri, Diagnostic[]][]): void {
+	private _fileDiagnostics: string | undefined;
+	setDiagnosticsData(fileDiagnostics: string): void {
 		this._fileDiagnostics = fileDiagnostics;
 	}
 
-	private _getDiagnosticsForTrackedFiles(): SerializedDiagnostic[] | undefined {
-		if (!this._fileDiagnostics || !this._nextEditRequest?.documents) {
-			return undefined;
-		}
-
-		const diagnosticsOfTrackedFiles = this._fileDiagnostics.filter(([uri]) =>
-			this._nextEditRequest!.documents.some(doc => doc.id.toString() === uri.toString())
-		);
-
-		return serializeFileDiagnostics(diagnosticsOfTrackedFiles);
+	private _terminalOutput: string | undefined;
+	setTerminalData(terminalOutput: string): void {
+		this._terminalOutput = terminalOutput;
 	}
 
 	private _languageContext: LanguageContextResponse | undefined;
@@ -441,7 +675,8 @@ export class InlineEditRequestLogContext {
 			logs: this._logs,
 			isAccepted: this._isAccepted,
 			languageContext: this._languageContext ? serializeLanguageContext(this._languageContext) : undefined,
-			diagnostics: this._getDiagnosticsForTrackedFiles()
+			diagnostics: this._fileDiagnostics,
+			terminalOutput: this._terminalOutput,
 		};
 	}
 }
@@ -486,5 +721,6 @@ export interface ISerializedInlineEditLogContext {
 	logs: string[];
 	isAccepted: boolean | undefined;
 	languageContext: SerializedContextResponse | undefined;
-	diagnostics: SerializedDiagnostic[] | undefined;
+	diagnostics: string | undefined;
+	terminalOutput: string | undefined;
 }

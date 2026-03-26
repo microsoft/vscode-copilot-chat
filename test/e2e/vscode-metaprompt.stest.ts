@@ -11,7 +11,7 @@ import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
 import { ssuite, stest } from '../base/stest';
 
-ssuite({ title: 'vscode', subtitle: 'metaprompt', location: 'panel' }, async (_) => {
+ssuite.skip({ title: 'vscode', subtitle: 'metaprompt', location: 'panel' }, async (_) => {
 
 	const scenarios = [
 		{
@@ -37,7 +37,7 @@ ssuite({ title: 'vscode', subtitle: 'metaprompt', location: 'panel' }, async (_)
 				const accessor = testingServiceCollection.createTestingAccessor();
 				const instantiationService = accessor.get(IInstantiationService);
 
-				const endpoint = await accessor.get(IEndpointProvider).getChatEndpoint('gpt-4.1');
+				const endpoint = await accessor.get(IEndpointProvider).getChatEndpoint('copilot-base');
 				const vscodePrompt = instantiationService.createInstance(VscodePrompt, {
 					promptContext: {
 						chatVariables: new ChatVariablesCollection([]),

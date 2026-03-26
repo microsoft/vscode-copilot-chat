@@ -5,13 +5,13 @@
 
 import * as eslint from 'eslint';
 
-export = new class NoBadGDPRComment implements eslint.Rule.RuleModule {
+export default new class NoBadGDPRComment implements eslint.Rule.RuleModule {
 
 	create(context: eslint.Rule.RuleContext): eslint.Rule.RuleListener {
 
 		return {
 			['Program'](node) {
-				for (const comment of (<eslint.AST.Program>node).comments) {
+				for (const comment of (node as eslint.AST.Program).comments) {
 					if (comment.type !== 'Block' || !comment.loc) {
 						continue;
 					}

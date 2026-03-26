@@ -16,6 +16,7 @@ import { APIUsage } from '../src/platform/networking/common/openai';
 import { ISimulationTestContext } from '../src/platform/simulationTestContext/common/simulationTestContext';
 import { ITasksService } from '../src/platform/tasks/common/tasksService';
 import { TestTasksService } from '../src/platform/tasks/common/testTasksService';
+import { TestingServiceCollection } from '../src/platform/test/node/services';
 import { ITokenizerProvider } from '../src/platform/tokenizer/node/tokenizer';
 import { count } from '../src/util/common/arrays';
 import { WellKnownLanguageId } from '../src/util/common/languages';
@@ -250,7 +251,8 @@ async function executeTestNTimes(
 
 	const duration = testSummary.results.reduce((acc, c) => acc + c.duration, 0);
 
-	const usage = testSummary.results.reduce((acc, c): APIUsage => {
+	const initial: APIUsage = { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } };
+	const usage: APIUsage = testSummary.results.reduce((acc, c): APIUsage => {
 		if (c.usage === undefined) { return acc; }
 		const { completion_tokens, prompt_tokens, total_tokens, prompt_tokens_details } = c.usage;
 		return {
@@ -258,10 +260,10 @@ async function executeTestNTimes(
 			prompt_tokens: acc.prompt_tokens + prompt_tokens,
 			total_tokens: acc.total_tokens + total_tokens,
 			prompt_tokens_details: {
-				cached_tokens: acc.prompt_tokens_details.cached_tokens + (prompt_tokens_details?.cached_tokens ?? 0),
+				cached_tokens: (acc.prompt_tokens_details?.cached_tokens ?? 0) + (prompt_tokens_details?.cached_tokens ?? 0),
 			}
-		};
-	}, { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } });
+		} satisfies APIUsage;
+	}, initial);
 
 	return {
 		test: test.fullName,
@@ -386,11 +388,42 @@ export const executeTestOnce = async (
 		isInRealExtensionHost,
 	};
 
-	const testingServiceCollection = await createSimulationAccessor(
-		ctx.modelConfig,
-		ctx.simulationServicesOptions,
-		currentTestRunInfo
-	);
+	let testingServiceCollection: TestingServiceCollection;
+	try {
+		testingServiceCollection = await createSimulationAccessor(
+			ctx.modelConfig,
+			ctx.simulationServicesOptions,
+			currentTestRunInfo
+		);
+	} catch (e) {
+		const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);
+		console.error(`Error in createSimulationAccessor`, e);
+		jsonOutputPrinter.print({ type: shared.OutputType.testRunStart, name: test.fullName, runNumber } satisfies shared.ITestRunStartOutput);
+		jsonOutputPrinter.print({
+			type: shared.OutputType.testRunEnd,
+			name: test.fullName,
+			runNumber,
+			duration: 0,
+			writtenFiles: [],
+			error: msg,
+			pass: false,
+			explicitScore: undefined,
+			annotations: undefined,
+			averageRequestDuration: undefined,
+			requestCount: 0,
+			hasCacheMiss: false,
+		} satisfies shared.ITestRunEndOutput);
+		return {
+			kind: 'fail',
+			message: msg,
+			contentFilterCount: 0,
+			duration: 0,
+			usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+			outcome: { kind: 'failed', error: msg, hitContentFilter: false, critical: true },
+			cacheInfo: [],
+			hasCacheMiss: false,
+		} satisfies ITestRunResultFail;
+	}
 
 	testingServiceCollection.define(ISimulationOutcome, ctx.simulationOutcome);
 	testingServiceCollection.define(ITokenizerProvider, ctx.tokenizerProvider);
@@ -398,7 +431,7 @@ export const executeTestOnce = async (
 	testingServiceCollection.define(IJSONOutputPrinter, ctx.jsonOutputPrinter);
 	testingServiceCollection.define(ITasksService, new TestTasksService());
 
-	if (test.model || test.embeddingsModel) {
+	if (test.model || test.embeddingType) {
 		// We prefer opts that come from the CLI over test specific args since Opts are global and must apply to the entire simulation
 		const smartChatModel = (opts.smartChatModel ?? opts.chatModel) ?? test.model;
 		const fastChatModel = (opts.fastChatModel ?? opts.chatModel) ?? test.model;

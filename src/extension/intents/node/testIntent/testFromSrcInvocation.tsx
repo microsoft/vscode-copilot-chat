@@ -22,6 +22,7 @@ import { ChatResponseMovePart, Range, Uri } from '../../../../vscodeTypes';
 import { IBuildPromptContext } from '../../../prompt/common/intents';
 import { IDocumentContext } from '../../../prompt/node/documentContext';
 import { EarlyStopping, IIntentInvocation, IResponseProcessorContext, LeadingMarkdownStreaming } from '../../../prompt/node/intents';
+import { PseudoStopStartResponseProcessor } from '../../../prompt/node/pseudoStartStopConversationCallback';
 import { InsertionStreamingEdits, TextPieceClassifiers } from '../../../prompt/node/streamingEdits';
 import { TestExample, TestExampleFile } from '../../../prompt/node/testExample';
 import { isTestFile, suggestUntitledTestFileLocation, TestFileFinder } from '../../../prompt/node/testFiles';
@@ -140,6 +141,12 @@ export class TestFromSourceInvocation implements IIntentInvocation {
 
 	async processResponse(context: IResponseProcessorContext, inputStream: AsyncIterable<IResponsePart>, outputStream: vscode.ChatResponseStream, token: CancellationToken): Promise<void> {
 
+		if (this.location === ChatLocation.Panel) {
+			const responseProcessor = this.instantiationService.createInstance(PseudoStopStartResponseProcessor, [], undefined);
+			await responseProcessor.processResponse(context, inputStream, outputStream, token);
+			return;
+		}
+
 		const doc = this.documentContext.document;
 
 		const additionalParts = this._additionalResponseParts;
@@ -210,7 +217,7 @@ export class TestFromSourceInvocation implements IIntentInvocation {
 
 			const replyInterpreter = splitDoc.createReplyInterpreter(
 				StreamPipe.chain(
-					markdownStream => replaceStringInStream(markdownStream, "`" + placeHolder + "`", 'selection'),
+					markdownStream => replaceStringInStream(markdownStream, '`' + placeHolder + '`', 'selection'),
 					markdownStream => replaceStringInStream(markdownStream, placeHolder, 'selection'),
 				),
 				EarlyStopping.StopAfterFirstCodeBlock,
@@ -390,7 +397,7 @@ class Prompt extends PromptElement<Props> {
 					{
 						testExampleFile !== null && <TestExample priority={750} {...testExampleFile} />
 					}
-					<Tag name="currentFile" priority={900}>
+					<Tag name='currentFile' priority={900}>
 						Here is the current file at `{srcFilePath}`:<br />
 						<br />
 						<CodeBlock uri={context.document.uri} languageId={context.document.languageId} code={summarization.text} /><br />

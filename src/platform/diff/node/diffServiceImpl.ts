@@ -13,7 +13,7 @@ import { existsSync } from 'fs';
 import { ILinesDiffComputerOptions, MovedText } from '../../../util/vs/editor/common/diff/linesDiffComputer';
 import { DetailedLineRangeMapping, LineRangeMapping, RangeMapping } from '../../../util/vs/editor/common/diff/rangeMapping';
 import { IDiffService, IDocumentDiff } from '../common/diffService';
-import type * as diffWorker from '../common/diffWorker';
+import * as diffWorker from '../common/diffWorker';
 
 export class DiffServiceImpl implements IDiffService {
 
@@ -21,7 +21,7 @@ export class DiffServiceImpl implements IDiffService {
 
 	private _worker: Lazy<WorkerWithRpcProxy<typeof diffWorker>>;
 
-	constructor() {
+	constructor(private _useWorker = true) {
 		this._worker = new Lazy(() => {
 			const workerPath = firstExistingPath([
 				path.join(__dirname, 'diffWorker.js'), // after bundling by esbuild
@@ -43,7 +43,9 @@ export class DiffServiceImpl implements IDiffService {
 	}
 
 	async computeDiff(original: string, modified: string, options: ILinesDiffComputerOptions): Promise<IDocumentDiff> {
-		const result = await this._worker.value.proxy.computeDiff(original, modified, options);
+		const result = this._useWorker ?
+			await this._worker.value.proxy.computeDiff(original, modified, options) :
+			await diffWorker.computeDiff(original, modified, options);
 
 		// Convert from space efficient JSON data to rich objects.
 		const diff: IDocumentDiff = {

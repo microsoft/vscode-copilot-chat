@@ -40,11 +40,11 @@ export class TextDocumentSnapshot {
 		);
 	}
 
-	static fromNewText(text: string, doc: TextDocument) {
+	static fromNewText(text: string, doc: TextDocument | TextDocumentSnapshot) {
 		return new TextDocumentSnapshot(
-			doc,
+			doc instanceof TextDocumentSnapshot ? doc.document : doc,
 			doc.uri,
-			doc.getText(),
+			text,
 			doc.languageId,
 			doc.eol,
 			doc.version + 1,

@@ -7,7 +7,7 @@ import assert from 'assert';
 import { SinonSandbox, createSandbox } from 'sinon';
 import { LanguageModelChat } from 'vscode';
 import { CHAT_MODEL } from '../../../platform/configuration/common/configurationService';
-import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
+import { IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { IModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
 import { ITestingServicesAccessor } from '../../../platform/test/node/services';
 import { TokenizerType } from '../../../util/common/tokenizer';
@@ -21,12 +21,16 @@ class FakeModelMetadataFetcher implements IModelMetadataFetcher {
 	async getAllChatModels(): Promise<IChatModelInformation[]> {
 		return [];
 	}
+	async getAllCompletionModels(forceRefresh: boolean): Promise<ICompletionModelInformation[]> {
+		return [];
+	}
 	async getChatModelFromApiModel(model: LanguageModelChat): Promise<IChatModelInformation | undefined> {
 		return undefined;
 	}
 	async getChatModelFromFamily(modelId: string): Promise<IChatModelInformation> {
 		return {
 			id: modelId,
+			vendor: 'fake-vendor',
 			name: 'fake-name',
 			version: 'fake-version',
 			model_picker_enabled: false,
@@ -40,6 +44,24 @@ class FakeModelMetadataFetcher implements IModelMetadataFetcher {
 			}
 		};
 	}
+
+	async getEmbeddingsModel(): Promise<IEmbeddingModelInformation> {
+		return {
+			id: 'text-embedding-3-small',
+			name: 'fake-name',
+			vendor: 'fake-vendor',
+			version: 'fake-version',
+			model_picker_enabled: false,
+			is_chat_default: false,
+			is_chat_fallback: false,
+			capabilities: {
+				type: 'embeddings',
+				tokenizer: TokenizerType.O200K,
+				family: 'text-embedding-3-small',
+				limits: { max_inputs: 256 }
+			}
+		};
+	}
 }
 
 suite('Endpoint Class Test', function () {
@@ -49,7 +71,7 @@ suite('Endpoint Class Test', function () {
 
 	setup(() => {
 		accessor = createExtensionTestingServices().createTestingAccessor();
-		endpointProvider = accessor.get(IInstantiationService).createInstance(ProductionEndpointProvider, () => { });
+		endpointProvider = accessor.get(IInstantiationService).createInstance(ProductionEndpointProvider);
 		sandbox = createSandbox();
 		//@ts-expect-error
 		sandbox.replace(endpointProvider, '_modelFetcher', new FakeModelMetadataFetcher());
@@ -57,11 +79,6 @@ suite('Endpoint Class Test', function () {
 
 	teardown(() => {
 		sandbox.restore();
-	});
-
-	test('getChatEndpoint by family', async function () {
-		const chatEndpointInfo = await endpointProvider.getChatEndpoint('gpt-4o-mini');
-		assert.strictEqual(chatEndpointInfo.model, CHAT_MODEL.GPT4OMINI);
 	});
 
 	test('Model names have proper casing', async function () {

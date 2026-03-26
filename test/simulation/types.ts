@@ -117,17 +117,13 @@ export const enum EditTestStrategy {
 	 */
 	Edits,
 	/**
-	 * Tests Edits2 (with edit tool)
-	 */
-	Edits2,
-	/**
 	 * We will test an inline interaction.
 	 */
 	Inline,
 	/**
-	 * We will test an inline 2 interaction.
+	 * We will test an inline chat intent interaction.
 	 */
-	Inline2,
+	InlineChatIntent,
 	/**
 	 * Test Edits in agent mode
 	 */

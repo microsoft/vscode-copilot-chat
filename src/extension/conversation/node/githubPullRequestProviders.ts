@@ -4,15 +4,17 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Disposable } from 'vscode';
+import * as l10n from '@vscode/l10n';
 import { IExtensionsService } from '../../../platform/extensions/common/extensionsService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IReviewService } from '../../../platform/review/common/reviewService';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { Extension, l10n, Uri } from '../../../vscodeTypes';
+import { Extension, Uri } from '../../../vscodeTypes';
 import { API, RepositoryDescription } from '../../githubPullRequest';
 import { GitHubPullRequestTitleAndDescriptionGenerator } from '../../prompt/node/githubPullRequestTitleAndDescriptionGenerator';
 import { GitHubPullRequestReviewerCommentsProvider } from '../../review/node/githubPullRequestReviewerCommentsProvider';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 
 export class GitHubPullRequestProviders implements Disposable {
 	private gitHubExtensionApi: API | undefined;
@@ -23,6 +25,7 @@ export class GitHubPullRequestProviders implements Disposable {
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IReviewService private readonly reviewService: IReviewService,
 		@IExtensionsService private readonly extensionService: IExtensionsService,
+		@IConfigurationService private _configurationService: IConfigurationService,
 	) {
 		this.initializeGitHubPRExtensionApi();
 	}
@@ -62,6 +65,12 @@ export class GitHubPullRequestProviders implements Disposable {
 			});
 			this.disposables.add(listener);
 		}
+
+		this.disposables.add(this._configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(ConfigKey.ReviewAgent.fullyQualifiedId)) {
+				this.registerReviewerCommentsProvider();
+			}
+		}));
 	}
 
 	private titleAndDescriptionProvider: GitHubPullRequestTitleAndDescriptionGenerator | undefined;
@@ -82,12 +91,21 @@ export class GitHubPullRequestProviders implements Disposable {
 	}
 
 	private reviewerCommentsProvider: GitHubPullRequestReviewerCommentsProvider | undefined;
+	private reviewerCommentsRegistration: Disposable | undefined;
 	private async registerReviewerCommentsProvider() {
 		if (!this.gitHubExtensionApi) {
 			return;
 		}
 
 		if (!this.reviewService.isReviewDiffEnabled()) {
+			if (this.reviewerCommentsRegistration) {
+				this.disposables.delete(this.reviewerCommentsRegistration);
+				this.reviewerCommentsRegistration = undefined;
+			}
+			return;
+		}
+
+		if (this.reviewerCommentsRegistration) {
 			return;
 		}
 
@@ -95,7 +113,8 @@ export class GitHubPullRequestProviders implements Disposable {
 			if (!this.reviewerCommentsProvider) {
 				this.reviewerCommentsProvider = this.instantiationService.createInstance(GitHubPullRequestReviewerCommentsProvider);
 			}
-			this.disposables.add(this.gitHubExtensionApi.registerReviewerCommentsProvider(l10n.t('Copilot'), this.reviewerCommentsProvider));
+			this.reviewerCommentsRegistration = this.gitHubExtensionApi.registerReviewerCommentsProvider(l10n.t('Copilot'), this.reviewerCommentsProvider);
+			this.disposables.add(this.reviewerCommentsRegistration);
 			this.logService.info('Successfully registered GitHub PR reviewer comments provider.');
 		} catch (e) {
 			// Catch errors in case there's a breaking API change.

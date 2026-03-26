@@ -11,6 +11,7 @@ import { DebugNameData } from '../debugName';
 import { BugIndicatingError, DisposableStore, EqualityComparer, assertFn, onBugIndicatingError } from '../commonFacade/deps';
 import { getLogger } from '../logging/logging';
 import { IChangeTracker } from '../changeTracker';
+import { DebugLocation } from '../debugLocation';
 
 export interface IDerivedReader<TChange = void> extends IReaderWithStore {
 	/**
@@ -41,6 +42,16 @@ export const enum DerivedState {
 	upToDate = 3,
 }
 
+function derivedStateToString(state: DerivedState): string {
+	switch (state) {
+		case DerivedState.initial: return 'initial';
+		case DerivedState.dependenciesMightHaveChanged: return 'dependenciesMightHaveChanged';
+		case DerivedState.stale: return 'stale';
+		case DerivedState.upToDate: return 'upToDate';
+		default: return '<unknown>';
+	}
+}
+
 export class Derived<T, TChangeSummary = any, TChange = void> extends BaseObservable<T, TChange> implements IDerivedReader<TChange>, IObserver {
 	private _state = DerivedState.initial;
 	private _value: T | undefined = undefined;
@@ -67,8 +78,9 @@ export class Derived<T, TChangeSummary = any, TChange = void> extends BaseObserv
 		private readonly _changeTracker: IChangeTracker<TChangeSummary> | undefined,
 		private readonly _handleLastObserverRemoved: (() => void) | undefined = undefined,
 		private readonly _equalityComparator: EqualityComparer<T>,
+		debugLocation: DebugLocation,
 	) {
-		super();
+		super(debugLocation);
 		this._changeSummary = this._changeTracker?.createChangeSummary(undefined);
 	}
 
@@ -300,6 +312,7 @@ export class Derived<T, TChangeSummary = any, TChange = void> extends BaseObserv
 				shouldReact = this._changeTracker ? this._changeTracker.handleChange({
 					changedObservable: observable,
 					change,
+					// eslint-disable-next-line local/code-no-any-casts
 					didChange: (o): this is any => o === observable as any,
 				}, this._changeSummary!) : true;
 			} catch (e) {
@@ -370,9 +383,7 @@ export class Derived<T, TChangeSummary = any, TChange = void> extends BaseObserv
 		super.addObserver(observer);
 
 		if (shouldCallBeginUpdate) {
-			if (this._removedObserverToCallEndUpdateOn && this._removedObserverToCallEndUpdateOn.has(observer)) {
-				this._removedObserverToCallEndUpdateOn.delete(observer);
-			} else {
+			if (!this._removedObserverToCallEndUpdateOn?.delete(observer)) {
 				observer.beginUpdate(this);
 			}
 		}
@@ -391,6 +402,7 @@ export class Derived<T, TChangeSummary = any, TChange = void> extends BaseObserv
 	public debugGetState() {
 		return {
 			state: this._state,
+			stateStr: derivedStateToString(this._state),
 			updateCount: this._updateCount,
 			isComputing: this._isComputing,
 			dependencies: this._dependencies,
@@ -399,7 +411,21 @@ export class Derived<T, TChangeSummary = any, TChange = void> extends BaseObserv
 	}
 
 	public debugSetValue(newValue: unknown) {
+		// eslint-disable-next-line local/code-no-any-casts
 		this._value = newValue as any;
+	}
+
+	public debugRecompute(): void {
+		this.beginUpdate(this);
+		try {
+			if (!this._isComputing) {
+				this._recompute();
+			} else {
+				this._state = DerivedState.stale;
+			}
+		} finally {
+			this.endUpdate(this);
+		}
 	}
 
 	public setValue(newValue: T, tx: ITransaction, change: TChange): void {
@@ -421,6 +447,7 @@ export class DerivedWithSetter<T, TChangeSummary = any, TOutChanges = any> exten
 		handleLastObserverRemoved: (() => void) | undefined = undefined,
 		equalityComparator: EqualityComparer<T>,
 		public readonly set: (value: T, tx: ITransaction | undefined, change: TOutChanges) => void,
+		debugLocation: DebugLocation,
 	) {
 		super(
 			debugNameData,
@@ -428,6 +455,7 @@ export class DerivedWithSetter<T, TChangeSummary = any, TOutChanges = any> exten
 			changeTracker,
 			handleLastObserverRemoved,
 			equalityComparator,
+			debugLocation,
 		);
 	}
 }

@@ -59,23 +59,23 @@ export type Format =
 	| typeof Format.regex;
 
 export namespace Format {
-	export const dateTime = "date-time";
-	export const date = "date";
-	export const time = "time";
-	export const email = "email";
-	export const idnEmail = "idn-email";
-	export const hostname = "hostname";
-	export const idnHostname = "idn-hostname";
-	export const ipv4 = "ipv4";
-	export const ipv6 = "ipv6";
-	export const uri = "uri";
-	export const uriReference = "uri-reference";
-	export const iri = "iri";
-	export const iriReference = "iri-reference";
-	export const uriTemplate = "uri-template";
-	export const jsonPointer = "json-pointer";
-	export const relativeJsonPointer = "relative-json-pointer";
-	export const regex = "regex";
+	export const dateTime = 'date-time';
+	export const date = 'date';
+	export const time = 'time';
+	export const email = 'email';
+	export const idnEmail = 'idn-email';
+	export const hostname = 'hostname';
+	export const idnHostname = 'idn-hostname';
+	export const ipv4 = 'ipv4';
+	export const ipv6 = 'ipv6';
+	export const uri = 'uri';
+	export const uriReference = 'uri-reference';
+	export const iri = 'iri';
+	export const iriReference = 'iri-reference';
+	export const uriTemplate = 'uri-template';
+	export const jsonPointer = 'json-pointer';
+	export const relativeJsonPointer = 'relative-json-pointer';
+	export const regex = 'regex';
 }
 
 export interface NumericJsonSchema extends BaseJsonSchema {
@@ -122,17 +122,17 @@ export interface ObjectJsonSchema extends BaseJsonSchema {
 }
 
 namespace JsonSchemaType {
-	export const number = "number";
-	export const integer = "integer";
-	export const array = "array";
-	export const object = "object";
-	export const string = "string";
+	export const number = 'number';
+	export const integer = 'integer';
+	export const array = 'array';
+	export const object = 'object';
+	export const string = 'string';
 	export type Numeric = typeof number | typeof integer;
 }
 
 export type JsonSchemaType =
-	| "null"
-	| "boolean"
+	| 'null'
+	| 'boolean'
 	| typeof JsonSchemaType.object
 	| typeof JsonSchemaType.array
 	| typeof JsonSchemaType.string

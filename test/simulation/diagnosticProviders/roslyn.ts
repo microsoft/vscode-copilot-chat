@@ -40,7 +40,7 @@ export class RoslynDiagnosticsProvider extends CachingDiagnosticsProvider {
 			'		<PackageReference Include="System.Runtime.Loader" Version="4.0.0-*"/>',
 			'	</ItemGroup>',
 			'</Project>',
-		].join("\n");
+		].join('\n');
 	}
 
 	private get rulesetFile(): string {
@@ -51,7 +51,7 @@ export class RoslynDiagnosticsProvider extends CachingDiagnosticsProvider {
 			'		<Rule Id="CS8981" Action="None"/>',
 			'	</Rules>',
 			'</RuleSet>',
-		].join("\n");
+		].join('\n');
 	}
 
 	override isInstalled(): boolean {

@@ -7,7 +7,7 @@ import { BugIndicatingError } from '../../../../util/vs/base/common/errors';
 import { Emitter, Event, Relay } from '../../../../util/vs/base/common/event';
 import { safeStringify } from '../../../../util/vs/base/common/objects';
 import { NullEnvService } from '../../../env/common/nullEnvService';
-import { CopilotToken, ExtendedTokenInfo, TokenInfo } from '../../common/copilotToken';
+import { CopilotToken, createTestExtendedTokenInfo, ExtendedTokenInfo, TokenEnvelope } from '../../common/copilotToken';
 import { ICopilotTokenManager, nowSeconds } from '../../common/copilotTokenManager';
 
 export class SimulationTestCopilotTokenManager implements ICopilotTokenManager {
@@ -32,7 +32,7 @@ class SimulationTestFixedCopilotTokenManager {
 	) { }
 
 	async getCopilotToken(): Promise<CopilotToken> {
-		return new CopilotToken({ token: this._completionsToken, expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown' });
+		return new CopilotToken(createTestExtendedTokenInfo({ token: this._completionsToken, username: 'fixedTokenManager', copilot_plan: 'unknown' }));
 	}
 }
 
@@ -87,7 +87,7 @@ class SimulationTestCopilotTokenManagerFromGitHubToken {
 			throw new Error(`Failed to get copilot token: ${errAsString}`);
 		}
 
-		const tokenInfo: undefined | TokenInfo = await response.json() as any;
+		const tokenInfo: undefined | TokenEnvelope = await response.json() as any;
 		if (!response.ok || response.status === 401 || response.status === 403 || !tokenInfo || !tokenInfo.token) {
 			throw new Error(`Failed to get copilot token: ${response.status} ${response.statusText}`);
 		}
@@ -102,6 +102,7 @@ class SimulationTestCopilotTokenManagerFromGitHubToken {
 			username: 'NullUser',
 			copilot_plan: 'unknown',
 			isVscodeTeamMember: false,
+			organization_login_list: [],
 		};
 
 		setTimeout(() => {

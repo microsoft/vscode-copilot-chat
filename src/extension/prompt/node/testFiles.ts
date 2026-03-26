@@ -275,7 +275,7 @@ export function suggestTestFileDir(document: TextDocumentSnapshot): URI {
 		 * this stage.
 		 */
 		const srcFilePath = srcFileLocation.path;
-		if (srcFilePath.includes("/src/main/")) {
+		if (srcFilePath.includes('/src/main/')) {
 			const testFilePath = srcFilePath.replace('/src/main/', '/src/test/');
 			return srcFileLocation.with({ path: testFilePath });
 		}

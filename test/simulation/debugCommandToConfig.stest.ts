@@ -40,16 +40,16 @@ ssuite({ title: 'Debug config to command', location: 'context' }, () => {
 			throw new Error('Expected tools to be found');
 		}
 
-		return { accessor, r: result.config!.configurations[0] };
+		return { accessor, r: result.config?.configurations[0] };
 	}
 
 	stest({ description: 'node test' }, async (testingServiceCollection) => {
 		const { accessor, r } = await score(testingServiceCollection, WORKSPACE_FOLDER.fsPath, ['node', 'index.js']);
 
 		rubric(accessor,
-			() => assert.ok(r.type === 'node'),
-			() => assert.ok(r.program.endsWith('index.js')),
-			() => assert.ok(!r.cwd || r.cwd === '${workspaceFolder}'),
+			() => assert.ok(r?.type === 'node'),
+			() => assert.ok(r?.program.endsWith('index.js')),
+			() => assert.ok(!r?.cwd || r?.cwd === '${workspaceFolder}'),
 		);
 	});
 
@@ -57,10 +57,10 @@ ssuite({ title: 'Debug config to command', location: 'context' }, () => {
 		const { accessor, r } = await score(testingServiceCollection, path.join(WORKSPACE_FOLDER.fsPath, 'foo'), ['node', 'index', '--my-arg']);
 
 		rubric(accessor,
-			() => assert.ok(r.type === 'node'),
-			() => assert.ok(r.program.endsWith('index.js')),
-			() => assert.ok(r.cwd.endsWith('foo')),
-			() => assert.deepStrictEqual(r.args, ['--my-arg']),
+			() => assert.ok(r?.type === 'node'),
+			() => assert.ok(r?.program.endsWith('index.js')),
+			() => assert.ok(r?.cwd.endsWith('foo')),
+			() => assert.deepStrictEqual(r?.args, ['--my-arg']),
 		);
 	});
 
@@ -68,10 +68,10 @@ ssuite({ title: 'Debug config to command', location: 'context' }, () => {
 		const { accessor, r } = await score(testingServiceCollection, path.join(WORKSPACE_FOLDER.fsPath, 'foo'), ['python3', 'cool.py', '--my-arg']);
 
 		rubric(accessor,
-			() => assert.ok(r.type === 'python' || r.type === 'debugpy'),
-			() => assert.ok(r.program.endsWith('cool.py')),
-			() => assert.ok(r.cwd.endsWith('foo')),
-			() => assert.deepStrictEqual(r.args, ['--my-arg']),
+			() => assert.ok(r?.type === 'python' || r?.type === 'debugpy'),
+			() => assert.ok(r?.program.endsWith('cool.py')),
+			() => assert.ok(r?.cwd.endsWith('foo')),
+			() => assert.deepStrictEqual(r?.args, ['--my-arg']),
 		);
 	});
 
@@ -79,8 +79,8 @@ ssuite({ title: 'Debug config to command', location: 'context' }, () => {
 		const { accessor, r } = await score(testingServiceCollection, path.join(WORKSPACE_FOLDER.fsPath), ['chrome.exe', 'https://microsoft.com']);
 
 		rubric(accessor,
-			() => assert.ok(r.type === 'chrome'),
-			() => assert.deepStrictEqual(r.url, 'https://microsoft.com'),
+			() => assert.ok(r?.type === 'chrome'),
+			() => assert.deepStrictEqual(r?.url, 'https://microsoft.com'),
 		);
 	});
 
@@ -89,8 +89,8 @@ ssuite({ title: 'Debug config to command', location: 'context' }, () => {
 
 		rubric(accessor,
 			// test env service always advertises linux:
-			() => assert.strictEqual(r.type, 'lldb'),
-			() => assert.ok(r.program.includes('target/debug')),
+			() => assert.strictEqual(r?.type, 'lldb'),
+			() => assert.ok(r?.program.includes('target/debug')),
 		);
 	});
 });

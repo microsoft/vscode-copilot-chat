@@ -31,7 +31,7 @@ export class NotificationService implements INotificationService {
 		return window.showWarningMessage(message, ...items);
 	}
 
-	async showQuotaExceededDialog(): Promise<unknown> {
-		return commands.executeCommand('workbench.action.chat.openQuotaExceededDialog');
+	async showQuotaExceededDialog(options: { isNoAuthUser: boolean }): Promise<unknown> {
+		return commands.executeCommand(options.isNoAuthUser ? 'workbench.action.chat.triggerSetup' : 'workbench.action.chat.openQuotaExceededDialog');
 	}
 }

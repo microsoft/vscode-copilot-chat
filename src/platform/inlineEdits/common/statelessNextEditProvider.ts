@@ -11,9 +11,11 @@ import { CancellationToken, CancellationTokenSource } from '../../../util/vs/bas
 import { URI } from '../../../util/vs/base/common/uri';
 import { LineEdit, LineReplacement, SerializedLineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
+import { Position } from '../../../util/vs/editor/common/core/position';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { ChatFetchResponseType, FetchResponse } from '../../chat/common/commonTypes';
+import { ILogger } from '../../log/common/logService';
 import { ISerializedOffsetRange, LogEntry, serializeOffsetRange } from '../../workspaceRecorder/common/workspaceLog';
 import { DocumentId } from './dataTypes/documentId';
 import { Edits } from './dataTypes/edit';
@@ -24,20 +26,39 @@ import { InlineEditRequestLogContext } from './inlineEditLogContext';
 import { stringifyChatMessages } from './utils/stringifyChatMessages';
 import { IXtabHistoryEntry } from './workspaceEditTracker/nesXtabHistoryTracker';
 
-export const enum ShowNextEditPreference {
-	Always = 'always',
-	AroundEdit = 'aroundEdit',
+export type EditStreaming = AsyncGenerator<StreamedEdit, NoNextEditReason, void>
+
+export class WithStatelessProviderTelemetry<T> {
+	constructor(
+		public readonly v: T,
+		public readonly telemetryBuilder: IStatelessNextEditTelemetry,
+	) {
+	}
 }
 
-export type PushEdit = (edit: Result<{ edit: LineReplacement; window?: OffsetRange; targetDocument?: DocumentId }, NoNextEditReason>) => void;
+export type EditStreamingWithTelemetry = AsyncGenerator<WithStatelessProviderTelemetry<StreamedEdit>, WithStatelessProviderTelemetry<NoNextEditReason>, void>
+
+export type StreamedEdit = {
+	readonly targetDocument: DocumentId;
+	readonly edit: LineReplacement;
+	readonly isFromCursorJump: boolean;
+	readonly window?: OffsetRange;
+	/**
+	 * For cursor jump edits, this is the edit window around the original cursor position
+	 * (before the jump). This allows the cached edit to be served when the cursor is
+	 * in either the original location or the jump target location.
+	 */
+	readonly originalWindow?: OffsetRange;
+}
+
+export type PushEdit = (edit: Result<StreamedEdit, NoNextEditReason>) => void;
 
 export interface IStatelessNextEditProvider {
 	readonly ID: string;
-	readonly dependsOnSelection?: boolean;
-	readonly showNextEditPreference?: ShowNextEditPreference;
-	provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult>;
+	provideNextEdit(request: StatelessNextEditRequest, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): EditStreamingWithTelemetry;
 	handleAcceptance?(): void;
 	handleRejection?(): void;
+	handleIgnored?(): void;
 }
 
 export class StatelessNextEditRequest<TFirstEdit = any> {
@@ -56,12 +77,15 @@ export class StatelessNextEditRequest<TFirstEdit = any> {
 	}
 
 	constructor(
-		public readonly id: string,
+		public readonly headerRequestId: string,
+		public readonly opportunityId: string,
 		public readonly documentBeforeEdits: StringText,
 		public readonly documents: readonly StatelessNextEditDocument[],
 		public readonly activeDocumentIdx: number,
-		public readonly xtabEditHistory: IXtabHistoryEntry[],
+		public readonly xtabEditHistory: readonly IXtabHistoryEntry[],
 		public readonly firstEdit: DeferredPromise<Result<TFirstEdit, NoNextEditReason>>,
+		public readonly expandedEditWindowNLines: number | undefined,
+		public readonly isSpeculative: boolean,
 		public readonly logContext: InlineEditRequestLogContext,
 		public readonly recordingBookmark: DebugRecorderBookmark | undefined,
 		public readonly recording: LogEntry[] | undefined,
@@ -89,7 +113,7 @@ export class StatelessNextEditRequest<TFirstEdit = any> {
 
 	serialize(): ISerializedNextEditRequest {
 		return {
-			id: this.id,
+			id: this.headerRequestId,
 			documents: this.documents.map(d => d.serialize()),
 			activeDocumentIdx: this.activeDocumentIdx,
 			recording: this.recording,
@@ -181,40 +205,85 @@ export enum FilteredOutReason {
 }
 
 export namespace NoNextEditReason {
-	export class ActiveDocumentHasNoEdits {
-		public readonly kind = 'activeDocumentHasNoEdits';
+	abstract class NoNextEditReason {
+		abstract toString(): string;
 	}
-	export class NoSuggestions {
+	export class ActiveDocumentHasNoEdits extends NoNextEditReason {
+		public readonly kind = 'activeDocumentHasNoEdits';
+
+		toString(): string {
+			return this.kind;
+		}
+	}
+	export class NoSuggestions extends NoNextEditReason {
 		public readonly kind = 'noSuggestions';
+
 		constructor(
 			public readonly documentBeforeEdits: StringText,
-			public readonly window: OffsetRange | undefined
+			public readonly window: OffsetRange | undefined,
+			public readonly nextCursorPosition?: Position | undefined,
+			public readonly nextCursorDocumentId?: DocumentId | undefined,
 		) {
+			super();
+		}
+
+		toString(): string {
+			return this.kind;
 		}
 	}
-	export class GotCancelled {
+	export class GotCancelled extends NoNextEditReason {
 		public readonly kind = 'gotCancelled';
-		constructor(public readonly message: 'afterDebounce' | 'afterGettingEndpoint' | 'afterPromptConstruction' | 'afterFetchCall' | 'duringStreaming' | 'afterResponse' | 'afterFailedRebase' | 'beforeExecutingNewRequest') {
+		constructor(public readonly message: string | 'afterDebounce' | 'afterGettingEndpoint' | 'afterLanguageContextAwait' | 'afterPromptConstruction' | 'afterFetchCall' | 'duringStreaming' | 'afterResponse' | 'afterFailedRebase' | 'beforeExecutingNewRequest' | 'afterArtificialDelay' | 'afterNextCursorPredictionFetch') {
+			super();
+		}
+
+		toString(): string {
+			return `${this.kind}:${this.message}`;
 		}
 	}
-	export class FetchFailure {
+	export class FetchFailure extends NoNextEditReason {
 		public readonly kind = 'fetchFailure';
 		constructor(public readonly error: Error) {
+			super();
+		}
+		toString(): string {
+			return `${this.kind}:${this.error.message}`;
 		}
 	}
-	export class FilteredOut {
+	export class FilteredOut extends NoNextEditReason {
 		public readonly kind = 'filteredOut';
 		constructor(public readonly message: FilteredOutReason | string) {
+			super();
+		}
+		toString(): string {
+			return `${this.kind}:${this.message}`;
 		}
 	}
-	export class Uncategorized {
+	export class PromptTooLarge extends NoNextEditReason {
+		public readonly kind = 'promptTooLarge';
+		constructor(public readonly message: 'editWindow' | 'currentFile' | 'final') {
+			super();
+		}
+		toString(): string {
+			return `${this.kind}:${this.message}`;
+		}
+	}
+	export class Uncategorized extends NoNextEditReason {
 		public readonly kind = 'uncategorized';
 		constructor(public readonly error: Error) {
+			super();
+		}
+		toString(): string {
+			return `${this.kind}:${this.error.message}`;
 		}
 	}
-	export class Unexpected {
+	export class Unexpected extends NoNextEditReason {
 		public readonly kind = 'unexpected';
 		constructor(public readonly error: Error) {
+			super();
+		}
+		toString(): string {
+			return `${this.kind}:${this.error.message}`;
 		}
 	}
 }
@@ -225,6 +294,7 @@ export type NoNextEditReason =
 	| NoNextEditReason.GotCancelled
 	| NoNextEditReason.FetchFailure
 	| NoNextEditReason.FilteredOut
+	| NoNextEditReason.PromptTooLarge
 	| NoNextEditReason.Uncategorized
 	| NoNextEditReason.Unexpected
 	;
@@ -256,6 +326,7 @@ export interface IStatelessNextEditTelemetry {
 	/* general info */
 	readonly statelessNextEditProviderDuration: number;
 	readonly isCursorAtEndOfLine: boolean | undefined;
+	readonly isInlineSuggestion: boolean | undefined;
 	readonly nLinesOfCurrentFileInPrompt: number | undefined;
 	readonly modelName: string | undefined;
 
@@ -267,6 +338,7 @@ export interface IStatelessNextEditTelemetry {
 	readonly prompt: string | undefined;
 	readonly promptLineCount: number | undefined;
 	readonly promptCharCount: number | undefined;
+	readonly mergeConflictExpanded: 'normal' | 'only' | undefined;
 
 	/* fetch request info */
 
@@ -291,7 +363,46 @@ export interface IStatelessNextEditTelemetry {
 	readonly nextEditLogprob: number | undefined;
 	readonly noNextEditReasonKind: string | undefined;
 	readonly noNextEditReasonMessage: string | undefined;
-	readonly summarizedEditWindow: any;
+
+	/* next cursor line info */
+	readonly nextCursorPrediction: {
+		nextCursorLineError: string | undefined;
+		/** nextCursorLineNumber - currentCursorLineNumber */
+		nextCursorLineDistance: number | undefined;
+		isCrossFile: boolean | undefined;
+	};
+
+	/* xtab aggressiveness telemetry (only set when promptingStrategy is aggressiveness-based) */
+	readonly xtabAggressivenessLevel: string | undefined;
+	readonly xtabUserHappinessScore: number | undefined;
+
+	/** The raw user-facing aggressiveness setting value (only set when user changed from default) */
+	readonly userAggressivenessSetting: string | undefined;
+
+	/* edit intent telemetry (only set when promptingStrategy is Xtab275EditIntent or Xtab275EditIntentShort) */
+	readonly editIntent: string | undefined;
+	readonly editIntentParseError: string | undefined;
+
+	/* cursor jump info */
+	readonly cursorJumpModelName: string | undefined;
+	readonly cursorJumpPrompt: string | undefined;
+	readonly cursorJumpResponse: string | undefined;
+
+	/* diff history info */
+	readonly nDiffsInPrompt: number | undefined;
+	readonly diffTokensInPrompt: number | undefined;
+
+	/* lint errors info */
+	readonly lintErrors: string | undefined;
+
+	/* terminal output info */
+	readonly terminalOutput: string | undefined;
+
+	/* similar files context for telemetry (GhostText-style neighbor code snippets) */
+	readonly similarFilesContext: Promise<string | undefined> | undefined;
+
+	/* JSON-encoded model configuration from the model service */
+	readonly modelConfig: string | undefined;
 }
 
 export type FetchResultWithStats = {
@@ -309,9 +420,9 @@ export class StatelessNextEditTelemetryBuilder {
 	/**
 	 * It takes a request to automatically capture some properties from the request.
 	 */
-	constructor(request: StatelessNextEditRequest) {
+	constructor(headerRequestId: string) {
 		this.startTime = Date.now();
-		this.requestUuid = request.id;
+		this.requestUuid = headerRequestId;
 	}
 
 	public build(result: Result<void, NoNextEditReason>): IStatelessNextEditTelemetry {
@@ -329,7 +440,7 @@ export class StatelessNextEditTelemetryBuilder {
 		if (result.isError()) {
 			if (result.err instanceof NoNextEditReason.ActiveDocumentHasNoEdits || result.err instanceof NoNextEditReason.NoSuggestions) {
 				// ignore
-			} else if (result.err instanceof NoNextEditReason.GotCancelled || result.err instanceof NoNextEditReason.FilteredOut) {
+			} else if (result.err instanceof NoNextEditReason.GotCancelled || result.err instanceof NoNextEditReason.FilteredOut || result.err instanceof NoNextEditReason.PromptTooLarge) {
 				noNextEditReasonMessage = result.err.message;
 			} else if (result.err instanceof NoNextEditReason.FetchFailure || result.err instanceof NoNextEditReason.Uncategorized || result.err instanceof NoNextEditReason.Unexpected) {
 				noNextEditReasonMessage = result.err.error.stack ? result.err.error.stack : result.err.error.message;
@@ -346,12 +457,14 @@ export class StatelessNextEditTelemetryBuilder {
 
 			statelessNextEditProviderDuration: timeSpent,
 			logProbThreshold: this._logProbThreshold,
+			mergeConflictExpanded: this._mergeConflictExpanded,
 			nLinesOfCurrentFileInPrompt: this._nLinesOfCurrentFileInPrompt,
 			modelName: this._modelName,
 			prompt,
 			promptLineCount,
 			promptCharCount,
 			isCursorAtEndOfLine: this._isCursorAtLineEnd,
+			isInlineSuggestion: this._isInlineSuggestion,
 			debounceTime: this._debounceTime,
 			artificialDelay: this._artificialDelay,
 			fetchStartedAt: this._fetchStartedAt,
@@ -359,14 +472,34 @@ export class StatelessNextEditTelemetryBuilder {
 			response: this._response,
 			nEditsSuggested: this._nEditsSuggested,
 			nextEditLogprob: this._nextEditLogProb,
+			nextCursorPrediction: this._nextCursorPrediction,
 			lineDistanceToMostRecentEdit: this._lineDistanceToMostRecentEdit,
-			summarizedEditWindow: this._summarizedEditWindow,
+			xtabAggressivenessLevel: this._xtabAggressivenessLevel,
+			xtabUserHappinessScore: this._xtabUserHappinessScore,
+			userAggressivenessSetting: this._userAggressivenessSetting,
+			editIntent: this._editIntent,
+			editIntentParseError: this._editIntentParseError,
+			cursorJumpModelName: this._cursorJumpModelName,
+			cursorJumpPrompt: this._cursorJumpPrompt ? JSON.stringify(this._cursorJumpPrompt.map(({ role, content }) => ({ role, content }))) : undefined,
+			cursorJumpResponse: this._cursorJumpResponse,
+			nDiffsInPrompt: this._nDiffsInPrompt,
+			diffTokensInPrompt: this._diffTokensInPrompt,
+			lintErrors: this._lintErrors,
+			terminalOutput: this._terminalOutput,
+			similarFilesContext: this._similarFilesContext,
+			modelConfig: this._modelConfig,
 		};
 	}
 
 	private _logProbThreshold: number | undefined;
 	public setLogProbThreshold(logProbThreshold: number): this {
 		this._logProbThreshold = logProbThreshold;
+		return this;
+	}
+
+	private _mergeConflictExpanded: 'normal' | 'only' | undefined;
+	public setMergeConflictExpanded(mergeConflictExpanded: 'normal' | 'only'): this {
+		this._mergeConflictExpanded = mergeConflictExpanded;
 		return this;
 	}
 
@@ -397,6 +530,12 @@ export class StatelessNextEditTelemetryBuilder {
 	private _isCursorAtLineEnd: boolean | undefined;
 	public setIsCursorAtLineEnd(isCursorAtLineEnd: boolean): this {
 		this._isCursorAtLineEnd = isCursorAtLineEnd;
+		return this;
+	}
+
+	private _isInlineSuggestion: boolean | undefined;
+	public setIsInlineSuggestion(isInlineSuggestion: boolean): this {
+		this._isInlineSuggestion = isInlineSuggestion;
 		return this;
 	}
 
@@ -440,6 +579,24 @@ export class StatelessNextEditTelemetryBuilder {
 		return this;
 	}
 
+	private _cursorJumpModelName: string | undefined;
+	public setCursorJumpModelName(modelName: string | undefined): this {
+		this._cursorJumpModelName = modelName;
+		return this;
+	}
+
+	private _cursorJumpPrompt: Raw.ChatMessage[] | undefined;
+	public setCursorJumpPrompt(prompt: Raw.ChatMessage[] | undefined): this {
+		this._cursorJumpPrompt = prompt;
+		return this;
+	}
+
+	private _cursorJumpResponse: string | undefined;
+	public setCursorJumpResponse(response: string | undefined): this {
+		this._cursorJumpResponse = response;
+		return this;
+	}
+
 	private _nextEditLogProb: number | undefined;
 	public setNextEditLogProb(logProb: number): this {
 		this._nextEditLogProb = logProb;
@@ -458,9 +615,93 @@ export class StatelessNextEditTelemetryBuilder {
 		return this;
 	}
 
-	private _summarizedEditWindow: any;
-	public setSummarizedEditWindow(summarizedEditWindow: any): this {
-		this._summarizedEditWindow = summarizedEditWindow;
+	private _nextCursorPrediction: IStatelessNextEditTelemetry['nextCursorPrediction'] = {
+		nextCursorLineError: undefined,
+		nextCursorLineDistance: undefined,
+		isCrossFile: undefined
+	};
+
+	public setNextCursorLineError(error: string): this {
+		this._nextCursorPrediction.nextCursorLineError = error;
+		return this;
+	}
+
+	/**
+	 * nextCursorLineNumber - currentCursorLineNumber
+	 */
+	public setNextCursorLineDistance(distance: number): this {
+		this._nextCursorPrediction.nextCursorLineDistance = distance;
+		return this;
+	}
+
+	public setNextCursorIsCrossFile(isCrossFile: boolean): this {
+		this._nextCursorPrediction.isCrossFile = isCrossFile;
+		return this;
+	}
+
+	private _xtabAggressivenessLevel: string | undefined;
+	public setXtabAggressivenessLevel(level: string): this {
+		this._xtabAggressivenessLevel = level;
+		return this;
+	}
+
+	private _xtabUserHappinessScore: number | undefined;
+	public setXtabUserHappinessScore(score: number): this {
+		this._xtabUserHappinessScore = score;
+		return this;
+	}
+
+	private _userAggressivenessSetting: string | undefined;
+	public setUserAggressivenessSetting(setting: string): this {
+		this._userAggressivenessSetting = setting;
+		return this;
+	}
+
+	private _editIntent: string | undefined;
+	public setEditIntent(editIntent: string): this {
+		this._editIntent = editIntent;
+		return this;
+	}
+
+	private _editIntentParseError: string | undefined;
+	public setEditIntentParseError(error: string): this {
+		this._editIntentParseError = error;
+		return this;
+	}
+
+	private _nDiffsInPrompt: number | undefined;
+	public setNDiffsInPrompt(n: number): this {
+		this._nDiffsInPrompt = n;
+		return this;
+	}
+
+	private _diffTokensInPrompt: number | undefined;
+	public setDiffTokensInPrompt(n: number): this {
+		this._diffTokensInPrompt = n;
+		return this;
+	}
+
+	private _lintErrors: string | undefined;
+	public setLintErrors(lintErrors: string): this {
+		this._lintErrors = lintErrors;
+		return this;
+	}
+
+	private _terminalOutput: string | undefined;
+	public setTerminalOutput(terminalOutput: string): this {
+		this._terminalOutput = terminalOutput;
+		return this;
+	}
+
+	private _similarFilesContext: Promise<string | undefined> | undefined;
+	public setSimilarFilesContext(similarFilesContext: Promise<string | undefined>): this {
+		this._similarFilesContext = similarFilesContext;
+		return this;
+	}
+
+	private _modelConfig: string | undefined;
+	public setModelConfig(modelConfig: string): this {
+		this._modelConfig = modelConfig;
 		return this;
 	}
 }

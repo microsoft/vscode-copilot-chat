@@ -6,11 +6,11 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type * as vscode from 'vscode';
 import { ConfigKey } from '../../../../platform/configuration/common/configurationService';
-import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/test/common/defaultsOnlyConfigurationService';
+import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { IIgnoreService, NullIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { DocumentFilter } from '../../vscode-node/parts/vscodeWorkspace';
+import { DocumentFilter } from '../../vscode-node/parts/documentFilter';
 
 describe('DocumentFilter', () => {
 
@@ -39,7 +39,7 @@ describe('DocumentFilter', () => {
 
 	it('can react to copilot.enable config changes for off-by-default language id', async () => {
 		const defaultsConfigService = new DefaultsOnlyConfigurationService();
-		const defaultConfig = defaultsConfigService.getConfig(ConfigKey.Shared.Enable);
+		const defaultConfig = defaultsConfigService.getConfig(ConfigKey.Enable);
 		const configService = new InMemoryConfigurationService(defaultsConfigService);
 		const documentFilter = new DocumentFilter(ignoreService, configService);
 		const doc = createDoc('markdown');
@@ -47,7 +47,7 @@ describe('DocumentFilter', () => {
 		const isEnabled0 = await documentFilter.isTrackingEnabled(doc);
 		expect(isEnabled0).toBe(false);
 
-		configService.setConfig(ConfigKey.Shared.Enable, {
+		configService.setConfig(ConfigKey.Enable, {
 			...defaultConfig,
 			'markdown': true,
 		});
@@ -58,10 +58,10 @@ describe('DocumentFilter', () => {
 
 	it('can react to copilot.enable config changes for javascript', async () => {
 		const defaultsConfigService = new DefaultsOnlyConfigurationService();
-		const defaultConfig = defaultsConfigService.getConfig(ConfigKey.Shared.Enable);
+		const defaultConfig = defaultsConfigService.getConfig(ConfigKey.Enable);
 		const configService = new InMemoryConfigurationService(defaultsConfigService, new Map(
 			[
-				[ConfigKey.Shared.Enable, {
+				[ConfigKey.Enable, {
 					...defaultConfig,
 					[js]: false,
 				}],
@@ -73,7 +73,7 @@ describe('DocumentFilter', () => {
 		const isEnabled0 = await documentFilter.isTrackingEnabled(doc);
 		expect(isEnabled0).toBe(false);
 
-		configService.setConfig(ConfigKey.Shared.Enable, {
+		configService.setConfig(ConfigKey.Enable, {
 			...defaultConfig,
 			[js]: true,
 		});

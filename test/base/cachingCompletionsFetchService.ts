@@ -10,19 +10,20 @@ import { IAuthenticationService } from '../../src/platform/authentication/common
 import * as fetcher from '../../src/platform/nesFetch/common/completionsFetchService';
 import { ResponseStream } from '../../src/platform/nesFetch/common/responseStream';
 import { CompletionsFetchService, FetchResponse, IFetchRequestParams } from '../../src/platform/nesFetch/node/completionsFetchServiceImpl';
+import { getRequestId } from '../../src/platform/networking/common/fetch';
 import { IFetcherService } from '../../src/platform/networking/common/fetcherService';
+import { IRequestLogger } from '../../src/platform/requestLogger/node/requestLogger';
+import { LockMap } from '../../src/util/common/lock';
 import { Result } from '../../src/util/common/result';
 import { AsyncIterableObject, DeferredPromise, IThrottledWorkerOptions, ThrottledWorker } from '../../src/util/vs/base/common/async';
 import { CachedFunction } from '../../src/util/vs/base/common/cache';
 import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
-import { IJSONOutputPrinter } from '../jsonOutputPrinter';
-import { InterceptedRequest, ISerialisedChatResponse, OutputType } from '../simulation/shared/sharedTypes';
-
-import { LockMap } from '../../src/util/common/lock';
 import { assertType } from '../../src/util/vs/base/common/types';
 import { OPENAI_FETCHER_CACHE_SALT } from '../cacheSalt';
+import { IJSONOutputPrinter } from '../jsonOutputPrinter';
+import { InterceptedRequest, ISerialisedChatResponse, OutputType } from '../simulation/shared/sharedTypes';
 import { CachedResponseMetadata, CachedTestInfo } from './cachingChatMLFetcher';
-import { ICacheableCompletionsResponse, ICompletionsCache } from './completionsCache';
+import { emptyFetcherResponse, ICacheableCompletionsResponse, ICompletionsCache } from './completionsCache';
 import { computeSHA256 } from './hash';
 import { CacheMode } from './simulationContext';
 import { FetchRequestCollector } from './spyingChatMLFetcher';
@@ -32,7 +33,7 @@ export class CacheableCompletionRequest {
 	readonly hash: string;
 	private readonly obj: unknown;
 
-	constructor(url: string, options: fetcher.FetchOptions) {
+	constructor(url: string, options: fetcher.Completions.Internal.FetchOptions) {
 		const cacheSalt = OPENAI_FETCHER_CACHE_SALT.getByUrl(url);
 		this.obj = { url, body: options.body };
 		this.hash = computeSHA256(cacheSalt + JSON.stringify(this.obj));
@@ -76,11 +77,12 @@ export class CachingCompletionsFetchService extends CompletionsFetchService {
 		@IJSONOutputPrinter private readonly jsonOutputPrinter: IJSONOutputPrinter,
 		@IAuthenticationService authService: IAuthenticationService,
 		@IFetcherService fetcherService: IFetcherService,
+		@IRequestLogger requestLogger: IRequestLogger,
 	) {
-		super(authService, fetcherService);
+		super(authService, fetcherService, requestLogger);
 	}
 
-	public override async fetch(url: string, secretKey: string, params: IFetchRequestParams, requestId: string, ct: CancellationToken, headerOverrides?: Record<string, string>): Promise<Result<ResponseStream, fetcher.CompletionsFetchFailure>> {
+	public override async fetch(url: string, secretKey: string, params: IFetchRequestParams, requestId: string, ct: CancellationToken, headerOverrides?: Record<string, string>): Promise<Result<ResponseStream, fetcher.Completions.CompletionsFetchFailure>> {
 		const interceptedRequest = new DeferredPromise<InterceptedRequest>();
 		this.requestCollector.addInterceptedRequest(interceptedRequest.p);
 		const r = await super.fetch(url, secretKey, params, requestId, ct, headerOverrides);
@@ -145,9 +147,9 @@ export class CachingCompletionsFetchService extends CompletionsFetchService {
 
 	protected override async _fetchFromUrl(
 		url: string,
-		options: fetcher.FetchOptions,
+		options: fetcher.Completions.Internal.FetchOptions,
 		ct: CancellationToken
-	): Promise<Result<FetchResponse, fetcher.CompletionsFetchFailure>> {
+	): Promise<Result<FetchResponse, fetcher.Completions.CompletionsFetchFailure>> {
 
 		const request = new CacheableCompletionRequest(url, options);
 
@@ -164,13 +166,7 @@ export class CachingCompletionsFetchService extends CompletionsFetchService {
 			}
 
 			if (this.cacheMode === CacheMode.Require) {
-				console.log(JSON.stringify(options.body, (key, value) => {
-					if (typeof value === 'string') {
-						const split = value.split(/\n/g);
-						return split.length > 1 ? split : value;
-					}
-					return value;
-				}, 4));
+				prettyPrintJsonEncodedObject(options.body);
 				await this.throwCacheMissing(request);
 			}
 
@@ -178,13 +174,7 @@ export class CachingCompletionsFetchService extends CompletionsFetchService {
 				this.requests.set(options.requestId, { request, hitsCache: false });
 			} catch (err) {
 				if (/Key already exists/.test(err.message)) {
-					console.log(JSON.stringify(options.body, (key, value) => {
-						if (typeof value === 'string') {
-							const split = value.split(/\n/g);
-							return split.length > 1 ? split : value;
-						}
-						return value;
-					}, 4));
+					prettyPrintJsonEncodedObject(options.body);
 					console.log(`\n✗ ${err.message}`);
 					await drainStdoutAndExit(1);
 				}
@@ -198,20 +188,22 @@ export class CachingCompletionsFetchService extends CompletionsFetchService {
 	private async _fetchFromUrlAndCache(
 		request: CacheableCompletionRequest,
 		url: string,
-		options: fetcher.FetchOptions,
+		options: fetcher.Completions.Internal.FetchOptions,
 		ct: CancellationToken,
-	): Promise<Result<FetchResponse, fetcher.CompletionsFetchFailure>> {
+	): Promise<Result<FetchResponse, fetcher.Completions.CompletionsFetchFailure>> {
 
 		const throttler = CachingCompletionsFetchService.throttlers.get(url);
 
 		let startTime: number | undefined;
-		const fetchResult: Result<FetchResponse, fetcher.CompletionsFetchFailure> =
+		const fetchResult: Result<FetchResponse, fetcher.Completions.CompletionsFetchFailure> =
 			this.isNoFetchModeEnabled
 				? Result.ok({
+					requestId: getRequestId(new Headers()),
 					status: 200,
 					statusText: '',
-					headers: {},
+					headers: new Headers(),
 					body: AsyncIterableObject.fromArray(['']),
+					response: emptyFetcherResponse(new Headers()),
 				} satisfies FetchResponse)
 				: await new Promise((resolve, reject) => {
 					throttler.work([
@@ -292,4 +284,20 @@ function inventModelFromURI(uri: string): string | undefined {
 	}
 	const secondLastSlash = uri.lastIndexOf('/', lastSlash - 1);
 	return uri.substring(secondLastSlash + 1);
+}
+
+function prettyPrintJsonEncodedObject(obj: string) {
+	console.log(
+		JSON.stringify(
+			JSON.parse(obj, (key, value) => {
+				if (typeof value === 'string') {
+					const split = value.split(/\n/g);
+					return split.length > 1 ? split : value;
+				}
+				return value;
+			}),
+			null,
+			4
+		)
+	);
 }

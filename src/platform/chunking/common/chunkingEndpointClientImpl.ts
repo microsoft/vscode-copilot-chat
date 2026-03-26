@@ -4,25 +4,21 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { RequestType } from '@vscode/copilot-api';
-import { createRequestHMAC } from '../../../util/common/crypto';
 import { CallTracker } from '../../../util/common/telemetryCorrelationId';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { DeferredPromise, raceCancellationError, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { Lazy } from '../../../util/vs/base/common/lazy';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { LinkedList } from '../../../util/vs/base/common/linkedList';
-import { env } from '../../../util/vs/base/common/process';
 import { isFalsyOrWhitespace } from '../../../util/vs/base/common/strings';
 import { Range } from '../../../util/vs/editor/common/core/range';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Embedding, EmbeddingType, EmbeddingVector } from '../../embeddings/common/embeddingsComputer';
-import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
+import { getGithubMetadataHeaders } from '../../github/common/githubApiFetcherService';
 import { logExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
-import { IFetcherService, Response } from '../../networking/common/fetcherService';
+import { Response } from '../../networking/common/fetcherService';
 import { postRequest } from '../../networking/common/networking';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -81,7 +77,7 @@ class RequestRateLimiter extends Disposable {
 	) {
 		super();
 
-		this._maxParallelChunksRequests = experimentationService.getTreatmentVariable<number>('vscode', 'workspace.embeddingIndex.maxParallelChunksRequests') ?? 8;
+		this._maxParallelChunksRequests = experimentationService.getTreatmentVariable<number>('workspace.embeddingIndex.maxParallelChunksRequests') ?? 8;
 	}
 
 	public enqueue(task: RequestTask, token: CancellationToken): Promise<Response> {
@@ -296,21 +292,16 @@ export class ChunkingEndpointClientImpl extends Disposable implements IChunkingE
 	 */
 	private readonly _requestLimiter: RequestRateLimiter;
 
-	private readonly _requestHmac = new Lazy(() => createRequestHMAC(env.HMAC_SECRET));
-
 	constructor(
-		@IInstantiationService instantiationService: IInstantiationService,
-		@IDomainService private readonly _domainService: IDomainService,
-		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IEnvService private readonly _envService: IEnvService,
-		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@ILogService private readonly _logService: ILogService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 	) {
 		super();
 
-		this._requestLimiter = this._register(instantiationService.createInstance(RequestRateLimiter));
+		this._requestLimiter = this._register(this._instantiationService.createInstance(RequestRateLimiter));
 	}
 
 	public computeChunks(authToken: string, embeddingType: EmbeddingType, content: ChunkableContent, batchInfo: ComputeBatchInfo, qos: EmbeddingsComputeQos, cache: ReadonlyMap<string, FileChunkWithEmbedding> | undefined, telemetryInfo: CallTracker, token: CancellationToken): Promise<readonly FileChunkWithOptionalEmbedding[] | undefined> {
@@ -341,21 +332,13 @@ export class ChunkingEndpointClientImpl extends Disposable implements IChunkingE
 		}
 
 		try {
-			const hmac = await raceCancellationError(this._requestHmac.value, token);
-
 			const makeRequest = async (attempt: number) => {
-				return logExecTime(this._logService, `ChunksEndpointEmbeddingComputer.fetchChunksRequest(${content.uri}, attempt=${attempt})`, () => postRequest(
-					this._fetcherService,
-					this._envService,
-					this._telemetryService,
-					this._domainService,
-					this._capiClientService,
-					{ type: RequestType.Chunks },
-					authToken,
-					hmac,
-					'copilot-panel',
-					'',
-					{
+				return logExecTime(this._logService, `ChunksEndpointEmbeddingComputer.fetchChunksRequest(${content.uri}, attempt=${attempt})`, () => this._instantiationService.invokeFunction(postRequest, {
+					endpointOrUrl: { type: RequestType.Chunks },
+					secretKey: authToken,
+					intent: 'copilot-panel',
+					requestId: '',
+					body: {
 						embed: options.computeEmbeddings,
 						// Only to online set during re-ranking step
 						qos: options.qos,
@@ -373,8 +356,9 @@ export class ChunkingEndpointClientImpl extends Disposable implements IChunkingE
 						language_id: number | undefined;
 						embedding_model: string;
 					} as any,
-					getGithubMetadataHeaders(telemetryInfo, this._envService),
-					token));
+					additionalHeaders: getGithubMetadataHeaders(telemetryInfo, this._envService),
+					cancelToken: token,
+				}));
 			};
 
 			batchInfo.recomputedFileCount++;
@@ -461,20 +445,4 @@ export class ChunkingEndpointClientImpl extends Disposable implements IChunkingE
 			return undefined;
 		}
 	}
-}
-
-export function getGithubMetadataHeaders(callerInfo: CallTracker, envService: IEnvService): Record<string, string> | undefined {
-	const editorInfo = envService.getEditorInfo();
-
-	// Try converting vscode/1.xxx-insiders to vscode-insiders/1.xxx
-	const versionNumberAndSubName = editorInfo.version.match(/^(?<version>.+?)(\-(?<subName>\w+?))?$/);
-	const application = versionNumberAndSubName && versionNumberAndSubName.groups?.subName
-		? `${editorInfo.name}-${versionNumberAndSubName.groups.subName}/${versionNumberAndSubName.groups.version}`
-		: editorInfo.format();
-
-	return {
-		'X-Client-Application': application,
-		'X-Client-Source': envService.getEditorPluginInfo().format(),
-		'X-Client-Feature': callerInfo.toAscii().slice(0, 1000),
-	};
 }

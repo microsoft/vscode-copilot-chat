@@ -321,6 +321,9 @@ function reportEditSurvivalEvent(res: EditSurvivalResult, { requestId, speculati
 		chatRequestModel,
 		mapper,
 		currentFileContent: res.currentFileContent,
+		textBeforeAiEdits: res.textBeforeAiEdits ? JSON.stringify(res.textBeforeAiEdits) : undefined,
+		textAfterAiEdits: res.textAfterAiEdits ? JSON.stringify(res.textAfterAiEdits) : undefined,
+		textAfterUserEdits: res.textAfterUserEdits ? JSON.stringify(res.textAfterUserEdits) : undefined,
 	}, {
 		survivalRateFourGram: res.fourGram,
 		survivalRateNoRevert: res.noRevert,

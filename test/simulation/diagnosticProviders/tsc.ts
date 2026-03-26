@@ -80,34 +80,34 @@ declare module '*'  {
 			let tsConfig: any;
 			if (this.ignoreImportErrors) {
 				tsConfig = {
-					"compilerOptions": {
-						"target": "es2021",
-						"strict": true,
-						"module": "commonjs",
-						"outDir": "out",
-						"sourceMap": false,
-						"useDefineForClassFields": false,
-						"experimentalDecorators": true,
+					'compilerOptions': {
+						'target': 'es2021',
+						'strict': true,
+						'module': 'commonjs',
+						'outDir': 'out',
+						'sourceMap': false,
+						'useDefineForClassFields': false,
+						'experimentalDecorators': true,
 					},
-					"exclude": [
-						"node_modules",
-						"outcome",
-						"scenarios"
+					'exclude': [
+						'node_modules',
+						'outcome',
+						'scenarios'
 					]
 				};
 			} else {
 				tsConfig = {
-					"compilerOptions": {
-						"target": "es2021",
-						"strict": true,
-						"module": "commonjs",
-						"outDir": "out",
-						"sourceMap": true
+					'compilerOptions': {
+						'target': 'es2021',
+						'strict': true,
+						'module': 'commonjs',
+						'outDir': 'out',
+						'sourceMap': true
 					},
-					"exclude": [
-						"node_modules",
-						"outcome",
-						"scenarios"
+					'exclude': [
+						'node_modules',
+						'outcome',
+						'scenarios'
 					]
 				};
 			}
@@ -149,25 +149,25 @@ declare module '*'  {
 
 			for (const file of files) {
 				writeRequest({
-					"type": "request",
-					"command": "open",
-					"arguments": { "file": file.filePath }
+					'type': 'request',
+					'command': 'open',
+					'arguments': { 'file': file.filePath }
 				});
 			}
 			for (const file of files) {
 				seqToFile.set(seq, file.fileName);
 				writeRequest({
-					"type": "request",
-					"command": "syntacticDiagnosticsSync",
-					"arguments": { "file": file.filePath }
+					'type': 'request',
+					'command': 'syntacticDiagnosticsSync',
+					'arguments': { 'file': file.filePath }
 				});
 			}
 			for (const file of files) {
 				seqToFile.set(seq, file.fileName);
 				writeRequest({
-					"type": "request",
-					"command": "semanticDiagnosticsSync",
-					"arguments": { "file": file.filePath }
+					'type': 'request',
+					'command': 'semanticDiagnosticsSync',
+					'arguments': { 'file': file.filePath }
 				});
 			}
 			tsserver.on('error', reject);
@@ -219,8 +219,8 @@ declare module '*'  {
 
 				if (diagResp.request_seq === seq - 1) {
 					writeRequest({
-						"type": "request",
-						"command": "exit",
+						'type': 'request',
+						'command': 'exit',
 					});
 					tsserver.on('exit', () => {
 						resolve(results);

@@ -138,13 +138,14 @@ export interface ICodeContextInfo {
 	above: CodeContextRegion;
 	range: CodeContextRegion;
 	below: CodeContextRegion;
-}export class CopilotInteractiveEditorResponse {
+}
+
+export class CopilotInteractiveEditorResponse {
 	constructor(
-		public readonly kind: 'ok',
-		public readonly store: ISessionTurnStorage | undefined,
-		public readonly promptQuery: PromptQuery,
-		public readonly messageId: string,
-		public readonly telemetry: ChatTelemetry | undefined,
-		public readonly editSurvivalTracker: IEditSurvivalTrackingSession
+		readonly store: ISessionTurnStorage | undefined,
+		readonly promptQuery: PromptQuery,
+		readonly messageId: string,
+		readonly telemetry: ChatTelemetry | undefined,
+		readonly editSurvivalTracker: IEditSurvivalTrackingSession
 	) { }
 }

@@ -10,6 +10,7 @@ import { VSCodeFileSystemService } from '../../filesystem/vscode/fileSystemServi
 import { IGitExtensionService } from '../../git/common/gitExtensionService';
 import { IGitService } from '../../git/common/gitService';
 import { ILogService } from '../../log/common/logService';
+import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { BaseSearchServiceImpl } from '../../search/vscode/baseSearchServiceImpl';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
 import { BaseIgnoreService } from '../node/ignoreServiceImpl';
@@ -23,7 +24,8 @@ export class VsCodeIgnoreService extends BaseIgnoreService {
 		@ILogService _logService: ILogService,
 		@IAuthenticationService _authService: IAuthenticationService,
 		@IWorkspaceService _workspaceService: IWorkspaceService,
-		@ICAPIClientService _capiClientService: ICAPIClientService
+		@ICAPIClientService _capiClientService: ICAPIClientService,
+		@IRequestLogger _requestLogger: IRequestLogger
 	) {
 		super(
 			_gitService,
@@ -32,7 +34,8 @@ export class VsCodeIgnoreService extends BaseIgnoreService {
 			_workspaceService,
 			_capiClientService,
 			new BaseSearchServiceImpl(),
-			new VSCodeFileSystemService()
+			new VSCodeFileSystemService(),
+			_requestLogger
 		);
 		this.installListeners();
 	}

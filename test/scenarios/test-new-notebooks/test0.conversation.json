@@ -1,6 +1,6 @@
 [
   {
-    "question": "@workspace /newNotebook load csv to dataframe",
+    "question": "/newNotebook load csv to dataframe",
     "stateFile": "./workspaceState.state.json",
     "generateFollowups": true
   }

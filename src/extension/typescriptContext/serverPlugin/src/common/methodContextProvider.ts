@@ -9,7 +9,7 @@ const ts = TS();
 import { FunctionLikeContextProvider, FunctionLikeContextRunnable } from './baseContextProviders';
 import { CodeSnippetBuilder } from './code';
 import {
-	AbstractContextRunnable, ComputeCost, ContextResult, Search, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext,
+	AbstractContextRunnable, ComputeCost, ContextResult, Search, SnippetLocation, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext,
 	type RunnableResult
 } from './contextProvider';
 import { EmitMode, Priorities, SpeculativeKind, type CacheInfo } from './protocol';
@@ -449,9 +449,9 @@ abstract class SimilarPropertyRunnable<T extends tt.MethodDeclaration | tt.Const
 					return;
 				}
 				const sourceFile = this.declaration.getSourceFile();
-				const snippetBuilder = new CodeSnippetBuilder(this.session, this.context.getSymbols(program), sourceFile);
+				const snippetBuilder = new CodeSnippetBuilder(this.context, this.context.getSymbols(program), sourceFile);
 				snippetBuilder.addDeclaration(candidate);
-				result.addSnippet(snippetBuilder, undefined);
+				result.addSnippet(snippetBuilder, this.location, undefined);
 			}
 		}
 	}
@@ -511,7 +511,7 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 	private readonly declaration: tt.MethodDeclaration | tt.ConstructorDeclaration | tt.GetAccessorDeclaration | tt.SetAccessorDeclaration;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, declaration: tt.MethodDeclaration | tt.ConstructorDeclaration | tt.GetAccessorDeclaration | tt.SetAccessorDeclaration, priority: number = Priorities.Properties) {
-		super(session, languageService, context, 'PropertiesTypeRunnable', priority, ComputeCost.Medium);
+		super(session, languageService, context, 'PropertiesTypeRunnable', SnippetLocation.Secondary, priority, ComputeCost.Medium);
 		this.declaration = declaration;
 	}
 
@@ -528,16 +528,11 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 		// We could consider object literals here as well. However they don't usually have a this
 		// and all things a public in an literal. So we skip them for now.
 		const containerDeclaration = this.declaration.parent;
-		const isClassDeclaration = ts.isClassDeclaration(containerDeclaration);
-		if (!isClassDeclaration) {
+		if (!ts.isClassDeclaration(containerDeclaration)) {
 			return;
 		}
 		const program = this.getProgram();
 		const symbols = this.context.getSymbols(program);
-		const methodSymbol = symbols.getLeafSymbolAtLocation(this.declaration.name ? this.declaration.name : this.declaration);
-		if (methodSymbol === undefined || !Symbols.isMethod(methodSymbol)) {
-			return;
-		}
 		const containerSymbol = symbols.getLeafSymbolAtLocation(containerDeclaration.name ? containerDeclaration.name : containerDeclaration);
 		if (containerSymbol === undefined || !Symbols.isClass(containerSymbol)) {
 			return;
@@ -545,9 +540,6 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 		if (containerSymbol.members !== undefined) {
 			for (const member of containerSymbol.members.values()) {
 				token.throwIfCancellationRequested();
-				if (member === methodSymbol) {
-					continue;
-				}
 				if (!this.handleMember(result, member, symbols, ts.ModifierFlags.Private | ts.ModifierFlags.Protected)) {
 					return;
 				}
@@ -561,7 +553,7 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 			}
 			for (const member of type.members.values()) {
 				token.throwIfCancellationRequested();
-				if (!this.handleMember(result, member, symbols, ts.ModifierFlags.Protected)) {
+				if (!this.handleMember(result, member, symbols, ts.ModifierFlags.Public | ts.ModifierFlags.Protected)) {
 					return;
 				}
 			}

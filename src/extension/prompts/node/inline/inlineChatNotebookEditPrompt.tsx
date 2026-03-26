@@ -176,7 +176,7 @@ export class InlineChatNotebookEditPrompt extends PromptElement<InlineChatEditCo
 			sizing.endpoint.modelMaxPromptTokens / 3 // consume one 3rd of the model window
 		);
 
-		const isTagBasedDocumentSummary = this.experimentationService.getTreatmentVariable<boolean>('vscode', 'copilotchat.tagBasedDocumentSummary') ?? false;
+		const isTagBasedDocumentSummary = this.experimentationService.getTreatmentVariable<boolean>('copilotchat.tagBasedDocumentSummary') ?? false;
 
 		return {
 			notebook,

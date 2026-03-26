@@ -11,11 +11,38 @@ export class MockChatMLFetcher implements IChatMLFetcher {
 	_serviceBrand: undefined;
 	onDidMakeChatMLRequest = Event.None;
 
+	private _nextResponse: ChatResponse = {
+		type: ChatFetchResponseType.Success,
+		requestId: 'test-request-id',
+		serverRequestId: 'test-server-request-id',
+		usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } },
+		value: '10',
+		resolvedModel: 'test-model'
+	};
+
+	setNextResponse(response: ChatResponse): void {
+		this._nextResponse = response;
+	}
+
 	async fetchOne(): Promise<ChatResponse> {
-		return { type: ChatFetchResponseType.Success, requestId: '', serverRequestId: '', usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } }, value: '' } satisfies ChatResponse;
+		return this.fetchMany().then(responses => {
+			if (responses.type === ChatFetchResponseType.Success) {
+				return {
+					...responses,
+					value: responses.value[0]
+				};
+			}
+			return responses;
+		});
 	}
 
 	async fetchMany(): Promise<ChatResponses> {
-		return { type: ChatFetchResponseType.Success, requestId: '', serverRequestId: '', usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } }, value: [''] } satisfies ChatResponses;
+		if (this._nextResponse.type === ChatFetchResponseType.Success) {
+			return {
+				...this._nextResponse,
+				value: [this._nextResponse.value]
+			};
+		}
+		return this._nextResponse;
 	}
 }

@@ -7,12 +7,12 @@ import * as assert from 'assert';
 import { Intent } from '../../src/extension/common/constants';
 import { InlineDocIntent } from '../../src/extension/intents/node/docIntent';
 import { ssuite, stest } from '../base/stest';
-import { forInlineAndInline2, simulateInlineChatWithStrategy } from '../simulation/inlineChatSimulator';
+import { forInline, simulateInlineChatWithStrategy } from '../simulation/inlineChatSimulator';
 import { assertLooksLikeJSDoc, assertNoSyntacticDiagnosticsAsync } from '../simulation/outcomeValidators';
 import { assertInlineEdit, assertInlineEditShape, fromFixture } from '../simulation/stestUtil';
 import { assertDocLines } from './slashDoc.util';
 
-forInlineAndInline2((strategy, nonExtensionConfigurations, suffix) => {
+forInline((strategy, nonExtensionConfigurations, suffix) => {
 
 	ssuite({ title: `/doc${suffix}`, location: 'inline', language: 'typescript' }, () => {
 

@@ -42,8 +42,16 @@ function findBestSymbol(
 				bestMatch = match;
 			}
 		} else { // Is a vscode.SymbolInformation
-			if (symbol.name === symbolParts[0]) {
-				bestMatch ??= { symbol, matchCount: 1 };
+			// For flat symbol information, try to match against symbol parts
+			// Prefer symbols that appear more to the right (higher index) in the qualified name
+			// This prioritizes members over classes (e.g., in `TextModel.undo()`, prefer `undo`)
+			const matchIndex = symbolParts.indexOf(symbol.name);
+			if (matchIndex !== -1) {
+				// Higher index = more to the right = higher priority
+				const match = { symbol, matchCount: matchIndex + 1 };
+				if (!bestMatch || match.matchCount > bestMatch.matchCount) {
+					bestMatch = match;
+				}
 			}
 		}
 	}

@@ -3,6 +3,7 @@
 exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns only has tool results from current turn 1`] = `
 {
   "codeBlocks": [],
+  "resolvedModel": "",
   "toolCallResults": {
     "tool_call_id_0__vscode-0": LanguageModelToolResult {
       "content": [
@@ -21,9 +22,15 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
   },
   "toolCallRounds": [
     ToolCallRound {
+      "compaction": undefined,
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 0",
       "statefulMarker": undefined,
+      "summary": undefined,
+      "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -34,9 +41,15 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "toolInputRetry": 0,
     },
     ToolCallRound {
+      "compaction": undefined,
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 1",
       "statefulMarker": undefined,
+      "summary": undefined,
+      "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -47,9 +60,15 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "toolInputRetry": 0,
     },
     ToolCallRound {
+      "compaction": undefined,
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 2",
       "statefulMarker": undefined,
+      "summary": undefined,
+      "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [],
       "toolInputRetry": 0,
     },
@@ -60,6 +79,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
 exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns only has tool results from current turn 2`] = `
 {
   "codeBlocks": [],
+  "resolvedModel": "",
   "toolCallResults": {
     "tool_call_id_2__vscode-2": LanguageModelToolResult {
       "content": [
@@ -78,9 +98,15 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
   },
   "toolCallRounds": [
     ToolCallRound {
+      "compaction": undefined,
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 3",
       "statefulMarker": undefined,
+      "summary": undefined,
+      "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -91,9 +117,15 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "toolInputRetry": 0,
     },
     ToolCallRound {
+      "compaction": undefined,
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 4",
       "statefulMarker": undefined,
+      "summary": undefined,
+      "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -104,9 +136,15 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "toolInputRetry": 0,
     },
     ToolCallRound {
+      "compaction": undefined,
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 5",
       "statefulMarker": undefined,
+      "summary": undefined,
+      "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [],
       "toolInputRetry": 0,
     },
@@ -125,6 +163,7 @@ exports[`defaultIntentRequestHandler > avoids requests when handler return is nu
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "contextTypes": "none",
@@ -145,6 +184,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
   "metadata": {
     "codeBlocks": [],
     "maxToolCallsExceeded": true,
+    "resolvedModel": "",
     "toolCallResults": {
       "tool_call_id_0__vscode-0": LanguageModelToolResult {
         "content": [
@@ -177,9 +217,15 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     },
     "toolCallRounds": [
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 0",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -190,9 +236,15 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "toolInputRetry": 0,
       },
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 1",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -203,9 +255,15 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "toolInputRetry": 0,
       },
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 2",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -216,9 +274,15 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "toolInputRetry": 0,
       },
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 3",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -238,6 +302,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
   "metadata": {
     "codeBlocks": [],
     "maxToolCallsExceeded": true,
+    "resolvedModel": "",
     "toolCallResults": {
       "tool_call_id_4__vscode-4": LanguageModelToolResult {
         "content": [
@@ -270,9 +335,15 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     },
     "toolCallRounds": [
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 4",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -283,9 +354,15 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "toolInputRetry": 0,
       },
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 5",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -296,9 +373,15 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "toolInputRetry": 0,
       },
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 6",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -309,9 +392,15 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "toolInputRetry": 0,
       },
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 7",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -329,92 +418,28 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
 exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and continues to iterate 3`] = `
 [
   ChatResponseMarkdownPart {
-    "value": MarkdownString {
-      "delegate": MarkdownString {
-        "baseUri": undefined,
-        "isTrusted": undefined,
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "response number ",
-      },
-    },
+    "value": MarkdownString {},
   },
   ChatResponseMarkdownPart {
-    "value": MarkdownString {
-      "delegate": MarkdownString {
-        "baseUri": undefined,
-        "isTrusted": undefined,
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "0",
-      },
-    },
+    "value": MarkdownString {},
   },
   ChatResponseMarkdownPart {
-    "value": MarkdownString {
-      "delegate": MarkdownString {
-        "baseUri": undefined,
-        "isTrusted": undefined,
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "response number ",
-      },
-    },
+    "value": MarkdownString {},
   },
   ChatResponseMarkdownPart {
-    "value": MarkdownString {
-      "delegate": MarkdownString {
-        "baseUri": undefined,
-        "isTrusted": undefined,
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "1",
-      },
-    },
+    "value": MarkdownString {},
   },
   ChatResponseMarkdownPart {
-    "value": MarkdownString {
-      "delegate": MarkdownString {
-        "baseUri": undefined,
-        "isTrusted": undefined,
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "response number ",
-      },
-    },
+    "value": MarkdownString {},
   },
   ChatResponseMarkdownPart {
-    "value": MarkdownString {
-      "delegate": MarkdownString {
-        "baseUri": undefined,
-        "isTrusted": undefined,
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "2",
-      },
-    },
+    "value": MarkdownString {},
   },
   ChatResponseMarkdownPart {
-    "value": MarkdownString {
-      "delegate": MarkdownString {
-        "baseUri": undefined,
-        "isTrusted": undefined,
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "response number ",
-      },
-    },
+    "value": MarkdownString {},
   },
   ChatResponseMarkdownPart {
-    "value": MarkdownString {
-      "delegate": MarkdownString {
-        "baseUri": undefined,
-        "isTrusted": undefined,
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "3",
-      },
-    },
+    "value": MarkdownString {},
   },
   ChatResponseConfirmationPart {
     "buttons": [
@@ -424,107 +449,32 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     "data": {
       "copilotRequestedRoundLimit": 5,
     },
-    "message": MarkdownString {
-      "delegate": MarkdownString {
-        "isTrusted": {
-          "enabledCommands": [
-            "workbench.action.openSettings",
-          ],
-        },
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "Copilot has been working on this problem for a while. It can continue to iterate, or you can send a new message to refine your prompt. [Configure max requests](command:workbench.action.openSettings?%5B%22chat.agent.maxRequests%22%5D).",
-      },
-    },
+    "message": MarkdownString {},
     "title": "Continue to iterate?",
   },
   ChatResponseMarkdownPart {
-    "value": MarkdownString {
-      "delegate": MarkdownString {
-        "baseUri": undefined,
-        "isTrusted": undefined,
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "response number ",
-      },
-    },
+    "value": MarkdownString {},
   },
   ChatResponseMarkdownPart {
-    "value": MarkdownString {
-      "delegate": MarkdownString {
-        "baseUri": undefined,
-        "isTrusted": undefined,
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "4",
-      },
-    },
+    "value": MarkdownString {},
   },
   ChatResponseMarkdownPart {
-    "value": MarkdownString {
-      "delegate": MarkdownString {
-        "baseUri": undefined,
-        "isTrusted": undefined,
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "response number ",
-      },
-    },
+    "value": MarkdownString {},
   },
   ChatResponseMarkdownPart {
-    "value": MarkdownString {
-      "delegate": MarkdownString {
-        "baseUri": undefined,
-        "isTrusted": undefined,
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "5",
-      },
-    },
+    "value": MarkdownString {},
   },
   ChatResponseMarkdownPart {
-    "value": MarkdownString {
-      "delegate": MarkdownString {
-        "baseUri": undefined,
-        "isTrusted": undefined,
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "response number ",
-      },
-    },
+    "value": MarkdownString {},
   },
   ChatResponseMarkdownPart {
-    "value": MarkdownString {
-      "delegate": MarkdownString {
-        "baseUri": undefined,
-        "isTrusted": undefined,
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "6",
-      },
-    },
+    "value": MarkdownString {},
   },
   ChatResponseMarkdownPart {
-    "value": MarkdownString {
-      "delegate": MarkdownString {
-        "baseUri": undefined,
-        "isTrusted": undefined,
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "response number ",
-      },
-    },
+    "value": MarkdownString {},
   },
   ChatResponseMarkdownPart {
-    "value": MarkdownString {
-      "delegate": MarkdownString {
-        "baseUri": undefined,
-        "isTrusted": undefined,
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "7",
-      },
-    },
+    "value": MarkdownString {},
   },
   ChatResponseConfirmationPart {
     "buttons": [
@@ -534,18 +484,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     "data": {
       "copilotRequestedRoundLimit": 5,
     },
-    "message": MarkdownString {
-      "delegate": MarkdownString {
-        "isTrusted": {
-          "enabledCommands": [
-            "workbench.action.openSettings",
-          ],
-        },
-        "supportHtml": false,
-        "supportThemeIcons": false,
-        "value": "Copilot has been working on this problem for a while. It can continue to iterate, or you can send a new message to refine your prompt. [Configure max requests](command:workbench.action.openSettings?%5B%22chat.agent.maxRequests%22%5D).",
-      },
-    },
+    "message": MarkdownString {},
     "title": "Continue to iterate?",
   },
 ]
@@ -562,6 +501,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "contextTypes": "none",
@@ -705,6 +645,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "codeGenInstructionsCount": 0,
         "codeGenInstructionsFilteredCount": 0,
         "codeGenInstructionsLength": 0,
+        "isAuto": -1,
+        "isBYOK": -1,
         "links": 0,
         "maybeOffTopic": 0,
         "messageTokenCount": 3,
@@ -712,28 +654,33 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
+        "summarizationEnabled": 1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
       "properties": {
+        "apiType": undefined,
         "codeBlocks": "",
         "command": "test",
         "contextTypes": "none",
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
-        "promptTypes": "1:1",
+        "parentRequestId": undefined,
+        "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -749,8 +696,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
@@ -769,6 +714,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -778,6 +724,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "intent": "test",
@@ -795,6 +742,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "contextTypes": "none",
@@ -938,6 +886,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "codeGenInstructionsCount": 0,
         "codeGenInstructionsFilteredCount": 0,
         "codeGenInstructionsLength": 0,
+        "isAuto": -1,
+        "isBYOK": -1,
         "links": 0,
         "maybeOffTopic": 0,
         "messageTokenCount": 3,
@@ -945,28 +895,33 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
+        "summarizationEnabled": 1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
       "properties": {
+        "apiType": undefined,
         "codeBlocks": "",
         "command": "test",
         "contextTypes": "none",
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
-        "promptTypes": "1:1",
+        "parentRequestId": undefined,
+        "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -982,8 +937,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
@@ -1002,6 +955,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -1011,6 +965,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "intent": "test",
@@ -1028,6 +983,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "contextTypes": "none",
@@ -1171,6 +1127,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "codeGenInstructionsCount": 0,
         "codeGenInstructionsFilteredCount": 0,
         "codeGenInstructionsLength": 0,
+        "isAuto": -1,
+        "isBYOK": -1,
         "links": 0,
         "maybeOffTopic": 0,
         "messageTokenCount": 3,
@@ -1178,28 +1136,33 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
+        "summarizationEnabled": 1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
       "properties": {
+        "apiType": undefined,
         "codeBlocks": "",
         "command": "test",
         "contextTypes": "none",
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
-        "promptTypes": "1:1",
+        "parentRequestId": undefined,
+        "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -1215,8 +1178,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
@@ -1235,6 +1196,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -1244,6 +1206,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "intent": "test",
@@ -1261,6 +1224,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "contextTypes": "none",
@@ -1404,6 +1368,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "codeGenInstructionsCount": 0,
         "codeGenInstructionsFilteredCount": 0,
         "codeGenInstructionsLength": 0,
+        "isAuto": -1,
+        "isBYOK": -1,
         "links": 0,
         "maybeOffTopic": 0,
         "messageTokenCount": 3,
@@ -1411,28 +1377,33 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
+        "summarizationEnabled": 1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
       "properties": {
+        "apiType": undefined,
         "codeBlocks": "",
         "command": "test",
         "contextTypes": "none",
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
-        "promptTypes": "1:1",
+        "parentRequestId": undefined,
+        "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -1448,8 +1419,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
@@ -1468,6 +1437,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -1477,6 +1447,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "intent": "test",
@@ -1544,6 +1515,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "contextTypes": "none",
@@ -1687,6 +1659,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "codeGenInstructionsCount": 0,
         "codeGenInstructionsFilteredCount": 0,
         "codeGenInstructionsLength": 0,
+        "isAuto": -1,
+        "isBYOK": -1,
         "links": 0,
         "maybeOffTopic": 0,
         "messageTokenCount": 3,
@@ -1694,28 +1668,33 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
+        "summarizationEnabled": 1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
       "properties": {
+        "apiType": undefined,
         "codeBlocks": "",
         "command": "test",
         "contextTypes": "none",
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
-        "promptTypes": "1:1",
+        "parentRequestId": undefined,
+        "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -1731,8 +1710,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
@@ -1751,6 +1728,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -1760,6 +1738,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "intent": "test",
@@ -1777,6 +1756,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "contextTypes": "none",
@@ -1920,6 +1900,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "codeGenInstructionsCount": 0,
         "codeGenInstructionsFilteredCount": 0,
         "codeGenInstructionsLength": 0,
+        "isAuto": -1,
+        "isBYOK": -1,
         "links": 0,
         "maybeOffTopic": 0,
         "messageTokenCount": 3,
@@ -1927,28 +1909,33 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
+        "summarizationEnabled": 1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
       "properties": {
+        "apiType": undefined,
         "codeBlocks": "",
         "command": "test",
         "contextTypes": "none",
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
-        "promptTypes": "1:1",
+        "parentRequestId": undefined,
+        "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -1964,8 +1951,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
@@ -1984,6 +1969,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -1993,6 +1979,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "intent": "test",
@@ -2010,6 +1997,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "contextTypes": "none",
@@ -2153,6 +2141,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "codeGenInstructionsCount": 0,
         "codeGenInstructionsFilteredCount": 0,
         "codeGenInstructionsLength": 0,
+        "isAuto": -1,
+        "isBYOK": -1,
         "links": 0,
         "maybeOffTopic": 0,
         "messageTokenCount": 3,
@@ -2160,28 +2150,33 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
+        "summarizationEnabled": 1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
       "properties": {
+        "apiType": undefined,
         "codeBlocks": "",
         "command": "test",
         "contextTypes": "none",
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
-        "promptTypes": "1:1",
+        "parentRequestId": undefined,
+        "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -2197,8 +2192,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
@@ -2217,6 +2210,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -2226,6 +2220,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "intent": "test",
@@ -2243,6 +2238,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "contextTypes": "none",
@@ -2386,6 +2382,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "codeGenInstructionsCount": 0,
         "codeGenInstructionsFilteredCount": 0,
         "codeGenInstructionsLength": 0,
+        "isAuto": -1,
+        "isBYOK": -1,
         "links": 0,
         "maybeOffTopic": 0,
         "messageTokenCount": 3,
@@ -2393,28 +2391,33 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
+        "summarizationEnabled": 1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
       "properties": {
+        "apiType": undefined,
         "codeBlocks": "",
         "command": "test",
         "contextTypes": "none",
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
-        "promptTypes": "1:1",
+        "parentRequestId": undefined,
+        "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -2430,8 +2433,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
@@ -2450,6 +2451,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -2459,6 +2461,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "intent": "test",
@@ -2527,12 +2530,19 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
 {
   "metadata": {
     "codeBlocks": [],
+    "resolvedModel": "",
     "toolCallResults": undefined,
     "toolCallRounds": [
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "some response here :)",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [],
         "toolInputRetry": 0,
       },
@@ -2552,6 +2562,7 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "contextTypes": "none",
@@ -2695,6 +2706,8 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "codeGenInstructionsCount": 0,
         "codeGenInstructionsFilteredCount": 0,
         "codeGenInstructionsLength": 0,
+        "isAuto": -1,
+        "isBYOK": -1,
         "links": 0,
         "maybeOffTopic": 0,
         "messageTokenCount": 3,
@@ -2702,28 +2715,33 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
+        "summarizationEnabled": 1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
       "properties": {
+        "apiType": undefined,
         "codeBlocks": "",
         "command": "test",
         "contextTypes": "none",
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
-        "promptTypes": "1:1",
+        "parentRequestId": undefined,
+        "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -2739,8 +2757,6 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
@@ -2759,6 +2775,7 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "requestId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -2768,6 +2785,7 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "intent": "test",
@@ -2836,6 +2854,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
 {
   "metadata": {
     "codeBlocks": [],
+    "resolvedModel": "",
     "toolCallResults": {
       "tool_call_id__vscode-0": LanguageModelToolResult {
         "content": [
@@ -2847,9 +2866,15 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
     },
     "toolCallRounds": [
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "some response here :)",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -2860,9 +2885,15 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
         "toolInputRetry": 0,
       },
       ToolCallRound {
+        "compaction": undefined,
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response to tool call",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [],
         "toolInputRetry": 0,
       },
@@ -2882,6 +2913,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "contextTypes": "none",
@@ -3025,6 +3057,8 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "codeGenInstructionsCount": 0,
         "codeGenInstructionsFilteredCount": 0,
         "codeGenInstructionsLength": 0,
+        "isAuto": -1,
+        "isBYOK": -1,
         "links": 0,
         "maybeOffTopic": 0,
         "messageTokenCount": 3,
@@ -3032,28 +3066,33 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
+        "summarizationEnabled": 1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
       "properties": {
+        "apiType": undefined,
         "codeBlocks": "",
         "command": "test",
         "contextTypes": "none",
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
-        "promptTypes": "1:1",
+        "parentRequestId": undefined,
+        "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -3069,8 +3108,6 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
@@ -3089,6 +3126,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "requestId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -3098,6 +3136,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "intent": "test",
@@ -3115,6 +3154,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "contextTypes": "none",
@@ -3258,6 +3298,8 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "codeGenInstructionsCount": 0,
         "codeGenInstructionsFilteredCount": 0,
         "codeGenInstructionsLength": 0,
+        "isAuto": -1,
+        "isBYOK": -1,
         "links": 0,
         "maybeOffTopic": 0,
         "messageTokenCount": 3,
@@ -3265,28 +3307,33 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
+        "summarizationEnabled": 1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
       "properties": {
+        "apiType": undefined,
         "codeBlocks": "",
         "command": "test",
         "contextTypes": "none",
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
-        "promptTypes": "1:1",
+        "parentRequestId": undefined,
+        "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -3302,8 +3349,6 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "promptTokenCount": 10,
         "responseTokenCount": 4,
         "round": 0,
-        "temporalCtxFileCount": -1,
-        "temporalCtxTotalCharCount": -1,
         "textBlocks": 1,
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
@@ -3322,6 +3367,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "requestId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -3331,6 +3377,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "turnNumber": 1,
       },
       "properties": {
+        "apiType": undefined,
         "baseModel": "gpt-4.1-2025-04-14",
         "chatLocation": "panel",
         "intent": "test",

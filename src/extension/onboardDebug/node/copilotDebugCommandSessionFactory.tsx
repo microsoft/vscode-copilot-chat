@@ -94,14 +94,14 @@ export class CopilotDebugCommandSessionFactory {
 			};
 
 			/* __GDPR__
-			"onboardDebug.configGenerated" : {
+			"onboardDebug.sessionConfigGenerated" : {
 				"owner": "connor4312",
 				"comment": "Reports a generated config for the copilot-debug command",
 				"binary": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Binary executed with the command" },
 				"debugType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Debug type generated" }
 			}
 			*/
-			this.telemetry.sendMSFTTelemetryEvent('onboardDebug.configGenerated', {
+			this.telemetry.sendMSFTTelemetryEvent('onboardDebug.sessionConfigGenerated', {
 				binary: args[0],
 				debugType: record.config.configurations[0].type,
 			});

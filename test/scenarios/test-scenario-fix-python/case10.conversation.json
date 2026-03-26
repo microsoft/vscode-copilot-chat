@@ -1,4 +1,4 @@
 [{
-  "question": "@workspace /fix",
+  "question": "/fix",
   "stateFile": "case10.state.json"
 }]

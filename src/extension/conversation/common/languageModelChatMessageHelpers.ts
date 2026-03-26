@@ -4,7 +4,15 @@
  *--------------------------------------------------------------------------------------------*/
 
 
-import { ChatImageMimeType, LanguageModelDataPart } from '../../../vscodeTypes';
+import { LanguageModelDataPart } from '../../../vscodeTypes';
+
+export enum ChatImageMimeType {
+	PNG = 'image/png',
+	JPEG = 'image/jpeg',
+	GIF = 'image/gif',
+	WEBP = 'image/webp',
+	BMP = 'image/bmp',
+}
 
 export function isImageDataPart(part: unknown): part is LanguageModelDataPart {
 	if (part instanceof LanguageModelDataPart && isChatImageMimeType(part.mimeType)) {

@@ -19,7 +19,7 @@ import type * as vscodeType from 'vscode';
 import { SimpleRPC } from '../src/extension/onboardDebug/node/copilotDebugWorker/rpc';
 import { ISimulationModelConfig, createExtensionUnitTestingServices } from '../src/extension/test/node/services';
 import { CHAT_MODEL } from '../src/platform/configuration/common/configurationService';
-import { IEndpointProvider } from '../src/platform/endpoint/common/endpointProvider';
+import { IEndpointProvider, ModelSupportedEndpoint } from '../src/platform/endpoint/common/endpointProvider';
 import { IModelConfig } from '../src/platform/endpoint/test/node/openaiCompatibleEndpoint';
 import { fileSystemServiceReadAsJSON } from '../src/platform/filesystem/common/fileSystemService';
 import { LogLevel } from '../src/platform/log/common/logService';
@@ -79,7 +79,7 @@ async function main() {
 	}
 
 	if (errors.length > 0) {
-		console.error(`\n${red("⚠️⚠️⚠️  Command failed with:")}\n\n`);
+		console.error(`\n${red('⚠️⚠️⚠️  Command failed with:')}\n\n`);
 
 		for (let i = 0; i < errors.length; i++) {
 			const idx = `Error${errors.length === 1 ? '' : ` ${i + 1})`} `;
@@ -94,6 +94,10 @@ type RunResult = void | { errors: unknown[] };
 
 async function run(opts: SimulationOptions): Promise<RunResult> {
 	const jsonOutputPrinter: IJSONOutputPrinter = opts.jsonOutput ? new ConsoleJSONOutputPrinter() : new CollectingJSONOutputPrinter();
+
+	if (opts.externalCacheLayersPath) {
+		process.env['EXTERNAL_CACHE_LAYERS_PATH'] = opts.externalCacheLayersPath;
+	}
 
 	switch (true) {
 		case opts.help:
@@ -297,6 +301,9 @@ async function runTests(opts: SimulationOptions, jsonOutputPrinter: IJSONOutputP
 	const { simulationEndpointHealth, simulationOutcome, simulationTestContext, testsToRun, baseline, canUseBaseline, outputPath, runningAllTests, hasFilteredTests } = await prepareTestEnvironment(opts, jsonOutputPrinter);
 
 	if (opts.gc) {
+		if (opts.gc && opts.externalCacheLayersPath) {
+			throw new Error('--gc is currently not compatible with --external-cache-layers-path');
+		}
 		Cache.Instance.gcStart();
 	}
 
@@ -489,7 +496,7 @@ function listTests(allSuites: readonly SimulationSuite[], opts: SimulationOption
 }
 
 async function listChatModels(skipCache: boolean = false) {
-	const accessor = createExtensionUnitTestingServices(undefined, { skipModelMetadataCache: skipCache }).createTestingAccessor();
+	const accessor = createExtensionUnitTestingServices(undefined, undefined, { skipModelMetadataCache: skipCache }).createTestingAccessor();
 	const endpointProvider = accessor.get(IEndpointProvider);
 	const chatEndpoints = await endpointProvider.getAllChatEndpoints();
 	console.log('Available Chat Models:\n');
@@ -565,7 +572,7 @@ function createSimulationTestContext(
 
 	const customModelConfigMap: Map<string, IModelConfig> = new Map();
 	if (opts.modelConfigFile) {
-		console.log("Using model configuration file: " + opts.modelConfigFile);
+		console.log('Using model configuration file: ' + opts.modelConfigFile);
 		const customModelConfigs = parseModelConfigFile(opts.modelConfigFile);
 		customModelConfigs.forEach(config => {
 			customModelConfigMap.set(config.id, config);
@@ -576,7 +583,7 @@ function createSimulationTestContext(
 		chatModel: opts.chatModel,
 		fastChatModel: opts.fastChatModel,
 		smartChatModel: opts.smartChatModel,
-		embeddingModel: opts.embeddingModel,
+		embeddingType: opts.embeddingType,
 		fastRewriteModel: opts.fastRewriteModel,
 		skipModelMetadataCache: opts.modelCacheMode === CacheMode.Disable,
 		customModelConfigs: customModelConfigMap,
@@ -884,6 +891,7 @@ function parseModelConfigFile(modelConfigFilePath: string): IModelConfig[] {
 			checkProperty(model.capabilities.supports, 'tool_calls', 'boolean', true);
 			checkProperty(model.capabilities.supports, 'vision', 'boolean', true);
 			checkProperty(model.capabilities.supports, 'prediction', 'boolean', true);
+			checkProperty(model.capabilities.supports, 'thinking', 'boolean', true);
 		}
 
 		checkProperty(model.capabilities, 'limits', 'object', true);
@@ -913,6 +921,18 @@ function parseModelConfigFile(modelConfigFilePath: string): IModelConfig[] {
 			checkProperty(overrides, 'reasoning_effort', 'string', true, true);
 		}
 
+		// Validate supported_endpoints
+		if (model.supported_endpoints) {
+			if (!Array.isArray(model.supported_endpoints)) {
+				throw new Error(`Property 'supported_endpoints' in model configuration file ${resolvedModelConfigFilePath} must be an array`);
+			}
+			for (const endpointSuffix of model.supported_endpoints) {
+				if (!Object.values(ModelSupportedEndpoint).includes(endpointSuffix as ModelSupportedEndpoint)) {
+					throw new Error(`Invalid endpoint suffix '${endpointSuffix}' in supported_endpoints for model '${modelId}'. Must be one of: ${Object.values(ModelSupportedEndpoint).join(', ')}`);
+				}
+			}
+		}
+
 		modelConfigs.push({
 			id: modelId,
 			name: model.name,
@@ -926,7 +946,8 @@ function parseModelConfigFile(modelConfigFilePath: string): IModelConfig[] {
 					streaming: model.capabilities?.supports?.streaming ?? false,
 					tool_calls: model.capabilities?.supports?.tool_calls ?? false,
 					vision: model.capabilities?.supports?.vision ?? false,
-					prediction: model.capabilities?.supports?.prediction ?? false
+					prediction: model.capabilities?.supports?.prediction ?? false,
+					thinking: model.capabilities?.supports?.thinking ?? false
 				},
 				limits: {
 					max_prompt_tokens: model.capabilities?.limits?.max_prompt_tokens ?? 128000,
@@ -934,6 +955,7 @@ function parseModelConfigFile(modelConfigFilePath: string): IModelConfig[] {
 					max_context_window_tokens: model.capabilities?.limits?.max_context_window_tokens
 				}
 			},
+			supported_endpoints: model.supported_endpoints?.length ? model.supported_endpoints as ModelSupportedEndpoint[] : [ModelSupportedEndpoint.ChatCompletions],
 			auth: {
 				useBearerHeader: model.auth?.useBearerHeader ?? false,
 				useApiKeyHeader: model.auth?.useApiKeyHeader ?? false,

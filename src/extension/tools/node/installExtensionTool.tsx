@@ -10,10 +10,10 @@ import { IEnvService } from '../../../platform/env/common/envService';
 import { IExtensionsService } from '../../../platform/extensions/common/extensionsService';
 import { timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
-import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { IToolsService } from '../common/toolsService';
 
 export interface IInstallExtensionToolInput {
@@ -94,9 +94,9 @@ class InstallExtensionTool implements vscode.LanguageModelTool<IInstallExtension
 		const markdownString = new MarkdownString(l10n.t(`Copilot will install the extension [{0}](command:workbench.extensions.action.showExtensionsWithIds?{1}) and its dependencies.`, options.input.name, query));
 		markdownString.isTrusted = { enabledCommands: ['workbench.extensions.action.showExtensionsWithIds'] };
 		return {
-			invocationMessage: l10n.t`Installing extension \`${options.input.name}\``,
+			invocationMessage: l10n.t`Installing extension ${options.input.name}`,
 			confirmationMessages: {
-				title: l10n.t`Install Extension \`${options.input.name}\`?`,
+				title: l10n.t`Install Extension ${options.input.name}?`,
 				message: markdownString,
 			},
 		};

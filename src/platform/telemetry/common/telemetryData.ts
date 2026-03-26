@@ -91,6 +91,9 @@ export class TelemetryData {
 		if (telemetryConfig.organizationsList) {
 			configProperties['organizations_list'] = telemetryConfig.organizationsList;
 		}
+		if (telemetryConfig.enterpriseList) {
+			configProperties['enterprise_list'] = telemetryConfig.enterpriseList;
+		}
 
 		// By being the second argument, configProperties will always override
 		this.properties = { ...this.properties, ...configProperties };
@@ -155,9 +158,11 @@ export class TelemetryData {
 
 	updateTimeSinceIssuedAndDisplayed(): void {
 		const timeSinceIssued = Date.now() - this.issuedTime;
-		this.measurements.timeSinceIssuedMs = timeSinceIssued;
+		if (this.measurements.timeSinceIssuedMs === undefined) {
+			this.measurements.timeSinceIssuedMs = timeSinceIssued;
+		}
 
-		if (this.displayedTime !== undefined) {
+		if (this.measurements.timeSinceDisplayedMs === undefined && this.displayedTime !== undefined) {
 			const timeSinceDisplayed = Date.now() - this.displayedTime;
 			this.measurements.timeSinceDisplayedMs = timeSinceDisplayed;
 		}

@@ -17,6 +17,7 @@ import { IGitCommitMessageService } from '../../../platform/git/common/gitCommit
 import { ILogService } from '../../../platform/log/common/logService';
 import { ISettingsEditorSearchService } from '../../../platform/settingsEditor/common/settingsEditorSearchService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { isUri } from '../../../util/common/types';
 import { DeferredPromise } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { DisposableStore, IDisposable, combinedDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -24,6 +25,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ContributionCollection, IExtensionContribution } from '../../common/contributions';
 import { vscodeNodeChatContributions } from '../../extension/vscode-node/contributions';
+import { IMergeConflictService } from '../../git/common/mergeConflictService';
 import { registerInlineChatCommands } from '../../inlineChat/vscode-node/inlineChatCommands';
 import { INewWorkspacePreviewContentManager } from '../../intents/node/newIntent';
 import { FindInFilesArgs } from '../../intents/node/searchIntent';
@@ -60,7 +62,7 @@ export class ConversationFeature implements IExtensionContribution {
 	private _settingsSearchProviderRegistered = false;
 
 	readonly id = 'conversationFeature';
-	readonly activationBlocker?: Promise<any>;
+	readonly activationBlocker?: Promise<void>;
 
 	constructor(
 		@IInstantiationService private instantiationService: IInstantiationService,
@@ -73,6 +75,7 @@ export class ConversationFeature implements IExtensionContribution {
 		@ICombinedEmbeddingIndex private readonly embeddingIndex: ICombinedEmbeddingIndex,
 		@IDevContainerConfigurationService private readonly devContainerConfigurationService: IDevContainerConfigurationService,
 		@IGitCommitMessageService private readonly gitCommitMessageService: IGitCommitMessageService,
+		@IMergeConflictService private readonly mergeConflictService: IMergeConflictService,
 		@ILinkifyService private readonly linkifyService: ILinkifyService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@INewWorkspacePreviewContentManager private readonly newWorkspacePreviewContentManager: INewWorkspacePreviewContentManager,
@@ -87,14 +90,16 @@ export class ConversationFeature implements IExtensionContribution {
 		const activationBlockerDeferred = new DeferredPromise<void>();
 		this.activationBlocker = activationBlockerDeferred.p;
 		if (authenticationService.copilotToken) {
-			this.logService.debug(`ConversationFeature: Copilot token already available`);
+			this.logService.info(`ConversationFeature: Copilot token already available`);
 			this.activated = true;
 			activationBlockerDeferred.complete();
+		} else {
+			this.logService.info(`ConversationFeature: Waiting for copilot token to activate conversation feature`);
 		}
 
 		this._disposables.add(authenticationService.onDidAuthenticationChange(async () => {
 			const hasSession = !!authenticationService.copilotToken;
-			this.logService.debug(`ConversationFeature: onDidAuthenticationChange has token: ${hasSession}`);
+			this.logService.info(`ConversationFeature: onDidAuthenticationChange has token: ${hasSession}`);
 			if (hasSession) {
 				this.activated = true;
 			} else {
@@ -130,8 +135,10 @@ export class ConversationFeature implements IExtensionContribution {
 		this._activated = value;
 
 		if (!value) {
+			this.logService.info('ConversationFeature: Deactivating contributions');
 			this._activatedDisposables.clear();
 		} else {
+			this.logService.info('ConversationFeature: Activating contributions');
 			const options: IConversationOptions = this.conversationOptions;
 
 			this._activatedDisposables.add(this.registerProviders());
@@ -159,6 +166,13 @@ export class ConversationFeature implements IExtensionContribution {
 			return;
 		} else {
 			this._searchProviderRegistered = true;
+
+			// Don't register for no auth user
+			if (this.authenticationService.copilotToken?.isNoAuthUser) {
+				this.logService.debug('ConversationFeature: Skipping search provider registration - no GitHub session available');
+				return;
+			}
+
 			return vscode.workspace.registerAITextSearchProvider('file', this.instantiationService.createInstance(SemanticSearchTextSearchProvider));
 		}
 	}
@@ -189,7 +203,7 @@ export class ConversationFeature implements IExtensionContribution {
 			if (settingsSearchDisposable) {
 				disposables.add(settingsSearchDisposable);
 			}
-		} catch (err: any) {
+		} catch (err) {
 			this.logService.error(err, 'Registration of interactive providers failed');
 		}
 		return disposables;
@@ -209,6 +223,7 @@ export class ConversationFeature implements IExtensionContribution {
 			vscode.commands.registerCommand('github.copilot.interactiveSession.feedback', async () => {
 				return vscode.env.openExternal(vscode.Uri.parse(FEEDBACK_URL));
 			}),
+			vscode.commands.registerCommand('github.copilot.chat.compact', () => vscode.commands.executeCommand('workbench.action.chat.open', { query: '/compact' })),
 			vscode.commands.registerCommand('github.copilot.terminal.explainTerminalLastCommand', async () => this.triggerTerminalChat({ query: `/${TerminalExplainIntent.intentName} #terminalLastCommand` })),
 			vscode.commands.registerCommand('github.copilot.terminal.fixTerminalLastCommand', async () => generateTerminalFixes(this.instantiationService)),
 			vscode.commands.registerCommand('github.copilot.terminal.generateCommitMessage', async () => {
@@ -222,7 +237,7 @@ export class ConversationFeature implements IExtensionContribution {
 					return;
 				}
 
-				const repository = this.gitCommitMessageService.getRepository(uri);
+				const repository = await this.gitCommitMessageService.getRepository(uri);
 				if (!repository) {
 					return;
 				}
@@ -236,7 +251,7 @@ export class ConversationFeature implements IExtensionContribution {
 				}
 			}),
 			vscode.commands.registerCommand('github.copilot.git.generateCommitMessage', async (rootUri: vscode.Uri | undefined, _: vscode.SourceControlInputBoxValueProviderContext[], cancellationToken: vscode.CancellationToken | undefined) => {
-				const repository = this.gitCommitMessageService.getRepository(rootUri);
+				const repository = await this.gitCommitMessageService.getRepository(rootUri);
 				if (!repository) {
 					return;
 				}
@@ -246,8 +261,21 @@ export class ConversationFeature implements IExtensionContribution {
 					repository.inputBox.value = commitMessage;
 				}
 			}),
-			vscode.commands.registerCommand('github.copilot.devcontainer.generateDevContainerConfig', async (args: DevContainerConfigGeneratorArguments, cancellationToken = new vscode.CancellationTokenSource().token) => {
-				return this.devContainerConfigurationService.generateConfiguration(args, cancellationToken);
+			vscode.commands.registerCommand('github.copilot.git.resolveMergeConflicts', async (...resourceStates: (vscode.Uri | vscode.SourceControlResourceState)[]) => {
+				const resources = resourceStates.filter(r => !!r).map(r => isUri(r) ? r : r.resourceUri);
+				await this.mergeConflictService.resolveMergeConflicts(resources, undefined);
+			}),
+			vscode.commands.registerCommand('github.copilot.devcontainer.generateDevContainerConfig', async (args: DevContainerConfigGeneratorArguments, cancellationToken?: vscode.CancellationToken) => {
+				if (cancellationToken) {
+					return this.devContainerConfigurationService.generateConfiguration(args, cancellationToken);
+				}
+
+				const tokenSource = new vscode.CancellationTokenSource();
+				try {
+					return this.devContainerConfigurationService.generateConfiguration(args, tokenSource.token);
+				} finally {
+					tokenSource.dispose();
+				}
 			}),
 			vscode.commands.registerCommand('github.copilot.chat.openUserPreferences', async () => {
 				const uri = URI.joinPath(this.extensionContext.globalStorageUri, 'copilotUserPreferences.md');
@@ -311,8 +339,8 @@ export class ConversationFeature implements IExtensionContribution {
 
 	private registerCopilotTokenListener() {
 		this._disposables.add(this.authenticationService.onDidAuthenticationChange(() => {
-			const chatEnabled = this.authenticationService.copilotToken?.isChatEnabled();
-			this.logService.info(`copilot token chat_enabled: ${chatEnabled}, sku: ${this.authenticationService.copilotToken?.sku ?? ''}`);
+			const chatEnabled = this.authenticationService.copilotToken !== undefined;
+			this.logService.info(`copilot token sku: ${this.authenticationService.copilotToken?.sku ?? ''}`);
 			this.enabled = chatEnabled ?? false;
 		}));
 	}

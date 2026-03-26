@@ -5,6 +5,7 @@
 
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptReference, TextChunk } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
+import { isScenarioAutomation } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -32,7 +33,7 @@ export abstract class SafePromptElement<P extends BasePromptElementProps, S = vo
 		const err = new Error('BAD PROMPT');
 		this._logService.error(err);
 
-		if (this._contextService.extensionMode !== ExtensionMode.Production) {
+		if (this._contextService.extensionMode !== ExtensionMode.Production && !isScenarioAutomation) {
 			throw err;
 		}
 

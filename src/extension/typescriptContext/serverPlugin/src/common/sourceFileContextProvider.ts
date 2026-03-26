@@ -7,7 +7,7 @@ import TS from './typescript';
 const ts = TS();
 
 import { ImportsRunnable, TypeOfExpressionRunnable, TypeOfLocalsRunnable, TypesOfNeighborFilesRunnable } from './baseContextProviders';
-import { AbstractContextRunnable, ComputeCost, ContextProvider, ContextResult, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext, type RunnableResult } from './contextProvider';
+import { AbstractContextRunnable, ComputeCost, ContextProvider, ContextResult, SnippetLocation, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext, type RunnableResult } from './contextProvider';
 import { CacheScopeKind, EmitMode, Priorities, SpeculativeKind } from './protocol';
 import tss, { type TokenInfo } from './typescripts';
 
@@ -25,7 +25,7 @@ export class GlobalsRunnable extends AbstractContextRunnable {
 	private readonly tokenInfo: TokenInfo;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: TokenInfo) {
-		super(session, languageService, context, 'GlobalsRunnable', Priorities.Globals, ComputeCost.Medium);
+		super(session, languageService, context, 'GlobalsRunnable', SnippetLocation.Secondary, Priorities.Globals, ComputeCost.Medium);
 		this.tokenInfo = tokenInfo;
 	}
 
@@ -57,7 +57,7 @@ export class GlobalsRunnable extends AbstractContextRunnable {
 		const result: tt.Symbol[] = [];
 		const symbols = typeChecker.getSymbolsInScope(sourceFile, ts.SymbolFlags.Function | ts.SymbolFlags.Class | ts.SymbolFlags.Interface | ts.SymbolFlags.TypeAlias | ts.SymbolFlags.ValueModule);
 		for (const symbol of symbols) {
-			if (this.skipSymbol(symbol)) {
+			if (this.skipSymbolBasedOnDeclaration(symbol)) {
 				continue;
 			}
 			result.push(this.symbols.getLeafSymbol(symbol));

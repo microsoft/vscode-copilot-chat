@@ -15,7 +15,7 @@ export class ThrottledDebouncer implements Disposable {
 	private static readonly DELAY_INCREMENT = 10;
 	private static readonly MAX_DELAY = 500;
 
-	private timeoutId: NodeJS.Timeout | undefined;
+	private timeoutId: TimeoutHandle | undefined;
 	private currentDelay: number;
 	private readonly initialDelay: number;
 	private readonly increment: number;

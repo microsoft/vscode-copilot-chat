@@ -20,7 +20,7 @@ namespace tss {
 		getSymbolId(symbol: tt.Symbol): SymbolId;
 	} & typeof ts;
 
-	const its = ts as any as InternalTypeScript;
+	const its = ts as unknown as InternalTypeScript;
 
 	export const getTokenAtPosition: (sourceFile: tt.SourceFile, position: number) => tt.Node = its.getTokenAtPosition;
 	export const getTouchingToken: (sourceFile: tt.SourceFile, position: number, includePrecedingTokenAtEndPosition?: (n: tt.Node) => boolean) => tt.Node = its.getTouchingToken;
@@ -295,6 +295,20 @@ namespace tss {
 		}
 	}
 
+	export namespace TypeChecker {
+
+		interface InternalTypeChecker extends tt.TypeChecker {
+			getAccessibleSymbolChain(symbol: tt.Symbol, enclosingDeclaration: tt.Node | undefined, meaning: tt.SymbolFlags, useOnlyExternalAliasing: boolean): tt.Symbol[] | undefined;
+		}
+		export function getAccessibleSymbolChain(typeChecker: tt.TypeChecker, symbol: tt.Symbol, enclosingDeclaration: tt.Node | undefined, meaning: tt.SymbolFlags, useOnlyExternalAliasing: boolean): tt.Symbol[] | undefined {
+			const internalTypeChecker = typeChecker as InternalTypeChecker;
+			if (typeof internalTypeChecker.getAccessibleSymbolChain !== 'function') {
+				return undefined;
+			}
+			return internalTypeChecker.getAccessibleSymbolChain(symbol, enclosingDeclaration, meaning, useOnlyExternalAliasing);
+		}
+	}
+
 	export namespace Types {
 
 		export function isIntersection(type: tt.Type): type is tt.IntersectionType {
@@ -335,6 +349,18 @@ namespace tss {
 		}
 	}
 
+	interface InternalLanguageServiceHost extends tt.LanguageServiceHost {
+		runWithTemporaryFileUpdate?(rootFile: string, updatedText: string, cb: (updatedProgram: tt.Program, originalProgram: tt.Program | undefined, updatedFile: tt.SourceFile) => void): void;
+	}
+
+	export namespace LanguageServiceHost {
+		export function runWithTemporaryFileUpdate(host: tt.LanguageServiceHost, rootFile: string, updatedText: string, cb: (updatedProgram: tt.Program, originalProgram: tt.Program | undefined, updatedFile: tt.SourceFile) => void): void {
+			const internalHost = host as InternalLanguageServiceHost;
+			if (typeof internalHost.runWithTemporaryFileUpdate === 'function') {
+				internalHost.runWithTemporaryFileUpdate(rootFile, updatedText, cb);
+			}
+		}
+	}
 
 	interface InternalSymbol extends tt.Symbol {
 		parent?: tt.Symbol;
@@ -425,6 +451,8 @@ namespace tss {
 		}
 	}
 
+	export type DirectSuperSymbolInfo = { extends?: { symbol: tt.Symbol; name: string } | undefined; implements?: { symbol: tt.Symbol; name: string }[] }
+
 	export class Symbols {
 
 		private readonly program: tt.Program;
@@ -441,6 +469,14 @@ namespace tss {
 
 		public static getParent(symbol: tt.Symbol): tt.Symbol | undefined {
 			return (symbol as InternalSymbol).parent;
+		}
+
+		public static isFunctionScopedVariable(symbol: tt.Symbol | undefined): boolean {
+			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.FunctionScopedVariable) !== 0;
+		}
+
+		public static isBlockScopedVariable(symbol: tt.Symbol | undefined): boolean {
+			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.BlockScopedVariable) !== 0;
 		}
 
 		public static isConstructor(symbol: tt.Symbol | undefined): boolean {
@@ -479,6 +515,10 @@ namespace tss {
 			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeAlias) !== 0;
 		}
 
+		public static isTypeParameter(symbol: tt.Symbol | undefined): boolean {
+			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeParameter) !== 0;
+		}
+
 		public static isTypeLiteral(symbol: tt.Symbol | undefined): boolean {
 			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeLiteral) !== 0;
 		}
@@ -493,6 +533,10 @@ namespace tss {
 
 		public static isValueModule(symbol: tt.Symbol | undefined): boolean {
 			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.ValueModule) !== 0;
+		}
+
+		public static isNamespaceModule(symbol: tt.Symbol | undefined): boolean {
+			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.NamespaceModule) !== 0;
 		}
 
 		public static isEnum(symbol: tt.Symbol | undefined): boolean {
@@ -541,7 +585,7 @@ namespace tss {
 			if (this.internalSymbolNames === undefined) {
 				this.internalSymbolNames = new Set();
 				for (const item in ts.InternalSymbolName) {
-					this.internalSymbolNames.add((ts.InternalSymbolName as any)[item]);
+					this.internalSymbolNames.add((ts.InternalSymbolName as Record<string, string>)[item]);
 				}
 			}
 			return this.internalSymbolNames.has(symbol.escapedName as string);
@@ -776,6 +820,41 @@ namespace tss {
 				}
 			}
 			return [undefined, undefined];
+		}
+
+		public getDirectSuperSymbols(symbol: tt.Symbol): DirectSuperSymbolInfo | undefined {
+			const declarations = symbol.declarations;
+			if (declarations === undefined) {
+				return undefined;
+			}
+			const result: DirectSuperSymbolInfo = {};
+			for (const declaration of declarations) {
+				if (ts.isClassDeclaration(declaration)) {
+					const heritageClauses = declaration.heritageClauses;
+					if (heritageClauses !== undefined) {
+						for (const heritageClause of heritageClauses) {
+							const extendsNode = heritageClause.types[0]?.expression;
+							let candidate = this.typeChecker.getSymbolAtLocation(extendsNode);
+							if (Symbols.isAlias(candidate)) {
+								candidate = this.typeChecker.getAliasedSymbol(candidate!);
+							}
+							if (heritageClause.token === ts.SyntaxKind.ExtendsKeyword) {
+								if (Symbols.isClass(candidate)) {
+									result.extends = { symbol: candidate!, name: extendsNode.getText() };
+								}
+							} else if (heritageClause.token === ts.SyntaxKind.ImplementsKeyword) {
+								if (Symbols.isInterface(candidate)) {
+									if (result.implements === undefined) {
+										result.implements = [];
+									}
+									result.implements.push({ symbol: candidate!, name: extendsNode.getText() });
+								}
+							}
+						}
+					}
+				}
+			}
+			return result;
 		}
 
 		public getAliasedSymbolAtLocation(node: tt.Node): tt.Symbol | undefined {

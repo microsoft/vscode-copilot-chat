@@ -115,6 +115,10 @@ export function isJupyterNotebookUri(uri: vscode.Uri): boolean {
 	return uri.path.endsWith('.ipynb');
 }
 
+export function isJupyterNotebook(notebook: vscode.NotebookDocument): boolean {
+	return notebook.notebookType === 'jupyter-notebook';
+}
+
 
 export function serializeNotebookDocument(document: vscode.NotebookDocument, features: { cell_uri_fragment?: boolean } = {}): string {
 	return JSON.stringify({

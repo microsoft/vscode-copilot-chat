@@ -74,7 +74,7 @@ export class SearchPanelKeywordsPrompt extends PromptElement<ISearchPanelKeyword
 				</HistoryWithInstructions>
 				<UserMessage>
 					<>
-						{"Here are all the relevant symbols for the user query:"}<br />
+						{'Here are all the relevant symbols for the user query:'}<br />
 						{this.props.promptContext.symbols.join('\n')}
 						<br /><br />
 					</>

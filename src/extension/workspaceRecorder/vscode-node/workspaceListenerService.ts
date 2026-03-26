@@ -12,10 +12,10 @@ import { IRecordableEditorLogEntry, IRecordableLogEntry, ITextModelEditReasonMet
 export class WorkspacListenerService extends Disposable implements IWorkspaceListenerService {
 	readonly _serviceBrand = undefined;
 
-	private readonly _onStructuredData = new Emitter<IRecordableLogEntry | IRecordableEditorLogEntry>();
+	private readonly _onStructuredData = this._register(new Emitter<IRecordableLogEntry | IRecordableEditorLogEntry>());
 	readonly onStructuredData = this._onStructuredData.event;
 
-	private readonly _onHandleChangeReason = new Emitter<{ documentUri: string; documentVersion: number; reason: string; metadata: ITextModelEditReasonMetadata }>();
+	private readonly _onHandleChangeReason = this._register(new Emitter<{ documentUri: string; documentVersion: number; reason: string; metadata: ITextModelEditReasonMetadata }>());
 	readonly onHandleChangeReason = this._onHandleChangeReason.event;
 
 	constructor() {

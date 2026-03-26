@@ -1,6 +1,6 @@
 [
     {
-        "question": "@workspace /explain",
+        "question": "/explain",
         "description": "includes function definitions from same file",
         "stateFile": "./explain.12.state.json",
         "keywords": {

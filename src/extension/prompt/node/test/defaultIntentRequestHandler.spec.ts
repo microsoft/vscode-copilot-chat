@@ -5,7 +5,7 @@
 
 
 import { Raw, RenderPromptResult } from '@vscode/prompt-tsx';
-import { afterEach, beforeEach, expect, suite, test } from 'vitest';
+import { afterEach, beforeEach, expect, suite, test, vi } from 'vitest';
 import type { ChatLanguageModelToolReference, ChatPromptReference, ChatRequest, ExtendedChatResponsePart, LanguageModelChat } from 'vscode';
 import { IChatMLFetcher } from '../../../../platform/chat/common/chatMLFetcher';
 import { toTextPart } from '../../../../platform/chat/common/globalStringUtils';
@@ -16,13 +16,15 @@ import { IChatEndpoint } from '../../../../platform/networking/common/networking
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { SpyingTelemetryService } from '../../../../platform/telemetry/node/spyingTelemetryService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
+import { NullWorkspaceFileIndex } from '../../../../platform/workspaceChunkSearch/node/nullWorkspaceFileIndex';
+import { IWorkspaceFileIndex } from '../../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
 import { ChatResponseStreamImpl } from '../../../../util/common/chatResponseStreamImpl';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
-import { Event } from '../../../../util/vs/base/common/event';
 import { isObject, isUndefinedOrNull } from '../../../../util/vs/base/common/types';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
+import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatLocation, ChatResponseConfirmationPart, LanguageModelTextPart, LanguageModelToolResult } from '../../../../vscodeTypes';
+import { ChatLocation, ChatResponseConfirmationPart, ChatResponseMarkdownPart, LanguageModelTextPart, LanguageModelToolResult, Uri } from '../../../../vscodeTypes';
 import { ToolCallingLoop } from '../../../intents/node/toolCallingLoop';
 import { ToolResultMetadata } from '../../../prompts/node/panel/toolCalling';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
@@ -39,6 +41,7 @@ suite('defaultIntentRequestHandler', () => {
 	let chatResponse: (string | IResponseDelta[])[] = [];
 	let promptResult: RenderPromptResult | RenderPromptResult[];
 	let telemetry: SpyingTelemetryService;
+	let fetcher: StaticChatMLFetcher;
 	let endpoint: IChatEndpoint;
 	let turnIdCounter = 0;
 	let builtPrompts: IBuildPromptContext[] = [];
@@ -50,19 +53,24 @@ suite('defaultIntentRequestHandler', () => {
 		const services = createExtensionUnitTestingServices();
 		telemetry = new SpyingTelemetryService();
 		chatResponse = [];
+		fetcher = new StaticChatMLFetcher(chatResponse);
 		services.define(ITelemetryService, telemetry);
-		services.define(IChatMLFetcher, new StaticChatMLFetcher(chatResponse));
+		services.define(IChatMLFetcher, fetcher);
+		services.define(IWorkspaceFileIndex, new SyncDescriptor(NullWorkspaceFileIndex));
+
 		accessor = services.createTestingAccessor();
-		endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint);
+		endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint, undefined);
 		builtPrompts = [];
 		response = [];
 		promptResult = nullRenderPromptResult();
 		turnIdCounter = 0;
 		(ToolCallingLoop as any).NextToolCallId = 0;
 		(ToolCallRound as any).generateID = () => 'static-id';
+		vi.spyOn(Date, 'now').mockReturnValue(0);
 	});
 
 	afterEach(() => {
+		vi.restoreAllMocks();
 		accessor.dispose();
 	});
 
@@ -124,12 +132,15 @@ suite('defaultIntentRequestHandler', () => {
 		command: string | undefined;
 		references: readonly ChatPromptReference[] = [];
 		toolReferences: readonly ChatLanguageModelToolReference[] = [];
-		model: LanguageModelChat = null as any;
+		model: LanguageModelChat = { family: '' } as any;
 		tools = new Map();
 		id = generateUuid();
+		sessionId = generateUuid();
+		sessionResource = Uri.parse(`test://session/${this.sessionId}`);
+		hasHooksEnabled = false;
 	}
 
-	const responseStream = new ChatResponseStreamImpl(p => response.push(p), () => { });
+	const responseStream = new ChatResponseStreamImpl(p => response.push(p), () => { }, undefined, undefined, undefined, () => Promise.resolve(undefined));
 	const maxToolCallIterations = 3;
 
 	const makeHandler = ({
@@ -152,9 +163,9 @@ suite('defaultIntentRequestHandler', () => {
 			CancellationToken.None,
 			undefined,
 			ChatLocation.Panel,
-			instaService.createInstance(ChatTelemetryBuilder, Date.now(), sessionId, undefined, turns.length > 1, request),
+			instaService.createInstance(ChatTelemetryBuilder, Date.now(), sessionId, undefined, turns.length > 1, request, undefined),
 			{ maxToolCallIterations },
-			Event.None,
+			undefined,
 		);
 	};
 
@@ -178,6 +189,19 @@ suite('defaultIntentRequestHandler', () => {
 		// Wait for event loop to finish as we often fire off telemetry without properly awaiting it as it doesn't matter when it is sent
 		await new Promise(setImmediate);
 		expect(getDerandomizedTelemetry()).toMatchSnapshot();
+	});
+
+	test('propagates resolvedModel into result metadata from a successful response', async () => {
+		fetcher.resolvedModel = 'gpt-4o-resolved';
+		const handler = makeHandler();
+		chatResponse[0] = 'some response here :)';
+		promptResult = {
+			...nullRenderPromptResult(),
+			messages: [{ role: Raw.ChatRole.User, content: [toTextPart('hello world!')] }],
+		};
+
+		const result = await handler.getResult();
+		expect(result.metadata?.resolvedModel).toBe('gpt-4o-resolved');
 	});
 
 	test('makes a tool call turn', async () => {
@@ -323,23 +347,14 @@ suite('defaultIntentRequestHandler', () => {
 		expect(last).toBeInstanceOf(ChatResponseConfirmationPart);
 
 		const request = new TestChatRequest();
-		request.acceptedConfirmationData = [(last as ChatResponseConfirmationPart).data];
+		request.rejectedConfirmationData = [(last as ChatResponseConfirmationPart).data];
 		request.prompt = (last as ChatResponseConfirmationPart).buttons![1];
 		const handler2 = makeHandler({ request });
 		await handler2.getResult();
 
-		expect(response.at(-1)).toMatchInlineSnapshot(`
-			ChatResponseMarkdownPart {
-			  "value": MarkdownString {
-			    "delegate": MarkdownString {
-			      "isTrusted": undefined,
-			      "supportHtml": false,
-			      "supportThemeIcons": false,
-			      "value": "Let me know if there's anything else I can help with!",
-			    },
-			  },
-			}
-		`);
+		const last2 = response.at(-1);
+		expect(last2).toBeInstanceOf(ChatResponseMarkdownPart);
+		expect((last2 as ChatResponseMarkdownPart).value.value).toMatchInlineSnapshot(`"Let me know if there's anything else I can help with!"`);
 	});
 });
 

@@ -6,19 +6,14 @@
 import type { LanguageModelToolInformation, LanguageModelToolResult } from 'vscode';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
-import { VirtualTool } from './virtualTool';
 import { IObservable } from '../../../../util/vs/base/common/observableInternal';
+import { VirtualTool } from './virtualTool';
 
 export interface IToolGrouping {
 	/**
 	 * Gets or sets the list of tools available for the group.
 	 */
 	tools: readonly LanguageModelToolInformation[];
-
-	/**
-	 * Whether tool grouping logic is enabled at the current tool threshold.
-	 */
-	isEnabled: boolean;
 
 	/**
 	 * Should be called for each model tool call. Returns a tool result if the
@@ -53,12 +48,12 @@ export interface IToolGrouping {
 	 * Returns a list of tools that should be used for the given request.
 	 * Internally re-reads the request and conversation state.
 	 */
-	compute(token: CancellationToken): Promise<LanguageModelToolInformation[]>;
+	compute(query: string, token: CancellationToken): Promise<LanguageModelToolInformation[]>;
 
 	/**
 	 * Returns the complete tree of tools, used for diagnostic purposes.
 	 */
-	computeAll(token: CancellationToken): Promise<(LanguageModelToolInformation | VirtualTool)[]>;
+	computeAll(query: string, token: CancellationToken): Promise<(LanguageModelToolInformation | VirtualTool)[]>;
 }
 
 export interface IToolGroupingService {
@@ -92,7 +87,7 @@ export interface IToolGroupingCache {
 	/**
 	 * Gets or inserts the grouping for the given set of tools.
 	 */
-	getOrInsert(tools: LanguageModelToolInformation[], factory: () => Promise<ISummarizedToolCategory[] | undefined>): Promise<ISummarizedToolCategory[] | undefined>;
+	getDescription(tools: LanguageModelToolInformation[]): Promise<ISummarizedToolCategoryUpdatable>;
 }
 
 export const IToolGroupingCache = createServiceIdentifier<IToolGroupingCache>('IToolGroupingCache');
@@ -103,13 +98,25 @@ export interface IToolCategorization {
 	 * Called whenever new tools are added. The function should add each tool into
 	 * the appropriate virtual tool or top-level tool in the `root`.
 	 */
-	addGroups(root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<void>;
+	addGroups(query: string, root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<void>;
+
+	/**
+	 * Recalculates the "embeddings" group, when enabled, so relevant tools
+	 * for the query are shown at the top level.
+	 */
+	recomputeEmbeddingRankings(query: string, root: VirtualTool, token: CancellationToken): Promise<void>;
 }
 
 export interface ISummarizedToolCategory {
 	summary: string;
 	name: string;
 	tools: LanguageModelToolInformation[];
+}
+
+export interface ISummarizedToolCategoryUpdatable {
+	category: ISummarizedToolCategory | undefined;
+	tools: LanguageModelToolInformation[];
+	update(up: ISummarizedToolCategory): void;
 }
 
 export class SummarizerError extends Error { }

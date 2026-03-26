@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as assert from 'assert';
-import { suite, test } from 'vitest';
+import { expect, suite, test } from 'vitest';
 import { EditSurvivalTracker, applyEditsToRanges, compute4GramTextSimilarity } from '../../../platform/editSurvivalTracking/common/editSurvivalTracker';
 import { ISerializedStringEdit, StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
@@ -131,9 +131,9 @@ suite('applyEditsToRanges', () => {
 
 		const newRanges = applyEditsToRanges(ranges, edits);
 		assert.deepStrictEqual(newRanges.map(r => r.toString()), [
-			"[10, 20)",
-			"[30, 40)",
-			"[50, 60)",
+			'[10, 20)',
+			'[30, 40)',
+			'[50, 60)',
 		]);
 	});
 
@@ -150,9 +150,9 @@ suite('applyEditsToRanges', () => {
 
 		const newRanges = applyEditsToRanges(ranges, edits);
 		assert.deepStrictEqual(newRanges.map(r => r.toString()), [
-			"[12, 22)",
-			"[32, 42)",
-			"[52, 62)",
+			'[12, 22)',
+			'[32, 42)',
+			'[52, 62)',
 		]);
 	});
 
@@ -169,9 +169,9 @@ suite('applyEditsToRanges', () => {
 
 		const newRanges = applyEditsToRanges(ranges, edits);
 		assert.deepStrictEqual(newRanges.map(r => r.toString()), [
-			"[10, 13)",
-			"[23, 33)",
-			"[43, 53)",
+			'[10, 13)',
+			'[23, 33)',
+			'[43, 53)',
 		]);
 	});
 
@@ -188,9 +188,9 @@ suite('applyEditsToRanges', () => {
 
 		const newRanges = applyEditsToRanges(ranges, edits);
 		assert.deepStrictEqual(newRanges.map(r => r.toString()), [
-			"[10, 16)",
-			"[16, 16)",
-			"[16, 21)",
+			'[10, 16)',
+			'[16, 16)',
+			'[16, 21)',
 		]);
 	});
 
@@ -208,9 +208,9 @@ suite('applyEditsToRanges', () => {
 
 		const newRanges = applyEditsToRanges(ranges, edits);
 		assert.deepStrictEqual(newRanges.map(r => r.toString()), [
-			"[10, 16)",
-			"[16, 16)",
-			"[16, 22)",
+			'[10, 16)',
+			'[16, 16)',
+			'[16, 22)',
 		]);
 	});
 
@@ -228,9 +228,9 @@ suite('applyEditsToRanges', () => {
 
 		const newRanges = applyEditsToRanges(ranges, edits);
 		assert.deepStrictEqual(newRanges.map(r => r.toString()), [
-			"[10, 20)",
-			"[30, 41)",
-			"[51, 62)"
+			'[10, 20)',
+			'[30, 41)',
+			'[51, 62)'
 		]);
 	});
 });
@@ -261,41 +261,169 @@ suite('compute4GramTextSimilarity', () => {
 });
 
 suite('EditSurvivalTracker', () => {
+	function renameProps<T extends object>(obj: T, map: { [K in keyof T]?: string }): any {
+		const result: any = {};
+		for (const key of Object.keys(obj) as (keyof T)[]) {
+			const newKey = map[key] || key;
+			result[newKey] = obj[key];
+		}
+		return result;
+	}
+
 	function getScore(input: { text: string; edits: ISerializedStringEdit[] }): unknown {
 		const originalText = input.text;
 		const t = new EditSurvivalTracker(originalText, StringEdit.fromJson(input.edits[0]));
 		t.handleEdits(StringEdit.fromJson(input.edits[1]));
 		const score = t.computeTrackedEditsSurvivalScore();
-		return score;
+		return renameProps(score, {
+			textBeforeAiEdits: 'text1BeforeAiEdits',
+			textAfterAiEdits: 'text2AfterAiEdits',
+			textAfterUserEdits: 'text3AfterUserEdits',
+		});
 	}
 
-	test('test1', async () => {
-		assert.deepStrictEqual(
+	test('simple', async () => {
+		expect(
 			getScore(projectableValue_editable({
-				"text": "import {\r\n\tTextDocument,\r\n\tWebviewPanel,\r\n\tCancellationToken,\r\n\tworkspace,\r\n\tWorkspaceEdit,\r\n\tRange,\r\n\tCustomTextEditorProvider,\r\n} from \"vscode\";\r\nimport { WebviewInitializer } from \"./WebviewInitializer\";\r\n\r\ninterface EditableDocument {\r\n\t\"x-editable\"?: {\r\n\t\tkind: string;\r\n\t\tdefaultUrl: string;\r\n\t};\r\n}\r\n\r\nexport class TextEditorProvider implements CustomTextEditorProvider {\r\n\tconstructor(private readonly webviewInitializer: WebviewInitializer) {}\r\n\r\n\tpublic async resolveCustomTextEditor(\r\n\t\tdocument: TextDocument,\r\n\t\twebviewPanel: WebviewPanel,\r\n\t\ttoken: CancellationToken\r\n\t): Promise<void> {\r\n\t\tlet isThisEditorSaving = false;\r\n\r\n\t\tconst text = document.getText();\r\n\t\tconst doc = JSON.parse(text) as EditableDocument;\r\n\t\tconst args = doc[\"x-editable\"];\r\n\r\n\r\n\t\tconst bridge = this.webviewInitializer.setupWebview(\r\n\t\t\t{ editorUrl: args.defaultUrl },\r\n\t\t\twebviewPanel.webview\r\n\t\t);\r\n\r\n\t\tconst setContentFromDocument = () => {\r\n\t\t\tconst newText = document.getText();\r\n\t\t\tconst content = JSON.parse(newText);\r\n\t\t\tbridge.setContent(content);\r\n\t\t};\r\n\r\n\t\tworkspace.onDidChangeTextDocument(async (evt) => {\r\n\t\t\tif (evt.document !== document) {\r\n\t\t\t\treturn;\r\n\t\t\t}\r\n\t\t\tif (isThisEditorSaving) {\r\n\t\t\t\t// We don't want to integrate our own changes\r\n\t\t\t\treturn;\r\n\t\t\t}\r\n\t\t\tif (evt.contentChanges.length === 0) {\r\n\t\t\t\t// Sometimes VS Code reports a document change without a change.\r\n\t\t\t\treturn;\r\n\t\t\t}\r\n\r\n\t\t\tsetContentFromDocument();\r\n\t\t});\r\n\r\n\t\tbridge.onChange.sub(async ({ newContent }) => {\r\n\t\t\tconst workspaceEdit = new WorkspaceEdit();\r\n\t\t\tconst data = newContent as EditableDocument;\r\n\t\t\tif (!data['x-editable']) {\r\n\t\t\t\tdata['x-editable'] = args;\r\n\t\t\t}\r\n\t\t\tconst output = JSON.stringify(newContent, undefined, 4);\r\n\t\t\tworkspaceEdit.replace(\r\n\t\t\t\tdocument.uri,\r\n\t\t\t\tnew Range(0, 0, document.lineCount, 0),\r\n\t\t\t\toutput\r\n\t\t\t);\r\n\r\n\t\t\tisThisEditorSaving = true;\r\n\t\t\ttry {\r\n\t\t\t\tawait workspace.applyEdit(workspaceEdit);\r\n\t\t\t} finally {\r\n\t\t\t\tisThisEditorSaving = false;\r\n\t\t\t}\r\n\t\t});\r\n\r\n\t\tbridge.onInit.sub(() => {\r\n\t\t\tsetContentFromDocument();\r\n\t\t});\r\n\t}\r\n}\r\n",
-				"edits": [
+				'text': 'console.log(123456);',
+				'edits': [
 					[
 						{
-							"pos": 762,
-							"len": 2,
-							"txt": "\r\n\r\n\t\tif (!args) {\r\n\t\t\tthrow new Error(\"invalid json document!\");\r\n\t\t}"
+							'pos': 12,
+							'len': 6,
+							'txt': `'hello'`
 						}
 					],
 					[
 						{
-							"pos": 801,
-							"len": 24,
-							"txt": "\"\""
+							'pos': 12,
+							'len': 7,
+							'txt': `'Hello'`
 						}
 					]
 				],
-				"x-editor": "edit-editor"
+				'x-editor': 'edit-editor'
 			})),
+		).toMatchInlineSnapshot(`
 			{
-				"fourGram": 0.75,
-				"noRevert": 1,
+			  "fourGram": 0.5,
+			  "noRevert": 1,
+			  "text1BeforeAiEdits": [
+			    "123456",
+			  ],
+			  "text2AfterAiEdits": [
+			    "'hello'",
+			  ],
+			  "text3AfterUserEdits": [
+			    "'Hello'",
+			  ],
 			}
-		);
+		`);
+	});
+
+	test('multi edit', async () => {
+		expect(
+			getScore(projectableValue_editable({
+				'text': 'console.log(123456);',
+				'edits': [
+					[
+						{
+							'pos': 0,
+							'len': 0,
+							'txt': '// comment\\n'
+						},
+						{
+							'pos': 12,
+							'len': 6,
+							'txt': `'hello'`
+						}
+					],
+					[
+						{
+							'pos': 0,
+							'len': 2,
+							'txt': '/*'
+						},
+						{
+							'pos': 10,
+							'len': 2,
+							'txt': ' */'
+						},
+						{
+							'pos': 25,
+							'len': 7,
+							'txt': 'Hello'
+						}
+					]
+				],
+				'x-editor': 'edit-editor'
+			})),
+		).toMatchInlineSnapshot(`
+			{
+			  "fourGram": 0.4376731301939058,
+			  "noRevert": 1,
+			  "text1BeforeAiEdits": [
+			    "",
+			    "123456",
+			  ],
+			  "text2AfterAiEdits": [
+			    "// comment\\n",
+			    "'hello'",
+			  ],
+			  "text3AfterUserEdits": [
+			    "/* comment */",
+			    "'Hello",
+			  ],
+			}
+		`);
+	});
+
+	test('realistic example', async () => {
+		expect(
+			getScore(projectableValue_editable({
+				'text': `import {\r\n\tTextDocument,\r\n\tWebviewPanel,\r\n\tCancellationToken,\r\n\tworkspace,\r\n\tWorkspaceEdit,\r\n\tRange,\r\n\tCustomTextEditorProvider,\r\n} from "vscode";\r\nimport { WebviewInitializer } from "./WebviewInitializer";\r\n\r\ninterface EditableDocument {\r\n\t"x-editable"?: {\r\n\t\tkind: string;\r\n\t\tdefaultUrl: string;\r\n\t};\r\n}\r\n\r\nexport class TextEditorProvider implements CustomTextEditorProvider {\r\n\tconstructor(private readonly webviewInitializer: WebviewInitializer) {}\r\n\r\n\tpublic async resolveCustomTextEditor(\r\n\t\tdocument: TextDocument,\r\n\t\twebviewPanel: WebviewPanel,\r\n\t\ttoken: CancellationToken\r\n\t): Promise<void> {\r\n\t\tlet isThisEditorSaving = false;\r\n\r\n\t\tconst text = document.getText();\r\n\t\tconst doc = JSON.parse(text) as EditableDocument;\r\n\t\tconst args = doc["x-editable"];\r\n\r\n\r\n\t\tconst bridge = this.webviewInitializer.setupWebview(\r\n\t\t\t{ editorUrl: args.defaultUrl },\r\n\t\t\twebviewPanel.webview\r\n\t\t);\r\n\r\n\t\tconst setContentFromDocument = () => {\r\n\t\t\tconst newText = document.getText();\r\n\t\t\tconst content = JSON.parse(newText);\r\n\t\t\tbridge.setContent(content);\r\n\t\t};\r\n\r\n\t\tworkspace.onDidChangeTextDocument(async (evt) => {\r\n\t\t\tif (evt.document !== document) {\r\n\t\t\t\treturn;\r\n\t\t\t}\r\n\t\t\tif (isThisEditorSaving) {\r\n\t\t\t\t// We don't want to integrate our own changes\r\n\t\t\t\treturn;\r\n\t\t\t}\r\n\t\t\tif (evt.contentChanges.length === 0) {\r\n\t\t\t\t// Sometimes VS Code reports a document change without a change.\r\n\t\t\t\treturn;\r\n\t\t\t}\r\n\r\n\t\t\tsetContentFromDocument();\r\n\t\t});\r\n\r\n\t\tbridge.onChange.sub(async ({ newContent }) => {\r\n\t\t\tconst workspaceEdit = new WorkspaceEdit();\r\n\t\t\tconst data = newContent as EditableDocument;\r\n\t\t\tif (!data['x-editable']) {\r\n\t\t\t\tdata['x-editable'] = args;\r\n\t\t\t}\r\n\t\t\tconst output = JSON.stringify(newContent, undefined, 4);\r\n\t\t\tworkspaceEdit.replace(\r\n\t\t\t\tdocument.uri,\r\n\t\t\t\tnew Range(0, 0, document.lineCount, 0),\r\n\t\t\t\toutput\r\n\t\t\t);\r\n\r\n\t\t\tisThisEditorSaving = true;\r\n\t\t\ttry {\r\n\t\t\t\tawait workspace.applyEdit(workspaceEdit);\r\n\t\t\t} finally {\r\n\t\t\t\tisThisEditorSaving = false;\r\n\t\t\t}\r\n\t\t});\r\n\r\n\t\tbridge.onInit.sub(() => {\r\n\t\t\tsetContentFromDocument();\r\n\t\t});\r\n\t}\r\n}\r\n`,
+				'edits': [
+					[
+						{
+							'pos': 762,
+							'len': 2,
+							'txt': '\r\n\r\n\t\tif (!args) {\r\n\t\t\tthrow new Error("invalid json document!");\r\n\t\t}'
+						}
+					],
+					[
+						{
+							'pos': 801,
+							'len': 24,
+							'txt': '""'
+						}
+					]
+				],
+				'x-editor': 'edit-editor'
+			}))).toMatchInlineSnapshot(
+				`
+				{
+				  "fourGram": 0.75,
+				  "noRevert": 1,
+				  "text1BeforeAiEdits": [
+				    "
+				",
+				  ],
+				  "text2AfterAiEdits": [
+				    "
+
+						if (!args) {
+							throw new Error("invalid json document!");
+						}",
+				  ],
+				  "text3AfterUserEdits": [
+				    "
+
+						if (!args) {
+							throw new Error("");
+						}",
+				  ],
+				}
+			`);
 	});
 });
 

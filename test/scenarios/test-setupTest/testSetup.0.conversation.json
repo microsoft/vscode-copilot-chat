@@ -1,7 +1,7 @@
 [
   {
     "name": "nodeApp",
-    "question": "@workspace /setupTests mocha",
+    "question": "/setupTests mocha",
     "expectations": {
       "filePatterns": ["(mocharc|mocha\\.opts)", "\\.test\\.ts"],
       "installCommandPattern": "npm i.*mocha",

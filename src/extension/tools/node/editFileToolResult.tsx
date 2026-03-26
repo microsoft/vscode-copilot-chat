@@ -11,12 +11,14 @@ import { IEndpointProvider } from '../../../platform/endpoint/common/endpointPro
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ISimulationTestContext } from '../../../platform/simulationTestContext/common/simulationTestContext';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { getLanguage } from '../../../util/common/languages';
 import { timeout } from '../../../util/vs/base/common/async';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Diagnostic, DiagnosticSeverity } from '../../../vscodeTypes';
+import { Tag } from '../../prompts/node/base/tag';
 import { ToolName } from '../common/toolNames';
 import { DiagnosticToolOutput } from './getErrorsTool';
 
@@ -26,6 +28,7 @@ export interface IEditedFile {
 	uri: URI;
 	isNotebook: boolean;
 	error?: string;
+	healed?: string;
 }
 
 export interface IEditFileResultProps extends BasePromptElementProps {
@@ -34,7 +37,6 @@ export interface IEditFileResultProps extends BasePromptElementProps {
 	toolName?: ToolName;
 	requestId?: string;
 	model?: vscode.LanguageModelChat;
-	healed?: string;
 }
 
 export class EditFileResult extends PromptElement<IEditFileResultProps> {
@@ -47,6 +49,7 @@ export class EditFileResult extends PromptElement<IEditFileResultProps> {
 		@IWorkspaceService protected readonly workspaceService: IWorkspaceService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) {
 		super(props);
 	}
@@ -55,6 +58,7 @@ export class EditFileResult extends PromptElement<IEditFileResultProps> {
 		const successfullyEditedFiles: string[] = [];
 		const editingErrors: string[] = [];
 		const editsWithDiagnostics: { file: string; diagnostics: PromptElement }[] = [];
+		const healedEdits: { file: string; healing: string }[] = [];
 		let totalNewDiagnostics = 0;
 		let filesWithNewDiagnostics = 0;
 		let notebookEditFailures = 0;
@@ -67,7 +71,15 @@ export class EditFileResult extends PromptElement<IEditFileResultProps> {
 				continue;
 			}
 
-			const diagnostics = !this.testContext.isInSimulationTests && this.configurationService.getConfig(ConfigKey.AutoFixDiagnostics) && !(file.isNotebook)
+			const filePath = this.promptPathRepresentationService.getFilePath(file.uri);
+			if (file.healed) {
+				healedEdits.push({ file: filePath, healing: file.healed });
+			}
+
+			const diagnostics = (this.props.diagnosticsTimeout === undefined || this.props.diagnosticsTimeout >= 0)
+				&& !this.testContext.isInSimulationTests
+				&& this.configurationService.getExperimentBasedConfig(ConfigKey.AutoFixDiagnostics, this.experimentationService)
+				&& !file.isNotebook
 				? await this.getNewDiagnostics(file)
 				: [];
 
@@ -76,7 +88,7 @@ export class EditFileResult extends PromptElement<IEditFileResultProps> {
 				filesWithNewDiagnostics++;
 				const newSnapshot = await this.workspaceService.openTextDocumentAndSnapshot(file.uri);
 				editsWithDiagnostics.push({
-					file: this.promptPathRepresentationService.getFilePath(file.uri),
+					file: filePath,
 					diagnostics: <DiagnosticToolOutput
 						diagnosticsGroups={[{
 							context: { document: newSnapshot, language: getLanguage(newSnapshot) },
@@ -89,7 +101,7 @@ export class EditFileResult extends PromptElement<IEditFileResultProps> {
 				continue;
 			}
 
-			successfullyEditedFiles.push(this.promptPathRepresentationService.getFilePath(file.uri));
+			successfullyEditedFiles.push(filePath);
 		}
 
 		if (this.props.toolName && this.props.requestId) {
@@ -110,7 +122,11 @@ export class EditFileResult extends PromptElement<IEditFileResultProps> {
 		}
 		return (
 			<>
-				{this.props.healed && <>There was an error applying your original patch, and it was modified to the following:<br />{this.props.healed}<br /></>}
+				{!!healedEdits.length && <>There was an error applying your original patch, and it was corrected:<br />{healedEdits.map(h =>
+					<Tag name='correctedEdit' attrs={{ file: h.file }}>
+						{h.healing}
+					</Tag>
+				)}<br /></>}
 				{successfullyEditedFiles.length > 0 &&
 					<>The following files were successfully edited:<br />
 						{successfullyEditedFiles.join('\n')}<br /></>}

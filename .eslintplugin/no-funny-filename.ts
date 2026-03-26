@@ -7,7 +7,7 @@ import * as eslint from 'eslint';
 import { readdirSync } from 'fs';
 import path from 'path';
 
-export = new class NoTestOnly implements eslint.Rule.RuleModule {
+export default new class NoTestOnly implements eslint.Rule.RuleModule {
 
 	create(context: eslint.Rule.RuleContext): eslint.Rule.RuleListener {
 

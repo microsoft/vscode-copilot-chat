@@ -20,7 +20,7 @@ import { findNotebook, isJupyterNotebookUri } from '../../../util/common/noteboo
 import { raceCancellationError, raceTimeout } from '../../../util/vs/base/common/async';
 import { dispose } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatImageMimeType, ExtendedLanguageModelToolResult, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
+import { ExtendedLanguageModelToolResult, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { Tag } from '../../prompts/node/base/tag';
@@ -29,6 +29,7 @@ import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { IInstallExtensionToolInput } from './installExtensionTool';
+import { ChatImageMimeType } from '../../conversation/common/languageModelChatMessageHelpers';
 
 class RunNotebookTelemetryEvent {
 	public result: 'success' | 'failure' | 'skipped' = 'failure';
@@ -401,7 +402,7 @@ export class RunNotebookCellOutput extends PromptElement<IRunNotebookCellOutputP
 			</Tag>;
 		}
 
-		return <Tag name="cell-output">
+		return <Tag name='cell-output'>
 			Output with mimeTypes: {output.items.map((item) => item.mime).join(', ')}<br />
 			{`Output ${index}: ${this.renderOutputFallback(output, sizing.tokenBudget / 8)}`}
 		</Tag>;

@@ -5,7 +5,7 @@
 
 import * as eslint from 'eslint';
 
-export = new class MissingTSXLinebreak implements eslint.Rule.RuleModule {
+export default new class MissingTSXLinebreak implements eslint.Rule.RuleModule {
 
 	readonly meta: eslint.Rule.RuleMetaData = {
 		type: "problem",

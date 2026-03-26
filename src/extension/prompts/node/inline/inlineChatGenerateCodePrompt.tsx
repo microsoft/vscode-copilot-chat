@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
-import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { KnownSources } from '../../../../platform/languageServer/common/languageContextService';
@@ -25,7 +24,6 @@ import { CustomInstructions } from '../panel/customInstructions';
 import { ProjectLabels } from '../panel/projectLabels';
 import { LanguageServerContextPrompt } from './languageServerContextPrompt';
 import { SummarizedDocumentSplit } from './promptingSummarizedDocument';
-import { TemporalContext } from './temporalContext';
 
 export interface InlineChatGenerateCodePromptProps extends GenericInlinePromptProps {
 }
@@ -62,7 +60,7 @@ export class InlineChatGenerateCodePrompt extends PromptElement<InlineChatGenera
 
 		const { query, history, chatVariables, } = this.props.promptContext;
 
-		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.ProjectLabelsInline, this._experimentationService);
+		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ProjectLabelsInline, this._experimentationService);
 
 		const data = await SummarizedDocumentData.create(this._parserService, document, context.fileIndentInfo, context.wholeRange, SelectionSplitKind.OriginalEnd);
 
@@ -96,7 +94,6 @@ export class InlineChatGenerateCodePrompt extends PromptElement<InlineChatGenera
 				<UserMessage priority={725}>
 					<CustomInstructions languageId={languageId} chatVariables={chatVariables} />
 					<LanguageServerContextPrompt priority={700} document={document} position={context.selection.start} requestId={this.props.promptContext.requestId} source={KnownSources.chat} />
-					<TemporalContext context={[document]} location={ChatLocation.Editor} />
 				</UserMessage>
 				<ChatToolReferences priority={750} promptContext={this.props.promptContext} flexGrow={1} embeddedInsideUserMessage={false} />
 				<ChatVariables priority={750} chatVariables={chatVariables} embeddedInsideUserMessage={false} />

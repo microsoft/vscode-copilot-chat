@@ -3,8 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { t } from '@vscode/l10n';
-import { Result } from '../../../util/common/result';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { Delayer, raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
@@ -19,15 +17,16 @@ import { IVSCodeExtensionContext } from '../../extContext/common/extensionContex
 import { logExecTime, LogExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
 import { ICodeSearchAuthenticationService } from '../../remoteCodeSearch/node/codeSearchRepoAuth';
-import { BuildIndexTriggerReason, TriggerIndexingError } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId } from '../common/workspaceChunkSearch';
-import { WorkspaceChunkEmbeddingsIndex, WorkspaceChunkEmbeddingsIndexState } from './workspaceChunkEmbeddingsIndex';
+import { BuildIndexTriggerReason } from './codeSearch/codeSearchRepo';
+import { WorkspaceChunkEmbeddingsIndex } from './workspaceChunkEmbeddingsIndex';
 import { IWorkspaceFileIndex } from './workspaceFileIndex';
 
 export enum LocalEmbeddingsIndexStatus {
+	Disabled = 'disabled',
 	Unknown = 'unknown',
 
 	UpdatingIndex = 'updatingIndex',
@@ -37,11 +36,6 @@ export enum LocalEmbeddingsIndexStatus {
 	TooManyFilesForAnyIndexing = 'tooManyFilesForAnyIndexing',
 }
 
-export interface LocalEmbeddingsIndexState {
-	readonly status: LocalEmbeddingsIndexStatus;
-
-	getState(): Promise<WorkspaceChunkEmbeddingsIndexState | undefined>;
-}
 
 /**
  * Uses a locally stored index of embeddings to find the most similar chunks from the workspace.
@@ -102,31 +96,6 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 
 		dispose(this._reindexRequests.values());
 		this._reindexRequests.clear();
-	}
-
-	async triggerLocalIndexing(trigger: BuildIndexTriggerReason): Promise<Result<true, TriggerIndexingError>> {
-		await this.initialize();
-
-		if (trigger === 'manual') {
-			this._extensionContext.workspaceState.update(this._hasRequestedManualIndexingKey, true);
-		}
-
-		// TODO: we need to re-check the workspace state here since it may have changed
-		if (this._state === LocalEmbeddingsIndexStatus.TooManyFilesForAnyIndexing) {
-			const fileCap = await this.getManualIndexFileCap();
-			return Result.error({
-				id: 'too-many-files',
-				userMessage: t('@workspace\'s indexing currently is limited to {0} files. Found {1} potential files to index in the workspace.\n\nA sparse local index will be used to answer question instead.', fileCap, this._embeddingsIndex.fileCount)
-			});
-		}
-
-		if (this._state === LocalEmbeddingsIndexStatus.TooManyFilesForAutomaticIndexing && trigger === 'auto') {
-			return Result.ok(true);
-		}
-
-		await this.triggerIndexingOfWorkspace(trigger, new TelemetryCorrelationId('EmbeddingsChunkSearch::triggerLocalIndexing'));
-
-		return Result.ok(true);
 	}
 
 	async prepareSearchWorkspace(telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<void> {
@@ -196,10 +165,10 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	private isEmbeddingSearchEnabled() {
-		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.WorkspaceEnableEmbeddingsSearch, this._experimentationService);
+		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.WorkspaceEnableEmbeddingsSearch, this._experimentationService);
 	}
 
-	@LogExecTime(self => self._logService)
+	@LogExecTime(self => self._logService, 'EmbeddingsChunkSearch::searchSubsetOfFiles')
 	async searchSubsetOfFiles(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, files: readonly URI[], options: WorkspaceChunkSearchOptions, telemetry: { info: TelemetryCorrelationId; batchInfo?: ComputeBatchInfo }, token: CancellationToken): Promise<StrategySearchResult> {
 		if (!files.length) {
 			return { chunks: [] };
@@ -233,14 +202,6 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 		});
 	}
 
-	async getState(): Promise<LocalEmbeddingsIndexState> {
-		await this.initialize();
-		return {
-			status: this._state,
-			getState: () => this._embeddingsIndex.getIndexState()
-		};
-	}
-
 	private _init?: Promise<void>;
 	private async initialize(): Promise<void> {
 		this._init ??= (async () => {
@@ -252,16 +213,16 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 			const limitStatus = await this.checkIndexSizeLimits();
 			if (limitStatus) {
 				if (limitStatus === LocalEmbeddingsIndexStatus.TooManyFilesForAnyIndexing) {
-					this._logService.debug(`EmbeddingsChunkSearch: Disabling all local embedding indexing due to too many files. Found ${this._embeddingsIndex.fileCount} files. Max: ${this.getManualIndexFileCap()}`);
+					this._logService.debug(`EmbeddingsChunkSearch: Disabling all local embedding indexing due to too many files. Found ${this._embeddingsIndex.fileCount} files. Max: ${await this.getManualIndexFileCap()}`);
 				} else if (limitStatus === LocalEmbeddingsIndexStatus.TooManyFilesForAutomaticIndexing) {
-					this._logService.debug(`EmbeddingsChunkSearch: skipping automatic indexing due to too many files. Found ${this._embeddingsIndex.fileCount} files. Max: ${this.getAutoIndexFileCap()}`);
+					this._logService.debug(`EmbeddingsChunkSearch: skipping automatic indexing due to too many files. Found ${this._embeddingsIndex.fileCount} files. Max: ${await this.getAutoIndexFileCap()}`);
 				}
 
 				this.setState(limitStatus);
 				return;
 			}
 
-			this._logService.debug(`EmbeddingsChunkSearch: initialize found ${this._embeddingsIndex.fileCount} files. Max: ${this.getAutoIndexFileCap()}`);
+			this._logService.debug(`EmbeddingsChunkSearch: initialize found ${this._embeddingsIndex.fileCount} files. Max: ${await this.getAutoIndexFileCap()}`);
 			this.setState(LocalEmbeddingsIndexStatus.Ready);
 		})();
 		await this._init;
@@ -330,12 +291,10 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 			}
 		};
 
-		this._reindexDisposables.add(this._workspaceIndex.onDidCreateFiles(async uris => {
+		this._reindexDisposables.add(this._workspaceIndex.onDidCreateFiles(async _uris => {
 			updateIndexState();
-			this.tryTriggerReindexing(uris, new TelemetryCorrelationId('EmbeddingsChunkSearch::onDidCreateFiles'));
 		}));
 
-		this._reindexDisposables.add(this._workspaceIndex.onDidChangeFiles(uris => this.tryTriggerReindexing(uris, new TelemetryCorrelationId('EmbeddingsChunkSearch::onDidChangeFiles'))));
 		this._reindexDisposables.add(this._workspaceIndex.onDidDeleteFiles(uris => {
 			for (const uri of uris) {
 				this._reindexRequests.get(uri)?.dispose();
@@ -348,17 +307,17 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 
 	private async getAutoIndexFileCap() {
 		if (await this.getExpandedClientSideIndexingStatus() === 'enabled') {
-			return this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
+			return this._experimentationService.getTreatmentVariable<number>('workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
 		}
 
-		return this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.embeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultAutomaticIndexingFileCap;
+		return this._experimentationService.getTreatmentVariable<number>('workspace.embeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultAutomaticIndexingFileCap;
 	}
 
 	private async getManualIndexFileCap() {
-		let manualCap = this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.manualEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultManualIndexingFileCap;
+		let manualCap = this._experimentationService.getTreatmentVariable<number>('workspace.manualEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultManualIndexingFileCap;
 
 		if (await this.getExpandedClientSideIndexingStatus() === 'available') {
-			manualCap = this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
+			manualCap = this._experimentationService.getTreatmentVariable<number>('workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
 		}
 
 		// The manual cap should never be lower than the auto cap
@@ -366,9 +325,13 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	private async getExpandedClientSideIndexingStatus(): Promise<'enabled' | 'available' | 'disabled'> {
-		const token = await this._authService.getCopilotToken();
-		if (!token?.isExpandedClientSideIndexingEnabled()) {
-			return 'disabled';
+		try {
+			const token = await this._authService.getCopilotToken();
+			if (!token?.isExpandedClientSideIndexingEnabled()) {
+				return 'disabled';
+			}
+		} catch {
+			// noop
 		}
 
 		const cache = this._extensionContext.workspaceState.get<boolean | undefined>(this._hasPromptedExpandedIndexingKey);
@@ -383,18 +346,17 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 		}
 	}
 
-	public tryTriggerReindexing(uris: readonly URI[], telemetryInfo: TelemetryCorrelationId, immediately = false): void {
+	public tryTriggerReindexing(uris: readonly URI[], telemetryInfo: TelemetryCorrelationId): void {
 		if (this._state === LocalEmbeddingsIndexStatus.TooManyFilesForAnyIndexing
 			|| this._state === LocalEmbeddingsIndexStatus.TooManyFilesForAutomaticIndexing
 		) {
 			return;
 		}
 
-		const defaultDelay = this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.embeddingIndex.automaticReindexingDelay') ?? 60000;
 		for (const uri of uris) {
 			let delayer = this._reindexRequests.get(uri);
 			if (!delayer) {
-				delayer = new Delayer<void>(defaultDelay);
+				delayer = new Delayer<void>(0);
 				this._reindexRequests.set(uri, delayer);
 			}
 
@@ -408,7 +370,7 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 				}
 
 				return this._embeddingsIndex.triggerIndexingOfFile(uri, telemetryInfo.addCaller('EmbeddingChunkSearch::tryTriggerReindexing'), this._disposeCts.token);
-			}, immediately ? 0 : defaultDelay);
+			}, 0);
 		}
 	}
 }

@@ -5,8 +5,8 @@
 
 import * as l10n from '@vscode/l10n';
 import { commands, env, ExtensionContext, ExtensionMode, l10n as vscodeL10n } from 'vscode';
-import { IEnvService } from '../../../platform/env/common/envService';
-import { IHeatmapService } from '../../../platform/heatmap/common/heatmapService';
+import { isScenarioAutomation } from '../../../platform/env/common/envService';
+import { isProduction } from '../../../platform/env/common/packagejson';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationServiceBuilder, InstantiationServiceBuilder } from '../../../util/common/services';
@@ -32,7 +32,7 @@ export interface IExtensionActivationConfiguration {
 
 export async function baseActivate(configuration: IExtensionActivationConfiguration) {
 	const context = configuration.context;
-	if (context.extensionMode === ExtensionMode.Test && !configuration.forceActivation) {
+	if (context.extensionMode === ExtensionMode.Test && !configuration.forceActivation && !isScenarioAutomation) {
 		// FIXME Running in tests, don't activate the extension
 		// Avoid bundling the extension code in the test bundle
 		return context;
@@ -53,20 +53,19 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 		l10n.config({ contents: vscodeL10n.bundle });
 	}
 
+	if (!isProduction) {
+		// Must do this before creating all the services which may rely on keys from .env
+		configuration.configureDevPackages?.();
+	}
+
 	const instantiationService = createInstantiationService(configuration);
 
 	await instantiationService.invokeFunction(async accessor => {
-		const envService = accessor.get(IEnvService);
 		const expService = accessor.get(IExperimentationService);
-
-		if (!envService.isProduction()) {
-			configuration.configureDevPackages?.();
-		}
 
 		// Await intialization of exp service. This ensure cache is fresh.
 		// It will then auto refresh every 30 minutes after that.
-		await expService.initializePromise;
-		await expService.initialFetch;
+		await expService.hasTreatments();
 
 		// THIS is awaited because some contributions can block activation
 		// via `IExtensionContribution#activationBlocker`
@@ -75,7 +74,7 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 		await contributions.waitForActivationBlockers();
 	});
 
-	if (ExtensionMode.Test === context.extensionMode) {
+	if (ExtensionMode.Test === context.extensionMode && !isScenarioAutomation) {
 		return instantiationService; // The returned accessor is used in tests
 	}
 
@@ -102,9 +101,6 @@ export function createInstantiationService(configuration: IExtensionActivationCo
 
 		// Does the initial read of ignore files, but don't block
 		accessor.get(IIgnoreService).init();
-
-		// force create heatmap service
-		accessor.get(IHeatmapService);
 	});
 
 	return instantiationService;

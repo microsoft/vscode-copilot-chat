@@ -50,7 +50,7 @@ export async function run(fullPath: string, testFullName: string) {
 		configs: undefined,
 	};
 	const testingServiceCollection = await createSimulationAccessor(
-		{ chatModel: test.model, embeddingModel: test.embeddingsModel },
+		{ chatModel: test.model, embeddingType: test.embeddingType },
 		simulationServicesOptions,
 		currentTestRunInfo
 	);

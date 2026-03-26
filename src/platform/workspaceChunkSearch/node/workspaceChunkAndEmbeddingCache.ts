@@ -6,35 +6,20 @@ import fs from 'fs';
 import { IDisposable } from 'monaco-editor';
 import sql from 'node:sqlite';
 import path from 'path';
-import { CancelablePromise, createCancelablePromise } from '../../../util/vs/base/common/async';
+import { CancelablePromise, createCancelablePromise, raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { URI } from '../../../util/vs/base/common/uri';
-import { IRange, Range } from '../../../util/vs/editor/common/core/range';
+import { Range } from '../../../util/vs/editor/common/core/range';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { FileChunkWithEmbedding } from '../../chunking/common/chunk';
-import { Embedding, EmbeddingType, EmbeddingVector } from '../../embeddings/common/embeddingsComputer';
+import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
+import { packEmbedding, unpackEmbedding } from '../../embeddings/common/embeddingsStorage';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { ILogService } from '../../log/common/logService';
 import { FileRepresentation, IWorkspaceFileIndex } from './workspaceFileIndex';
-
-interface PersistedCache {
-	readonly version: string;
-	readonly embeddingModel: string | undefined;
-	readonly entries: Record<string, PersistedCacheEntry>;
-}
-
-interface PersistedCacheEntry {
-	readonly contentVersionId: string | undefined;
-	readonly hash: string | undefined;
-	readonly entries: readonly {
-		readonly text: string;
-		readonly range: IRange;
-		readonly embedding: EmbeddingVector | /* base64*/ string;
-		readonly chunkHash: string | undefined;
-	}[];
-}
 
 type CacheEntry = {
 	readonly contentVersionId: string | undefined;
@@ -73,56 +58,16 @@ export async function createWorkspaceChunkAndEmbeddingCache(
 	accessor: ServicesAccessor,
 	embeddingType: EmbeddingType,
 	cacheRoot: URI | undefined,
-	workspaceIndex: IWorkspaceFileIndex
+	workspaceIndex: IWorkspaceFileIndex,
+	token: CancellationToken,
 ): Promise<IWorkspaceChunkAndEmbeddingCache> {
 	const instantiationService = accessor.get(IInstantiationService);
-	return instantiationService.invokeFunction(accessor => DbCache.create(accessor, embeddingType, cacheRoot ?? ':memory:', workspaceIndex));
+	return instantiationService.invokeFunction(accessor => DbCache.create(accessor, embeddingType, cacheRoot ?? ':memory:', workspaceIndex, token));
 }
 
 class OldDiskCache {
-	private static readonly version = '1.0.0';
 	private static cacheFileName = 'workspace-chunks.json';
 
-	public static decodeEmbedding(base64Str: string): EmbeddingVector {
-		const decoded = Buffer.from(base64Str, 'base64');
-		const float32Array = new Float32Array(decoded.buffer, decoded.byteOffset, decoded.byteLength / Float32Array.BYTES_PER_ELEMENT);
-		return Array.from(float32Array);
-	}
-
-	public static async readDiskCache(accessor: ServicesAccessor, embeddingType: EmbeddingType, cacheRoot: URI, logService: ILogService): Promise<Iterable<[string, PersistedCacheEntry]> | undefined> {
-		const fileSystem = accessor.get(IFileSystemService);
-
-		const cachePath = URI.joinPath(cacheRoot, OldDiskCache.cacheFileName);
-		try {
-			let file: Uint8Array | undefined;
-			try {
-				file = await fileSystem.readFile(cachePath, true);
-			} catch (e) {
-				// Expected, most likely file doesn't exist
-				return undefined;
-			}
-
-			const data: PersistedCache = JSON.parse(new TextDecoder().decode(file));
-			if (data.version !== OldDiskCache.version) {
-				logService.debug(`WorkspaceChunkAndEmbeddingCache: invalidating cache due to version mismatch. Expected ${OldDiskCache.version} but found ${data.version}`);
-				return undefined;
-			}
-
-			// Check mismatch in embedding models
-			// Older cached version don't store their embedding model but it's always text3small_512
-			if (
-				(data.embeddingModel === undefined && embeddingType !== EmbeddingType.text3small_512)
-				|| (data.embeddingModel !== undefined && data.embeddingModel !== embeddingType.id)
-			) {
-				logService.debug(`WorkspaceChunkAndEmbeddingCache: invalidating cache due to embeddings type mismatch. Expected ${embeddingType} but found ${data.embeddingModel}`);
-				return undefined;
-			}
-
-			return Object.entries(data.entries);
-		} catch {
-			return undefined;
-		}
-	}
 
 	static async deleteDiskCache(accessor: ServicesAccessor, cacheRoot: URI) {
 		const fileSystem = accessor.get(IFileSystemService);
@@ -147,141 +92,113 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 		embeddingType: EmbeddingType,
 		cacheRoot: URI | ':memory:',
 		workspaceIndex: IWorkspaceFileIndex,
+		token: CancellationToken,
 	): Promise<DbCache> {
 		const instantiationService = accessor.get(IInstantiationService);
+		const logService = accessor.get(ILogService);
 
 		const syncOptions: sql.DatabaseSyncOptions = {
 			open: true,
 			enableForeignKeyConstraints: true
 		};
 
-
 		let db: sql.DatabaseSync | undefined;
 		if (cacheRoot !== ':memory:' && cacheRoot.scheme === Schemas.file) {
 			const dbPath = URI.joinPath(cacheRoot, `workspace-chunks.db`);
 			try {
-				await fs.promises.mkdir(path.dirname(dbPath.fsPath), { recursive: true });
+				await raceCancellationError(fs.promises.mkdir(path.dirname(dbPath.fsPath), { recursive: true }), token);
 				db = new sql.DatabaseSync(dbPath.fsPath, syncOptions);
+				logService.trace(`DbWorkspaceChunkAndEmbeddingCache: Opened SQLite database on disk at ${dbPath.fsPath}`);
 			} catch (e) {
+				if (isCancellationError(e)) {
+					throw e;
+				}
 				console.error('Failed to open SQLite database on disk', e);
 			}
 		}
 
 		if (!db) {
 			db = new sql.DatabaseSync(':memory:', syncOptions);
+			logService.trace(`DbWorkspaceChunkAndEmbeddingCache: Using in memory database`);
 		}
 
-		db.exec(`
+		try {
+			db.exec(`
 			PRAGMA journal_mode = OFF;
 			PRAGMA synchronous = 0;
-			PRAGMA cache_size = 1000000;
+			PRAGMA cache_size = 10000;
 			PRAGMA locking_mode = EXCLUSIVE;
 			PRAGMA temp_store = MEMORY;
 		`);
 
-		db.exec(`
-			CREATE TABLE IF NOT EXISTS CacheMeta (
-				version TEXT NOT NULL,
-				embeddingModel TEXT
-			);
+			db.exec(`
+				CREATE TABLE IF NOT EXISTS CacheMeta (
+					version TEXT NOT NULL,
+					embeddingModel TEXT
+				);
 
-			CREATE TABLE IF NOT EXISTS Files (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				uri TEXT NOT NULL UNIQUE,
-				contentVersionId TEXT
-			);
+				CREATE TABLE IF NOT EXISTS Files (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					uri TEXT NOT NULL UNIQUE,
+					contentVersionId TEXT
+				);
 
-			CREATE TABLE IF NOT EXISTS FileChunks (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				fileId INTEGER NOT NULL,
-				text TEXT NOT NULL,
-				range_startLineNumber INTEGER NOT NULL,
-				range_startColumn INTEGER NOT NULL,
-				range_endLineNumber INTEGER NOT NULL,
-				range_endColumn INTEGER NOT NULL,
-				embedding BINARY NOT NULL,
-				chunkHash TEXT NOT NULL,
-				FOREIGN KEY (fileId) REFERENCES Files(id) ON DELETE CASCADE
-			);
+				CREATE TABLE IF NOT EXISTS FileChunks (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					fileId INTEGER NOT NULL,
+					text TEXT NOT NULL,
+					range_startLineNumber INTEGER NOT NULL,
+					range_startColumn INTEGER NOT NULL,
+					range_endLineNumber INTEGER NOT NULL,
+					range_endColumn INTEGER NOT NULL,
+					embedding BINARY NOT NULL,
+					chunkHash TEXT NOT NULL,
+					FOREIGN KEY (fileId) REFERENCES Files(id) ON DELETE CASCADE
+				);
 
-			CREATE INDEX IF NOT EXISTS idx_files_uri ON Files(uri);
-			CREATE INDEX IF NOT EXISTS idx_filechunks_fileId ON FileChunks(fileId);
-		`);
+				CREATE INDEX IF NOT EXISTS idx_files_uri ON Files(uri);
+				CREATE INDEX IF NOT EXISTS idx_filechunks_fileId ON FileChunks(fileId);
+			`);
 
-		const versionResult = db.prepare('SELECT version, embeddingModel FROM CacheMeta LIMIT 1').get();
-		if (!versionResult || versionResult.version !== this.version || versionResult.embeddingModel !== embeddingType.id) {
-			// Clear everything
-			db.exec('DELETE FROM CacheMeta; DELETE FROM Files; DELETE FROM FileChunks;');
-		}
+			const versionResult = db.prepare('SELECT version, embeddingModel FROM CacheMeta LIMIT 1').get();
+			if (!versionResult || versionResult.version !== this.version || versionResult.embeddingModel !== embeddingType.id) {
+				// Clear everything
+				db.exec('DELETE FROM CacheMeta; DELETE FROM Files; DELETE FROM FileChunks;');
+			}
 
-		// Update cache metadata
-		db.exec('DELETE FROM CacheMeta;');
-		db.prepare('INSERT INTO CacheMeta (version, embeddingModel) VALUES (?, ?)').run(this.version, embeddingType.id);
+			// Update cache metadata
+			db.exec('DELETE FROM CacheMeta;');
+			db.prepare('INSERT INTO CacheMeta (version, embeddingModel) VALUES (?, ?)').run(this.version, embeddingType.id);
 
-		// Load existing disk db if it exists
-		const diskCache = cacheRoot !== ':memory:' ?
-			await instantiationService.invokeFunction(accessor => OldDiskCache.readDiskCache(
-				accessor,
-				embeddingType,
-				cacheRoot,
-				accessor.get(ILogService)
-			))
-			: undefined;
-		if (diskCache) {
+			// Clean up old disk db if it exists
+			if (cacheRoot !== ':memory:') {
+				void instantiationService.invokeFunction(accessor => OldDiskCache.deleteDiskCache(accessor, cacheRoot));
+			}
+
+			// Validate all files in the database against the workspace index and remove any that are no longer present
+			await raceCancellationError(workspaceIndex.initialize(), token);
+
+			const allFilesStmt = db.prepare('SELECT id, uri FROM Files');
 			try {
-				const insertFileStatement = db.prepare('INSERT OR REPLACE INTO Files (uri, contentVersionId) VALUES (?, ?)');
-				const insertChunkStatement = db.prepare(`INSERT INTO FileChunks (fileId, text, range_startLineNumber, range_startColumn, range_endLineNumber, range_endColumn, embedding, chunkHash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-
 				db.exec('BEGIN TRANSACTION');
-				for (const [uri, entry] of diskCache) {
-					const fileIdResult = insertFileStatement
-						.run(uri.toString(), entry.contentVersionId ?? '');
-
-					for (const chunk of entry.entries) {
-						insertChunkStatement.run(
-							fileIdResult.lastInsertRowid as number,
-							chunk.text,
-							chunk.range.startLineNumber,
-							chunk.range.startColumn,
-							chunk.range.endLineNumber,
-							chunk.range.endColumn,
-							packEmbedding({
-								type: embeddingType,
-								value: typeof chunk.embedding === 'string' ? OldDiskCache.decodeEmbedding(chunk.embedding) : chunk.embedding,
-							}),
-							chunk.chunkHash ?? ''
-						);
+				for (const row of allFilesStmt.all()) {
+					try {
+						const uri = URI.parse(row.uri as string);
+						if (workspaceIndex.get(uri)) {
+							continue;
+						}
+					} catch {
+						// noop
 					}
+
+					db.prepare('DELETE FROM Files WHERE id = ?').run(row.id as number);
 				}
 			} finally {
 				db.exec('COMMIT');
 			}
-
-			if (cacheRoot !== ':memory:') {
-				void instantiationService.invokeFunction(accessor => OldDiskCache.deleteDiskCache(accessor, cacheRoot));
-			}
-		}
-
-		// Validate all files in the database against the workspace index and remove any that are no longer present
-		await workspaceIndex.initialize();
-
-		const allFilesStmt = db.prepare('SELECT id, uri FROM Files');
-		try {
-			db.exec('BEGIN TRANSACTION');
-			for (const row of allFilesStmt.all()) {
-				try {
-					const uri = URI.parse(row.uri as string);
-					if (workspaceIndex.get(uri)) {
-						continue;
-					}
-				} catch {
-					// noop
-				}
-
-				db.prepare('DELETE FROM Files WHERE id = ?').run(row.id as number);
-			}
-		} finally {
-			db.exec('COMMIT');
+		} catch (e) {
+			db.close();
+			throw e;
 		}
 
 		return new DbCache(embeddingType, db);
@@ -295,7 +212,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 	) { }
 
 	dispose(): void {
-		// Noop
+		this.db.close();
 	}
 
 	/**
@@ -449,52 +366,4 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 
 		return chunks;
 	}
-}
-
-/**
- * Packs the embedding into a binary value for efficient storage.
- */
-export function packEmbedding(embedding: Embedding): Uint8Array {
-	if (embedding.type.equals(EmbeddingType.metis_1024_I16_Binary)) {
-		// Generate packed binary
-		if (embedding.value.length % 8 !== 0) {
-			throw new Error(`Embedding value length must be a multiple of 8 for ${embedding.type.id}, got ${embedding.value.length}`);
-		}
-
-		const data = new Uint8Array(embedding.value.length / 8);
-		for (let i = 0; i < embedding.value.length; i += 8) {
-			let value = 0;
-			for (let j = 0; j < 8; j++) {
-				value |= (embedding.value[i + j] >= 0 ? 1 : 0) << j;
-			}
-			data[i / 8] = value;
-		}
-		return data;
-	}
-
-	// All other formats default to float32 for now
-	const data = Float32Array.from(embedding.value);
-	return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-}
-
-/**
- * Unpacks an embedding from a binary value packed with {@link packEmbedding}.
- */
-export function unpackEmbedding(type: EmbeddingType, data: Uint8Array): Embedding {
-	if (type.equals(EmbeddingType.metis_1024_I16_Binary)) {
-		// Old versions may have stored the values as a float32
-		if (data.length <= 1024) {
-			const values = new Array(data.length * 8);
-			for (let i = 0; i < data.length; i++) {
-				const byte = data[i];
-				for (let j = 0; j < 8; j++) {
-					values[i * 8 + j] = (byte & (1 << j)) > 0 ? 0.03125 : -0.03125;
-				}
-			}
-			return { type, value: values };
-		}
-	}
-
-	const float32Array = new Float32Array(data.buffer, data.byteOffset, data.byteLength / 4);
-	return { type, value: Array.from(float32Array) };
 }

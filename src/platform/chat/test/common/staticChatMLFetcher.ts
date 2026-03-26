@@ -14,6 +14,7 @@ export class StaticChatMLFetcher implements IChatMLFetcher {
 	_serviceBrand: undefined;
 	onDidMakeChatMLRequest = Event.None;
 	private reqs = 0;
+	public resolvedModel = '';
 
 	constructor(public readonly value: StaticChatMLFetcherInput) { }
 
@@ -43,7 +44,7 @@ export class StaticChatMLFetcher implements IChatMLFetcher {
 			responseSoFar += chunks[i].text;
 		}
 
-		return { type: ChatFetchResponseType.Success, requestId: '', serverRequestId: '', usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } }, value: responseSoFar };
+		return { type: ChatFetchResponseType.Success, requestId: '', serverRequestId: '', usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } }, value: responseSoFar, resolvedModel: this.resolvedModel };
 	}
 
 	async fetchMany(): Promise<ChatResponses> {

@@ -81,7 +81,7 @@ export class NotebookExectionStatusBarItemProvider implements vscode.NotebookCel
 
 			const title = l10n.t('Fix using Copilot');
 			// remove the file and line number from the error message as they are in-memory
-			const joinedMessage = [err.name, err.message].filter(Boolean).join(': ').replace(/\s*\(\S+,\s*line\s*\d+\)/, "");
+			const joinedMessage = [err.name, err.message].filter(Boolean).join(': ').replace(/\s*\(\S+,\s*line\s*\d+\)/, '');
 
 			return [
 				{

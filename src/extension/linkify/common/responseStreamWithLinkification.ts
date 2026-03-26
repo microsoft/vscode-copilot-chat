@@ -2,11 +2,11 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { ChatResponseClearToPreviousToolInvocationReason, ChatResponseFileTree, ChatResponsePart, ChatResponseStream, ChatVulnerability, Command, Location, NotebookEdit, TextEdit, ThinkingDelta, Uri } from 'vscode';
+import type { ChatQuestion, ChatResponseClearToPreviousToolInvocationReason, ChatResponseFileTree, ChatResponsePart, ChatResponseStream, ChatResultUsage, ChatToolInvocationStreamData, ChatVulnerability, ChatWorkspaceFileEdit, Command, Location, NotebookEdit, TextEdit, ThinkingDelta, Uri } from 'vscode';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { FinalizableChatResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, MarkdownString } from '../../../vscodeTypes';
+import { ChatHookType, ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatToolInvocationPart, MarkdownString } from '../../../vscodeTypes';
 import { LinkifiedText, LinkifySymbolAnchor } from './linkifiedText';
 import { IContributedLinkifierFactory, ILinkifier, ILinkifyService, LinkifierContext } from './linkifyService';
 
@@ -37,6 +37,8 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 	}
 
 	clearToPreviousToolInvocation(reason: ChatResponseClearToPreviousToolInvocationReason): void {
+		this._pendingMarkdown = '';
+		this._pendingMarkdownScheduled = false;
 		this._linkifier.flush(CancellationToken.None);
 		this._progress.clearToPreviousToolInvocation(reason);
 	}
@@ -77,6 +79,11 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 		return this;
 	}
 
+	hookProgress(hookType: ChatHookType, stopReason?: string, systemMessage?: string): ChatResponseStream {
+		this.enqueue(() => this._progress.hookProgress(hookType, stopReason, systemMessage), false);
+		return this;
+	}
+
 
 	reference(value: Uri | Location): ChatResponseStream {
 		this.enqueue(() => this._progress.reference(value), false);
@@ -93,6 +100,10 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 		return this;
 	}
 
+	externalEdit(target: Uri | Uri[], callback: () => Thenable<void>): Thenable<string> {
+		return this.enqueue(() => this._progress.externalEdit(target, callback), true);
+	}
+
 	push(part: ChatResponsePart): ChatResponseStream {
 		if (part instanceof ChatResponseMarkdownPart) {
 			this.appendMarkdown(part.value);
@@ -105,7 +116,9 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 	private isBlockPart(part: ChatResponsePart): boolean {
 		return part instanceof ChatResponseFileTreePart
 			|| part instanceof ChatResponseCommandButtonPart
-			|| part instanceof ChatResponseConfirmationPart;
+			|| part instanceof ChatResponseConfirmationPart
+			|| part instanceof ChatToolInvocationPart
+			|| part instanceof ChatResponseThinkingProgressPart;
 	}
 
 	textEdit(target: Uri, editsOrDone: TextEdit | TextEdit[] | true): ChatResponseStream {
@@ -131,6 +144,10 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 		return this;
 	}
 
+	workspaceEdit(edits: ChatWorkspaceFileEdit[]): void {
+		this.enqueue(() => this._progress.workspaceEdit(edits), false);
+	}
+
 	markdownWithVulnerabilities(value: string | MarkdownString, vulnerabilities: ChatVulnerability[]): ChatResponseStream {
 		this.enqueue(() => this._progress.markdownWithVulnerabilities(value, vulnerabilities), false);
 		return this;
@@ -147,36 +164,65 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 		return this;
 	}
 
-	prepareToolInvocation(toolName: string): ChatResponseStream {
-		this.enqueue(() => this._progress.prepareToolInvocation(toolName), false);
+	beginToolInvocation(toolCallId: string, toolName: string, streamData?: ChatToolInvocationStreamData): ChatResponseStream {
+		this.enqueue(() => this._progress.beginToolInvocation(toolCallId, toolName, streamData), true);
+		return this;
+	}
+
+	updateToolInvocation(toolCallId: string, streamData: { partialInput?: unknown }): ChatResponseStream {
+		this.enqueue(() => this._progress.updateToolInvocation(toolCallId, streamData), false);
+		return this;
+	}
+
+	questionCarousel(questions: ChatQuestion[], allowSkip?: boolean): Thenable<Record<string, unknown> | undefined> {
+		return this.enqueue(() => this._progress.questionCarousel(questions, allowSkip), true);
+	}
+
+	usage(usage: ChatResultUsage): ChatResponseStream {
+		this.enqueue(() => this._progress.usage(usage), false);
 		return this;
 	}
 
 	//#endregion
 
-	private sequencer: Promise<void> = Promise.resolve();
+	private sequencer: Promise<unknown> = Promise.resolve();
 
-	private enqueue(f: () => any | Promise<any>, flush: boolean) {
+	private enqueue<T>(f: () => T | Thenable<T>, flush: boolean) {
 		if (flush) {
 			this.sequencer = this.sequencer.then(() => this.doFinalize());
 		}
 		this.sequencer = this.sequencer.then(f);
-		return this.sequencer;
+		return this.sequencer as Promise<T>;
 	}
+
+	private _pendingMarkdown = '';
+	private _pendingMarkdownScheduled = false;
 
 	private async appendMarkdown(md: MarkdownString): Promise<void> {
 		if (!md.value) {
 			return;
 		}
 
-		this.enqueue(async () => {
-			const output = await this._linkifier.append(md.value, this._token);
-			if (this._token.isCancellationRequested) {
-				return;
-			}
+		// Buffer incoming markdown and schedule a single drain when the sequencer frees up.
+		// This coalesces many small markdown chunks into fewer linkifier.append() calls,
+		// dramatically reducing queue wait when the linkifier is busy.
+		this._pendingMarkdown += md.value;
 
-			this.outputMarkdown(output);
-		}, false);
+		if (!this._pendingMarkdownScheduled) {
+			this._pendingMarkdownScheduled = true;
+			this.enqueue(async () => {
+				const buf = this._pendingMarkdown;
+				this._pendingMarkdown = '';
+				this._pendingMarkdownScheduled = false;
+
+				const output = await this._linkifier.append(buf, this._token);
+				if (this._token.isCancellationRequested) {
+					return;
+				}
+
+				this.outputMarkdown(output);
+			}, false);
+		}
 	}
 
 	async finalize() {

@@ -6,6 +6,7 @@
 import { PromptElement, PromptElementProps, PromptPiece, PromptSizing } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
+import { isScenarioAutomation } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILanguageFeaturesService, isLocationLink } from '../../../../platform/languages/common/languageFeaturesService';
@@ -78,7 +79,7 @@ export class DefinitionAtPosition extends PromptElement<Props, State> {
 			return { k: 'ignored' };
 		}
 
-		const timeout = this._vscodeExtensionCtxService.extensionMode === ExtensionMode.Test
+		const timeout = this._vscodeExtensionCtxService.extensionMode === ExtensionMode.Test && !isScenarioAutomation
 			? 0
 			: (this.props.timeoutMs === undefined ? DefinitionAtPosition.DEFAULT_TIMEOUT_MS : this.props.timeoutMs);
 

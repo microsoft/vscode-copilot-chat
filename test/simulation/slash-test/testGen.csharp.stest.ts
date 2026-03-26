@@ -8,11 +8,11 @@ import { Intent } from '../../../src/extension/common/constants';
 import { isQualifiedFile, isRelativeFile } from '../../../src/platform/test/node/simulationWorkspace';
 import { Schemas } from '../../../src/util/vs/base/common/network';
 import { ssuite, stest } from '../../base/stest';
-import { forInlineAndInline2, simulateInlineChatWithStrategy } from '../inlineChatSimulator';
+import { forInline, simulateInlineChatWithStrategy } from '../inlineChatSimulator';
 import { getFileContent } from '../outcomeValidators';
 import { assertSomeStrings, assertWorkspaceEdit, fromFixture } from '../stestUtil';
 
-forInlineAndInline2((strategy, nonExtensionConfigurations, suffix) => {
+forInline((strategy, nonExtensionConfigurations, suffix) => {
 
 	ssuite({ title: `/tests${suffix}`, location: 'inline', language: 'csharp', nonExtensionConfigurations }, () => {
 

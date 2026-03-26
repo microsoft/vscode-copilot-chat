@@ -5,14 +5,16 @@
 
 import { IDisposable } from 'monaco-editor';
 import { createServiceIdentifier } from '../../../util/common/services';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { IObservable } from '../../../util/vs/base/common/observableInternal';
 import { equalsIgnoreCase } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
-import { Change, Commit, LogOptions } from '../vscode/git';
+import { Branch, Change, Commit, CommitOptions, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, RepositoryAccessDetails, RepositoryKind, RepositoryState, Worktree } from '../vscode/git';
 
 export interface RepoContext {
 	readonly rootUri: URI;
+	readonly kind: RepositoryKind;
 	readonly headBranchName: string | undefined;
 	readonly headCommitHash: string | undefined;
 	readonly upstreamBranchName: string | undefined;
@@ -22,8 +24,8 @@ export interface RepoContext {
 	// to change every test.
 	readonly remoteFetchUrls?: Array<string | undefined>;
 	readonly remotes: string[];
+	readonly worktrees: Worktree[];
 	readonly changes: { mergeChanges: Change[]; indexChanges: Change[]; workingTree: Change[]; untrackedChanges: Change[] } | undefined;
-
 
 	readonly headBranchNameObs: IObservable<string | undefined>;
 	readonly headCommitHashObs: IObservable<string | undefined>;
@@ -49,13 +51,41 @@ export interface IGitService extends IDisposable {
 	readonly repositories: Array<RepoContext>;
 	readonly isInitialized: boolean;
 
-	getRepository(uri: URI): Promise<RepoContext | undefined>;
+	getRecentRepositories(): Iterable<RepositoryAccessDetails>;
+	getRepository(uri: URI, forceOpen?: boolean): Promise<RepoContext | undefined>;
+	getRepositoryState(uri: URI, forceOpen?: boolean): Promise<RepositoryState | undefined>;
 	getRepositoryFetchUrls(uri: URI): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined>;
 	initialize(): Promise<void>;
+	add(uri: URI, paths: string[]): Promise<void>;
 	log(uri: URI, options?: LogOptions): Promise<Commit[] | undefined>;
 	diffBetween(uri: URI, ref1: string, ref2: string): Promise<Change[] | undefined>;
+	diffBetweenPatch(uri: URI, ref1: string, ref2: string, path?: string): Promise<string | undefined>;
+	diffBetweenWithStats(uri: URI, ref1: string, ref2: string, path?: string): Promise<DiffChange[] | undefined>;
+	diffBetweenWithStats2(uri: URI, ref: string, path?: string): Promise<DiffChange[] | undefined>;
 	diffWith(uri: URI, ref: string): Promise<Change[] | undefined>;
+	diffIndexWithHEADShortStats(uri: URI): Promise<CommitShortStat | undefined>;
 	fetch(uri: URI, remote?: string, ref?: string, depth?: number): Promise<void>;
+	getMergeBase(uri: URI, ref1: string, ref2: string): Promise<string | undefined>;
+
+	createWorktree(uri: URI, options?: { path?: string; commitish?: string; branch?: string }): Promise<string | undefined>;
+	deleteWorktree(uri: URI, path: string, options?: { force?: boolean }): Promise<void>;
+
+	migrateChanges(uri: URI, sourceRepositoryUri: URI, options?: { confirmation?: boolean; deleteFromSource?: boolean; untracked?: boolean }): Promise<void>;
+
+	applyPatch(uri: URI, patch: string): Promise<void>;
+	commit(uri: URI, message: string | undefined, opts?: CommitOptions): Promise<void>;
+
+	checkout(uri: URI, treeish: string): Promise<void>;
+	merge(uri: URI, ref: string): Promise<void>;
+	push(uri: URI): Promise<void>;
+	rebase(uri: URI, branch: string): Promise<void>;
+
+	getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]>;
+	isBranchProtected(uri: URI, branch?: string | Branch): Promise<boolean | undefined>;
+
+	generateRandomBranchName(uri: URI): Promise<string | undefined>;
+
+	exec(uri: URI, args: string[], env?: Record<string, string>): Promise<string>;
 }
 
 /**
@@ -75,8 +105,10 @@ export function getGitHubRepoInfoFromContext(repoContext: RepoContext): { id: Gi
 
 export interface ResolvedRepoRemoteInfo {
 	readonly fetchUrl: string | undefined;
-	readonly repoId: GithubRepoId | AdoRepoId;
+	readonly repoId: ResolvedRepoId;
 }
+
+export type ResolvedRepoId = GithubRepoId | AdoRepoId;
 
 /**
  * Gets the repo info for any type of repo from the repo context.
@@ -131,7 +163,7 @@ export function getOrderedRemoteUrlsFromContext(repoContext: RepoContext): Itera
 	return out;
 }
 
-export function parseRemoteUrl(fetchUrl: string): { host: string; path: string } | undefined {
+export function parseRemoteUrl(fetchUrl: string): { host: string; rawHost: string; path: string } | undefined {
 	fetchUrl = fetchUrl.trim();
 	try {
 		// Normalize git shorthand syntax (git@github.com:user/repo.git) into an explicit ssh:// url
@@ -161,13 +193,15 @@ export function parseRemoteUrl(fetchUrl: string): { host: string; path: string }
 			return;
 		}
 
-		const normalizedHost = extractedHost
+		const rawHost = extractedHost
 			.toLowerCase()
-			.replace(/:\d+$/, '') // Remove optional port
+			.replace(/:\d+$/, ''); // Remove optional port
+
+		const normalizedHost = rawHost
 			.replace(/^[\w\-]+-/, '') // Remove common ssh syntax: abc-github.com
 			.replace(/-[\w\-]+$/, '');// Remove common ssh syntax: github.com-abc
 
-		return { host: normalizedHost, path: path };
+		return { host: normalizedHost, rawHost, path: path };
 	} catch (err) {
 		return undefined;
 	}
@@ -187,6 +221,7 @@ export class GithubRepoId {
 	constructor(
 		public readonly org: string,
 		public readonly repo: string,
+		public readonly host: string = 'github.com',
 	) { }
 
 	toString(): string {
@@ -196,6 +231,10 @@ export class GithubRepoId {
 
 export function toGithubNwo(id: GithubRepoId): string {
 	return `${id.org}/${id.repo}`.toLowerCase();
+}
+
+export function toGithubWebUrl(id: GithubRepoId): string {
+	return `https://${id.host}/${id.org}/${id.repo}`;
 }
 
 /**
@@ -215,8 +254,15 @@ export function getGithubRepoIdFromFetchUrl(fetchUrl: string): GithubRepoId | un
 		return;
 	}
 
+	// Determine the actual web-accessible hostname
+	// For ghe.com subdomains, use the raw host (e.g., 'myco.ghe.com')
+	// For github.com, always use 'github.com' (SSH aliases like 'alias-github.com' should map to github.com)
+	const webHost = matchedHost === 'ghe.com'
+		? parsed.rawHost
+		: 'github.com';
+
 	const pathMatch = parsed.path.match(/^\/?([^/]+)\/([^/]+?)(\/|\.git\/?)?$/i);
-	return pathMatch ? new GithubRepoId(pathMatch[1], pathMatch[2]) : undefined;
+	return pathMatch ? new GithubRepoId(pathMatch[1], pathMatch[2], webHost) : undefined;
 }
 
 export class AdoRepoId {

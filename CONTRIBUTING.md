@@ -73,14 +73,14 @@ Please include the following with each issue:
 - (Windows) Visual Studio Build Tools >=2019 - for building with node-gyp [see node-gyp docs](https://github.com/nodejs/node-gyp?tab=readme-ov-file#on-windows)
 
 ### First-time setup
-- on Windows you need to run `Set-ExecutionPolicy Unrestricted` as admin in Powershell.
+- On Windows you need to run `Set-ExecutionPolicy Unrestricted` as admin in Powershell.
 - `npm install`
 - `npm run get_token`
-- Then you can run the build task with `cmd+shift+B`, or just start the "Launch Copilot Extension - Watch Mode" launch config to start the build then start debugging the extension.
+- Then you can run the build task with `Cmd+Shift+B` (or `Ctrl+Shift+B` if you are on Windows), or just start the "Launch Copilot Extension - Watch Mode" launch config to start the build then start debugging the extension.
 
 **Tip:** If "Launch Copilot Extension - Watch Mode" doesn't work for you, try using the "Launch Copilot Extension" debug configuration instead.
 
-**Note:** Setup and running under Windows Subsystem for Linux (WSL) is supported.
+**Note:** Setup and running under Windows Subsystem for Linux (WSL) is supported by following the [VS Code setup instructions](https://github.com/microsoft/vscode/wiki/Selfhosting-on-Windows-WSL).
 
 ### Testing
 If you hit errors while running tests, ensure that you are using the correct Node version and that git lfs is properly installed (run `git lfs pull` to validate).
@@ -343,63 +343,10 @@ You can run the extension from Code OSS Desktop, provided that you follow along 
 
 ```json
 {
-   "defaultChatAgent": {
-      "extensionId": "GitHub.copilot",
-      "chatExtensionId": "GitHub.copilot-chat",
-      "documentationUrl": "https://aka.ms/github-copilot-overview",
-      "termsStatementUrl": "https://aka.ms/github-copilot-terms-statement",
-      "privacyStatementUrl": "https://aka.ms/github-copilot-privacy-statement",
-      "skusDocumentationUrl": "https://aka.ms/github-copilot-plans",
-      "publicCodeMatchesUrl": "https://aka.ms/github-copilot-match-public-code",
-      "manageSettingsUrl": "https://aka.ms/github-copilot-settings",
-      "managePlanUrl": "https://aka.ms/github-copilot-manage-plan",
-      "manageOverageUrl": "https://aka.ms/github-copilot-manage-overage",
-      "upgradePlanUrl": "https://aka.ms/github-copilot-upgrade-plan",
-      "signUpUrl": "https://aka.ms/github-sign-up",
-      "provider": {
-         "default": {
-            "id": "github",
-            "name": "GitHub"
-         },
-         "enterprise": {
-            "id": "github-enterprise",
-            "name": "GHE.com"
-         },
-         "google": {
-            "id": "google",
-            "name": "Google"
-         },
-         "apple": {
-            "id": "apple",
-            "name": "Apple"
-         }
-      },
-      "providerUriSetting": "github-enterprise.uri",
-      "providerScopes": [
-         [
-            "user:email"
-         ],
-         [
-            "read:user"
-         ],
-         [
-            "read:user",
-            "user:email",
-            "repo",
-            "workflow"
-         ]
-      ],
-      "entitlementUrl": "https://api.github.com/copilot_internal/user",
-      "entitlementSignupLimitedUrl": "https://api.github.com/copilot_internal/subscribe_limited_user",
-      "chatQuotaExceededContext": "github.copilot.chat.quotaExceeded",
-      "completionsQuotaExceededContext": "github.copilot.completions.quotaExceeded",
-      "walkthroughCommand": "github.copilot.open.walkthrough",
-      "completionsMenuCommand": "github.copilot.toggleStatusMenu",
-      "completionsRefreshTokenCommand": "github.copilot.signIn",
-      "chatRefreshTokenCommand": "github.copilot.refreshToken",
-      "completionsAdvancedSetting": "github.copilot.advanced",
-      "completionsEnablementSetting": "github.copilot.enable",
-      "nextEditSuggestionsSetting": "github.copilot.nextEditSuggestions.enabled"
+   "trustedExtensionAuthAccess": {
+      "github": [
+         "github.copilot-chat"
+      ]
    }
 }
 ```
@@ -480,6 +427,11 @@ Object.assign(product, {
 			'completionsAdvancedSetting': 'github.copilot.advanced',
 			'completionsEnablementSetting': 'github.copilot.enable',
 			'nextEditSuggestionsSetting': 'github.copilot.nextEditSuggestions.enabled'
+		},
+		trustedExtensionAuthAccess: {
+			'github': [
+				'github.copilot-chat'
+			]
 		}
 	});
 }

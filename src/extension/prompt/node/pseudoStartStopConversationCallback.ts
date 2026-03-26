@@ -4,16 +4,19 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
+import { disableErrorLogging, parse as parsePartialJson } from 'best-effort-json-parser';
 import type { ChatResponseStream, ChatVulnerability } from 'vscode';
 import { IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
 import { FilterReason } from '../../../platform/networking/common/openai';
-import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
+import { isEncryptedThinkingDelta } from '../../../platform/thinking/common/thinking';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { URI } from '../../../util/vs/base/common/uri';
 import { ChatResponseClearToPreviousToolInvocationReason } from '../../../vscodeTypes';
 import { getContributedToolName } from '../../tools/common/toolNames';
 import { IResponseProcessor, IResponseProcessorContext } from './intents';
+
+disableErrorLogging();
 
 export interface StartStopMapping {
 	readonly stop: string;
@@ -27,11 +30,12 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 	private stagedDeltasToApply: IResponseDelta[] = [];
 	private currentStartStop: StartStopMapping | undefined = undefined;
 	private nonReportedDeltas: IResponseDelta[] = [];
+	private thinkingActive: boolean = false;
 
 	constructor(
 		private readonly stopStartMappings: readonly StartStopMapping[],
 		private readonly processNonReportedDelta: ((deltas: IResponseDelta[]) => string[]) | undefined,
-		@IThinkingDataService private readonly thinkingDataService: IThinkingDataService
+		private readonly options?: { subagentInvocationId?: string }
 	) { }
 
 	async processResponse(_context: IResponseProcessorContext, inputStream: AsyncIterable<IResponsePart>, outputStream: ChatResponseStream, token: CancellationToken): Promise<void> {
@@ -48,6 +52,17 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 	}
 
 	protected applyDeltaToProgress(delta: IResponseDelta, progress: ChatResponseStream) {
+		if (delta.thinking) {
+			// Don't send parts that are only encrypted content
+			if (!isEncryptedThinkingDelta(delta.thinking) || delta.thinking.text) {
+				progress.thinkingProgress(delta.thinking);
+				this.thinkingActive = true;
+			}
+		} else if (this.thinkingActive) {
+			progress.thinkingProgress({ id: '', text: '', metadata: { vscodeReasoningDone: true, stopReason: delta.text ? 'text' : 'other' } });
+			this.thinkingActive = false;
+		}
+
 		reportCitations(delta, progress);
 
 		const vulnerabilities: ChatVulnerability[] | undefined = delta.codeVulnAnnotations?.map(a => ({ title: a.details.type, description: a.details.description }));
@@ -58,13 +73,18 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 		}
 
 		if (delta.beginToolCalls?.length) {
-			progress.prepareToolInvocation(getContributedToolName(delta.beginToolCalls[0].name));
+			for (const beginCall of delta.beginToolCalls) {
+				progress.beginToolInvocation(beginCall.id ?? '', getContributedToolName(beginCall.name), { subagentInvocationId: this.options?.subagentInvocationId });
+			}
 		}
 
-		if (delta.thinking) {
-			progress.thinkingProgress(delta.thinking);
-			// @karthiknadig: remove this when LM API becomes available
-			this.thinkingDataService.update(0, delta.thinking);
+		if (delta.copilotToolCallStreamUpdates?.length) {
+			for (const update of delta.copilotToolCallStreamUpdates) {
+				if (!update.name) {
+					continue;
+				}
+				progress.updateToolInvocation(update.id ?? '', { partialInput: tryParsePartialToolInput(update.arguments) });
+			}
 		}
 	}
 
@@ -155,7 +175,10 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 			this.stagedDeltasToApply = [];
 			this.currentStartStop = undefined;
 			this.nonReportedDeltas = [];
-			if (delta.retryReason === FilterReason.Copyright) {
+			this.thinkingActive = false;
+			if (delta.retryReason === 'network_error' || delta.retryReason === 'server_error') {
+				progress.clearToPreviousToolInvocation(ChatResponseClearToPreviousToolInvocationReason.NoReason);
+			} else if (delta.retryReason === FilterReason.Copyright) {
 				progress.clearToPreviousToolInvocation(ChatResponseClearToPreviousToolInvocationReason.CopyrightContentRetry);
 			} else {
 				progress.clearToPreviousToolInvocation(ChatResponseClearToPreviousToolInvocationReason.FilteredContentRetry);
@@ -201,5 +224,22 @@ export function reportCitations(delta: IResponseDelta, progress: ChatResponseStr
 				c.citations.license;
 			progress.codeCitation(URI.parse(c.citations.url), licenseLabel, c.citations.snippet);
 		});
+	}
+}
+
+/**
+ * Attempts to parse partial JSON using best-effort parsing.
+ * For streaming tool call arguments, the JSON arrives incrementally.
+ */
+function tryParsePartialToolInput(raw: string | undefined): unknown {
+	if (!raw) {
+		return raw;
+	}
+
+	try {
+		// Certain patterns, especially partially-generated unicode escape sequences, cause this to throw.
+		return parsePartialJson(raw);
+	} catch {
+		return undefined;
 	}
 }

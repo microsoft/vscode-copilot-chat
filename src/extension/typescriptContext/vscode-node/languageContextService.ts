@@ -8,7 +8,7 @@ import * as vscode from 'vscode';
 import { LRUCache } from 'lru-cache';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
-import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
+import { ILanguageContextProviderService, ProviderTarget } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ContextKind, ILanguageContextService, KnownSources, TriggerKind, type ContextItem, type RequestContext } from '../../../platform/languageServer/common/languageContextService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -20,6 +20,9 @@ import * as protocol from '../common/serverProtocol';
 import { InspectorDataProvider } from './inspector';
 import { ThrottledDebouncer } from './throttledDebounce';
 import { ContextItemResultBuilder, ContextItemSummary, ResolvedRunnableResult, type OnCachePopulatedEvent, type OnContextComputedEvent, type OnContextComputedOnTimeoutEvent } from './types';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+
+const currentTokenBudget: number = 8 * 1024;
 
 enum ExecutionTarget {
 	Semantic,
@@ -317,7 +320,7 @@ class TelemetrySender {
 		this.logService.debug(`TypeScript Copilot context request ${context.requestId} got cancelled.`);
 	}
 
-	public sendActivationTelemetry(response: protocol.PingResponse | undefined, error: any | undefined): void {
+	public sendActivationTelemetry(response: protocol.PingResponse | undefined, error: unknown | undefined): void {
 		if (response !== undefined) {
 			const body: protocol.PingResponse['body'] | undefined = response?.body;
 			if (body?.kind === 'ok') {
@@ -344,9 +347,10 @@ class TelemetrySender {
 				this.sendUnknownPingResponseTelemetry(ErrorLocation.Server, ErrorPart.ServerPlugin, response);
 			}
 		} else if (error !== undefined) {
-			if (TypeScriptServerError.is(error)) {
+			const isError = error instanceof Error;
+			if (isError && TypeScriptServerError.is(error)) {
 				this.sendActivationFailedTelemetry(ErrorLocation.Server, ErrorPart.ServerPlugin, error.response.message ?? error.message, undefined, error.version.displayName);
-			} else if (error instanceof Error) {
+			} else if (isError) {
 				this.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.ServerPlugin, error.message, error.stack);
 			} else {
 				this.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.ServerPlugin, 'Unknown error', undefined);
@@ -557,7 +561,10 @@ class RunnableResultManager implements vscode.Disposable {
 		this.disposables.add(vscode.window.onDidChangeActiveTextEditor(() => {
 			this.clear();
 		}));
-		this.disposables.add(vscode.window.tabGroups.onDidChangeTabs(() => {
+		this.disposables.add(vscode.window.tabGroups.onDidChangeTabs((event: vscode.TabChangeEvent) => {
+			if (event.closed.length === 0 && event.opened.length === 0) {
+				return;
+			}
 			for (const item of this.neighborFileRunnableResults) {
 				this.results.delete(item.resultId);
 			}
@@ -726,7 +733,7 @@ class RunnableResultManager implements vscode.Disposable {
 		return this.results.get(id);
 	}
 
-	public getCachedRunnableResults(document: vscode.TextDocument, position: vscode.Position): ResolvedRunnableResult[] {
+	public getCachedRunnableResults(document: vscode.TextDocument, position: vscode.Position, emitMode?: protocol.EmitMode): ResolvedRunnableResult[] {
 		const results: ResolvedRunnableResult[] = [];
 		if (this.requestInfo?.document !== document.uri.toString()) {
 			return results;
@@ -735,6 +742,9 @@ class RunnableResultManager implements vscode.Disposable {
 			return results;
 		}
 		for (const item of this.results.values()) {
+			if (emitMode !== undefined && item.cache?.emitMode === emitMode) {
+				continue;
+			}
 			const scope = item.cache?.scope;
 			if (scope === undefined || scope.kind !== protocol.CacheScopeKind.WithinRange) {
 				results.push(item);
@@ -953,48 +963,72 @@ namespace TextDocuments {
 
 class NeighborFileModel implements vscode.Disposable {
 
+	private static readonly MAX_ITEMS = 12;
+
 	private readonly disposables;
-	private readonly order: LRUCache<string, string>;
+	private readonly visible: LRUCache<string, string>;
+	private readonly notVisible: LRUCache<string, string>;
 
 	constructor() {
 		this.disposables = new DisposableStore();
-		this.order = new LRUCache<string, string>({ max: 32 });
+		this.visible = new LRUCache<string, string>({ max: NeighborFileModel.MAX_ITEMS });
+		this.notVisible = new LRUCache<string, string>({ max: NeighborFileModel.MAX_ITEMS });
 		this.disposables.add(vscode.window.onDidChangeActiveTextEditor((editor: vscode.TextEditor | undefined) => {
 			if (editor === undefined) {
 				return;
 			}
 			const document = editor.document;
 			if (TextDocuments.consider(document)) {
-				this.order.set(document.uri.toString(), document.uri.fsPath);
+				const uri = document.uri.toString();
+				this.visible.set(uri, document.uri.fsPath);
+				this.notVisible.delete(uri);
 			}
 		}));
 		this.disposables.add(vscode.workspace.onDidCloseTextDocument((document: vscode.TextDocument) => {
-			this.order.delete(document.uri.toString());
+			const uri = document.uri.toString();
+			if (TextDocuments.consider(document)) {
+				this.visible.delete(uri);
+				this.notVisible.delete(uri);
+			}
 		}));
 		this.disposables.add(vscode.window.tabGroups.onDidChangeTabs((e: vscode.TabChangeEvent) => {
+			// We don't track open tabs here to ensure we only track documents that are
+			// actually focused. Otherwise opening multiple tabs at once would cause too much churn.
 			for (const tab of e.closed) {
 				if (tab.input instanceof vscode.TabInputText) {
-					this.order.delete(tab.input.uri.toString());
+					const uri = tab.input.uri.toString();
+					const isVisible = this.visible.has(uri);
+					if (isVisible) {
+						this.visible.delete(uri);
+						this.notVisible.set(uri, tab.input.uri.fsPath);
+					}
 				}
 			}
 		}));
-		const openTextDocuments: Set<string> = new Set();
+		const textDocumentsToConsider: Map<string, vscode.Uri> = new Map();
 		for (const document of vscode.workspace.textDocuments) {
 			if (TextDocuments.consider(document)) {
-				openTextDocuments.add(document.uri.toString());
+				textDocumentsToConsider.set(document.uri.toString(), document.uri);
 			}
 		}
 		for (const group of vscode.window.tabGroups.all) {
 			for (const tab of group.tabs) {
-				if (tab.input instanceof vscode.TabInputText && openTextDocuments.has(tab.input.uri.toString())) {
-					this.order.set(tab.input.uri.toString(), tab.input.uri.fsPath);
+				const uri = tab.input instanceof vscode.TabInputText ? tab.input.uri : undefined;
+				if (uri !== undefined && textDocumentsToConsider.has(uri.toString())) {
+					this.visible.set(uri.toString(), uri.fsPath);
+					textDocumentsToConsider.delete(uri.toString());
 				}
 			}
+		}
+		for (const [key, uri] of textDocumentsToConsider.entries()) {
+			this.notVisible.set(key, uri.fsPath);
 		}
 		if (vscode.window.activeTextEditor !== undefined) {
 			const document = vscode.window.activeTextEditor.document;
 			if (TextDocuments.consider(document)) {
-				this.order.set(document.uri.toString(), document.uri.fsPath);
+				const uri = document.uri.toString();
+				this.visible.set(uri, document.uri.fsPath);
+				this.notVisible.delete(uri);
 			}
 		}
 	}
@@ -1002,13 +1036,21 @@ class NeighborFileModel implements vscode.Disposable {
 	public getNeighborFiles(currentDocument: vscode.TextDocument): string[] {
 		const result: string[] = [];
 		const currentUri = currentDocument.uri.toString();
-		for (const [key, value] of this.order.entries()) {
+		for (const [key, value] of this.visible.entries()) {
 			if (key === currentUri) {
 				continue;
 			}
 			result.push(value);
-			if (result.length >= 10) {
-				break;
+		}
+		if (result.length < NeighborFileModel.MAX_ITEMS) {
+			for (const [key, value] of this.notVisible.entries()) {
+				if (key === currentUri) {
+					continue;
+				}
+				result.push(value);
+				if (result.length >= NeighborFileModel.MAX_ITEMS) {
+					break;
+				}
 			}
 		}
 		return result;
@@ -1019,26 +1061,23 @@ class NeighborFileModel implements vscode.Disposable {
 	}
 }
 
-type ComputeContextRequestArgs = {
+type ComputeContextRequestArgs = Omit<protocol.ComputeContextRequestArgs, 'file' | 'projectFileName' | 'line' | 'offset'> & {
 	file: vscode.Uri;
 	line: number;
 	offset: number;
-	startTime: number;
-	timeBudget?: number;
-	tokenBudget?: number;
-	neighborFiles?: readonly string[];
-	clientSideRunnableResults?: readonly protocol.CachedContextRunnableResult[];
 	$traceId?: string;
 };
 namespace ComputeContextRequestArgs {
-	export function create(document: vscode.TextDocument, position: vscode.Position, context: RequestContext, startTime: number, timeBudget: number, willLogRequestTelemetry: boolean, neighborFiles: readonly string[] | undefined, clientSideRunnableResults: readonly protocol.CachedContextRunnableResult[] | undefined): ComputeContextRequestArgs {
+	export function create(document: vscode.TextDocument, position: vscode.Position, context: RequestContext, startTime: number, timeBudget: number, willLogRequestTelemetry: boolean, neighborFiles: readonly string[] | undefined, clientSideRunnableResults: readonly protocol.CachedContextRunnableResult[] | undefined, includeDocumentation: boolean): ComputeContextRequestArgs {
 		return {
 			file: vscode.Uri.file(document.fileName),
 			line: position.line + 1,
 			offset: position.character + 1,
 			startTime: startTime,
 			timeBudget: timeBudget,
-			tokenBudget: context.tokenBudget ?? 7 * 1024,
+			primaryCharacterBudget: (context.tokenBudget ?? 7 * 1024) * 4,
+			secondaryCharacterBudget: (currentTokenBudget * 4),
+			includeDocumentation: includeDocumentation,
 			neighborFiles: neighborFiles !== undefined && neighborFiles.length > 0 ? neighborFiles : undefined,
 			clientSideRunnableResults: clientSideRunnableResults,
 			$traceId: willLogRequestTelemetry ? context.requestId : undefined
@@ -1093,14 +1132,93 @@ class InflightRequestInfo {
 	}
 }
 
+class OnTimeoutData {
+
+	private readonly document: string;
+	private readonly version: number;
+	private readonly position: vscode.Position;
+
+	public readonly runnableResults: ResolvedRunnableResult[] = [];
+	public resultBuilder: ContextItemResultBuilder | undefined;
+
+	constructor(document: vscode.TextDocument, position: vscode.Position) {
+		this.document = document.uri.toString();
+		this.version = document.version;
+		this.position = position;
+	}
+
+	addRunnableResult(result: ResolvedRunnableResult): void {
+		this.runnableResults.push(result);
+	}
+
+	addRunnableResults(results: readonly ResolvedRunnableResult[]): void {
+		this.runnableResults.push(...results);
+	}
+
+	matches(document: vscode.TextDocument, position: vscode.Position): boolean {
+		return this.document === document.uri.toString() && this.version === document.version && this.position.isEqual(position);
+	}
+}
+
+enum ContextItemUsageMode {
+	minimal = 'minimal',
+	double = 'double',
+	fillHalf = 'fillHalf',
+	fill = 'fill'
+}
+namespace ContextItemUsageMode {
+	export function fromString(value: string): ContextItemUsageMode {
+		switch (value) {
+			case 'minimal': return ContextItemUsageMode.minimal;
+			case 'double': return ContextItemUsageMode.double;
+			case 'fillHalf': return ContextItemUsageMode.fillHalf;
+			case 'fill': return ContextItemUsageMode.fill;
+			default: return ContextItemUsageMode.minimal;
+		}
+	}
+}
+
+class CharacterBudget {
+
+	public readonly overall: number;
+	private mandatory: number;
+	private optional: number;
+	private start: { mandatory: number; optional: number };
+
+	constructor(mandatory: number, optional: number) {
+		this.overall = mandatory;
+		this.mandatory = mandatory;
+		this.optional = optional;
+		this.start = { mandatory, optional };
+	}
+
+	spend(chars: number): void {
+		this.mandatory -= chars;
+		this.optional -= chars;
+	}
+
+	isExhausted(): boolean {
+		return this.mandatory <= 0;
+	}
+
+	isOptionalExhausted(): boolean {
+		return this.optional <= 0;
+	}
+
+	public fresh(): CharacterBudget {
+		return new CharacterBudget(this.start.mandatory, this.start.optional);
+	}
+}
+
 export class LanguageContextServiceImpl implements ILanguageContextService, vscode.Disposable {
 
 	private static readonly defaultCachePopulationBudget: number = 500;
 	private static readonly defaultCachePopulationRaceTimeout: number = 20;
+	private static readonly ExecConfig: ExecConfig = { executionTarget: ExecutionTarget.Semantic };
 
 	readonly _serviceBrand: undefined;
 
-	private static readonly ExecConfig: ExecConfig = { executionTarget: ExecutionTarget.Semantic };
+	private readonly disposables: DisposableStore;
 
 	private readonly isDebugging: boolean;
 	private _isActivated: Promise<boolean> | undefined;
@@ -1109,12 +1227,13 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 	private readonly runnableResultManager: RunnableResultManager;
 	private readonly neighborFileModel: NeighborFileModel;
 
-
 	private pendingRequest: PendingRequestInfo | undefined;
 	private inflightCachePopulationRequest: InflightRequestInfo | undefined;
-	private readonly cachePopulationTimeout: number;
+	private onTimeoutData: OnTimeoutData | undefined;
+	private cachePopulationTimeout: number;
+	private usageMode: ContextItemUsageMode;
+	private includeDocumentation: boolean;
 
-	private readonly disposables = new DisposableStore();
 	private _onCachePopulated: vscode.EventEmitter<OnCachePopulatedEvent>;
 	public readonly onCachePopulated: vscode.Event<OnCachePopulatedEvent>;
 
@@ -1136,9 +1255,22 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		this.neighborFileModel = new NeighborFileModel();
 		this.pendingRequest = undefined;
 		this.inflightCachePopulationRequest = undefined;
+		this.onTimeoutData = undefined;
 		this.cachePopulationTimeout = this.getCachePopulationBudget();
+		this.usageMode = this.getUsageMode();
+		this.includeDocumentation = this.getIncludeDocumentation();
 
 		this.disposables = new DisposableStore();
+		this.disposables.add(this.configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(ConfigKey.TypeScriptLanguageContextMode.fullyQualifiedId)) {
+				this.usageMode = this.getUsageMode();
+			} else if (e.affectsConfiguration(ConfigKey.TypeScriptLanguageContextCacheTimeout.fullyQualifiedId)) {
+				this.cachePopulationTimeout = this.getCachePopulationBudget();
+			} else if (e.affectsConfiguration(ConfigKey.TypeScriptLanguageContextIncludeDocumentation.fullyQualifiedId)) {
+				this.includeDocumentation = this.getIncludeDocumentation();
+			}
+		}));
+
 		this._onCachePopulated = this.disposables.add(new vscode.EventEmitter<OnCachePopulatedEvent>());
 		this.onCachePopulated = this._onCachePopulated.event;
 
@@ -1181,7 +1313,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 			await typeScriptExtension.activate();
 
 			// Send a ping request to see if the TS server plugin got installed correctly.
-			const response: protocol.PingResponse | undefined = await vscode.commands.executeCommand('typescript.tsserverRequest', '_.copilot.ping', LanguageContextServiceImpl.ExecConfig, new vscode.CancellationTokenSource().token);
+			const response: protocol.PingResponse | undefined = await vscode.commands.executeCommand('typescript.tsserverRequest', '_.copilot.ping', LanguageContextServiceImpl.ExecConfig, CancellationToken.None);
 			this.telemetrySender.sendActivationTelemetry(response, undefined);
 			if (response !== undefined) {
 				if (response.body?.kind === 'ok') {
@@ -1221,7 +1353,10 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		const neighborFiles: string[] = this.neighborFileModel.getNeighborFiles(document);
 		const timeBudget = this.cachePopulationTimeout;
 		const willLogRequestTelemetry = this.telemetrySender.willLogRequestTelemetry(context);
-		const args: ComputeContextRequestArgs = ComputeContextRequestArgs.create(document, position, context, startTime, timeBudget, willLogRequestTelemetry, neighborFiles, contextRequestState?.server);
+		const args: ComputeContextRequestArgs = ComputeContextRequestArgs.create(
+			document, position, context, startTime, timeBudget, willLogRequestTelemetry,
+			neighborFiles, contextRequestState?.server, this.includeDocumentation
+		);
 		try {
 			const isDebugging = this.isDebugging;
 			const forDebugging: ContextItem[] | undefined = isDebugging ? [] : undefined;
@@ -1255,15 +1390,15 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				if (resolved.length > 0) {
 					// Update the stats for telemetry.
 					for (const runnableResult of resolved) {
-						for (const item of contextItemResult.update(runnableResult)) {
-							forDebugging?.push(item);
+						for (const converted of contextItemResult.update(runnableResult)) {
+							forDebugging?.push(converted.item);
 						}
 					}
 				}
 				contextItemResult.updateResponse(body, token);
 				this.telemetrySender.sendRequestTelemetry(document, position, context, contextItemResult, timeTaken, { before: cacheState, after: this.runnableResultManager.getCacheState() }, undefined);
 				isDebugging && forDebugging?.length;
-				this._onCachePopulated.fire({ document, position, source: context.source, results: resolved, summary: contextItemResult });
+				this._onCachePopulated.fire({ document, position, source: context.source, items: resolved, summary: contextItemResult });
 			} else if (protocol.ComputeContextResponse.isError(response)) {
 				this.telemetrySender.sendRequestFailureTelemetry(context, response.body);
 				console.error('Error populating cache:', response.body.message, response.body.stack);
@@ -1285,44 +1420,96 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		}
 	}
 
-	async *getContext(document: vscode.TextDocument, position: vscode.Position, context: RequestContext, token: vscode.CancellationToken): AsyncIterable<ContextItem> {
+	public async *getContext(document: vscode.TextDocument, position: vscode.Position, context: RequestContext, token: vscode.CancellationToken): AsyncIterable<ContextItem> {
+		this.onTimeoutData = undefined;
 		if (document.languageId !== 'typescript' && document.languageId !== 'typescriptreact') {
 			return;
 		}
 
 		const startTime = Date.now();
 		let cacheRequest = 'none';
-		if (this.inflightCachePopulationRequest !== undefined && this.inflightCachePopulationRequest.matchesDocument(document)) {
+		const cachePopulationRequestInflight = this.inflightCachePopulationRequest !== undefined && this.inflightCachePopulationRequest.matchesDocument(document);
+		if (cachePopulationRequestInflight) {
+			this.onTimeoutData = new OnTimeoutData(document, position);
 			cacheRequest = 'inflight';
-			// We have an inflight request for the same document and position.
-			// We wait for the server promise to resolve and then see if we can yield items from the
-			// inflight request.
-			const timeOut = Math.max(0, Math.min(context.timeBudget ?? LanguageContextServiceImpl.defaultCachePopulationRaceTimeout, LanguageContextServiceImpl.defaultCachePopulationRaceTimeout));
-			const result = await Promise.race([this.inflightCachePopulationRequest.serverPromise, new Promise((resolve) => setTimeout(resolve, timeOut)).then(() => 'timedOut')]);
-			// The server promised resolved first. So the inflight request is done.
-			if (result !== 'timedOut') {
-				this.inflightCachePopulationRequest = undefined;
-				cacheRequest = 'awaited';
-			}
 		}
-		const afterInflightJoin = Date.now() - startTime;
 		if (token.isCancellationRequested) {
-			this.telemetrySender.sendRequestCancelledTelemetry(context, afterInflightJoin);
+			this.telemetrySender.sendRequestCancelledTelemetry(context, Date.now() - startTime);
 			return;
 		}
 		const isDebugging = this.isDebugging;
 		const forDebugging: ContextItem[] | undefined = isDebugging ? [] : undefined;
-		const contextItemResult = new ContextItemResultBuilder(afterInflightJoin);
-		const runnableResults = this.runnableResultManager.getCachedRunnableResults(document, position);
-		for (const runnableResult of runnableResults) {
-			for (const item of contextItemResult.update(runnableResult, true)) {
+		const contextItemResult = new ContextItemResultBuilder(Date.now() - startTime);
+		if (this.onTimeoutData !== undefined) {
+			this.onTimeoutData.resultBuilder = contextItemResult;
+		}
+		const characterBudget = this.getCharacterBudget(context, document);
+		// We first collect all items to yield so that the state of the cache doesn't change underneath us.
+		// This could otherwise happen if the cache population request finishes while we are yielding items.
+		const itemsToYield: ContextItem[] = [];
+		const { mandatory, optional, onTimeout } = this.getRunnables(document, position, cachePopulationRequestInflight);
+		if (this.onTimeoutData !== undefined) {
+			this.onTimeoutData.addRunnableResults(onTimeout);
+		}
+		outer: for (const runnableResult of mandatory) {
+			for (const { item, size } of contextItemResult.update(runnableResult, true)) {
 				forDebugging?.push(item);
-				yield item;
-			}
-			if (token.isCancellationRequested) {
-				break;
+				characterBudget.spend(size);
+				if (characterBudget.isExhausted()) {
+					break outer;
+				}
+				itemsToYield.push(item);
 			}
 		}
+		if (!characterBudget.isOptionalExhausted()) {
+			outer: for (const runnableResult of optional) {
+				for (const { item, size } of contextItemResult.update(runnableResult, true)) {
+					forDebugging?.push(item);
+					characterBudget.spend(size);
+					if (characterBudget.isOptionalExhausted()) {
+						break outer;
+					}
+					itemsToYield.push(item);
+				}
+			}
+		}
+		if (!token.isCancellationRequested) {
+			for (const item of itemsToYield) {
+				if (token.isCancellationRequested) {
+					this.onTimeoutData = undefined;
+					break;
+				}
+				yield item;
+			}
+
+			// Recheck for an inflight request and join it if it is for the same document and position.
+			if (this.inflightCachePopulationRequest !== undefined && this.inflightCachePopulationRequest.matchesDocument(document)) {
+				cacheRequest = 'inflight';
+				// We have an inflight request for the same document and position.
+				// We wait for the server promise to resolve and then see if we can yield items from the
+				// inflight request.
+				const timeOut = Math.max(0, Math.min(context.timeBudget ?? LanguageContextServiceImpl.defaultCachePopulationRaceTimeout, LanguageContextServiceImpl.defaultCachePopulationRaceTimeout));
+				const result = await Promise.race([this.inflightCachePopulationRequest.serverPromise, new Promise((resolve) => setTimeout(resolve, timeOut)).then(() => 'timedOut')]);
+				// The server promised resolved first. So the inflight request is done.
+				if (result !== 'timedOut') {
+					this.inflightCachePopulationRequest = undefined;
+					if (this.onTimeoutData !== undefined) {
+						this.onTimeoutData = undefined;
+						const runnableResults = this.runnableResultManager.getCachedRunnableResults(document, position, protocol.EmitMode.ClientBasedOnTimeout);
+						for (const runnableResult of runnableResults) {
+							for (const { item } of contextItemResult.update(runnableResult)) {
+								forDebugging?.push(item);
+								yield item;
+							}
+						}
+						cacheRequest = 'awaited';
+					}
+				}
+			}
+		} else {
+			this.onTimeoutData = undefined;
+		}
+
 		const isSpeculativeRequest = context.proposedEdits !== undefined;
 		if (isSpeculativeRequest) {
 			this.telemetrySender.sendSpeculativeRequestTelemetry(context, this.runnableResultManager.getRequestId() ?? 'unknown', contextItemResult.stats.yielded);
@@ -1338,18 +1525,81 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				{ before: cacheState, after: cacheState }, cacheRequest
 			);
 			isDebugging && forDebugging?.length;
-			this._onContextComputed.fire({ document, position, source: context.source, results: runnableResults, summary: contextItemResult });
+			this._onContextComputed.fire({
+				document, position, source: context.source, items: itemsToYield, summary: contextItemResult
+			});
 		}
 		return;
 	}
 
-	getContextOnTimeout(document: vscode.TextDocument, position: vscode.Position, context: RequestContext): readonly ContextItem[] | undefined {
-		return [];
+	private getRunnables(document: vscode.TextDocument, position: vscode.Position, cachePopulationInflight: boolean): { mandatory: readonly ResolvedRunnableResult[]; optional: readonly ResolvedRunnableResult[]; onTimeout: readonly ResolvedRunnableResult[] } {
+		const mandatory: ResolvedRunnableResult[] = [];
+		const optional: ResolvedRunnableResult[] = [];
+		const onTimeout: ResolvedRunnableResult[] = [];
+		for (const runnable of this.runnableResultManager.getCachedRunnableResults(document, position)) {
+			if (cachePopulationInflight && runnable.cache?.emitMode === protocol.EmitMode.ClientBasedOnTimeout) {
+				onTimeout.push(runnable);
+			} else {
+				const priority = runnable.priority;
+				if (priority === protocol.Priorities.Expression || priority === protocol.Priorities.Locals || priority === protocol.Priorities.Inherited || priority === protocol.Priorities.Traits) {
+					mandatory.push(runnable);
+				} else {
+					optional.push(runnable);
+				}
+			}
+		}
+		return { mandatory, optional, onTimeout };
+	}
+
+	public getContextOnTimeout(document: vscode.TextDocument, position: vscode.Position, context: RequestContext): readonly ContextItem[] | undefined {
+		try {
+			if (this.onTimeoutData === undefined) {
+				return [];
+			}
+			if (!this.onTimeoutData.matches(document, position) || this.onTimeoutData.resultBuilder === undefined) {
+				return [];
+			}
+			const result: ContextItem[] = [];
+			const contextItemResult = this.onTimeoutData.resultBuilder;
+			for (const runnableResult of this.onTimeoutData.runnableResults) {
+				for (const { item } of contextItemResult.update(runnableResult, true)) {
+					result.push(item);
+				}
+			}
+			return result;
+		} finally {
+			this.onTimeoutData = undefined;
+		}
 	}
 
 	private getCachePopulationBudget(): number {
 		const result = this.configurationService.getExperimentBasedConfig(ConfigKey.TypeScriptLanguageContextCacheTimeout, this.experimentationService);
 		return result ?? LanguageContextServiceImpl.defaultCachePopulationBudget;
+	}
+
+	private getUsageMode(): ContextItemUsageMode {
+		const value = this.configurationService.getExperimentBasedConfig(ConfigKey.TypeScriptLanguageContextMode, this.experimentationService);
+		return ContextItemUsageMode.fromString(value);
+	}
+
+	private getIncludeDocumentation(): boolean {
+		return this.configurationService.getExperimentBasedConfig<boolean>(ConfigKey.TypeScriptLanguageContextIncludeDocumentation, this.experimentationService);
+	}
+
+	private getCharacterBudget(context: RequestContext, document: vscode.TextDocument): CharacterBudget {
+		const chars = (context.tokenBudget ?? currentTokenBudget) * 4;
+		switch (this.usageMode) {
+			case ContextItemUsageMode.minimal:
+				return new CharacterBudget(chars, 0);
+			case ContextItemUsageMode.double:
+				return new CharacterBudget(chars, Math.min(chars, document.getText().length));
+			case ContextItemUsageMode.fillHalf:
+				return new CharacterBudget(chars, Math.floor(chars / 2));
+			case ContextItemUsageMode.fill:
+				return new CharacterBudget(chars, chars);
+			default:
+				return new CharacterBudget(chars, chars);
+		}
 	}
 }
 
@@ -1392,7 +1642,7 @@ class CachePopulationTrigger implements vscode.Disposable {
 				this.onInlineCompletion(document, position, context);
 				return undefined;
 			}
-		}, { debounceDelayMs: 0 }));
+		}, { debounceDelayMs: 0, groupId: 'contextService' }));
 	}
 
 	public dispose() {
@@ -1526,6 +1776,18 @@ class CachePopulationTrigger implements vscode.Disposable {
 	}
 }
 
+async function* mapAsyncIterable<T, U>(
+	source: AsyncIterable<T>,
+	transform: (item: T) => U | undefined
+): AsyncIterable<U> {
+	for await (const item of source) {
+		const result = transform(item);
+		if (result !== undefined) {
+			yield result;
+		}
+	}
+}
+
 const showContextInspectorViewContextKey = `github.copilot.chat.showContextInspectorView`;
 export class InlineCompletionContribution implements vscode.Disposable, TokenBudgetProvider {
 
@@ -1594,7 +1856,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 			} else {
 				this.unregister();
 			}
-		}).catch((error: any) => this.logService.error('Error checking TypeScript context provider registration:', error));
+		}).catch((error) => this.logService.error(error, 'Error checking TypeScript context provider registration'));
 	}
 
 	private async register(): Promise<void> {
@@ -1609,12 +1871,6 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 				return;
 			}
 
-			const copilotAPI = await this.getCopilotApi();
-			if (copilotAPI === undefined) {
-				logService.warn('Copilot API is undefined, unable to register context provider.');
-				return;
-			}
-
 			if (this.registrations !== undefined) {
 				this.registrations.dispose();
 				this.registrations = undefined;
@@ -1626,17 +1882,17 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 			const telemetrySender = this.telemetrySender;
 			const self = this;
 			const resolver: Copilot.ContextResolver<Copilot.SupportedContextItem> = {
-				async *resolve(request: Copilot.ResolveRequest, token: vscode.CancellationToken): AsyncIterable<Copilot.SupportedContextItem> {
+				resolve(request: Copilot.ResolveRequest, token: vscode.CancellationToken): Promise<Copilot.SupportedContextItem[]> | AsyncIterable<Copilot.SupportedContextItem> {
 					// console.log(`Resolve request ${Date.now()}`);
 					const isSpeculativeRequest = request.documentContext.proposedEdits !== undefined;
 					const [document, position] = self.getDocumentAndPosition(request, token);
 					if (document === undefined || position === undefined) {
-						return;
+						return Promise.resolve([]);
 					}
 					const tokenBudget = self.getTokenBudget(document);
 					if (tokenBudget <= 0) {
 						telemetrySender.sendRequestTelemetry(document, position, { requestId: request.completionId, source: KnownSources.completion }, ContextItemSummary.DefaultExhausted, 0, undefined, undefined);
-						return [];
+						return Promise.resolve([]);
 					}
 					const context: RequestContext = {
 						requestId: request.completionId,
@@ -1649,12 +1905,32 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 						sampleTelemetry: self.getSampleTelemetry(request.activeExperiments)
 					};
 					const items = languageContextService.getContext(document, position, context, token);
-					for await (const item of items) {
-						const converted = self.convertItem(item);
-						if (converted === undefined) {
-							continue;
+					if (Array.isArray(items)) {
+						const convertedItems: Copilot.SupportedContextItem[] = [];
+						for (const item of items) {
+							const converted = self.convertItem(item);
+							if (converted === undefined) {
+								continue;
+							}
+							convertedItems.push(converted);
 						}
-						yield converted;
+						return Promise.resolve(convertedItems);
+					} else if (typeof (items as AsyncIterable<ContextItem>)[Symbol.asyncIterator] === 'function') {
+						return mapAsyncIterable(items as AsyncIterable<ContextItem>, (item) => self.convertItem(item));
+					} else if (items instanceof Promise) {
+						return items.then((resolvedItems) => {
+							const convertedItems: Copilot.SupportedContextItem[] = [];
+							for (const item of resolvedItems) {
+								const converted = self.convertItem(item);
+								if (converted === undefined) {
+									continue;
+								}
+								convertedItems.push(converted);
+							}
+							return convertedItems;
+						});
+					} else {
+						return Promise.resolve([]);
 					}
 				}
 			};
@@ -1691,8 +1967,15 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 				selector: { scheme: 'file', language: 'typescript' },
 				resolver: resolver
 			};
-			this.registrations.add(copilotAPI.registerContextProvider(provider));
-			this.registrations.add(this.languageContextProviderService.registerContextProvider(provider));
+
+			// For legacy register with the copilot API
+			const copilotAPI = await this.getCopilotApi();
+			if (copilotAPI !== undefined) {
+				this.registrations.add(copilotAPI.registerContextProvider(provider));
+			}
+
+			// Register with chat always.
+			this.registrations.add(this.languageContextProviderService.registerContextProvider(provider, [ProviderTarget.Completions]));
 			this.telemetrySender.sendInlineCompletionProviderTelemetry(KnownSources.completion, true);
 			logService.info('Registered TypeScript context provider with Copilot inline completions.');
 		} catch (error) {
@@ -1753,6 +2036,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 		if (item.kind === ContextKind.Snippet) {
 			const converted: Copilot.CodeSnippet = {
 				importance: item.priority * 100,
+				id: item.id,
 				uri: item.uri.toString(),
 				value: item.value
 			};
@@ -1763,8 +2047,17 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 		} else if (item.kind === ContextKind.Trait) {
 			const converted: Copilot.Trait = {
 				importance: item.priority * 100,
+				id: item.id,
 				name: item.name,
 				value: item.value
+			};
+			return converted;
+		} else if (item.kind === ContextKind.DiagnosticBag) {
+			const converted: Copilot.DiagnosticBag = {
+				importance: item.priority * 100,
+				id: item.id,
+				uri: item.uri,
+				values: item.values
 			};
 			return converted;
 		}
@@ -1774,8 +2067,8 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 	private async getCopilotApi(): Promise<Copilot.ContextProviderApiV1 | undefined> {
 		const copilotExtension = vscode.extensions.getExtension('GitHub.copilot');
 		if (copilotExtension === undefined) {
-			this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.CopilotExtension, 'Copilot extension not found', undefined);
-			this.logService.error('Copilot extension not found');
+			// this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.CopilotExtension, 'Copilot extension not found', undefined);
+			// this.logService.error('Copilot extension not found');
 			return undefined;
 		}
 		try {
@@ -1807,7 +2100,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 	}
 
 	public getTokenBudget(document: vscode.TextDocument): number {
-		return Math.trunc((8 * 1024) - (document.getText().length / 4) - 256);
+		return Math.trunc((currentTokenBudget) - (document.getText().length / 4) - 256);
 	}
 
 	private getSampleTelemetry(activeExperiments: Map<string, string | number | boolean | string[]>): number {

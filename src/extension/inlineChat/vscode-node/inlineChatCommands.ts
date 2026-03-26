@@ -4,47 +4,36 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { editorAgentName, getChatParticipantIdFromName } from '../../../platform/chat/common/chatAgents';
 import { trimCommonLeadingWhitespace } from '../../../platform/chunking/node/naiveChunker';
-import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
-import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
-import { IDomainService } from '../../../platform/endpoint/common/domainService';
-import { IEnvService } from '../../../platform/env/common/envService';
+import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { IFetcherService } from '../../../platform/networking/common/fetcherService';
-import { INotificationService } from '../../../platform/notification/common/notificationService';
 import { IParserService } from '../../../platform/parser/node/parserService';
+import type { CodeReviewInput } from '../../../platform/review/common/reviewCommand';
 import { IReviewService, ReviewComment, ReviewSuggestionChange } from '../../../platform/review/common/reviewService';
 import { IScopeSelector } from '../../../platform/scopeSelection/common/scopeSelection';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { createFencedCodeBlock } from '../../../util/common/markdown';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { CancellationError, onBugIndicatingError } from '../../../util/vs/base/common/errors';
-import { Event } from '../../../util/vs/base/common/event';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Intent } from '../../common/constants';
-import { InlineDocIntent } from '../../intents/node/docIntent';
 import { explainIntentPromptSnippet } from '../../intents/node/explainIntent';
-import { workspaceIntentId } from '../../intents/node/workspaceIntent';
-import { GenerateTests } from '../../intents/vscode-node/testGenAction';
 import { ChatParticipantRequestHandler } from '../../prompt/node/chatParticipantRequestHandler';
 import { sendReviewActionTelemetry } from '../../prompt/node/feedbackGenerator';
 import { CurrentSelection } from '../../prompts/node/panel/currentSelection';
 import { SymbolAtCursor } from '../../prompts/node/panel/symbolAtCursor';
-import { cancelReview, doReview } from '../../review/node/doReview';
+import { reviewFileChanges, ReviewSession } from '../../review/node/doReview';
 import { QuickFixesProvider, RefactorsProvider } from './inlineChatCodeActions';
 import { NotebookExectionStatusBarItemProvider } from './inlineChatNotebookActions';
 
@@ -62,7 +51,7 @@ export function registerInlineChatCommands(accessor: ServicesAccessor): IDisposa
 
 	const disposables = new DisposableStore();
 	const doExplain = async (arg0: any, fromPalette?: true) => {
-		let message = `@${workspaceIntentId} /${Intent.Explain} `;
+		let message = `/${Intent.Explain} `;
 		let selectedText;
 		let activeDocumentUri;
 		let explainingDiagnostics = false;
@@ -220,7 +209,7 @@ ${message}`,
 		}
 	};
 	const extensionMode = extensionContext.extensionMode;
-	if (typeof extensionMode === 'number' && extensionMode !== vscode.ExtensionMode.Test) {
+	if (typeof extensionMode === 'number' && (extensionMode !== vscode.ExtensionMode.Test || isScenarioAutomation)) {
 		reviewService.updateContextValues();
 	}
 	const goToNextReview = (currentThread: vscode.CommentThread | undefined, direction: number) => {
@@ -243,27 +232,12 @@ ${message}`,
 			return;
 		}
 		if (direction !== 0) {
-			newThread.reveal();
+			(newThread as unknown as vscode.CommentThread2).reveal();
 		}
 		instaService.invokeFunction(fetchSuggestion, newThread);
 	};
 	const doGenerate = () => {
 		return vscode.commands.executeCommand('vscode.editorChat.start', { message: '/generate ' });
-	};
-	const doGenerateDocs = () => {
-		return vscode.commands.executeCommand('vscode.editorChat.start', { message: `/${InlineDocIntent.ID} `, autoSend: true, initialRange: vscode.window.activeTextEditor?.selection });
-	};
-	const doGenerateTests = (arg?: unknown) => {
-		// @ulugbekna: `github.copilot.chat.generateTests` is invoked from editor context menu, which means
-		// 	the first arguments can be a vscode.Uri
-		const context =
-			(arg && typeof arg === 'object' &&
-				'document' in arg && arg.document && typeof arg.document === 'object' && 'getText' in arg.document &&
-				'selection' in arg && arg.selection instanceof vscode.Range
-			)
-				? arg as { document: vscode.TextDocument; selection: vscode.Range }
-				: undefined;
-		return instaService.createInstance(GenerateTests).runCommand(context);
 	};
 	const doFix = () => {
 		const activeDocument = vscode.window.activeTextEditor;
@@ -287,34 +261,22 @@ ${message}`,
 		}
 	};
 
-	const getServicesForReview = (accessor: ServicesAccessor): [IScopeSelector, IInstantiationService, IReviewService, IAuthenticationService, ILogService, IGitExtensionService, ICAPIClientService, IDomainService, IFetcherService, IEnvService, IIgnoreService, ITabsAndEditorsService, IWorkspaceService, IRunCommandExecutionService, INotificationService] => {
-		return [
-			accessor.get(IScopeSelector),
-			accessor.get(IInstantiationService),
-			accessor.get(IReviewService),
-			accessor.get(IAuthenticationService),
-			accessor.get(ILogService),
-			accessor.get(IGitExtensionService),
-			accessor.get(ICAPIClientService),
-			accessor.get(IDomainService),
-			accessor.get(IFetcherService),
-			accessor.get(IEnvService),
-			accessor.get(IIgnoreService),
-			accessor.get(ITabsAndEditorsService),
-			accessor.get(IWorkspaceService),
-			accessor.get(IRunCommandExecutionService),
-			accessor.get(INotificationService),
-		];
-	};
-
 	// register commands
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.explain', doExplain));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.explain.palette', () => doExplain(undefined, true)));
-	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review', () => doReview(...instaService.invokeFunction(getServicesForReview), 'selection', vscode.ProgressLocation.Notification)));
-	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.stagedChanges', () => doReview(...instaService.invokeFunction(getServicesForReview), 'index', vscode.ProgressLocation.SourceControl)));
-	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.unstagedChanges', () => doReview(...instaService.invokeFunction(getServicesForReview), 'workingTree', vscode.ProgressLocation.SourceControl)));
-	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.changes', () => doReview(...instaService.invokeFunction(getServicesForReview), 'all', vscode.ProgressLocation.SourceControl)));
-	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.changes.cancel', () => cancelReview(vscode.ProgressLocation.SourceControl, instaService.invokeFunction(accessor => accessor.get(IRunCommandExecutionService)))));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review', () => instaService.createInstance(ReviewSession).review('selection', vscode.ProgressLocation.Notification)));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.stagedChanges', () => instaService.createInstance(ReviewSession).review('index', vscode.ProgressLocation.Notification)));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.unstagedChanges', () => instaService.createInstance(ReviewSession).review('workingTree', vscode.ProgressLocation.Notification)));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.changes', () => instaService.createInstance(ReviewSession).review('all', vscode.ProgressLocation.Notification)));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.stagedFileChange', (resource: vscode.SourceControlResourceState) => {
+		return instaService.createInstance(ReviewSession).review({ group: 'index', file: resource.resourceUri }, vscode.ProgressLocation.Notification);
+	}));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.unstagedFileChange', (resource: vscode.SourceControlResourceState) => {
+		return instaService.createInstance(ReviewSession).review({ group: 'workingTree', file: resource.resourceUri }, vscode.ProgressLocation.Notification);
+	}));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.codeReview.run', (input: CodeReviewInput) => {
+		return instaService.invokeFunction(reviewFileChanges, input);
+	}));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.apply', doApplyReview));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.applyAndNext', (commentThread: vscode.CommentThread) => doApplyReview(commentThread, true)));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.applyShort', (commentThread: vscode.CommentThread) => doApplyReview(commentThread, true)));
@@ -330,8 +292,6 @@ ${message}`,
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.next', thread => goToNextReview(thread, +1)));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.current', thread => goToNextReview(thread, 0)));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.generate', doGenerate));
-	disposables.add(vscode.commands.registerCommand('github.copilot.chat.generateDocs', doGenerateDocs));
-	disposables.add(vscode.commands.registerCommand('github.copilot.chat.generateTests', doGenerateTests));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.fix', doFix));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.generateAltText', doGenerateAltText));
 	// register code actions
@@ -355,6 +315,9 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 	const instantiationService = accessor.get(IInstantiationService);
 	const comment = reviewService.findReviewComment(thread);
 	if (!comment || comment.suggestion || comment.skipSuggestion) {
+		if (comment?.suggestion && 'edits' in comment.suggestion && comment.suggestion.edits.length && thread.contextValue?.includes('hasNoSuggestion')) {
+			thread.contextValue = updateContextValue(thread.contextValue, 'hasSuggestion', 'hasNoSuggestion');
+		}
 		return;
 	}
 	comment.suggestion = (async () => {
@@ -362,12 +325,15 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 		const document = comment.document;
 
 		const selection = new vscode.Selection(comment.range.start, comment.range.end);
+		const textEditor = vscode.window.visibleTextEditors.find(editor => editor.document.uri.toString() === document.uri.toString()) ??
+			vscode.window.activeTextEditor ??
+			await vscode.window.showTextDocument(document.document, { preserveFocus: true, preview: false });
 
 		const command = Intent.Fix;
 		const prompt = message;
 		const request: vscode.ChatRequest = {
 			location: vscode.ChatLocation.Editor,
-			location2: new vscode.ChatRequestEditorData(document.document, selection, selection),
+			location2: new vscode.ChatRequestEditorData(textEditor, document.document, selection, selection),
 			command,
 			prompt,
 			references: [],
@@ -378,7 +344,10 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 			toolInvocationToken: undefined as never,
 			model: null!,
 			tools: new Map(),
-			id: '1'
+			id: '1',
+			sessionId: '1',
+			sessionResource: vscode.Uri.parse('chat:/1'),
+			hasHooksEnabled: false,
 		};
 		let markdown = '';
 		const edits: ReviewSuggestionChange[] = [];
@@ -392,13 +361,13 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 			} else if (value instanceof vscode.ChatResponseMarkdownPart) {
 				markdown += value.value.value;
 			}
-		}, () => { });
+		}, () => { }, undefined, undefined, undefined, () => Promise.resolve(undefined));
 
 		const requestHandler = instantiationService.createInstance(ChatParticipantRequestHandler, [], request, stream, CancellationToken.None, {
 			agentId: getChatParticipantIdFromName(editorAgentName),
 			agentName: editorAgentName,
 			intentId: request.command,
-		}, Event.None);
+		}, () => false, undefined);
 		const result = await requestHandler.getResult();
 		if (result.errorDetails) {
 			throw new Error(result.errorDetails.message);
