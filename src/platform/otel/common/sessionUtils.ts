@@ -13,7 +13,7 @@ import type { Uri } from 'vscode';
  * - `copilotcli://<sessionId>` — CLI in-process sessions
  * - `claude-code://<sessionId>` — Claude Code sessions
  *
- * Used by the debug panel, ATIF export, and other session-aware features.
+ * Used by the debug panel, span export, and other session-aware features.
  */
 export function decodeSessionId(sessionResource: Uri): string {
 	if (sessionResource.scheme === 'copilotcli' || sessionResource.scheme === 'claude-code') {

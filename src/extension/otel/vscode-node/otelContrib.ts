@@ -28,7 +28,7 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 			this._logService.trace('[OTel] Instrumentation disabled');
 		}
 
-		// Wire span completion to SQLite store for ATIF trajectory export.
+		// Wire span completion to SQLite store for trajectory export.
 		// When dbSpanExporter is enabled, spans flow through the OTel SDK pipeline
 		// via SqliteSpanExporter. Otherwise, fall back to onDidCompleteSpan subscription
 		// (InMemoryOTelService mode — no OTel SDK).
