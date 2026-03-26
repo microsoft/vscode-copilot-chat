@@ -99,8 +99,8 @@ async function copyCopilotCLIFolders(sourceDir: string, targetDir: string) {
  */
 async function createClaudeSymlinks() {
 	if (process.platform === 'win32') {
-		// Windows requires admin permissions to create symlinks.
-		// Return early instead.
+		// Creating symlinks on Windows may fail without Developer Mode or admin privileges.
+		// Skip this step to avoid postinstall failures on environments where symlinks are not available.
 		return;
 	}
 
