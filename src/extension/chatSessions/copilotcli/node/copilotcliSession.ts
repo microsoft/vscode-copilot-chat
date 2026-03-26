@@ -775,6 +775,15 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			if (steering) {
 				sendOptions.mode = 'immediate';
 			}
+
+			// Inject debug log path when /troubleshoot skill is invoked
+			if (input.prompt.includes('/troubleshoot')) {
+				const sessionLogDir = this._debugFileLogger.getSessionDir(this.sessionId);
+				if (sessionLogDir) {
+					sendOptions.prompt = `${input.prompt}\n\n<context>\nDebug log folder for this session: ${sessionLogDir.fsPath}\nStart by reading main.jsonl in that folder.\n</context>`;
+				}
+			}
+
 			await this._sdkSession.send(sendOptions);
 		}
 	}

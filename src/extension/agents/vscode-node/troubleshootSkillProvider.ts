@@ -3,42 +3,80 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as vscode from 'vscode';
+import { SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { BaseSkillProvider } from './baseSkillProvider';
 
-const RUNTIME_CONTEXT_PLACEHOLDER = '{{DEBUG_LOG_RUNTIME_CONTEXT}}';
-
 export class TroubleshootSkillProvider extends BaseSkillProvider {
+
+	private static readonly CACHE_DIR = 'skills';
+	private static readonly SKILL_FOLDER = 'troubleshoot';
+
+	private _diskSkillUri: vscode.Uri | undefined;
 
 	constructor(
 		@ILogService logService: ILogService,
 		@IVSCodeExtensionContext extensionContext: IVSCodeExtensionContext,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 	) {
 		super(logService, extensionContext, 'troubleshoot');
 	}
 
-	private getRuntimeContext(): string {
-		const lines: string[] = [];
-		lines.push('## Runtime Log Context');
-		lines.push('');
-
-		// Provide the debug-logs directory path so the agent can find log files.
-		// The {{CURRENT_SESSION_LOG}} placeholder may be resolved earlier during prompt
-		// rendering (for example by PromptFile.getBodyContent) or later by the read_file
-		// tool, which has access to the correct session context.
-		const storageUri = this.extensionContext.storageUri;
-		if (storageUri) {
-			lines.push('- Session log directories: `{{CURRENT_SESSION_LOG}}`');
-			lines.push('- If multiple directories are listed, compare the sessions to identify common issues and differences.');
-		} else {
-			lines.push('- Debug-logs directory: unavailable in this environment. Abort now and tell the user that troubleshooting is only available if a workspace is open.');
-		}
-
-		return lines.join('\n');
+	protected override processTemplate(templateContent: string): string {
+		// Template is now fully static — no placeholder replacement needed
+		return templateContent;
 	}
 
-	protected override processTemplate(templateContent: string): string {
-		return templateContent.replace(RUNTIME_CONTEXT_PLACEHOLDER, this.getRuntimeContext());
+	override async provideSkills(_context: unknown, token: vscode.CancellationToken): Promise<vscode.ChatResource[]> {
+		if (token.isCancellationRequested) {
+			return [];
+		}
+
+		const resources: vscode.ChatResource[] = [
+			// copilot-skill:// URI for VS Code local sessions (backward compat for readFileTool/promptFile session-log resolution)
+			{ uri: this.skillContentUri },
+		];
+
+		// file:// URI for CLI discovery (Copilot CLI and Claude CLI)
+		const diskUri = await this.ensureDiskSkill();
+		if (diskUri) {
+			resources.push({ uri: diskUri });
+		}
+
+		return resources;
+	}
+
+	private async ensureDiskSkill(): Promise<vscode.Uri | undefined> {
+		if (this._diskSkillUri) {
+			return this._diskSkillUri;
+		}
+
+		try {
+			const cacheDir = vscode.Uri.joinPath(
+				this.extensionContext.globalStorageUri,
+				TroubleshootSkillProvider.CACHE_DIR,
+				TroubleshootSkillProvider.SKILL_FOLDER,
+			);
+
+			// Ensure directory exists
+			try {
+				await this.fileSystemService.stat(cacheDir);
+			} catch {
+				await this.fileSystemService.createDirectory(cacheDir);
+			}
+
+			const fileUri = vscode.Uri.joinPath(cacheDir, SKILL_FILENAME);
+			const content = await this.getSkillContentBytes();
+			await this.fileSystemService.writeFile(fileUri, content);
+			this._diskSkillUri = fileUri;
+			this.logService.trace(`[TroubleshootSkillProvider] Wrote skill file: ${fileUri.toString()}`);
+			return fileUri;
+		} catch (error) {
+			this.logService.error(`[TroubleshootSkillProvider] Failed to write skill to disk: ${error}`);
+			return undefined;
+		}
 	}
 }

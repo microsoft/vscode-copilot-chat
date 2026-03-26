@@ -9,6 +9,7 @@ import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
+import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IMcpService } from '../../../../platform/mcp/common/mcpService';
 import { CopilotChatAttr, GenAiAttr, IOTelService, type ISpanHandle, SpanKind, SpanStatusCode, truncateForOTel } from '../../../../platform/otel/common/index';
@@ -91,9 +92,22 @@ export class ClaudeAgentManager extends Disposable {
 				session = newSession;
 			}
 
+			const contentBlocks = await resolvePromptToContentBlocks(request);
+
+			// Inject debug log path when /troubleshoot skill is invoked
+			if (request.command === 'troubleshoot' || request.prompt.startsWith('/troubleshoot')) {
+				const sessionLogDir = this.instantiationService.invokeFunction(accessor => accessor.get(IChatDebugFileLoggerService).getSessionDir(session.sessionId));
+				if (sessionLogDir) {
+					contentBlocks.push({
+						type: 'text',
+						text: `<system-reminder>\nDebug log folder for this session: ${sessionLogDir.fsPath}\nStart by reading main.jsonl in that folder.\n</system-reminder>`
+					});
+				}
+			}
+
 			await session.invoke(
 				request,
-				await resolvePromptToContentBlocks(request),
+				contentBlocks,
 				request.toolInvocationToken,
 				stream,
 				token,
@@ -214,6 +228,7 @@ export class ClaudeCodeSession extends Disposable {
 		@IMcpService private readonly mcpService: IMcpService,
 		@IOTelService private readonly _otelService: IOTelService,
 		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService,
+		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
 	) {
 		super();
 		this._currentModelId = initialModelId;
@@ -396,7 +411,11 @@ export class ClaudeCodeSession extends Disposable {
 		if (!folderInfo) {
 			throw new Error(`No folder info found for session ${this.sessionId}`);
 		}
-		const { cwd, additionalDirectories } = folderInfo;
+		const { cwd, additionalDirectories: baseAdditionalDirectories } = folderInfo;
+
+		// Include the extension's global skills directory so the Claude SDK can discover built-in skills (e.g. troubleshoot)
+		const skillsDir = URI.joinPath(this._extensionContext.globalStorageUri, 'skills').fsPath;
+		const additionalDirectories = [...(baseAdditionalDirectories ?? []), skillsDir];
 
 		// Build options for the Claude Code SDK
 		this.logService.trace(`appRoot: ${this.envService.appRoot}`);

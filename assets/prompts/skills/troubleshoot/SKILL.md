@@ -20,7 +20,7 @@ Base conclusions on evidence from logs. Do not guess.
 
 ## Data Source
 
-{{DEBUG_LOG_RUNTIME_CONTEXT}}
+The debug log folder path for the current session is provided in the conversation context. Look for the session log directory path there before proceeding. If no path is provided, ask the user to check that debug file logging is enabled (setting: `github.copilot.chat.agentDebugLog.fileLogging.enabled`).
 
 Use direct debug log files written by Copilot Chat:
 
