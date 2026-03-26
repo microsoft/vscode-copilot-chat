@@ -331,15 +331,12 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	public async detectPullRequestOnSessionOpen(sessionId: string): Promise<void> {
 		try {
 			const worktreeProperties = await this.worktreeManager.getWorktreeProperties(sessionId);
-			this.logService.debug(`[osortega] 1 ${JSON.stringify(worktreeProperties)}`);
 			if (worktreeProperties?.version !== 2
 				|| worktreeProperties.pullRequestState === 'merged'
 				|| !worktreeProperties.branchName
 				|| !worktreeProperties.repositoryPath) {
 				return;
 			}
-
-			this.logService.debug(`[osortega] 2`);
 
 			const prResult = await detectPullRequestFromGitHubAPI(
 				worktreeProperties.branchName,
@@ -351,7 +348,6 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 			if (prResult) {
 				const currentProperties = await this.worktreeManager.getWorktreeProperties(sessionId);
-				this.logService.debug(`[osortega] 3 ${JSON.stringify(currentProperties)}`);
 				if (currentProperties?.version === 2
 					&& (currentProperties.pullRequestUrl !== prResult.url || currentProperties.pullRequestState !== prResult.state)) {
 					await this.worktreeManager.setWorktreeProperties(sessionId, {
@@ -364,7 +360,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 				}
 			}
 		} catch (error) {
-			this.logService.debug(`[CopilotCLIChatSessionItemProvider] Failed to detect pull request on session open for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+			this.logService.trace(`[CopilotCLIChatSessionItemProvider] Failed to detect pull request on session open for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
 	public async createCopilotCLITerminal(location: TerminalOpenLocation = 'editor', name?: string, cwd?: string): Promise<void> {
