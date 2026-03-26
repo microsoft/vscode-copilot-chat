@@ -414,7 +414,7 @@ export class ExternalIngestIndex extends Disposable {
 		const sw = new StopWatch();
 
 		try {
-			const resolvedQuery = await query.resolveQuery(token);
+			const resolvedQuery = query.queryText;
 
 			const ingestResult = await raceCancellationError(this.doIngest(callTracker, () => { }, token), token);
 			if (!ingestResult.isOk()) {

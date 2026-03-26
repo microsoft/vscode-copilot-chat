@@ -701,10 +701,8 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		this._telemetryService.sendMSFTTelemetryEvent('codeSearchChunkSearch.perf.doCodeSearchWithRetry', { status }, { execTime });
 	})
 	private async doCodeSearch(query: WorkspaceChunkQueryWithEmbeddings, repos: readonly CodeSearchRepo[], sizing: StrategySearchSizing, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<CodeSearchResult | undefined> {
-		const resolvedQuery = await raceCancellationError(query.resolveQuery(token), token);
-
 		const results = await Promise.all(repos.map(repo => {
-			return repo.searchRepo({ silent: true }, this._embeddingType, resolvedQuery, sizing.maxResultCountHint, options, telemetryInfo, token);
+			return repo.searchRepo({ silent: true }, this._embeddingType, query.queryText, sizing.maxResultCountHint, options, telemetryInfo, token);
 		}));
 
 		return {
