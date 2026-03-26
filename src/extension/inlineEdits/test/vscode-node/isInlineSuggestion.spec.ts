@@ -37,8 +37,9 @@ suite('toInlineSuggestion', () => {
 
 		const result = toInlineSuggestion(cursorPosition, document, replaceRange, replaceText);
 		assert.isDefined(result);
-		assert.deepStrictEqual(result!.range, replaceRange);
-		assert.strictEqual(result!.newText, replaceText);
+		// Common prefix "This is lin" (11 chars) is trimmed so range starts at cursor
+		assert.deepStrictEqual(result!.range, new Range(1, 11, 1, 13));
+		assert.strictEqual(result!.newText, 'e 2,');
 	});
 
 	test('same line at completion', () => {
@@ -48,8 +49,9 @@ suite('toInlineSuggestion', () => {
 
 		const result = toInlineSuggestion(cursorPosition, document, replaceRange, replaceText);
 		assert.isDefined(result);
-		assert.deepStrictEqual(result!.range, replaceRange);
-		assert.strictEqual(result!.newText, replaceText);
+		// Common prefix "This is line" (12 chars) is trimmed so range starts at cursor
+		assert.deepStrictEqual(result!.range, new Range(1, 12, 1, 13));
+		assert.strictEqual(result!.newText, ' 2,');
 	});
 
 	test('same line after completion', () => {
@@ -429,9 +431,11 @@ function createDocumentSymbol(
 
 		// "clog" IS a subword of "console.log" (c...o...l...og)
 		// But text before cursor: replaced[0..1]="c", new[0..1]="c" → match
+		// Common prefix "c" (1 char) is trimmed so range starts at cursor
 		const result = toInlineSuggestion(cursorPosition, document, replaceRange, replaceText);
 		assert.isDefined(result);
-		assert.strictEqual(result!.newText, 'console.log');
+		assert.deepStrictEqual(result!.range, new Range(0, 1, 0, 4));
+		assert.strictEqual(result!.newText, 'onsole.log');
 	});
 
 	// --- Prefix-stripping: multi-line range reduction ---
