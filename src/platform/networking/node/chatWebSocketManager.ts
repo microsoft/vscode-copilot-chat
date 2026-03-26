@@ -226,6 +226,7 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 
 	private _connectStartTime: number | undefined;
 	private _connectedTime: number | undefined;
+	private _pendingErrorMessage: string | undefined;
 	private _totalSentMessageCount = 0;
 	private _totalReceivedMessageCount = 0;
 	private _totalSentCharacters = 0;
@@ -427,7 +428,9 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 				totalSentCharacters: this._totalSentCharacters,
 				totalReceivedCharacters: this._totalReceivedCharacters,
 			});
-			this._activeRequest?.handleConnectionClose(event.code, event.reason);
+			const errorMessage = this._pendingErrorMessage;
+			this._pendingErrorMessage = undefined;
+			this._activeRequest?.handleConnectionClose(event.code, event.reason, errorMessage);
 			this._activeRequest = undefined;
 		});
 
@@ -447,7 +450,7 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 				totalSentCharacters: this._totalSentCharacters,
 				totalReceivedCharacters: this._totalReceivedCharacters,
 			});
-			this._activeRequest?.handleConnectionError(new Error(errorMessage));
+			this._pendingErrorMessage ??= errorMessage;
 		});
 	}
 
@@ -616,19 +619,14 @@ class ChatWebSocketActiveRequest implements IChatWebSocketRequestHandle {
 		}
 	}
 
-	handleConnectionClose(code: number, reason: string): void {
+	handleConnectionClose(code: number, reason: string, errorMessage?: string): void {
 		if (this._settled) {
 			return;
 		}
-		const error = new Error(`WebSocket closed unexpectedly (code: ${code} ${wsCloseCodeToString(code)}${reason ? `, reason: ${reason}` : ''})`);
+		const error = errorMessage
+			? new Error(`${errorMessage} (close code: ${code} ${wsCloseCodeToString(code)}${reason ? `, reason: ${reason}` : ''})`)
+			: new Error(`WebSocket closed (code: ${code} ${wsCloseCodeToString(code)}${reason ? `, reason: ${reason}` : ''})`);
 		this._finalizeError('connection_closed', error, code, reason);
-	}
-
-	handleConnectionError(error: Error): void {
-		if (this._settled) {
-			return;
-		}
-		this._finalizeError('connection_error', error);
 	}
 
 	handleSuperseded(): void {

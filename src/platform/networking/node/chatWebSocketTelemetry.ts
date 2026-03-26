@@ -74,7 +74,7 @@ export interface IChatWebSocketMessageParseErrorTelemetryProperties extends ICha
 	totalReceivedCharacters: number;
 }
 
-export type ChatWebSocketRequestOutcome = 'completed' | 'server_error' | 'canceled' | 'superseded' | 'connection_closed' | 'connection_disposed' | 'connection_error';
+export type ChatWebSocketRequestOutcome = 'completed' | 'server_error' | 'canceled' | 'superseded' | 'connection_closed' | 'connection_disposed';
 
 export interface IChatWebSocketRequestOutcomeTelemetryProperties extends IChatWebSocketBaseTelemetryProperties {
 	requestOutcome: ChatWebSocketRequestOutcome;
