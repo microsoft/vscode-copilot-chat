@@ -7,10 +7,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
 // eslint-disable-next-line no-duplicate-imports
 import * as vscodeShim from 'vscode';
-vi.mock('../copilotCLIShim.ps1', () => ({ default: '# mock powershell script' }));
-import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { IRunCommandExecutionService } from '../../../../platform/commands/common/runCommandExecutionService';
 import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/common/defaultsOnlyConfigurationService';
+import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
@@ -24,6 +23,7 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { Event } from '../../../../util/vs/base/common/event';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { IChatSessionMetadataStore } from '../../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
 import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../../common/chatSessionWorktreeService';
 import { IFolderRepositoryManager } from '../../common/folderRepositoryManager';
@@ -35,6 +35,7 @@ import { ICopilotCLISessionService } from '../../copilotcli/node/copilotcliSessi
 import { ICopilotCLISessionTracker } from '../../copilotcli/vscode-node/copilotCLISessionTracker';
 import { CopilotCLIChatSessionContentProvider } from '../copilotCLIChatSessions';
 import { ICopilotCLITerminalIntegration } from '../copilotCLITerminalIntegration';
+vi.mock('../copilotCLIShim.ps1', () => ({ default: '# mock powershell script' }));
 
 beforeAll(() => {
 	(vscodeShim as Record<string, unknown>).chat = {
@@ -172,6 +173,7 @@ function createProvider() {
 	const sessionService = new TestSessionService();
 	const worktreeService = new TestWorktreeService();
 	const workspaceService = new NullWorkspaceService([URI.file('/workspace')]);
+	const metadataStore = new class extends mock<IChatSessionMetadataStore>() { };
 	const fileSystem = new class extends mock<IFileSystemService>() { declare readonly _serviceBrand: undefined; }();
 	const gitService = new TestGitService();
 	const folderRepositoryManager = new TestFolderRepositoryManager();
@@ -192,6 +194,7 @@ function createProvider() {
 	const provider = new CopilotCLIChatSessionContentProvider(
 		agents,
 		sessionService,
+		metadataStore,
 		worktreeService,
 		workspaceService as IWorkspaceService,
 		fileSystem,
