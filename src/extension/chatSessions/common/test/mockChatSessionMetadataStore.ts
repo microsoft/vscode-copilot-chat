@@ -42,6 +42,10 @@ export class MockChatSessionMetadataStore implements IChatSessionMetadataStore {
 		return undefined;
 	}
 
+	async getSessionIdForWorkspaceFolder(_folder: vscode.Uri): Promise<string[]> {
+		return [];
+	}
+
 	async getWorktreeProperties(sessionIdOrFolder: string | vscode.Uri): Promise<ChatSessionWorktreeProperties | undefined> {
 		if (typeof sessionIdOrFolder === 'string') {
 			return this._worktreeProperties.get(sessionIdOrFolder);

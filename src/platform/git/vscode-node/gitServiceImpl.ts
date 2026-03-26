@@ -393,7 +393,7 @@ export class GitServiceImpl extends Disposable implements IGitService {
 
 	async exec(uri: URI, args: string[], env?: Record<string, string>): Promise<string> {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
-		const repository = await gitAPI?.openRepository(uri);
+		const repository = await this.getRepository(uri);
 
 		if (!repository) {
 			this.logService.error(`[GitServiceImpl][exec] No repository found for URI: ${uri.toString()}`);

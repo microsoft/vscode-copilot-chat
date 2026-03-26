@@ -847,7 +847,16 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 		const toolCall = invocation[1];
 		if (Object.hasOwn(ToolFriendlyNameAndHandlers, toolCall.toolName)) {
 			const [, , postFormatter] = ToolFriendlyNameAndHandlers[toolCall.toolName];
-			(postFormatter as PostInvocationFormatter)(invocation[0], toolCall, event.data, workingDirectory);
+			try {
+				(postFormatter as PostInvocationFormatter)(invocation[0], toolCall, event.data, workingDirectory);
+			} catch (err) {
+				logger.error(err, `Failed to format tool invocation completion for tool: ${toolCall.toolName}`);
+				try {
+					genericToolInvocationCompleted(invocation[0], toolCall, event.data);
+				} catch {
+					// ignore
+				}
+			}
 		} else if (toolCall.mcpServerName && toolCall.mcpToolName) {
 			const toolCall = invocation[1];
 			// Use tool arguments as input, formatted as JSON
@@ -872,7 +881,7 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 export function createCopilotCLIToolInvocation(data: {
 	toolCallId: string; toolName: string; arguments?: unknown; mcpServerName?: string | undefined;
 	mcpToolName?: string | undefined;
-}, editId?: string, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart | undefined {
+}, editId?: string, workingDirectory?: URI, logger?: ILogger): ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart | undefined {
 	if (!Object.hasOwn(ToolFriendlyNameAndHandlers, data.toolName)) {
 		const mcpServer = l10n.t('MCP Server');
 		const toolName = data.mcpServerName && data.mcpToolName ? `${data.mcpServerName}, ${data.mcpToolName} (${mcpServer})` : data.toolName;
@@ -917,7 +926,11 @@ export function createCopilotCLIToolInvocation(data: {
 	invocation.isConfirmed = false;
 	invocation.isComplete = false;
 
-	(formatter as Formatter)(invocation, toolCall, editId, workingDirectory);
+	try {
+		(formatter as Formatter)(invocation, toolCall, editId, workingDirectory);
+	} catch (err) {
+		logger?.error(err, `Failed to format tool invocation for tool: ${toolCall.toolName}`);
+	}
 	return invocation;
 }
 

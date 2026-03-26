@@ -13,13 +13,14 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { getGitHubRepoInfoFromContext, IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
+import { derivePullRequestState } from '../../../platform/github/common/githubAPI';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { isUri } from '../../../util/common/types';
-import { DeferredPromise, IntervalTimer, SequencerByKey, ThrottledDelayer } from '../../../util/vs/base/common/async';
+import { DeferredPromise, IntervalTimer, SequencerByKey } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -172,13 +173,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	public readonly onDidCommitChatSessionItem: Event<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }> = this._onDidCommitChatSessionItem.event;
 
 	private readonly controller: vscode.ChatSessionItemController;
-	private static readonly _PR_DETECTION_RECHECK_INTERVAL = 60_000; // ms before re-checking a session that had no PR
-	private readonly _prDetectionDelayer = this._register(new ThrottledDelayer<void>(2000));
-	private readonly _prDetectionPendingSessions = new Map<string, { branchName: string; repositoryPath: string }>();
-	/** Sessions where a PR was found and persisted — permanently skip further detection. */
-	private readonly _prDetectionDone = new Set<string>();
-	/** Sessions checked without finding a PR — stores the timestamp so we can re-check after a cooldown. */
-	private readonly _prDetectionLastChecked = new Map<string, number>();
 	private readonly newSessions = new ResourceMap<vscode.ChatSessionItem>();
 	/**
 	 * ID of the last used folder in an untitled workspace (for defaulting selection).
@@ -263,7 +257,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		}
 		this._register(this.sessionService.onDidDeleteSession(async (e) => {
 			controller.items.delete(SessionIdForCLI.getResource(e));
-			this.clearPrDetectionState(e);
 		}));
 		this._register(this.sessionService.onDidChangeSession(async (e) => {
 			const item = await this.toChatSessionItem(e);
@@ -291,12 +284,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		this._register(this.copilotCLIAgents.onDidChangeAgents(() => {
 			this._onDidChangeChatSessionProviderOptions.fire();
 		}));
-	}
-
-	private clearPrDetectionState(sessionId: string): void {
-		this._prDetectionPendingSessions.delete(sessionId);
-		this._prDetectionDone.delete(sessionId);
-		this._prDetectionLastChecked.delete(sessionId);
 	}
 
 	public async refreshSession(refreshOptions: { reason: 'update'; sessionId: string } | { reason: 'delete'; sessionId: string }): Promise<void> {
@@ -383,17 +370,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		// Status
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
 
-		// Async PR detection for completed sessions without a pull request URL.
-		// Sessions are collected and checked in a debounced batch to avoid
-		// excessive API calls when the session list refreshes rapidly.
-		if (this.shouldDetectPullRequest(session.id, status, worktreeProperties, changes)) {
-			this._prDetectionPendingSessions.set(session.id, {
-				branchName: worktreeProperties!.branchName,
-				repositoryPath: worktreeProperties!.repositoryPath,
-			});
-			this._prDetectionDelayer.trigger(async () => this.processPendingPrDetections()).catch(() => { /* expected on dispose */ });
-		}
-
 		// Metadata
 		const metadata = worktreeProperties
 			? {
@@ -407,6 +383,9 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				worktreePath: worktreeProperties?.worktreePath,
 				pullRequestUrl: worktreeProperties.version === 2
 					? worktreeProperties.pullRequestUrl
+					: undefined,
+				pullRequestState: worktreeProperties.version === 2
+					? worktreeProperties.pullRequestState
 					: undefined,
 				firstCheckpointRef: worktreeProperties.version === 2
 					? worktreeProperties.firstCheckpointRef
@@ -433,84 +412,43 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	}
 
 	/**
-	 * Processes all pending PR detection requests in a single batch.
-	 * Called by the debounced delayer after rapid-fire `toChatSessionItem` calls settle.
+	 * Detects a pull request for a session when the user opens it.
+	 * If a PR is found, persists the URL and notifies the UI.
 	 */
-	private async processPendingPrDetections(): Promise<void> {
-		const pending = new Map(this._prDetectionPendingSessions);
-		this._prDetectionPendingSessions.clear();
+	public async detectPullRequestOnSessionOpen(sessionId: string): Promise<void> {
+		try {
+			const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+			if (worktreeProperties?.version !== 2
+				|| worktreeProperties.pullRequestState === 'merged'
+				|| !worktreeProperties.branchName
+				|| !worktreeProperties.repositoryPath) {
+				return;
+			}
 
-		for (const [sessionId, { branchName, repositoryPath }] of pending) {
-			try {
-				const prUrl = await detectPullRequestFromGitHubAPI(
-					branchName,
-					repositoryPath,
-					this.gitService,
-					this.octoKitService,
-					this.logService,
-				);
+			const prResult = await detectPullRequestFromGitHubAPI(
+				worktreeProperties.branchName,
+				worktreeProperties.repositoryPath,
+				this.gitService,
+				this.octoKitService,
+				this.logService,
+			);
 
-				if (prUrl) {
-					const currentProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
-					if (currentProperties?.version === 2 && !currentProperties.pullRequestUrl) {
-						const updated: typeof currentProperties = {
-							...currentProperties,
-							pullRequestUrl: prUrl,
-							changes: undefined,
-						};
-						await this.copilotCLIWorktreeManagerService.setWorktreeProperties(sessionId, updated);
-						this.refreshSession({ reason: 'update', sessionId });
-					}
-
-					// Mark permanently only after the PR URL has been persisted successfully.
-					this._prDetectionDone.add(sessionId);
-					this._prDetectionLastChecked.delete(sessionId);
-				} else {
-					// No PR yet — record the timestamp so we can re-check after a cooldown.
-					this._prDetectionLastChecked.set(sessionId, Date.now());
+			if (prResult) {
+				const currentProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+				if (currentProperties?.version === 2
+					&& (currentProperties.pullRequestUrl !== prResult.url || currentProperties.pullRequestState !== prResult.state)) {
+					await this.copilotCLIWorktreeManagerService.setWorktreeProperties(sessionId, {
+						...currentProperties,
+						pullRequestUrl: prResult.url,
+						pullRequestState: prResult.state,
+						changes: undefined,
+					});
+					await this.refreshSession({ reason: 'update', sessionId });
 				}
-			} catch (error) {
-				// Do not record a timestamp — the session will be retried on the next refresh.
-				this.logService.debug(`[CopilotCLIChatSessionItemProvider] Failed to detect pull request via GitHub API for session ${sessionId}, will retry: ${error instanceof Error ? error.message : String(error)}`);
 			}
+		} catch (error) {
+			this.logService.trace(`[CopilotCLIChatSessionItemProvider] Failed to detect pull request on session open for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
 		}
-	}
-
-	/**
-	 * Determines whether a session is a candidate for async PR detection.
-	 * Skips sessions that are not completed, not v2 worktrees, already have a
-	 * PR URL, have no file changes, or have already been checked.
-	 */
-	private shouldDetectPullRequest(
-		sessionId: string,
-		status: vscode.ChatSessionStatus,
-		worktreeProperties: Awaited<ReturnType<IChatSessionWorktreeService['getWorktreeProperties']>>,
-		changes: readonly vscode.ChatSessionChangedFile2[],
-	): boolean {
-		if (status !== vscode.ChatSessionStatus.Completed
-			|| worktreeProperties?.version !== 2
-			|| worktreeProperties.pullRequestUrl
-			|| !worktreeProperties.branchName
-			|| !worktreeProperties.repositoryPath
-			|| changes.length === 0) {
-			return false;
-		}
-
-		// Skip sessions where a PR was already found.
-		if (this._prDetectionDone.has(sessionId)) {
-			return false;
-		}
-
-		// Allow re-checking after a cooldown so PRs created after session completion are detected.
-		const lastChecked = this._prDetectionLastChecked.get(sessionId);
-		if (lastChecked !== undefined) {
-			const elapsed = Date.now() - lastChecked;
-			if (elapsed < CopilotCLIChatSessionContentProvider._PR_DETECTION_RECHECK_INTERVAL) {
-				return false;
-			}
-		}
-
-		return true;
 	}
 
 	public notifySessionOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<{ optionId: string; value: string | vscode.ChatSessionProviderOptionItem }>): void {
@@ -565,6 +503,10 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	async provideChatSessionContentForExistingSession(resource: Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
 		const copilotcliSessionId = SessionIdForCLI.parse(resource);
 		this._currentSessionId = copilotcliSessionId;
+
+		// Fire-and-forget: detect PR when the user opens a session.
+		void this.detectPullRequestOnSessionOpen(copilotcliSessionId);
+
 		const folderRepo = await this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token);
 		const [history, title] = await Promise.all([
 			this.getSessionHistory(copilotcliSessionId, folderRepo, token),
@@ -1465,17 +1407,18 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					// done in the checkpoint so that users can easily see the changes made in
 					// the worktree and also revert back if needed.
 					await this.copilotCLIWorktreeManagerService.handleRequestCompleted(session.sessionId);
-
-					// When isolation is enabled and we are using a git worktree, and the worktree supports
-					// checkpoints, we create a checkpoint for the worktree changes so that users can easily
-					// see the changes made in the worktree and also revert back if needed.
-					await this.copilotCLIWorktreeCheckpointService.handleRequestCompleted(session.sessionId);
 				} else if (workingDirectory) {
 					// When isolation is not enabled, we are operating in the workspace directly,
 					// so we stage all the changes in the workspace directory when the session is
 					// completed
 					await this.workspaceFolderService.handleRequestCompleted(workingDirectory);
 				}
+
+				// Create checkpoint - we create a checkpoint for the worktree changes so that users
+				// can easily see the changes made in the worktree and also revert back if needed. This
+				// is used if worktree isolation is enabled, and auto-commit is disabled or workspace
+				// isolation is enabled.
+				await this.copilotCLIWorktreeCheckpointService.handleRequestCompleted(session.sessionId, request.id);
 			}
 
 			await this.handlePullRequestCreated(session);
@@ -1486,9 +1429,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 	private async handlePullRequestCreated(session: ICopilotCLISession): Promise<void> {
 		let prUrl = session.createdPullRequestUrl;
+		let prState: string | undefined;
 
 		if (!prUrl) {
-			prUrl = await this.detectPullRequestForSession(session.sessionId);
+			const detectedPr = await this.detectPullRequestForSession(session.sessionId);
+			prUrl = detectedPr?.url;
+			prState = detectedPr?.state;
 		}
 
 		if (!prUrl) {
@@ -1501,6 +1447,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.sessionId, {
 					...worktreeProperties,
 					pullRequestUrl: prUrl,
+					pullRequestState: prState,
 					changes: undefined,
 				});
 				await this.contentProvider.refreshSession({ reason: 'update', sessionId: session.sessionId });
@@ -1515,7 +1462,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	 * session's worktree branch. This covers cases where the MCP tool failed to
 	 * report a PR URL, or the user created the PR externally (e.g., via github.com).
 	 */
-	private async detectPullRequestForSession(sessionId: string): Promise<string | undefined> {
+	private async detectPullRequestForSession(sessionId: string): Promise<{ url: string; state: string } | undefined> {
 		try {
 			const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
 			if (!worktreeProperties?.branchName || !worktreeProperties.repositoryPath) {
@@ -2258,6 +2205,21 @@ export function registerCLIChatCommands(
 		await contentProvider.refreshSession({ reason: 'update', sessionId });
 	}));
 
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.sessions.commitChanges', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
+		const resource = sessionItemOrResource instanceof vscode.Uri
+			? sessionItemOrResource
+			: sessionItemOrResource?.resource;
+
+		if (!resource) {
+			return;
+		}
+
+		await vscode.commands.executeCommand('workbench.action.chat.openSessionWithPrompt.copilotcli', {
+			resource,
+			prompt: builtinSlashSCommands.commit,
+		});
+	}));
+
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
 		const resource = sessionItemOrResource instanceof vscode.Uri
 			? sessionItemOrResource
@@ -2530,7 +2492,7 @@ async function detectPullRequestFromGitHubAPI(
 	gitService: IGitService,
 	octoKitService: IOctoKitService,
 	logService: ILogService,
-): Promise<string | undefined> {
+): Promise<{ url: string; state: string } | undefined> {
 	const repoContext = await gitService.getRepository(URI.file(repositoryPath));
 	if (!repoContext) {
 		return undefined;
@@ -2549,8 +2511,9 @@ async function detectPullRequestFromGitHubAPI(
 	);
 
 	if (pr?.url) {
-		logService.trace(`[detectPullRequestFromGitHubAPI] Detected pull request via GitHub API: ${pr.url}`);
-		return pr.url;
+		const prState = derivePullRequestState(pr);
+		logService.trace(`[detectPullRequestFromGitHubAPI] Detected pull request via GitHub API: ${pr.url} ${prState}`);
+		return { url: pr.url, state: prState };
 	}
 
 	return undefined;

@@ -90,8 +90,6 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 		const searchSubagentToken = new CapturingToken(
 			`Search: ${options.input.query.substring(0, 50)}${options.input.query.length > 50 ? '...' : ''}`,
 			'search',
-			false,
-			false,
 			subAgentInvocationId,
 			'search',  // subAgentName for trajectory tracking
 			// Use invocation ID as chatSessionId so spans get their own log file

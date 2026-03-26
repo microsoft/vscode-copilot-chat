@@ -11,6 +11,7 @@ import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/ch
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { CopilotChatAttr, GenAiAttr, GenAiOperationName, IOTelService, ISpanHandle, SpanKind, SpanStatusCode, truncateForOTel } from '../../../../platform/otel/common/index';
+import type { ParsedPromptFile } from '../../../../platform/promptFiles/common/promptsService';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger, LoggedRequestKind } from '../../../../platform/requestLogger/node/requestLogger';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -19,8 +20,6 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { Codicon } from '../../../../util/vs/base/common/codicons';
 import { Emitter } from '../../../../util/vs/base/common/event';
 import { DisposableStore, IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
-import type { CopilotCliBridgeSpanProcessor } from './copilotCliBridgeSpanProcessor';
-
 import { extUriBiasedIgnorePathCase, isEqual } from '../../../../util/vs/base/common/resources';
 import { truncate } from '../../../../util/vs/base/common/strings';
 import { ThemeIcon } from '../../../../util/vs/base/common/themables';
@@ -28,8 +27,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, LanguageModelTextPart, Uri } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
-import { IChatCustomAgentsService } from '../../common/chatCustomAgentsService';
-import type { ParsedPromptFile } from '../../../../platform/promptFiles/common/promptsService';
+import { IChatPromptFileService } from '../../common/chatPromptFileService';
 import { IChatSessionMetadataStore, RequestDetails, StoredModeInstructions } from '../../common/chatSessionMetadataStore';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../../common/workspaceInfo';
@@ -37,6 +35,7 @@ import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEdi
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
 import { getCopilotCLISessionStateDir } from './cliHelpers';
 import { CopilotCLISessionOptions, getAgentFileNameFromFilePath, ICopilotCLISDK } from './copilotCli';
+import type { CopilotCliBridgeSpanProcessor } from './copilotCliBridgeSpanProcessor';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
 import { PermissionRequest, requestPermission, requiresFileEditconfirmation } from './permissionHelpers';
 import { IUserQuestionHandler, UserInputRequest } from './userInputHelpers';
@@ -53,6 +52,7 @@ export type CopilotCLICommand = 'compact';
 export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact'] as const;
 
 export const builtinSlashSCommands = {
+	commit: '/commit',
 	createPr: '/create-pr',
 	createDraftPr: '/create-draft-pr',
 	updatePr: '/update-pr',
@@ -160,7 +160,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IOTelService private readonly _otelService: IOTelService,
 		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService,
-		@IChatCustomAgentsService private readonly _chatCustomAgentsService: IChatCustomAgentsService,
+		@IChatPromptFileService private readonly _chatPromptFileService: IChatPromptFileService,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -229,7 +229,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}
 		const label = getPromptLabel(input);
 		const promptLabel = truncate(label, 50);
-		const capturingToken = new CapturingToken(`Copilot CLI | ${promptLabel}`, 'worktree', false, true, undefined, undefined, this.sessionId);
+		const capturingToken = new CapturingToken(`Copilot CLI | ${promptLabel}`, 'worktree', undefined, undefined, this.sessionId);
 		const isAlreadyBusyWithAnotherRequest = !!this._status && (this._status === ChatSessionStatus.InProgress || this._status === ChatSessionStatus.NeedsInput);
 		this._toolInvocationToken = request.toolInvocationToken;
 
@@ -840,7 +840,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	}
 
 	private createCustomAgentLookup(): Map<string, ParsedPromptFile> {
-		const agents = this._chatCustomAgentsService.getCustomAgents();
+		const agents = this._chatPromptFileService.customAgentPromptFiles;
 		const lookup = new Map<string, ParsedPromptFile>();
 		for (const agent of agents) {
 			const keys = [
