@@ -14,7 +14,7 @@ import { SpeculativeRequestsAutoExpandEditWindowLines, SpeculativeRequestsEnable
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../../../platform/inlineEdits/common/observableGit';
 import { MutableObservableWorkspace } from '../../../../platform/inlineEdits/common/observableWorkspace';
-import { IStatelessNextEditProvider, NoNextEditReason, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { EditStreamingWithTelemetry, IStatelessNextEditProvider, NoNextEditReason, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { NesHistoryContextProvider } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ILogger, ILogService, LogServiceImpl } from '../../../../platform/log/common/logService';
@@ -56,6 +56,12 @@ type ProviderBehavior =
 		continueSignal: DeferredPromise<void>;
 	}
 	| {
+		kind: 'yieldEditThenWaitThenYieldEditsThenNoSuggestions';
+		firstEdit: LineReplacement;
+		continueSignal: DeferredPromise<void>;
+		remainingEdits: readonly LineReplacement[];
+	}
+	| {
 		kind: 'waitForCancellation';
 	};
 
@@ -88,13 +94,14 @@ class TestStatelessNextEditProvider implements IStatelessNextEditProvider {
 		}
 	}
 
-	public async *provideNextEdit(request: StatelessNextEditRequest, _logger: ILogger, _logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken) {
+	public async *provideNextEdit(request: StatelessNextEditRequest, _logger: ILogger, _logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): EditStreamingWithTelemetry {
 		const behavior = this._behaviors.shift();
 		if (!behavior) {
 			throw new Error('Missing provider behavior');
 		}
 
 		const telemetryBuilder = new StatelessNextEditTelemetryBuilder(request.headerRequestId);
+		const activeDocId = request.getActiveDocument().id;
 		const cancellationRequested = new DeferredPromise<void>();
 		const completed = new DeferredPromise<void>();
 		const call: ICallRecord = {
@@ -120,7 +127,19 @@ class TestStatelessNextEditProvider implements IStatelessNextEditProvider {
 				return new WithStatelessProviderTelemetry(cancelled, telemetryBuilder.build(Result.error(cancelled)));
 			}
 
-			yield new WithStatelessProviderTelemetry({ edit: behavior.edit, isFromCursorJump: false }, telemetryBuilder.build(Result.ok(undefined)));
+			if (behavior.kind === 'yieldEditThenWaitThenYieldEditsThenNoSuggestions') {
+				yield new WithStatelessProviderTelemetry({ edit: behavior.firstEdit, isFromCursorJump: false, targetDocument: activeDocId }, telemetryBuilder.build(Result.ok(undefined)));
+				await Promise.race([behavior.continueSignal.p, cancellationRequested.p]);
+				if (!call.wasCancelled) {
+					for (const edit of behavior.remainingEdits) {
+						yield new WithStatelessProviderTelemetry({ edit, isFromCursorJump: false, targetDocument: activeDocId }, telemetryBuilder.build(Result.ok(undefined)));
+					}
+				}
+				const noSuggestions = new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, undefined);
+				return new WithStatelessProviderTelemetry(noSuggestions, telemetryBuilder.build(Result.error(noSuggestions)));
+			}
+
+			yield new WithStatelessProviderTelemetry({ edit: behavior.edit, isFromCursorJump: false, targetDocument: activeDocId }, telemetryBuilder.build(Result.ok(undefined)));
 
 			if (behavior.kind === 'yieldEditThenWait') {
 				await Promise.race([behavior.continueSignal.p, cancellationRequested.p]);
@@ -832,6 +851,270 @@ describe('NextEditProvider speculative requests', () => {
 
 			nextEditProvider.handleRejection(doc.id, secondSuggestion);
 			await statelessProvider.calls[2].completed.p;
+		});
+	});
+
+	describe('scheduled speculative requests for multi-edit streams', () => {
+		it('does not trigger speculative when shown edit is not the last in a multi-edit stream', async () => {
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
+
+			const statelessProvider = new TestStatelessNextEditProvider();
+			const continueSignal = new DeferredPromise<void>();
+			statelessProvider.enqueueBehavior({
+				kind: 'yieldEditThenWaitThenYieldEditsThenNoSuggestions',
+				firstEdit: lineReplacement(1, 'const value = 2;'),
+				continueSignal,
+				remainingEdits: [lineReplacement(2, 'console.log(value + 1);')],
+			});
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/spec-multi-not-last.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			// Get first edit (E0) — stream is paused on continueSignal
+			const suggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(suggestion.result?.edit);
+
+			// Show E0 — stream still running → speculative is scheduled (not fired)
+			nextEditProvider.handleShown(suggestion);
+
+			// Resume stream — E1 arrives → clears the scheduled speculative
+			continueSignal.complete();
+			await statelessProvider.calls[0].completed.p;
+			await flushMicrotasks();
+
+			// Only the original request was made — no speculative request
+			expect(statelessProvider.calls.length).toBe(1);
+		});
+
+		it('triggers speculative after stream completes when shown edit is the last one', async () => {
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
+
+			const statelessProvider = new TestStatelessNextEditProvider();
+			const continueSignal = new DeferredPromise<void>();
+			statelessProvider.enqueueBehavior({
+				kind: 'yieldEditThenWait',
+				edit: lineReplacement(1, 'const value = 2;'),
+				continueSignal,
+			});
+			statelessProvider.enqueueBehavior({ kind: 'waitForCancellation' });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/spec-last-edit.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			// Get first edit (E0) — stream paused on continueSignal
+			const suggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(suggestion.result?.edit);
+
+			// Show E0 — stream still running → speculative is scheduled
+			nextEditProvider.handleShown(suggestion);
+
+			// Resume stream — no more edits → stream ends → scheduled speculative fires
+			continueSignal.complete();
+			// The speculative fires from handleStreamEnd (background IIFE), so we need
+			// microtasks to propagate through the async chain before the call arrives.
+			await flushMicrotasks();
+
+			expect(statelessProvider.calls.length).toBe(2);
+			expect(statelessProvider.calls[1].request.isSpeculative).toBe(true);
+
+			nextEditProvider.handleRejection(doc.id, suggestion);
+			await statelessProvider.calls[1].completed.p;
+		});
+
+		it('clears scheduled speculative on rejection before stream completes', async () => {
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
+
+			const statelessProvider = new TestStatelessNextEditProvider();
+			const continueSignal = new DeferredPromise<void>();
+			statelessProvider.enqueueBehavior({
+				kind: 'yieldEditThenWait',
+				edit: lineReplacement(1, 'const value = 2;'),
+				continueSignal,
+			});
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/spec-reject-before-end.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			// Get E0, stream paused
+			const suggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(suggestion.result?.edit);
+
+			// Show → schedules speculative
+			nextEditProvider.handleShown(suggestion);
+
+			// Reject before stream completes → clears schedule
+			nextEditProvider.handleRejection(doc.id, suggestion);
+
+			// Let stream finish
+			continueSignal.complete();
+			await statelessProvider.calls[0].completed.p;
+			await flushMicrotasks();
+
+			// No speculative request was created
+			expect(statelessProvider.calls.length).toBe(1);
+		});
+
+		it('clears scheduled speculative on handleIgnored (shown, not superseded) before stream completes', async () => {
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
+
+			const statelessProvider = new TestStatelessNextEditProvider();
+			const continueSignal = new DeferredPromise<void>();
+			statelessProvider.enqueueBehavior({
+				kind: 'yieldEditThenWait',
+				edit: lineReplacement(1, 'const value = 2;'),
+				continueSignal,
+			});
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/spec-ignored-before-end.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			const suggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(suggestion.result?.edit);
+
+			// Show → schedules speculative
+			nextEditProvider.handleShown(suggestion);
+
+			// Ignored (shown, not superseded) before stream completes → clears schedule
+			nextEditProvider.handleIgnored(doc.id, suggestion, undefined);
+
+			// Let stream finish
+			continueSignal.complete();
+			await statelessProvider.calls[0].completed.p;
+			await flushMicrotasks();
+
+			// No speculative request was created
+			expect(statelessProvider.calls.length).toBe(1);
+		});
+
+		it('fires speculative immediately when stream already completed before handleShown', async () => {
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
+
+			const statelessProvider = new TestStatelessNextEditProvider();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(1, 'const value = 2;') });
+			statelessProvider.enqueueBehavior({ kind: 'waitForCancellation' });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/spec-stream-done.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			const suggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(suggestion.result?.edit);
+
+			// Ensure the background IIFE has completed (stream is done, pending request cleared)
+			await flushMicrotasks();
+
+			// Now handleShown sees no pending request → fires immediately (not scheduled)
+			nextEditProvider.handleShown(suggestion);
+			await statelessProvider.waitForCall(2);
+
+			expect(statelessProvider.calls.length).toBe(2);
+			expect(statelessProvider.calls[1].request.isSpeculative).toBe(true);
+
+			nextEditProvider.handleRejection(doc.id, suggestion);
+			await statelessProvider.calls[1].completed.p;
+		});
+
+		it('clears scheduled speculative when a new getNextEdit supersedes the originating stream', async () => {
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
+
+			const statelessProvider = new TestStatelessNextEditProvider();
+			// Stream A: yields E0, then waits (simulating a paused multi-edit stream)
+			const streamAContinue = new DeferredPromise<void>();
+			statelessProvider.enqueueBehavior({
+				kind: 'yieldEditThenWait',
+				edit: lineReplacement(1, 'const value = 2;'),
+				continueSignal: streamAContinue,
+			});
+			// Stream B: the new request that supersedes stream A
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(1, 'const value = 3;') });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/spec-stale-schedule.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			// 1. Get E0 from stream A — stream is paused on streamAContinue
+			const suggestionA = await getNextEdit(nextEditProvider, doc.id);
+			assert(suggestionA.result?.edit);
+
+			// 2. handleShown(E0) → speculative is scheduled (not fired, stream A still running)
+			nextEditProvider.handleShown(suggestionA);
+
+			// 3. A new getNextEdit supersedes stream A — should clear the scheduled speculative
+			const suggestionB = await getNextEdit(nextEditProvider, doc.id);
+			assert(suggestionB.result?.edit);
+
+			// 4. Let stream A's background IIFE finish (after cancellation).
+			//    Without the fix, handleStreamEnd would see the stale scheduled speculative
+			//    and fire _triggerSpeculativeRequest for stream A's E0.
+			streamAContinue.complete();
+			await statelessProvider.calls[0].completed.p;
+			await flushMicrotasks();
+
+			// Only 2 calls: stream A and stream B. No stale speculative request fired.
+			expect(statelessProvider.calls.length).toBe(2);
+		});
+
+		it('second handleShown replaces a previously scheduled speculative', async () => {
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
+
+			const statelessProvider = new TestStatelessNextEditProvider();
+			const continueSignal = new DeferredPromise<void>();
+			statelessProvider.enqueueBehavior({
+				kind: 'yieldEditThenWait',
+				edit: lineReplacement(1, 'const value = 2;'),
+				continueSignal,
+			});
+			statelessProvider.enqueueBehavior({ kind: 'waitForCancellation' });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/spec-replace-schedule.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			const suggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(suggestion.result?.edit);
+
+			// First handleShown → schedules speculative (stream still running)
+			nextEditProvider.handleShown(suggestion);
+
+			// Second handleShown for the same suggestion → clears the previous schedule
+			// and sets a new one for the same headerRequestId
+			nextEditProvider.handleShown(suggestion);
+
+			// Resume stream → stream ends → the (second) scheduled speculative fires
+			continueSignal.complete();
+			await flushMicrotasks();
+
+			// Exactly one speculative request was created (not two)
+			expect(statelessProvider.calls.length).toBe(2);
+			expect(statelessProvider.calls[1].request.isSpeculative).toBe(true);
+
+			nextEditProvider.handleRejection(doc.id, suggestion);
+			await statelessProvider.calls[1].completed.p;
 		});
 	});
 });

@@ -3,12 +3,16 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { NoNextEditReason, StreamedEdit } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ErrorUtils } from '../../../util/common/errors';
+import { isAbsolute } from '../../../util/vs/base/common/path';
+import { URI } from '../../../util/vs/base/common/uri';
 import { LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
+import { toUniquePath } from '../common/promptCraftingUtils';
 import { ResponseTags } from '../common/tags';
 
 
@@ -17,7 +21,10 @@ class Patch {
 	public addedLines: string[] = [];
 
 	private constructor(
-		public readonly filename: string,
+		/**
+		 * Expected to be file path relative to workspace root.
+		 */
+		public readonly filePath: string,
 		public readonly lineNumZeroBased: number,
 	) { }
 
@@ -45,7 +52,7 @@ class Patch {
 
 	public toString(): string {
 		return [
-			`${this.filename}:${this.lineNumZeroBased}`,
+			`${this.filePath}:${this.lineNumZeroBased}`,
 			...this.removedLines.map(l => `-${l}`),
 			...this.addedLines.map(l => `+${l}`),
 		].join('\n');
@@ -58,17 +65,22 @@ export class XtabCustomDiffPatchResponseHandler {
 	public static async *handleResponse(
 		linesStream: AsyncIterable<string>,
 		documentBeforeEdits: StringText,
+		activeDocumentId: DocumentId,
+		workspaceRoot: URI | undefined,
 		window: OffsetRange | undefined,
 		originalWindow?: OffsetRange,
 	): AsyncGenerator<StreamedEdit, NoNextEditReason, void> {
+		const activeDocRelativePath = toUniquePath(activeDocumentId, workspaceRoot?.path);
 		try {
 			for await (const edit of XtabCustomDiffPatchResponseHandler.extractEdits(linesStream)) {
+				const targetDocument = edit.filePath === activeDocRelativePath
+					? activeDocumentId
+					: XtabCustomDiffPatchResponseHandler.resolveTargetDocument(edit.filePath, workspaceRoot) ?? activeDocumentId; // FIXME@ulugbekna: it's wrong to fallback to active document but just ignoring edits is also bad
 				yield {
 					edit: XtabCustomDiffPatchResponseHandler.resolveEdit(edit),
+					isFromCursorJump: false,
+					targetDocument,
 					window,
-					originalWindow,
-					isFromCursorJump: true,
-					// targetDocument, // TODO@ulugbekna: implement target document resolution
 				} satisfies StreamedEdit;
 			}
 		} catch (e: unknown) {
@@ -81,6 +93,17 @@ export class XtabCustomDiffPatchResponseHandler {
 
 	private static resolveEdit(patch: Patch): LineReplacement {
 		return new LineReplacement(new LineRange(patch.lineNumZeroBased + 1, patch.lineNumZeroBased + 1 + patch.removedLines.length), patch.addedLines);
+	}
+
+	private static resolveTargetDocument(filePath: string, workspaceRoot: URI | undefined): DocumentId | undefined {
+		if (isAbsolute(filePath)) {
+			return DocumentId.create(URI.file(filePath).toString());
+		}
+		if (workspaceRoot) {
+			return DocumentId.create(URI.joinPath(workspaceRoot, filePath).toString());
+		}
+		// Relative path with no workspace root — cannot resolve to a valid URI
+		return undefined;
 	}
 
 	public static async *extractEdits(linesStream: AsyncIterable<string>): AsyncGenerator<Patch> {

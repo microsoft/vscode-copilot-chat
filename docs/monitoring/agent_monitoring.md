@@ -6,24 +6,54 @@ All signal names and attributes follow the [OTel GenAI Semantic Conventions](htt
 
 ## Quick Start
 
-Set these environment variables before launching VS Code:
+The fastest way to see Copilot Chat traces locally — no cloud account required. This guide uses the [Aspire Dashboard](https://aspire.dev/dashboard/standalone/), a lightweight container image from Microsoft that provides a trace viewer with a built-in OTLP endpoint. It can be used standalone, without the rest of .NET Aspire.
+
+### Prerequisites
+
+- **Docker** installed
+- **VS Code** with the GitHub Copilot Chat extension
+
+### 1. Start the Aspire Dashboard
 
 ```bash
-# Enable OTel and point to a local collector
-export COPILOT_OTEL_ENABLED=true
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-
-# Launch VS Code
-code .
+docker run --rm -d \
+  -p 18888:18888 \
+  -p 4317:18889 \
+  --name aspire-dashboard \
+  mcr.microsoft.com/dotnet/aspire-dashboard:latest
 ```
 
-That's it. Traces, metrics, and events start flowing to your collector.
+This exposes the dashboard UI on port `18888` and an OTLP (gRPC) endpoint on port `4317`.
 
-> **Tip:** To get started quickly with a local trace viewer, run [Jaeger](https://www.jaegertracing.io/) in Docker:
-> ```bash
-> docker run -d --name jaeger -p 16686:16686 -p 4318:4318 jaegertracing/jaeger:latest
-> ```
-> Then open http://localhost:16687 and look for service `copilot-chat`.
+### 2. Configure VS Code
+
+Open **Settings** (`Ctrl+,`) and add:
+
+```json
+{
+  "github.copilot.chat.otel.enabled": true,
+  "github.copilot.chat.otel.exporterType": "otlp-grpc",
+  "github.copilot.chat.otel.otlpEndpoint": "http://localhost:4317"
+}
+```
+
+> **Note:** You can also use environment variables instead of VS Code settings (see [Configuration](#configuration)). Environment variables always take precedence.
+
+### 3. Generate Telemetry
+
+Open Copilot Chat and send any message — for example, ask a question in Agent mode.
+
+### 4. View Traces
+
+Open http://localhost:18888 → **Traces**. You'll see `invoke_agent` spans with nested `chat` and `execute_tool` children.
+
+### Teardown
+
+```bash
+docker stop aspire-dashboard
+```
+
+> **Tip:** See the [Aspire Dashboard standalone docs](https://aspire.dev/dashboard/standalone/) for more configuration options.
 
 ---
 
@@ -278,10 +308,12 @@ These custom attributes are included in all traces, metrics, and events, allowin
 
 By default, **no prompt content, responses, or tool arguments are captured** — only metadata like model names, token counts, and durations.
 
-To capture full content:
+To capture full content, add to your VS Code settings:
 
-```bash
-export COPILOT_OTEL_CAPTURE_CONTENT=true
+```json
+{
+  "github.copilot.chat.otel.captureContent": true
+}
 ```
 
 This populates these span attributes:
@@ -305,25 +337,33 @@ Content is captured in full with no truncation.
 
 **OTLP/gRPC:**
 
-```bash
-export COPILOT_OTEL_ENABLED=true
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
-export OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+```json
+{
+  "github.copilot.chat.otel.enabled": true,
+  "github.copilot.chat.otel.exporterType": "otlp-grpc",
+  "github.copilot.chat.otel.otlpEndpoint": "http://localhost:4317"
+}
 ```
 
 **Remote collector with authentication:**
 
-```bash
-export COPILOT_OTEL_ENABLED=true
-export OTEL_EXPORTER_OTLP_ENDPOINT=https://collector.example.com:4318
-export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer your-token"
+```json
+{
+  "github.copilot.chat.otel.enabled": true,
+  "github.copilot.chat.otel.otlpEndpoint": "https://collector.example.com:4318"
+}
 ```
+
+> **Note:** Authentication headers are only configurable via the `OTEL_EXPORTER_OTLP_HEADERS` environment variable (e.g., `Authorization=Bearer your-token`). See [Environment Variables](#environment-variables).
 
 **File-based output (offline / CI):**
 
-```bash
-export COPILOT_OTEL_ENABLED=true
-export COPILOT_OTEL_FILE_EXPORTER_PATH=/tmp/copilot-otel.jsonl
+```json
+{
+  "github.copilot.chat.otel.enabled": true,
+  "github.copilot.chat.otel.exporterType": "file",
+  "github.copilot.chat.otel.outfile": "/tmp/copilot-otel.jsonl"
+}
 ```
 
 **Console output (quick debugging):**
@@ -358,6 +398,53 @@ This propagation works across async boundaries — the parent's trace context is
 
 ---
 
+## Background Agents (Copilot CLI)
+
+When OTel is enabled, **all agent types** are automatically instrumented — no additional configuration needed. The same settings that enable foreground agent traces also enable Copilot CLI traces.
+
+### Copilot CLI (Background Agent)
+
+The Copilot CLI SDK runs in the same VS Code process and produces a rich trace hierarchy including subagents, permissions, hooks, and tool calls:
+
+```
+copilot-chat invoke_agent copilotcli           [~45s]  ← extension wrapper
+  └── github-copilot invoke_agent              [~42s]  ← SDK native spans
+      ├── chat claude-sonnet-4.6               [~16s]
+      │   ├── hook postToolUse                          ← hook execution
+      │   └── hook postToolUse
+      ├── execute_tool task                    [~18s]
+      │   └── invoke_agent task                         ← subagent
+      │       ├── chat claude-sonnet-4.6
+      │       ├── execute_tool bash
+      │       │   └── permission
+      │       └── execute_tool report_intent
+      ├── chat claude-sonnet-4.6               [~4s]
+      └── hook sessionEnd                               ← session lifecycle hook
+```
+
+The extension wrapper span (`invoke_agent copilotcli`, service `copilot-chat`) parents the SDK's native spans (service `github-copilot`). Both appear in the same trace in your collector.
+
+**Agent Debug Log panel**: CLI sessions show the full SDK hierarchy in the Tree View — identical to what appears in Grafana/Jaeger. This works even when OTel export is disabled, because the SDK's internal tracing is always active for the debug panel.
+
+> **Content in the debug panel**: When OTel export is disabled (the default), the debug panel automatically captures full prompt/response content. When OTel export is enabled, content capture is controlled by the `captureContent` setting — the same flag applies to both the debug panel and OTLP export. To see content in the debug panel while OTel is enabled, set `github.copilot.chat.otel.captureContent` to `true`.
+
+### Copilot CLI (Terminal Session)
+
+Terminal CLI sessions ("New Copilot CLI Session") run as a separate process. When OTel is enabled, the extension forwards `COPILOT_OTEL_ENABLED` and `OTEL_EXPORTER_OTLP_ENDPOINT` to the terminal process. Terminal traces appear as **independent root traces** (service `github-copilot`) — they are not linked to extension traces.
+
+> **Note:** The CLI runtime only supports `otlp-http`. When `otlp-grpc` is configured, the terminal CLI still uses HTTP. Backends that serve both protocols on the same port (e.g., Aspire Dashboard) work transparently.
+
+### Filtering by Agent Type
+
+In your trace viewer, filter by `service.name` to see traces from specific agents:
+
+| `service.name` | Source |
+|---|---|
+| `copilot-chat` | Foreground agent + CLI wrapper spans |
+| `github-copilot` | CLI SDK native spans + CLI terminal |
+
+---
+
 ## Interpreting the Data
 
 **Traces** — Visualize the full agent execution in Jaeger or Grafana Tempo. Each `invoke_agent` span contains child `chat` and `execute_tool` spans, making it easy to identify bottlenecks and debug failures. Subagent invocations appear as nested `invoke_agent` spans under `execute_tool runSubagent`.
@@ -376,26 +463,35 @@ First successful span export is logged to the console (`[OTel] First span batch 
 
 ---
 
-## Backend Setup & Verification
+## Backend Setup Guides
 
-Copilot Chat's OTel data works with any OTLP-compatible backend. This section covers setup and verification for recommended backends.
+Copilot Chat's OTel data works with any OTLP-compatible backend. This section provides step-by-step setup guides for recommended backends.
+
+### Aspire Dashboard
+
+See [Quick Start](#quick-start) above for setup. The [Aspire Dashboard](https://aspire.dev/dashboard/standalone/) is the simplest option — a single Docker container with a built-in OTLP endpoint and trace viewer. No cloud account or collector needed.
 
 ### OTel Collector + Azure Application Insights
 
 [Azure Application Insights](https://learn.microsoft.com/en-us/azure/azure-monitor/app/app-insights-overview) ingests OTel traces, metrics, and logs through an [OTel Collector](https://opentelemetry.io/docs/collector/) with the `azuremonitor` exporter. This repo includes a ready-to-use collector setup in `docs/monitoring/`.
 
-**1. Start the collector:**
+**1. Create an Application Insights resource:**
+
+1. Go to the [Azure Portal](https://portal.azure.com/).
+2. Click **Create a resource** → search **Application Insights** → **Create**.
+3. Choose your subscription, resource group, name, and region → **Review + Create** → **Create**.
+4. Once deployed, go to the resource → **Overview** → copy the **Connection String**.
+
+**2. Start the OTel Collector:**
 
 ```bash
-# Set your App Insights connection string (from Azure Portal → App Insights → Overview)
 export APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=...;IngestionEndpoint=..."
 
-# Start the OTel Collector
 cd docs/monitoring
 docker compose up -d
 ```
 
-**2. Verify the collector is healthy:**
+Verify the collector is healthy:
 
 ```bash
 # Should return 200
@@ -403,39 +499,53 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:4328/v1/traces \
   -X POST -H "Content-Type: application/json" -d '{"resourceSpans":[]}'
 ```
 
-**3. Launch VS Code:**
+**3. Configure VS Code:**
 
-```bash
-COPILOT_OTEL_ENABLED=true \
-COPILOT_OTEL_CAPTURE_CONTENT=true \
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4328 \
-code .
+Open **Settings** (`Ctrl+,`) and add:
+
+```json
+{
+  "github.copilot.chat.otel.enabled": true,
+  "github.copilot.chat.otel.exporterType": "otlp-http",
+  "github.copilot.chat.otel.otlpEndpoint": "http://localhost:4328"
+}
 ```
 
-**4. Generate telemetry** — Send a chat message in Copilot Chat (e.g., "explain this file" in agent mode).
+Optionally, to capture full prompt/response content:
 
-**5. Verify in App Insights:**
+```json
+{
+  "github.copilot.chat.otel.captureContent": true
+}
+```
 
-- **Traces:** Application Insights → Transaction search → filter by "Trace" or "Request".
+> **Warning:** Content capture includes prompts, code, and file contents. Only enable in trusted environments.
 
-- **Logs:** Application Insights → Logs:
-  ```kql
-  traces
-  | where timestamp > ago(1h)
-  | where message contains "GenAI" or message contains "copilot_chat"
-  | project timestamp, message, customDimensions
-  | order by timestamp desc
-  ```
+**4. Generate telemetry** — Open Copilot Chat and send any message (e.g., use Agent mode).
 
-- **Metrics:** Application Insights → Metrics → "Custom" namespace, or via Logs:
-  ```kql
-  customMetrics
-  | where timestamp > ago(1h)
-  | where name startswith "gen_ai" or name startswith "copilot_chat"
-  | summarize avg(value), count() by name
-  ```
+**5. Verify data:**
 
-> **Note:** Traces typically appear within 1-2 minutes. Metrics may take 5-10 minutes.
+- **Jaeger (local):** Open http://localhost:16687, select service `copilot-chat`, click **Find Traces**.
+- **App Insights (Azure):** Go to your Application Insights resource → **Transaction search** → filter by "Trace" or "Request".
+
+Run this query in **Application Insights → Logs** to confirm:
+
+```kql
+traces
+| where timestamp > ago(1h)
+| where message contains "GenAI" or message contains "copilot_chat"
+| project timestamp, message, customDimensions
+| order by timestamp desc
+```
+
+For metrics (may take 5–10 minutes to appear):
+
+```kql
+customMetrics
+| where timestamp > ago(1h)
+| where name startswith "gen_ai" or name startswith "copilot_chat"
+| summarize avg(value), count() by name
+```
 
 **Collector config** (`docs/monitoring/otel-collector-config.yaml`):
 
@@ -466,6 +576,26 @@ service:
 
 > **Note:** The docker-compose maps ports to `4328`/`4327` on the host to avoid conflicts. Adjust in `docker-compose.yaml` if needed. Add additional exporters (e.g., `otlphttp/jaeger`) to fan out to multiple backends. See `docs/monitoring/otel-collector-config.yaml` for the full config including `batch` processor and `logs` pipeline.
 
+### Jaeger
+
+[Jaeger](https://www.jaegertracing.io/) is an open-source distributed tracing platform. It accepts OTLP directly — no collector needed.
+
+**1. Start Jaeger:**
+
+```bash
+docker run -d --name jaeger -p 16686:16686 -p 4318:4318 jaegertracing/jaeger:latest
+```
+
+**2. Configure VS Code:**
+
+```json
+{
+  "github.copilot.chat.otel.enabled": true,
+  "github.copilot.chat.otel.otlpEndpoint": "http://localhost:4318"
+}
+```
+
+**3. Verify:** Open http://localhost:16686, select service `copilot-chat`, and click **Find Traces**.
 
 ### Langfuse
 
@@ -473,11 +603,18 @@ service:
 
 **Setup:**
 
+```json
+{
+  "github.copilot.chat.otel.enabled": true,
+  "github.copilot.chat.otel.otlpEndpoint": "http://localhost:3000/api/public/otel",
+  "github.copilot.chat.otel.captureContent": true
+}
+```
+
+Then set the auth header via environment variable (required — no VS Code setting for headers):
+
 ```bash
-export COPILOT_OTEL_ENABLED=true
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:3000/api/public/otel
 export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic $(echo -n '<public-key>:<secret-key>' | base64)"
-export COPILOT_OTEL_CAPTURE_CONTENT=true
 ```
 
 Replace `<public-key>` and `<secret-key>` with your Langfuse API keys from **Settings → API Keys**.

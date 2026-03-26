@@ -13,6 +13,7 @@ import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getE
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEditSurvivalTrackerService } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Prediction } from '../../../platform/networking/common/fetch';
@@ -101,6 +102,7 @@ export class InlineChatIntent implements IIntent {
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IParserService private readonly _parserService: IParserService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@IOctoKitService private readonly _octoKitService: IOctoKitService,
 	) {
 		this._progressMessages = this._instantiationService.createInstance(InlineChatProgressMessages);
 	}
@@ -252,7 +254,11 @@ export class InlineChatIntent implements IIntent {
 		if (result.needsExitTool) {
 			this._logService.warn('[InlineChat], BAIL_OUT because of needsExitTool');
 			// BAILOUT: when no edits were emitted, invoke the exit tool manually
-			await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, { toolInvocationToken: request.toolInvocationToken, input: undefined }, token);
+			await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, {
+				toolInvocationToken: request.toolInvocationToken, input: {
+					response: result.lastResponse.type === ChatFetchResponseType.Success ? result.lastResponse.value : undefined,
+				}
+			}, token);
 		}
 
 
@@ -273,7 +279,8 @@ export class InlineChatIntent implements IIntent {
 		}
 
 		if (result.lastResponse.type !== ChatFetchResponseType.Success) {
-			const details = getErrorDetailsFromChatFetchError(result.lastResponse, (await this._authenticationService.getCopilotToken()).copilotPlan);
+			const outageStatus = await this._octoKitService.getGitHubOutageStatus();
+			const details = getErrorDetailsFromChatFetchError(result.lastResponse, (await this._authenticationService.getCopilotToken()).copilotPlan, outageStatus);
 			return {
 				errorDetails: {
 					message: details.message,
@@ -607,11 +614,11 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 	private async _getAvailableTools(request: vscode.ChatRequest, isLargeFile: boolean): Promise<vscode.LanguageModelToolInformation[]> {
 		assertType(request.location2 instanceof ChatRequestEditorData);
 
-		const exitTool = this._toolsService.getTool(INLINE_CHAT_EXIT_TOOL_NAME);
-		if (!exitTool) {
-			this._logService.error('MISSING inline chat exit tool');
-			throw new Error('Missing inline chat exit tool');
-		}
+		// const exitTool = this._toolsService.getTool(INLINE_CHAT_EXIT_TOOL_NAME);
+		// if (!exitTool) {
+		// 	this._logService.error('MISSING inline chat exit tool');
+		// 	throw new Error('Missing inline chat exit tool');
+		// }
 
 		const enabledTools = new Set(InlineChatIntent._EDIT_TOOLS);
 		if (!request.location2.selection.isEmpty) {
@@ -631,13 +638,19 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 		};
 
 		const agentTools = await this._instantiationService.invokeFunction(getAgentTools, fakeRequest);
-		const editTools = agentTools.filter(tool => enabledTools.has(tool.name));
+		let editTools = agentTools.filter(tool => enabledTools.has(tool.name));
 
 		if (editTools.length === 0) {
 			this._logService.error('MISSING inline chat edit tools');
 			throw new Error('MISSING inline chat edit tools');
 		}
-		const result = [exitTool, ...editTools];
+
+		// EditFile is a poor performer, prefer other edit tools when available
+		if (editTools.length > 1) {
+			editTools = editTools.filter(tool => tool.name !== ToolName.EditFile);
+		}
+		// const result = [exitTool, ...editTools];
+		const result = [...editTools];
 
 		// For large files, also include the read tool so the model can read more of the file
 		if (isLargeFile) {

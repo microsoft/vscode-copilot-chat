@@ -13,7 +13,7 @@ import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { outputChannel } from '../../../platform/log/vscode/outputChannelLogTarget';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
-import { ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, IRequestLogger, LoggedInfo, LoggedInfoKind, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
+import { ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, IRequestLogger, LoggedInfo, LoggedInfoKind, LoggedRequestKind, resolveMarkdownIcon } from '../../../platform/requestLogger/node/requestLogger';
 import { filterMap } from '../../../util/common/arrays';
 import { assert, assertNever } from '../../../util/vs/base/common/assert';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -588,10 +588,6 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 
 	getChildren(element?: TreeItem | undefined): vscode.ProviderResult<TreeItem[]> {
 		if (element instanceof ChatPromptItem) {
-			// If mainEntryId is set, filter out the main entry from children
-			if (element.mainEntryId) {
-				return element.children.filter(child => child.id !== element.mainEntryId);
-			}
 			return element.children;
 		} else if (element) {
 			return [];
@@ -600,10 +596,15 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 			const tokenToPrompt = new Map<CapturingToken, ChatPromptItem>();
 
 			for (const currReq of this.requestLogger.getRequests()) {
-				const currReqTreeItem = this.logToTreeItem(currReq);
-
 				if (!currReq.token) {
-					result.push(currReqTreeItem);
+					// Skip non-main hidden entries (e.g. skipped/cancelled live NES requests)
+					if (currReq.kind === LoggedInfoKind.Request &&
+						currReq.entry.type === LoggedRequestKind.MarkdownContentRequest &&
+						currReq.entry.isVisible && !currReq.entry.isVisible()) {
+						continue;
+					}
+
+					result.push(this.logToTreeItem(currReq));
 					continue;
 				}
 
@@ -614,30 +615,38 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 					result.push(prompt);
 				}
 
+				// If this entry is the main entry for the group (a MarkdownContentRequest
+				// whose debugName matches the token label), associate it directly with the
+				// parent ChatPromptItem — don't add it as a child. The entry stays in the
+				// request logger for virtual document serving; only tree nesting changes.
+				// Only wire the main entry if it is visible — for live NES/Ghost entries,
+				// isVisible() can be false (e.g. skipped/cancelled); wiring a hidden entry
+				// would make it visible again via the parent's icon and click command.
+				if (currReq.kind === LoggedInfoKind.Request &&
+					currReq.entry.type === LoggedRequestKind.MarkdownContentRequest &&
+					currReq.entry.debugName === currReq.token.label) {
+					const isHidden = currReq.entry.isVisible && !currReq.entry.isVisible();
+					if (!isHidden) {
+						prompt.setMainEntry(currReq);
+					}
+					continue;
+				}
+
+				// Skip non-main hidden entries
+				if (currReq.kind === LoggedInfoKind.Request &&
+					currReq.entry.type === LoggedRequestKind.MarkdownContentRequest &&
+					currReq.entry.isVisible && !currReq.entry.isVisible()) {
+					continue;
+				}
+
+				const currReqTreeItem = this.logToTreeItem(currReq);
 				const alreadyIncluded = prompt.children.find(existingChild => existingChild.id === currReqTreeItem.id);
 				if (!alreadyIncluded) {
 					prompt.children.push(currReqTreeItem);
 				}
 			}
 
-			// Post-process: flatten single-child items and promote main entries
-			const processed: (ChatPromptItem | TreeChildItem)[] = [];
-			for (const item of result) {
-				if (item instanceof ChatPromptItem) {
-					if (item.token.flattenSingleChild && item.children.length === 1) {
-						processed.push(item.children[0]);
-					} else {
-						if (item.token.promoteMainEntry) {
-							item.promoteMainEntry();
-						}
-						processed.push(item);
-					}
-				} else {
-					processed.push(item);
-				}
-			}
-
-			return filterMap(processed, r => {
+			return filterMap(result, r => {
 				if (!this.filters.itemIncluded(r)) {
 					return undefined;
 				}
@@ -672,11 +681,6 @@ class ChatPromptItem extends vscode.TreeItem {
 	override readonly contextValue = 'chatprompt';
 	public children: TreeChildItem[] = [];
 	public override id: string | undefined;
-	/**
-	 * The ID of the main entry that was promoted to this parent item.
-	 * When set, clicking the parent opens this entry and it's excluded from children.
-	 */
-	public mainEntryId: string | undefined;
 
 	public static create(info: LoggedInfo, request: CapturingToken) {
 		const existing = ChatPromptItem.ids.get(info);
@@ -684,60 +688,52 @@ class ChatPromptItem extends vscode.TreeItem {
 			return existing;
 		}
 
-		// Check if this first info should be promoted to the main entry
-		let mainEntryId: string | undefined;
-		if (request.promoteMainEntry && info.kind === LoggedInfoKind.Request) {
-			const requestInfo = info as ILoggedRequestInfo;
-			if (requestInfo.entry.debugName === request.label) {
-				mainEntryId = info.id;
-			}
-		}
-
-		const item = new ChatPromptItem(request, mainEntryId);
+		const item = new ChatPromptItem(request);
 		item.id = info.id + '-prompt';
 		ChatPromptItem.ids.set(info, item);
 		return item;
 	}
 
-	protected constructor(public readonly token: CapturingToken, mainEntryId?: string) {
+	protected constructor(public readonly token: CapturingToken) {
 		super(token.label, vscode.TreeItemCollapsibleState.Expanded);
 		if (token.icon) {
 			this.iconPath = new vscode.ThemeIcon(token.icon);
 		}
-		if (mainEntryId) {
-			this.mainEntryId = mainEntryId;
-			this.command = {
-				command: 'vscode.open',
-				title: '',
-				arguments: [vscode.Uri.parse(ChatRequestScheme.buildUri({ kind: 'request', id: mainEntryId }))]
-			};
-		}
 	}
 
-	public promoteMainEntry() {
-		const child = this.children.find(child => child.label === this.label);
-		if (!child || child.id === undefined) {
+	/**
+	 * Associate a main entry directly with this parent item.
+	 * The main entry's icon and click command are shown on the parent node.
+	 * The entry is NOT added as a child — it stays in the request logger
+	 * for virtual document serving only.
+	 */
+	public setMainEntry(info: ILoggedRequestInfo): void {
+		if (info.entry.type !== LoggedRequestKind.MarkdownContentRequest) {
 			return;
 		}
-		this.mainEntryId = child.id;
-		if (child.iconPath) {
-			this.iconPath = child.iconPath;
+		const resolvedIcon = resolveMarkdownIcon(info.entry);
+		if (resolvedIcon !== undefined) {
+			this.iconPath = new vscode.ThemeIcon(resolvedIcon.id);
 		}
 		this.command = {
 			command: 'vscode.open',
 			title: '',
-			arguments: [vscode.Uri.parse(ChatRequestScheme.buildUri({ kind: 'request', id: this.mainEntryId }))]
+			arguments: [vscode.Uri.parse(ChatRequestScheme.buildUri({ kind: 'request', id: info.id }))]
 		};
 	}
 
 	public withFilteredChildren(filter: (child: TreeChildItem) => boolean): ChatPromptItem {
-		const item = new ChatPromptItem(this.token, this.mainEntryId);
+		const item = new ChatPromptItem(this.token);
 		item.children = this.children.filter(filter);
 		item.id = this.id;
 		item.iconPath = this.iconPath;
 		item.command = this.command;
+		item.collapsibleState = item.children.length > 0
+			? vscode.TreeItemCollapsibleState.Expanded
+			: vscode.TreeItemCollapsibleState.None;
 		return item;
 	}
+
 }
 
 class ToolCallItem extends vscode.TreeItem {
@@ -784,7 +780,8 @@ class ChatRequestItem extends vscode.TreeItem {
 		this.id = info.id;
 
 		if (info.entry.type === LoggedRequestKind.MarkdownContentRequest) {
-			this.iconPath = info.entry.icon === undefined ? undefined : new vscode.ThemeIcon(info.entry.icon.id);
+			const resolvedIcon = resolveMarkdownIcon(info.entry);
+			this.iconPath = resolvedIcon === undefined ? undefined : new vscode.ThemeIcon(resolvedIcon.id);
 			const startTimeStr = new Date(info.entry.startTimeMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 			this.description = startTimeStr;
 		} else {
@@ -862,6 +859,9 @@ class LogTreeFilters extends Disposable {
 			if (this.isNesRequest(item)) {
 				return this._nesRequestsShown;
 			}
+			if (this.isGhostRequest(item)) {
+				return this._ghostRequestsShown;
+			}
 			return true; // Always show chat prompt items
 		} else if (item instanceof ChatElementItem) {
 			return this._elementsShown;
@@ -881,8 +881,14 @@ class LogTreeFilters extends Disposable {
 		return true;
 	}
 
-	private isGhostRequest(item: ChatRequestItem): boolean {
-		const debugName = item.info.entry.debugName.toLowerCase();
+	private isGhostRequest(item: ChatPromptItem | ChatRequestItem): boolean {
+		let debugName: string;
+		if (item instanceof ChatPromptItem) {
+			assert(typeof item.label === 'string', 'ChatPromptItem label must be a string');
+			debugName = item.label.toLowerCase();
+		} else {
+			debugName = item.info.entry.debugName.toLowerCase();
+		}
 		return debugName === 'ghost' || debugName.startsWith('ghost |');
 	}
 

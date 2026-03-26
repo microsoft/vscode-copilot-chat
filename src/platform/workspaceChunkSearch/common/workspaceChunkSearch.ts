@@ -56,7 +56,6 @@ export enum WorkspaceChunkSearchStrategyId {
 	Embeddings = 'ada',// Do not change value as it's used for telemetry
 	CodeSearch = 'codesearch',
 	Tfidf = 'tfidf',
-	FullWorkspace = 'fullWorkspace'
 }
 
 /**
@@ -65,7 +64,6 @@ export enum WorkspaceChunkSearchStrategyId {
 export interface StrategySearchSizing {
 	readonly endpoint: IChatEndpoint;
 	readonly tokenBudget: number | undefined;
-	readonly fullWorkspaceTokenBudget: number | undefined;
 	readonly maxResultCountHint: number;
 }
 

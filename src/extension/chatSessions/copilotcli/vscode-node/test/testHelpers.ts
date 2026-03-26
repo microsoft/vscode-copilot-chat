@@ -4,6 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { vi } from 'vitest';
+import type { ChatResource } from 'vscode';
+import { Emitter } from '../../../../../util/vs/base/common/event';
+import { Disposable, } from '../../../../../util/vs/base/common/lifecycle';
+import { IChatPromptFileService } from '../../../common/chatPromptFileService';
 import type { ICopilotCLISessionTracker } from '../copilotCLISessionTracker';
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
@@ -225,5 +229,33 @@ export class MockSessionTracker {
 
 	asTracker(): ICopilotCLISessionTracker {
 		return this as unknown as ICopilotCLISessionTracker;
+	}
+}
+
+export class MockChatPromptFileService extends Disposable implements IChatPromptFileService {
+	declare _serviceBrand: undefined;
+	customAgents: ChatResource[] = [];
+	instructions: ChatResource[] = [];
+	skills: ChatResource[] = [];
+	private readonly _onDidChangeCustomAgents = this._register(new Emitter<void>());
+	private readonly _onDidChangeInstructions = this._register(new Emitter<void>());
+	private readonly _onDidChangeSkills = this._register(new Emitter<void>());
+
+	get onDidChangeCustomAgents() {
+		return this._onDidChangeCustomAgents.event;
+	}
+
+	get onDidChangeInstructions() {
+		return this._onDidChangeInstructions.event;
+	}
+
+	get onDidChangeSkills() {
+		return this._onDidChangeSkills.event;
+	}
+	get customAgentPromptFiles() {
+		return [];
+	}
+	constructor() {
+		super();
 	}
 }

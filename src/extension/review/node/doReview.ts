@@ -11,12 +11,14 @@ import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocum
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IEnvService } from '../../../platform/env/common/envService';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { INotificationService, Progress, ProgressLocation } from '../../../platform/notification/common/notificationService';
+import { CodeReviewInput, CodeReviewResult, toCodeReviewResult } from '../../../platform/review/common/reviewCommand';
 import { IReviewService, ReviewComment } from '../../../platform/review/common/reviewService';
 import { IScopeSelector } from '../../../platform/scopeSelection/common/scopeSelection';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
@@ -25,10 +27,10 @@ import { CancellationToken, CancellationTokenSource } from '../../../util/vs/bas
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import * as path from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { FeedbackGenerator, FeedbackResult } from '../../prompt/node/feedbackGenerator';
 import { CurrentChange, CurrentChangeInput } from '../../prompts/node/feedback/currentChange';
-import { githubReview } from './githubReviewAgent';
+import { githubReview, githubReviewFileUris } from './githubReviewAgent';
 
 /**
  * Dependencies for handleReviewResult function.
@@ -374,4 +376,60 @@ async function review(
 		}
 	}
 	return feedbackGenerator.generateComments(input, cancellationToken, progress);
+}
+
+/**
+ * Runs a code review on file URI pairs and returns structured results.
+ * This is the handler for the `github.copilot.chat.codeReview.run` command.
+ * It bypasses the comment controller — results are returned directly to the caller.
+ */
+export async function reviewFileChanges(
+	accessor: ServicesAccessor,
+	input: CodeReviewInput,
+): Promise<CodeReviewResult> {
+	const logService = accessor.get(ILogService);
+	const authService = accessor.get(IAuthenticationService);
+	const capiClientService = accessor.get(ICAPIClientService);
+	const fetcherService = accessor.get(IFetcherService);
+	const envService = accessor.get(IEnvService);
+	const ignoreService = accessor.get(IIgnoreService);
+	const workspaceService = accessor.get(IWorkspaceService);
+	const fileSystemService = accessor.get(IFileSystemService);
+	const customInstructionsService = accessor.get(ICustomInstructionsService);
+
+	const copilotToken = await authService.getCopilotToken();
+	if (!copilotToken.isCopilotCodeReviewEnabled) {
+		return { type: 'error', reason: 'Code review is not enabled for this account.' };
+	}
+
+	const tokenSource = new CancellationTokenSource();
+	try {
+		const fileInputs = await Promise.all(input.files.map(async file => {
+			let baseContent = '';
+			if (file.baseUri) {
+				const bytes = await fileSystemService.readFile(file.baseUri);
+				baseContent = new TextDecoder().decode(bytes);
+			}
+			return { currentUri: file.currentUri, baseContent };
+		}));
+
+		const result = await githubReviewFileUris(
+			logService, authService, capiClientService, fetcherService, envService,
+			ignoreService, workspaceService, customInstructionsService,
+			fileInputs, tokenSource.token,
+		);
+
+		if (result.type === 'success') {
+			return toCodeReviewResult(result.comments);
+		}
+		if (result.type === 'error') {
+			return { type: 'error', reason: result.reason };
+		}
+		return { type: 'cancelled' };
+	} catch (err) {
+		logService.error(err, 'Error during code review command');
+		return { type: 'error', reason: err.message };
+	} finally {
+		tokenSource.dispose();
+	}
 }

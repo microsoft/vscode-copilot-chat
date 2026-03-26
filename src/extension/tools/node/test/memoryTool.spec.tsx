@@ -15,6 +15,7 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { MarkdownString } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { IAgentMemoryService, RepoMemoryEntry } from '../../common/agentMemoryService';
 import { MemoryTool } from '../memoryTool';
@@ -694,13 +695,13 @@ suite('MemoryTool', () => {
 			expect(prepared.invocationMessage).toContain('Reading memory');
 		});
 
-		test('falls back to plain text for repo paths', () => {
+		test('uses file widget for repo file paths', () => {
 			const result = tool.prepareInvocation({
 				input: { command: 'create', path: '/memories/repo/fact.json', file_text: '{}' },
 			} as never, CancellationToken.None);
-			const prepared = result as { invocationMessage: string; pastTenseMessage: string };
-			expect(typeof prepared.invocationMessage).toBe('string');
-			expect(prepared.invocationMessage).toContain('fact.json');
+			const prepared = result as { invocationMessage: MarkdownString; pastTenseMessage: MarkdownString };
+			expect(prepared.invocationMessage).toBeInstanceOf(MarkdownString);
+			expect(prepared.invocationMessage.value).toContain('fact.json');
 		});
 	});
 });

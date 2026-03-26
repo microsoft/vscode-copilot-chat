@@ -6,7 +6,7 @@
 import { Raw } from '@vscode/prompt-tsx';
 import { afterEach, beforeEach, describe, expect, it, suite, test, vi } from 'vitest';
 import { IChatMLFetcher } from '../../../../platform/chat/common/chatMLFetcher';
-import { ChatFetchResponseType } from '../../../../platform/chat/common/commonTypes';
+import { ChatFetchResponseType, RESPONSE_CONTAINED_NO_CHOICES } from '../../../../platform/chat/common/commonTypes';
 import { StreamingMockChatMLFetcher } from '../../../../platform/chat/test/common/streamingMockChatMLFetcher';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
@@ -28,9 +28,10 @@ import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { LineEdit } from '../../../../util/vs/editor/common/core/edits/lineEdit';
+import { LineEdit, LineReplacement } from '../../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit, StringReplacement } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { Position } from '../../../../util/vs/editor/common/core/position';
+import { LineRange } from '../../../../util/vs/editor/common/core/ranges/lineRange';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -42,6 +43,7 @@ import { CurrentDocument } from '../../common/xtabCurrentDocument';
 import {
 	computeAreaAroundEditWindowLinesRange,
 	determineLanguageContextOptions,
+	filterOutEditsWithSubstrings,
 	findMergeConflictMarkersRange,
 	getPredictionContents,
 	mapChatFetcherErrorToNoNextEditReason,
@@ -487,7 +489,7 @@ describe('mapChatFetcherErrorToNoNextEditReason', () => {
 		{ type: ChatFetchResponseType.Filtered, ...baseRequestFields, category: FilterReason.Hate },
 		{ type: ChatFetchResponseType.PromptFiltered, ...baseRequestFields, category: FilterReason.Hate },
 		{ type: ChatFetchResponseType.Length, ...baseRequestFields, truncatedValue: '' },
-		{ type: ChatFetchResponseType.RateLimited, ...baseRequestFields, retryAfter: undefined, rateLimitKey: 'k' },
+		{ type: ChatFetchResponseType.RateLimited, ...baseRequestFields, retryAfter: undefined, rateLimitKey: 'k', isAuto: false },
 		{ type: ChatFetchResponseType.QuotaExceeded, ...baseRequestFields, retryAfter: new Date() },
 		{ type: ChatFetchResponseType.ExtensionBlocked, ...baseRequestFields, retryAfter: 0, learnMoreLink: '' },
 		{ type: ChatFetchResponseType.AgentUnauthorized, ...baseRequestFields, authorizationUrl: '' },
@@ -549,12 +551,12 @@ describe('overrideModelConfig', () => {
 	});
 
 	it('merges lintOptions when overridingConfig has lintOptions', () => {
-		const testLintOptions = { tagName: 'lint', warnings: LintOptionWarning.YES, showCode: LintOptionShowCode.YES, maxLints: 5, maxLineDistance: 10 };
+		const testLintOptions = { tagName: 'lint', warnings: LintOptionWarning.YES, showCode: LintOptionShowCode.YES, maxLints: 5, maxLineDistance: 10, nRecentFiles: 0 };
 		const base: ModelConfig = {
 			...makeBaseModelConfig(),
 			lintOptions: testLintOptions,
 		};
-		const overrideLintOptions = { tagName: 'diag', warnings: LintOptionWarning.NO, showCode: LintOptionShowCode.NO, maxLints: 3, maxLineDistance: 5 };
+		const overrideLintOptions = { tagName: 'diag', warnings: LintOptionWarning.NO, showCode: LintOptionShowCode.NO, maxLints: 3, maxLineDistance: 5, nRecentFiles: 0 };
 		const override: ModelConfiguration = {
 			modelName: 'test',
 			promptingStrategy: undefined,
@@ -568,7 +570,7 @@ describe('overrideModelConfig', () => {
 	});
 
 	it('keeps base lintOptions when override has no lintOptions', () => {
-		const testLintOptions = { tagName: 'lint', warnings: LintOptionWarning.YES, showCode: LintOptionShowCode.YES, maxLints: 5, maxLineDistance: 10 };
+		const testLintOptions = { tagName: 'lint', warnings: LintOptionWarning.YES, showCode: LintOptionShowCode.YES, maxLints: 5, maxLineDistance: 10, nRecentFiles: 0 };
 		const base: ModelConfig = {
 			...makeBaseModelConfig(),
 			lintOptions: testLintOptions,
@@ -1312,6 +1314,44 @@ describe('XtabProvider integration', () => {
 			// Exactly 2 calls: initial + one retry with default model
 			expect(streamingFetcher.callCount).toBe(2);
 		});
+
+		it('returns NoSuggestions when response contains no choices', async () => {
+			const provider = createProvider();
+
+			const lines = ['const x = 1;'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 3, insertedText: 'a' });
+
+			streamingFetcher.enqueueResponse({
+				type: ChatFetchResponseType.Unknown,
+				reason: RESPONSE_CONTAINED_NO_CHOICES,
+				requestId: 'req-1',
+				serverRequestId: undefined,
+			});
+
+			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
+			const finalValue = await AsyncIterUtils.drainUntilReturn(gen);
+
+			expect(finalValue.v).toBeInstanceOf(NoNextEditReason.NoSuggestions);
+		});
+
+		it('returns FetchFailure for Unknown response with a different reason', async () => {
+			const provider = createProvider();
+
+			const lines = ['const x = 1;'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 3, insertedText: 'a' });
+
+			streamingFetcher.enqueueResponse({
+				type: ChatFetchResponseType.Unknown,
+				reason: 'some other error',
+				requestId: 'req-1',
+				serverRequestId: undefined,
+			});
+
+			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
+			const finalValue = await AsyncIterUtils.drainUntilReturn(gen);
+
+			expect(finalValue.v).toBeInstanceOf(NoNextEditReason.FetchFailure);
+		});
 	});
 
 	// ========================================================================
@@ -1890,6 +1930,62 @@ describe('XtabProvider integration', () => {
 			expect(spy).toHaveBeenCalled();
 			spy.mockRestore();
 		});
+
+		it('cancellation during debounce exits early with GotCancelled before LLM fetch', async () => {
+			const debounceMs = 500;
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsDebounce, debounceMs);
+
+			const provider = createProvider();
+			const lines = ['function foo() {', '  return 1;', '}'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 5, insertedText: 'c' });
+			streamingFetcher.setStreamingLines(lines);
+
+			const cts = new CancellationTokenSource();
+			vi.useFakeTimers();
+			try {
+				const genPromise = AsyncIterUtils.drainUntilReturn(
+					provider.provideNextEdit(request, createMockLogger(), createLogContext(), cts.token)
+				);
+
+				// Flush pending microtasks so the provider reaches the debounce await
+				await vi.advanceTimersByTimeAsync(0);
+				// Cancel while the debounce timer is scheduled but has not fired
+				cts.cancel();
+
+				const finalValue = await genPromise;
+
+				expect(finalValue.v).toBeInstanceOf(NoNextEditReason.GotCancelled);
+				// LLM fetch must not have been issued — cancelled before the fetch phase
+				expect(streamingFetcher.callCount).toBe(0);
+			} finally {
+				vi.useRealTimers();
+				cts.dispose();
+			}
+		});
+
+		it('pre-cancelled token resolves without waiting for debounce', async () => {
+			const debounceMs = 500;
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsDebounce, debounceMs);
+
+			const provider = createProvider();
+			const lines = ['function foo() {', '  return 1;', '}'];
+			const request = createRequestWithEdit(lines, { insertionOffset: 5, insertedText: 'c' });
+			streamingFetcher.setStreamingLines(lines);
+
+			const cts = new CancellationTokenSource();
+			cts.cancel(); // already cancelled before provideNextEdit is called
+
+			vi.useFakeTimers();
+			try {
+				const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), cts.token);
+				const finalValue = await AsyncIterUtils.drainUntilReturn(gen);
+
+				expect(finalValue.v).toBeInstanceOf(NoNextEditReason.GotCancelled);
+			} finally {
+				vi.useRealTimers();
+				cts.dispose();
+			}
+		});
 	});
 
 	// ========================================================================
@@ -1910,6 +2006,7 @@ describe('XtabProvider integration', () => {
 				serverRequestId: undefined,
 				retryAfter: undefined,
 				rateLimitKey: 'test',
+				isAuto: false,
 			});
 
 			const gen = provider.provideNextEdit(request, createMockLogger(), createLogContext(), CancellationToken.None);
@@ -2038,5 +2135,76 @@ describe('XtabProvider integration', () => {
 			const captured = streamingFetcher.capturedOptions[0];
 			expect(captured.requestOptions?.stream).toBe(true);
 		});
+	});
+});
+suite('filterOutEditsWithSubstrings', () => {
+
+	function makeEdit(newLines: string[]): LineReplacement {
+		return new LineReplacement(new LineRange(1, 2), newLines);
+	}
+
+	test('should return all edits when no lines contain any forbidden substring', () => {
+		const edits = [
+			makeEdit(['const x = 1;']),
+			makeEdit(['const y = 2;']),
+		];
+		const result = filterOutEditsWithSubstrings(edits, ['<|forbidden|>']);
+		expect(result).toEqual(edits);
+	});
+
+	test('should filter out edits where a line contains a forbidden substring', () => {
+		const kept = makeEdit(['const x = 1;']);
+		const filtered = makeEdit(['<|current_file_content|>some text']);
+		const result = filterOutEditsWithSubstrings([kept, filtered], ['<|current_file_content|>']);
+		expect(result).toEqual([kept]);
+	});
+
+	test('should filter out edits matching any of multiple substrings', () => {
+		const e1 = makeEdit(['hello world']);
+		const e2 = makeEdit(['<|diff_marker|>']);
+		const e3 = makeEdit(['<|current_file_content|>']);
+		const result = filterOutEditsWithSubstrings([e1, e2, e3], ['<|diff_marker|>', '<|current_file_content|>']);
+		expect(result).toEqual([e1]);
+	});
+
+	test('should filter out edit if any line in newLines contains a forbidden substring', () => {
+		const edit = makeEdit(['line 1', '<|diff_marker|> line 2', 'line 3']);
+		const result = filterOutEditsWithSubstrings([edit], ['<|diff_marker|>']);
+		expect(result).toEqual([]);
+	});
+
+	test('should keep edit when lines are close to but do not match the substring', () => {
+		const edit = makeEdit(['<|diff_marke|>']);
+		const result = filterOutEditsWithSubstrings([edit], ['<|diff_marker|>']);
+		expect(result).toEqual([edit]);
+	});
+
+	test('should return empty array when all edits are filtered out', () => {
+		const edits = [
+			makeEdit(['<|current_file_content|>']),
+			makeEdit(['<|diff_marker|>']),
+		];
+		const result = filterOutEditsWithSubstrings(edits, ['<|current_file_content|>', '<|diff_marker|>']);
+		expect(result).toEqual([]);
+	});
+
+	test('should return all edits when substringsToFilterOut is empty', () => {
+		const edits = [
+			makeEdit(['<|current_file_content|>']),
+			makeEdit(['anything']),
+		];
+		const result = filterOutEditsWithSubstrings(edits, []);
+		expect(result).toEqual(edits);
+	});
+
+	test('should handle empty edits array', () => {
+		const result = filterOutEditsWithSubstrings([], ['<|diff_marker|>']);
+		expect(result).toEqual([]);
+	});
+
+	test('should keep edits with empty newLines', () => {
+		const edit = makeEdit([]);
+		const result = filterOutEditsWithSubstrings([edit], ['<|diff_marker|>']);
+		expect(result).toEqual([edit]);
 	});
 });

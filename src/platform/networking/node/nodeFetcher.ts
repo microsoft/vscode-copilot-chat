@@ -9,7 +9,7 @@ import { Readable } from 'stream';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IEnvService } from '../../env/common/envService';
 import { collectSingleLineErrorMessage } from '../../log/common/logService';
-import { FetchOptions, IAbortController, IHeaders, PaginationOptions, ReportFetchEvent, Response, safeGetHostname } from '../common/fetcherService';
+import { FetchOptions, HeadersImpl, IAbortController, IHeaders, PaginationOptions, ReportFetchEvent, Response, safeGetHostname } from '../common/fetcherService';
 import { IFetcher, userAgentLibraryHeader } from '../common/networking';
 
 export class NodeFetcher implements IFetcher {
@@ -166,25 +166,7 @@ class NodeFetcherResponse {
 		readonly res: http.IncomingMessage,
 		readonly signal: AbortSignal
 	) {
-		this.headers = new class implements IHeaders {
-			get(name: string): string | null {
-				const result = res.headers[name];
-				return Array.isArray(result) ? result[0] : result ?? null;
-			}
-			[Symbol.iterator](): Iterator<[string, string], any, undefined> {
-				const keys = Object.keys(res.headers);
-				let index = 0;
-				return {
-					next: (): IteratorResult<[string, string]> => {
-						if (index >= keys.length) {
-							return { done: true, value: undefined };
-						}
-						const key = keys[index++];
-						return { done: false, value: [key, this.get(key)!] };
-					}
-				};
-			}
-		};
+		this.headers = new HeadersImpl(res.headers);
 	}
 
 	public text(): Promise<string> {

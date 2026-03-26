@@ -30,15 +30,21 @@ interface ChatSessionWorktreeBaseProperties {
 	readonly changes?: readonly ChatSessionWorktreeFile[] | undefined;
 }
 
-interface ChatSessionWorktreePropertiesV1 extends ChatSessionWorktreeBaseProperties {
+export interface ChatSessionWorktreePropertiesV1 extends ChatSessionWorktreeBaseProperties {
 	readonly version: 1;
 	readonly autoCommit: boolean;
 }
 
-interface ChatSessionWorktreePropertiesV2 extends ChatSessionWorktreeBaseProperties {
+export interface ChatSessionWorktreePropertiesV2 extends ChatSessionWorktreeBaseProperties {
 	readonly version: 2;
+	readonly autoCommit?: boolean;
 	readonly baseBranchName: string;
+	readonly baseBranchProtected?: boolean;
 	readonly pullRequestUrl?: string;
+	readonly pullRequestState?: string;
+	readonly firstCheckpointRef?: string;
+	readonly baseCheckpointRef?: string;
+	readonly lastCheckpointRef?: string;
 }
 
 export type ChatSessionWorktreeProperties = ChatSessionWorktreePropertiesV1 | ChatSessionWorktreePropertiesV2;
@@ -58,9 +64,11 @@ export interface IChatSessionWorktreeService {
 	getWorktreePath(sessionId: string): Promise<vscode.Uri | undefined>;
 
 	applyWorktreeChanges(sessionId: string): Promise<void>;
-	getWorktreeChanges(sessionId: string): Promise<readonly ChatSessionWorktreeFile[] | undefined>;
+	updateWorktreeBranch(sessionId: string): Promise<void>;
 
 	getSessionIdForWorktree(folder: vscode.Uri): Promise<string | undefined>;
+
+	getWorktreeChanges(sessionId: string): Promise<readonly vscode.ChatSessionChangedFile2[] | undefined>;
 
 	handleRequestCompleted(sessionId: string): Promise<void>;
 }

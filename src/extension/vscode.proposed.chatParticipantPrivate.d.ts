@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-// version: 14
+// version: 15
 
 declare module 'vscode' {
 
@@ -48,6 +48,12 @@ declare module 'vscode' {
 		readonly cell: TextDocument;
 
 		constructor(cell: TextDocument);
+	}
+
+	export interface ChatRequestSessionGrouping {
+		readonly id: string;
+		readonly order: number;
+		readonly kind?: string;
 	}
 
 	export interface ChatRequest {
@@ -117,6 +123,18 @@ declare module 'vscode' {
 		readonly parentRequestId?: string;
 
 		/**
+		 * Optional metadata used to group related requests together in the UI.
+		 */
+		readonly sessionGrouping?: ChatRequestSessionGrouping;
+
+		/**
+		 * The permission level for tool auto-approval in this request.
+		 * - `'autoApprove'`: Auto-approve all tool calls and retry on errors.
+		 * - `'autopilot'`: Everything autoApprove does plus continues until the task is done.
+		 */
+		readonly permissionLevel?: string;
+
+		/**
 		 * Whether any hooks are enabled for this request.
 		 */
 		readonly hasHooksEnabled: boolean;
@@ -182,9 +200,14 @@ declare module 'vscode' {
 		readonly modelId?: string;
 
 		/**
+		 * The mode instructions that were active for this request, if any.
+		 */
+		readonly modeInstructions2?: ChatRequestModeInstructions;
+
+		/**
 		 * @hidden
 		 */
-		constructor(prompt: string, command: string | undefined, references: ChatPromptReference[], participant: string, toolReferences: ChatLanguageModelToolReference[], editedFileEvents: ChatRequestEditedFileEvent[] | undefined, id: string | undefined, modelId: string | undefined);
+		constructor(prompt: string, command: string | undefined, references: ChatPromptReference[], participant: string, toolReferences: ChatLanguageModelToolReference[], editedFileEvents: ChatRequestEditedFileEvent[] | undefined, id: string | undefined, modelId: string | undefined, modeInstructions2: ChatRequestModeInstructions | undefined);
 	}
 
 	export class ChatResponseTurn2 {
@@ -393,6 +416,13 @@ declare module 'vscode' {
 		 * will immediately follow up with a new request in the same conversation.
 		 */
 		readonly yieldRequested: boolean;
+
+		/**
+		 * The resource URI identifying the chat session this context belongs to.
+		 * Available when the context is provided for title generation, summarization,
+		 * or other session-scoped operations. Extracted from the session's history entries.
+		 */
+		readonly sessionResource?: Uri;
 	}
 
 	// #endregion

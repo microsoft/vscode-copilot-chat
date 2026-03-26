@@ -153,16 +153,40 @@ const EXCLUDE_EXTENSIONS = new Set([
 ]);
 
 const EXCLUDED_FOLDERS = [
-	'node_modules',
-	'venv',
 	'out',
 	'dist',
 	'.git',
+	'.svn',
+	'.hg',
 	'.yarn',
-	'.npm',
-	'.venv',
+
 	'foo.asar',
 	'.vscode-test',
+
+	// JS/TS build outputs
+	'node_modules',
+	'bower_components',
+	'.next',
+	'.npm',
+	'.nuxt',
+	'.turbo',
+	'.parcel-cache',
+
+	// Python
+	'__pycache__',
+	'venv',
+	'.venv',
+
+	'.mypy_cache',
+	'.pytest_cache',
+	'.ruff_cache',
+	'.tox',
+
+	// Other
+	'Pods',
+	'.gradle',
+	'.terraform',
+	'.nyc_output',
 ];
 
 const EXCLUDED_FILES = [
@@ -184,7 +208,10 @@ const EXCLUDED_SCHEMES = [
 	Schemas.internal,
 	Schemas.vscodeChatCodeBlock,
 	Schemas.vscodeChatCodeCompareBlock,
+	Schemas.chatEditingModel,
+	Schemas.chatEditingSnapshotScheme,
 	'git',
+	Schemas.vscodeSourceControl,
 ];
 
 export function shouldAlwaysIgnoreFile(resource: URI): boolean {

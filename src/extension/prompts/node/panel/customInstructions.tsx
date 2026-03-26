@@ -10,11 +10,10 @@ import { CustomInstructionsKind, ICustomInstructions, ICustomInstructionsService
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
-import { isUri } from '../../../../util/common/types';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { ResourceSet } from '../../../../util/vs/base/common/map';
-import { isString } from '../../../../util/vs/base/common/types';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatVariablesCollection, isPromptInstruction } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile } from '../../../prompt/common/chatVariablesCollection';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { Tag } from '../base/tag';
 
@@ -58,6 +57,7 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 		@IPromptVariablesService private readonly promptVariablesService: IPromptVariablesService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@ILogService private readonly logService: ILogService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		super(props);
 	}
@@ -73,14 +73,15 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 			const hasSeenContent = new Set();
 			if (this.props.chatVariables) {
 				for (const variable of this.props.chatVariables) {
-					if (isPromptInstruction(variable)) {
+					if (isCustomizationsIndex(variable)) {
 						let value = variable.value;
-						if (isString(value)) {
-							if (variable.reference.toolReferences?.length) {
-								value = await this.promptVariablesService.resolveToolReferencesInPrompt(value, variable.reference.toolReferences);
-							}
-							chunks.push(<TextChunk>{value}</TextChunk>);
-						} else if (isUri(value) && !hasSeen.has(value)) {
+						if (variable.reference.toolReferences?.length) {
+							value = await this.promptVariablesService.resolveToolReferencesInPrompt(value, variable.reference.toolReferences);
+						}
+						chunks.push(<TextChunk>{value}</TextChunk>);
+					} else if (isInstructionFile(variable)) {
+						const value = variable.value;
+						if (!hasSeen.has(value)) {
 							hasSeen.add(value);
 							const element = await this.createElementFromURI(value, variable.reference.toolReferences);
 							if (element && !hasSeenContent.has(element.content)) {
@@ -130,10 +131,12 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 			return undefined;
 		}
 		const introduction = customIntroduction ?? 'When generating code, please follow these user provided coding instructions.';
+		const isMultiRoot = this.workspaceService.getWorkspaceFolders().length > 1;
+		const multiRootHint = isMultiRoot && ' This is a multi-root workspace. The instructions below may come from different workspace folders. Apply each set of instructions to the folder it belongs to.';
 		const systemMessageConflictWarning = includeSystemMessageConflictWarning && ' You can ignore an instruction if it contradicts a system message.';
 
 		return (<>
-			{introduction}{systemMessageConflictWarning}<br />
+			{introduction}{multiRootHint}{systemMessageConflictWarning}<br />
 			<Tag name='instructions'>
 				{
 					...chunks
@@ -150,8 +153,20 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 			if (toolReferences && toolReferences.length > 0) {
 				content = await this.promptVariablesService.resolveToolReferencesInPrompt(content, toolReferences);
 			}
+			content = content.trim();
+			if (content.length === 0) {
+				return undefined;
+			}
+			const attrs: Record<string, string> = { filePath: this.promptPathRepresentationService.getFilePath(fileUri) };
+			const folders = this.workspaceService.getWorkspaceFolders();
+			if (folders.length > 1) {
+				const folder = this.workspaceService.getWorkspaceFolder(fileUri);
+				if (folder) {
+					attrs.workspaceFolder = this.workspaceService.getWorkspaceFolderName(folder);
+				}
+			}
 			return {
-				chuck: <Tag name='attachment' attrs={{ filePath: this.promptPathRepresentationService.getFilePath(fileUri) }}>
+				chuck: <Tag name='attachment' attrs={attrs}>
 					<references value={[new InstructionFileReference(fileUri, content)]} />
 					<TextChunk>{content}</TextChunk>
 				</Tag>,

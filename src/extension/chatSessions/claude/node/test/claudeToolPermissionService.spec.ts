@@ -36,10 +36,15 @@ class MockToolsService implements IToolsService {
 	readonly copilotTools = new Map<ToolName, ICopilotTool<unknown>>();
 
 	private _confirmationResult: 'yes' | 'no' = 'yes';
+	private _optionsConfirmationResult: string | undefined;
 	private _invokeToolCalls: Array<{ name: string; input: unknown }> = [];
 
 	setConfirmationResult(result: 'yes' | 'no'): void {
 		this._confirmationResult = result;
+	}
+
+	setOptionsConfirmationResult(result: string | undefined): void {
+		this._optionsConfirmationResult = result;
 	}
 
 	get invokeToolCalls(): ReadonlyArray<{ name: string; input: unknown }> {
@@ -65,6 +70,14 @@ class MockToolsService implements IToolsService {
 		if (name === ToolName.CoreConfirmationTool || name === ToolName.CoreTerminalConfirmationTool) {
 			return {
 				content: [new LanguageModelTextPart(this._confirmationResult)]
+			};
+		}
+
+		if (name === ToolName.CoreConfirmationToolWithOptions) {
+			return {
+				content: this._optionsConfirmationResult !== undefined
+					? [new LanguageModelTextPart(this._optionsConfirmationResult)]
+					: []
 			};
 		}
 
@@ -258,6 +271,93 @@ describe('ClaudeToolPermissionService', () => {
 				expect(mockToolsService.invokeToolCalls[0].name).toBe(ToolName.CoreTerminalConfirmationTool);
 				const terminalInput = mockToolsService.invokeToolCalls[0].input as { message: string; command: string; isBackground: boolean };
 				expect(terminalInput.command).toBe('pwd');
+			});
+		});
+
+		describe('ExitPlanMode handler', () => {
+			const exitPlanModeInput = { plan: 'Step 1: Do something\nStep 2: Do another thing' };
+
+			it('allows when user clicks Approve', async () => {
+				mockToolsService.setOptionsConfirmationResult('Approve');
+				const context = createMockContext();
+
+				const result = await service.canUseTool(ClaudeToolNames.ExitPlanMode, exitPlanModeInput, context);
+
+				expect(result.behavior).toBe('allow');
+				if (result.behavior === 'allow') {
+					expect(result.updatedInput).toEqual(exitPlanModeInput);
+				}
+			});
+
+			it('invokes CoreConfirmationToolWithOptions with Approve and Deny buttons', async () => {
+				mockToolsService.setOptionsConfirmationResult('Approve');
+				const context = createMockContext();
+
+				await service.canUseTool(ClaudeToolNames.ExitPlanMode, exitPlanModeInput, context);
+
+				expect(mockToolsService.invokeToolCalls.length).toBe(1);
+				expect(mockToolsService.invokeToolCalls[0].name).toBe(ToolName.CoreConfirmationToolWithOptions);
+				const input = mockToolsService.invokeToolCalls[0].input as { title: string; message: string; buttons: string[] };
+				expect(input.buttons).toEqual(['Approve', 'Deny']);
+				expect(input.message).toContain('Step 1: Do something');
+			});
+
+			it('denies when user clicks Deny', async () => {
+				mockToolsService.setOptionsConfirmationResult('Deny');
+				const context = createMockContext();
+
+				const result = await service.canUseTool(ClaudeToolNames.ExitPlanMode, exitPlanModeInput, context);
+
+				expect(result.behavior).toBe('deny');
+				if (result.behavior === 'deny') {
+					expect(result.message).toContain('declined');
+				}
+			});
+
+			it('denies when dialog returns empty content', async () => {
+				mockToolsService.setOptionsConfirmationResult(undefined);
+				const context = createMockContext();
+
+				const result = await service.canUseTool(ClaudeToolNames.ExitPlanMode, exitPlanModeInput, context);
+
+				expect(result.behavior).toBe('deny');
+				if (result.behavior === 'deny') {
+					expect(result.message).toContain('declined');
+				}
+			});
+
+			it('denies with distinct message when tool invocation throws', async () => {
+				const failingService = new class extends MockToolsService {
+					override async invokeTool(name: string): Promise<vscode.LanguageModelToolResult2> {
+						if (name === ToolName.CoreConfirmationToolWithOptions) {
+							throw new Error('Tool unavailable');
+						}
+						return { content: [] };
+					}
+				}();
+
+				const serviceCollection = store.add(createExtensionUnitTestingServices());
+				serviceCollection.set(IToolsService, failingService);
+				const accessor = serviceCollection.createTestingAccessor();
+				const newService = accessor.get(IInstantiationService).createInstance(ClaudeToolPermissionService);
+
+				const result = await newService.canUseTool(ClaudeToolNames.ExitPlanMode, exitPlanModeInput, createMockContext());
+
+				expect(result.behavior).toBe('deny');
+				if (result.behavior === 'deny') {
+					expect(result.message).toBe('Failed to show plan confirmation');
+				}
+			});
+
+			it('handles missing plan gracefully', async () => {
+				mockToolsService.setOptionsConfirmationResult('Approve');
+				const context = createMockContext();
+
+				const result = await service.canUseTool(ClaudeToolNames.ExitPlanMode, {}, context);
+
+				expect(result.behavior).toBe('allow');
+				const input = mockToolsService.invokeToolCalls[0].input as { message: string };
+				expect(input.message).toContain('');
 			});
 		});
 

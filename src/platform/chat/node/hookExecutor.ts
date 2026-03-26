@@ -6,6 +6,8 @@
 import { spawn } from 'child_process';
 import { homedir } from 'os';
 import type { CancellationToken, ChatHookCommand, Uri } from 'vscode';
+import { basename, join } from '../../../util/vs/base/common/path';
+import { isWindows } from '../../../util/vs/base/common/platform';
 import { removeAnsiEscapeCodes } from '../../../util/vs/base/common/strings';
 import { ILogService } from '../../log/common/logService';
 import { HookCommandResultKind, IHookCommandResult, IHookExecutor } from '../common/hookExecutor';
@@ -51,7 +53,7 @@ export class NodeHookExecutor implements IHookExecutor {
 			stdio: 'pipe',
 			cwd,
 			env: { ...process.env, ...hook.env },
-			shell: true,
+			shell: getShell(),
 		});
 
 		return new Promise((resolve, reject) => {
@@ -144,13 +146,13 @@ export class NodeHookExecutor implements IHookExecutor {
 							this._outputChannel.appendLine(`[HookExecutor] ${message}`);
 						}
 					}
-					resolve({ kind: HookCommandResultKind.Success, result });
+					resolve({ kind: HookCommandResultKind.Success, result, exitCode: code });
 				} else if (code === 2) {
 					// Exit code 2: blocking error shown to model
-					resolve({ kind: HookCommandResultKind.Error, result: stderrStr });
+					resolve({ kind: HookCommandResultKind.Error, result: stderrStr, exitCode: code });
 				} else {
 					// Other non-zero: non-blocking warning shown to user only
-					resolve({ kind: HookCommandResultKind.NonBlockingError, result: stderrStr });
+					resolve({ kind: HookCommandResultKind.NonBlockingError, result: stderrStr, exitCode: code });
 				}
 			});
 
@@ -173,4 +175,29 @@ function uriToFsPath(uri: Uri): string {
 	}
 	// Fallback for URI-like objects
 	return (uri as { path: string }).path;
+}
+
+
+function getShell(): string | true {
+	if (!isWindows) {
+		return true;
+	}
+
+	const comSpec = process.env.ComSpec;
+	if (!comSpec || basename(comSpec).toLowerCase() !== 'cmd.exe') {
+		return true;
+	}
+
+	const systemRoot = process.env.SystemRoot || process.env.WINDIR;
+	if (!systemRoot) {
+		return true;
+	}
+
+	return join(
+		systemRoot,
+		'System32',
+		'WindowsPowerShell',
+		'v1.0',
+		'powershell.exe'
+	);
 }

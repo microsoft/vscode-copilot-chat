@@ -8,11 +8,16 @@ import { Event } from '../../../util/vs/base/common/event';
 
 export const IFetcherService = createServiceIdentifier<IFetcherService>('IFetcherService');
 
+/** Use as the callSite value to suppress fetch telemetry for a request (e.g. from the telemetry service itself). */
+export const NO_FETCH_TELEMETRY = 'NO_FETCH_TELEMETRY';
+
 export interface IFetcherService {
 	readonly _serviceBrand: undefined;
 	readonly onDidFetch: Event<FetchEvent>;
+	readonly onDidCompleteFetch: Event<FetchTelemetryEvent>;
 	getUserAgentLibrary(): string;
 	fetch(url: string, options: FetchOptions): Promise<Response>;
+	createWebSocket(url: string, options?: WebSocketConnectOptions): WebSocketConnection;
 	disconnectAll(): Promise<unknown>;
 	makeAbortController(): IAbortController;
 	isAbortError(e: any): boolean;
@@ -59,6 +64,14 @@ export type FetchEvent = {
 };
 
 export type ReportFetchEvent = (outcome: FetchEvent) => void;
+
+export interface FetchTelemetryEvent {
+	callSite: string;
+	hostname: string;
+	latencyMs: number;
+	statusCode: number | undefined;
+	success: boolean;
+}
 
 /** A basic version of http://developer.mozilla.org/en-US/docs/Web/API/Response */
 export class Response {
@@ -140,6 +153,8 @@ export type FetcherId = 'electron-fetch' | 'node-fetch' | 'node-http' | 'test-st
 
 /** These are the options we currently use, for ease of reference. */
 export interface FetchOptions {
+	/** Identifies the call site for telemetry tracking. Use {@link NO_FETCH_TELEMETRY} to suppress. */
+	callSite: string;
 	headers?: { [name: string]: string };
 	body?: string;
 	timeout?: number;
@@ -163,6 +178,17 @@ export interface PaginationOptions<T> extends FetchOptions {
 	buildUrl: (baseUrl: string, pageSize: number, page: number) => string;
 }
 
+export interface WebSocketConnectOptions {
+	headers?: { [name: string]: string };
+}
+
+export interface WebSocketConnection {
+	readonly webSocket: WebSocket;
+	readonly responseHeaders: IHeaders;
+	readonly responseStatusCode: number | undefined;
+	readonly responseStatusText: string | undefined;
+}
+
 export interface IAbortSignal {
 	readonly aborted: boolean;
 	addEventListener(type: 'abort', listener: (this: AbortSignal) => void): void;
@@ -176,6 +202,33 @@ export interface IAbortController {
 
 export interface IHeaders extends Iterable<[string, string]> {
 	get(name: string): string | null;
+}
+
+export class HeadersImpl implements IHeaders {
+	constructor(private readonly _record: Readonly<Record<string, string | string[] | undefined>>) { }
+
+	static fromMap(map: ReadonlyMap<string, string>): HeadersImpl {
+		return new HeadersImpl(Object.fromEntries(map));
+	}
+
+	get(name: string): string | null {
+		const result = this._record[name];
+		return Array.isArray(result) ? result[0] : result ?? null;
+	}
+
+	[Symbol.iterator](): Iterator<[string, string]> {
+		const keys = Object.keys(this._record);
+		let index = 0;
+		return {
+			next: (): IteratorResult<[string, string]> => {
+				if (index >= keys.length) {
+					return { done: true, value: undefined };
+				}
+				const key = keys[index++];
+				return { done: false, value: [key, this.get(key)!] };
+			}
+		};
+	}
 }
 
 /**

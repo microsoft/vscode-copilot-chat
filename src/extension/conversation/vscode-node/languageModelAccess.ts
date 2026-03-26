@@ -21,6 +21,7 @@ import { AutoChatEndpoint } from '../../../platform/endpoint/node/autoChatEndpoi
 import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
 import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
@@ -42,6 +43,55 @@ import { IExtensionContribution } from '../../common/contributions';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { isImageDataPart } from '../common/languageModelChatMessageHelpers';
 import { LanguageModelAccessPrompt } from './languageModelAccessPrompt';
+
+/**
+ * Builds a configurationSchema for the model picker based on the endpoint's supported capabilities.
+ * Models that support reasoning_effort get a "Thinking Effort" dropdown in the model picker UI.
+ */
+function buildConfigurationSchema(endpoint: IChatEndpoint): { configurationSchema?: vscode.LanguageModelConfigurationSchema } {
+	const effortLevels = endpoint.supportsReasoningEffort;
+	if (!effortLevels || effortLevels.length === 0) {
+		return {};
+	}
+
+	// Auto model delegates to different backends, so don't expose effort picker
+	if (endpoint instanceof AutoChatEndpoint) {
+		return {};
+	}
+
+	// Only enable effort picker for Claude and GPT models
+	const family = endpoint.family.toLowerCase();
+	if (!family.startsWith('claude') && !family.startsWith('gpt-')) {
+		return {};
+	}
+
+	const preferred = family.startsWith('claude') ? 'high' : 'medium';
+	const defaultEffort = effortLevels.includes(preferred) ? preferred : undefined;
+
+	return {
+		configurationSchema: {
+			properties: {
+				reasoningEffort: {
+					type: 'string',
+					title: vscode.l10n.t('Thinking Effort'),
+					enum: effortLevels,
+					enumItemLabels: effortLevels.map(level => level.charAt(0).toUpperCase() + level.slice(1)),
+					enumDescriptions: effortLevels.map(level => {
+						switch (level) {
+							case 'none': return vscode.l10n.t('No reasoning applied');
+							case 'low': return vscode.l10n.t('Faster responses with less reasoning');
+							case 'medium': return vscode.l10n.t('Balanced reasoning and speed');
+							case 'high': return vscode.l10n.t('Maximum reasoning depth');
+							default: return level;
+						}
+					}),
+					default: defaultEffort,
+					group: 'navigation',
+				}
+			}
+		}
+	};
+}
 
 /**
  * Returns a description of the model's capabilities and intended use cases.
@@ -290,7 +340,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				capabilities: {
 					imageInput: endpoint instanceof AutoChatEndpoint ? true : endpoint.supportsVision,
 					toolCalling: endpoint.supportsToolCalls,
-				}
+				},
+				...buildConfigurationSchema(endpoint),
 			};
 
 			models.push(model);
@@ -312,6 +363,14 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		return models;
 	}
 
+	private async _getEndpointForModel(model: vscode.LanguageModelChatInformation) {
+		if (model.id === AutoChatEndpoint.pseudoModelId) {
+			const allEndpoints = await this._endpointProvider.getAllChatEndpoints();
+			return await this._automodeService.resolveAutoModeEndpoint(undefined, allEndpoints);
+		}
+		return this._chatEndpoints.find(e => e.model === ModelAliasRegistry.resolveAlias(model.id));
+	}
+
 	private async _provideLanguageModelChatResponse(
 		model: vscode.LanguageModelChatInformation,
 		messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>,
@@ -319,7 +378,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
 		token: vscode.CancellationToken
 	): Promise<void> {
-		const endpoint = this._chatEndpoints.find(e => e.model === ModelAliasRegistry.resolveAlias(model.id));
+		const endpoint = await this._getEndpointForModel(model);
 		if (!endpoint) {
 			throw new Error(`Endpoint not found for model ${model.id}`);
 		}
@@ -335,7 +394,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		text: string | vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2,
 		token: vscode.CancellationToken
 	): Promise<number> {
-		const endpoint = this._chatEndpoints.find(e => e.model === ModelAliasRegistry.resolveAlias(model.id));
+		const endpoint = await this._getEndpointForModel(model);
 		if (!endpoint) {
 			throw new Error(`Endpoint not found for model ${model.id}`);
 		}
@@ -436,6 +495,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		@IEnvService private readonly _envService: IEnvService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IOTelService private readonly _otelService: IOTelService,
+		@IOctoKitService private readonly _octoKitService: IOctoKitService,
 	) {
 		super();
 	}
@@ -556,7 +616,17 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		// This links the wrapper's chat span back to the original invoke_agent trace.
 		const parentTraceContext = (_options as { modelOptions?: OTelModelOptions }).modelOptions?._otelTraceContext ?? undefined;
 
-		const makeRequest = () => endpoint.makeChatRequest('copilotLanguageModelWrapper', messages, callback, token, ChatLocation.Other, { extensionId }, options, !!extensionId, telemetryProperties);
+		const makeRequest = () => endpoint.makeChatRequest2({
+			debugName: 'copilotLanguageModelWrapper',
+			messages,
+			finishedCb: callback,
+			location: ChatLocation.Other,
+			source: { extensionId },
+			requestOptions: options,
+			userInitiatedRequest: !!extensionId,
+			telemetryProperties,
+			reasoningEffort: typeof _options.modelConfiguration?.reasoningEffort === 'string' ? _options.modelConfiguration.reasoningEffort : undefined,
+		}, token);
 
 		// Run request within the parent OTel context (no extra span) so chat spans in chatMLFetcher inherit the agent trace
 		const wrappedRequest = parentTraceContext
@@ -579,7 +649,8 @@ export class CopilotLanguageModelWrapper extends Disposable {
 
 				throw vscode.LanguageModelError.Blocked(blockedExtensionMessage);
 			} else if (result.type === ChatFetchResponseType.QuotaExceeded) {
-				const details = getErrorDetailsFromChatFetchError(result, (await this._authenticationService.getCopilotToken()).copilotPlan);
+				const outageStatus = await this._octoKitService.getGitHubOutageStatus();
+				const details = getErrorDetailsFromChatFetchError(result, (await this._authenticationService.getCopilotToken()).copilotPlan, outageStatus);
 				const err = new vscode.LanguageModelError(details.message);
 				err.name = 'ChatQuotaExceeded';
 				throw err;
@@ -658,6 +729,8 @@ export class CopilotLanguageModelWrapper extends Disposable {
 			const content = message.content.map((part): Raw.ChatCompletionContentPart | undefined => {
 				if (part instanceof vscode.LanguageModelTextPart) {
 					return { type: Raw.ChatCompletionContentPartKind.Text, text: part.value };
+				} else if (part instanceof vscode.LanguageModelDataPart && part.mimeType === 'application/pdf') {
+					return { type: Raw.ChatCompletionContentPartKind.Document, documentData: { data: Buffer.from(part.data).toString('base64'), mediaType: part.mimeType } };
 				} else if (isImageDataPart(part)) {
 					return { type: Raw.ChatCompletionContentPartKind.Image, imageUrl: { url: `data:${part.mimeType};base64,${Buffer.from(part.data).toString('base64url')}` } };
 				} else {

@@ -9,7 +9,7 @@ import { Raw } from '@vscode/prompt-tsx';
 import * as http from 'http';
 import { IChatMLFetcher, Source } from '../../../../platform/chat/common/chatMLFetcher';
 import { ChatLocation, ChatResponse } from '../../../../platform/chat/common/commonTypes';
-import { CustomModel, EndpointEditToolName, IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
+import { CustomModel, EndpointEditToolName } from '../../../../platform/endpoint/common/endpointProvider';
 import { AnthropicMessagesProcessor } from '../../../../platform/endpoint/node/messagesApi';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams } from '../../../../platform/networking/common/fetch';
@@ -26,6 +26,7 @@ import { Disposable, toDisposable } from '../../../../util/vs/base/common/lifecy
 import { SSEParser } from '../../../../util/vs/base/common/sseParser';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { IClaudeCodeModels } from './claudeCodeModels';
 import { IClaudeSessionStateService } from './claudeSessionStateService';
 
 /**
@@ -75,10 +76,10 @@ export class ClaudeLanguageModelServer extends Disposable {
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
-		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
 		@IRequestLogger private readonly requestLogger: IRequestLogger,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IClaudeCodeModels private readonly claudeCodeModels: IClaudeCodeModels,
 	) {
 		super();
 		this.config = {
@@ -155,9 +156,7 @@ export class ClaudeLanguageModelServer extends Disposable {
 		try {
 			const requestBody: AnthropicMessagesRequest = JSON.parse(bodyString);
 
-			const allEndpoints = await this.endpointProvider.getAllChatEndpoints();
-			// Filter to only endpoints that support the Messages API
-			const endpoints = allEndpoints.filter(e => e.apiType === 'messages');
+			const endpoints = await this.claudeCodeModels.getEndpoints();
 			if (endpoints.length === 0) {
 				this.error('No Claude models with Messages API available');
 				this.sendErrorResponse(res, 404, 'not_found_error', 'No Claude models with Messages API available');
@@ -230,6 +229,7 @@ export class ClaudeLanguageModelServer extends Disposable {
 				messages: messagesForLogging,
 				finishedCb: async () => undefined,
 				location: ChatLocation.MessagesProxy,
+				enableThinking: true,
 				userInitiatedRequest: isUserInitiatedMessage
 			}, tokenSource.token);
 
@@ -613,6 +613,10 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 
 	public get maxThinkingBudget(): number | undefined {
 		return this.base.maxThinkingBudget;
+	}
+
+	public get supportsReasoningEffort(): string[] | undefined {
+		return this.base.supportsReasoningEffort;
 	}
 
 	public get supportsToolCalls(): boolean {

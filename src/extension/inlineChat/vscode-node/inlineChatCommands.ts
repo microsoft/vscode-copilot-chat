@@ -13,6 +13,7 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IParserService } from '../../../platform/parser/node/parserService';
+import type { CodeReviewInput } from '../../../platform/review/common/reviewCommand';
 import { IReviewService, ReviewComment, ReviewSuggestionChange } from '../../../platform/review/common/reviewService';
 import { IScopeSelector } from '../../../platform/scopeSelection/common/scopeSelection';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
@@ -32,7 +33,7 @@ import { ChatParticipantRequestHandler } from '../../prompt/node/chatParticipant
 import { sendReviewActionTelemetry } from '../../prompt/node/feedbackGenerator';
 import { CurrentSelection } from '../../prompts/node/panel/currentSelection';
 import { SymbolAtCursor } from '../../prompts/node/panel/symbolAtCursor';
-import { ReviewSession } from '../../review/node/doReview';
+import { reviewFileChanges, ReviewSession } from '../../review/node/doReview';
 import { QuickFixesProvider, RefactorsProvider } from './inlineChatCodeActions';
 import { NotebookExectionStatusBarItemProvider } from './inlineChatNotebookActions';
 
@@ -272,6 +273,9 @@ ${message}`,
 	}));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.unstagedFileChange', (resource: vscode.SourceControlResourceState) => {
 		return instaService.createInstance(ReviewSession).review({ group: 'workingTree', file: resource.resourceUri }, vscode.ProgressLocation.Notification);
+	}));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.codeReview.run', (input: CodeReviewInput) => {
+		return instaService.invokeFunction(reviewFileChanges, input);
 	}));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.apply', doApplyReview));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.applyAndNext', (commentThread: vscode.CommentThread) => doApplyReview(commentThread, true)));

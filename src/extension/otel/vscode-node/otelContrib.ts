@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IOTelService } from '../../../platform/otel/common/otelService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -24,6 +25,15 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 		} else {
 			this._logService.trace('[OTel] Instrumentation disabled');
 		}
+
+		this._register(vscode.commands.registerCommand('github.copilot.chat.otel.flush', async () => {
+			if (!this._otelService.config.enabled) {
+				return;
+			}
+			this._logService.info('[OTel] Flush requested — exporting pending traces, metrics, and events');
+			await this._otelService.flush();
+			this._logService.info('[OTel] Flush complete');
+		}));
 	}
 
 	override dispose(): void {

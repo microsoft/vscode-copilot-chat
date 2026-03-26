@@ -41,7 +41,12 @@ export interface IChatSessionWorkspaceFolderService {
 	/**
 	 * Get the changes in the workspace folder for a session.
 	 * @param workspaceFolderUri
-	 * @param sessionId
 	 */
-	getWorkspaceChanges(workspaceFolderUri: vscode.Uri, sessionId: string): Promise<readonly ChatSessionWorktreeFile[] | undefined>;
+	getWorkspaceChanges(workspaceFolderUri: vscode.Uri): Promise<readonly ChatSessionWorktreeFile[] | undefined>;
+
+	/**
+	 * Clear the cached changes for a workspace folder.
+	 * @param workspaceFolderUri
+	 */
+	clearWorkspaceChanges(workspaceFolderUri: vscode.Uri): void;
 }
