@@ -23,7 +23,7 @@ import { IInstantiationService } from '../../../../../util/vs/platform/instantia
 import { ChatSessionStatus, ChatToolInvocationPart, Uri } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
-import { IChatCustomAgentsService } from '../../../common/chatCustomAgentsService';
+import { IChatPromptFileService } from '../../../common/chatPromptFileService';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
 import { MockChatSessionMetadataStore } from '../../../common/test/mockChatSessionMetadataStore';
 import { IWorkspaceInfo } from '../../../common/workspaceInfo';
@@ -237,9 +237,7 @@ describe('CopilotCLISession', () => {
 			configurationService,
 			new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })),
 			new NullChatDebugFileLoggerService(),
-			new class extends mock<IChatCustomAgentsService>() {
-				override getCustomAgents() { return []; }
-			},
+			new class extends mock<IChatPromptFileService>() { override get customAgentPromptFiles() { return []; } }(),
 		));
 	}
 
