@@ -1476,9 +1476,14 @@ export function overrideModelConfig(modelConfig: ModelConfig, overridingConfig: 
 		},
 		recentlyViewedDocuments: { ...modelConfig.recentlyViewedDocuments, ...overridingConfig.recentlyViewedDocuments },
 		lintOptions: overridingConfig.lintOptions
-			? { ...(modelConfig.lintOptions ?? {}), ...overridingConfig.lintOptions } as xtabPromptOptions.LintOptions
+			? mergeLintOptions(modelConfig.lintOptions, overridingConfig.lintOptions)
 			: modelConfig.lintOptions,
 	};
+}
+
+function mergeLintOptions(base: xtabPromptOptions.LintOptions | undefined, override: Partial<xtabPromptOptions.LintOptions>): xtabPromptOptions.LintOptions {
+	const resolved = base ?? xtabPromptOptions.DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS;
+	return { ...resolved, ...override };
 }
 
 export function pickSystemPrompt(promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): string {
