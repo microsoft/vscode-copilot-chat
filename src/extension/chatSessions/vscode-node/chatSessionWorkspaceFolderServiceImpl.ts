@@ -179,13 +179,13 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 				const result = await this.gitService.exec(repository.rootUri, ['diff', '--cached', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--'], { GIT_INDEX_FILE: diffIndexFile });
 				diffChanges.push(...parseGitChangesRaw(repository.rootUri.fsPath, result));
 			} catch (error) {
-				this.logService.error(`[ChatSessionWorktreeService][getWorkspaceChanges] Error while processing workspace changes: ${error}`);
+				this.logService.error(`[ChatSessionWorkspaceFolderService][getWorkspaceChangesFromWorkingtree] Error while processing workspace changes: ${error}`);
 				return [];
 			} finally {
 				try {
 					await fs.rm(path.dirname(diffIndexFile), { recursive: true, force: true });
 				} catch (error) {
-					this.logService.error(`[ChatSessionWorktreeService][getWorkspaceChanges] Error while cleaning up temp index file: ${error}`);
+					this.logService.error(`[ChatSessionWorkspaceFolderService][getWorkspaceChangesFromWorkingtree] Error while cleaning up temp index file: ${error}`);
 				}
 			}
 		} else {
