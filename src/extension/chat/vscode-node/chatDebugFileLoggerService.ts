@@ -386,7 +386,6 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		if (!this._modelSnapshot || session.modelSnapshotWritten) {
 			return;
 		}
-		session.modelSnapshotWritten = true;
 		try {
 			if (!session.dirEnsured) {
 				await createDirectoryIfNotExists(this._fileSystemService, session.sessionDir);
@@ -394,6 +393,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			}
 			const modelsUri = URI.joinPath(session.sessionDir, 'models.json');
 			await fs.promises.writeFile(modelsUri.fsPath, JSON.stringify(this._modelSnapshot, null, 2), 'utf-8');
+			session.modelSnapshotWritten = true;
 		} catch (err) {
 			this._logService.error('[ChatDebugFileLogger] Failed to write models.json', err);
 		}
