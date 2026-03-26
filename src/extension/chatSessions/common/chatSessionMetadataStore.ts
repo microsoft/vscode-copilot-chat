@@ -43,6 +43,9 @@ export interface RequestDetails {
 
 	/** Mode instructions for this request (excluding toolReferences). */
 	modeInstructions?: StoredModeInstructions;
+
+	/** Checkpoint reference for this request. */
+	checkpointRef?: string;
 }
 
 export interface ChatSessionMetadataFile {
@@ -71,6 +74,7 @@ export interface IChatSessionMetadataStore {
 	storeWorktreeInfo(sessionId: string, properties: ChatSessionWorktreeProperties): Promise<void>;
 	storeWorkspaceFolderInfo(sessionId: string, entry: WorkspaceFolderEntry): Promise<void>;
 	getSessionIdForWorktree(folder: vscode.Uri): Promise<string | undefined>;
+	getSessionIdForWorkspaceFolder(folder: vscode.Uri): Promise<string[]>;
 	getWorktreeProperties(sessionId: string): Promise<ChatSessionWorktreeProperties | undefined>;
 	getWorktreeProperties(folder: Uri): Promise<ChatSessionWorktreeProperties | undefined>;
 	getSessionWorkspaceFolder(sessionId: string): Promise<vscode.Uri | undefined>;

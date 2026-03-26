@@ -11,6 +11,6 @@ export interface IChatSessionWorktreeCheckpointService {
 	readonly _serviceBrand: undefined;
 
 	handleRequest(sessionId: string): Promise<void>;
-	handleRequestCompleted(sessionId: string): Promise<void>;
+	handleRequestCompleted(sessionId: string, requestId: string): Promise<void>;
 	getWorktreeCheckpointSupport(sessionId: string): Promise<boolean>;
 }

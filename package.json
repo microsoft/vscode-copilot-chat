@@ -3842,6 +3842,24 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.gpt54ConcisePrompt.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.gpt54ConcisePrompt.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.gpt54LargePrompt.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.gpt54LargePrompt.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.anthropic.tools.websearch.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -6266,7 +6284,7 @@
 		"open": "^10.1.2",
 		"openai": "^6.7.0",
 		"outdent": "^0.8.0",
-		"picomatch": "^4.0.2",
+		"picomatch": "^4.0.4",
 		"playwright": "^1.58.2",
 		"prettier": "^3.6.2",
 		"react": "^17.0.2",
