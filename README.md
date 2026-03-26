@@ -62,7 +62,7 @@ Only the latest Copilot Chat versions will use the latest models provided by the
 
 By using Copilot Chat you agree to [GitHub Copilot chat preview terms](https://docs.github.com/en/early-access/copilot/github-copilot-chat-technical-preview-license-terms). Review the [transparency note](https://aka.ms/CopilotChatTransparencyNote) to understand about usage, limitations and ways to improve Copilot Chat during the technical preview.
 
-Your code is yours. We follow responsible practices in accordance with our [Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement) to ensure that your code snippets will not be used as suggested code for other users of GitHub Copilot.
+Please refer to our [Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement) to learn about the data we collect, how we use it, and the controls available to you.
 
 To get the latest security fixes, please use the latest version of the Copilot extension and VS Code.
 

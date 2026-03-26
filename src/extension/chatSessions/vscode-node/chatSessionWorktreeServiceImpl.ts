@@ -535,6 +535,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		].some(change => change.status === 7 /* UNTRACKED */);
 
 		const changes: DiffChange[] = [];
+		const worktreePath = vscode.Uri.file(worktreeProperties.worktreePath);
 
 		if (hasUntrackedChanges) {
 			// Tracked + untracked changes
@@ -542,7 +543,6 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			const diffIndexFile = path.join(this.extensionContext.globalStorageUri.fsPath, tmpDirName, 'diff.index');
 
 			try {
-				const worktreePath = vscode.Uri.file(worktreeProperties.worktreePath);
 
 				// Create temp index file directory
 				await fs.mkdir(path.dirname(diffIndexFile), { recursive: true });
@@ -554,7 +554,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				await this.gitService.exec(worktreePath, ['add', '-A', '--', '.'], { GIT_INDEX_FILE: diffIndexFile });
 
 				// Diff the temp index with the base branch
-				const result = await this.gitService.exec(worktreePath, ['diff', '--cached', '--raw', '--numstat', '--diff-filter=ADMR', '-z', worktreeProperties.baseBranchName, '--'], { GIT_INDEX_FILE: diffIndexFile });
+				const result = await this.gitService.exec(worktreePath, ['diff', '--cached', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--merge-base', worktreeProperties.baseBranchName, '--'], { GIT_INDEX_FILE: diffIndexFile });
 				changes.push(...parseGitChangesRaw(worktreeProperties.worktreePath, result));
 			} catch (error) {
 				this.logService.error(`[ChatSessionWorktreeService][_getWorktreeChanges] Error while processing worktree changes for session ${sessionId}: ${error}`);
@@ -568,8 +568,8 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			}
 		} else {
 			// Tracked changes
-			changes.push(...(await this.gitService.diffBetweenWithStats2(
-				worktreeRepository.rootUri, worktreeProperties.baseBranchName) ?? []));
+			const result = await this.gitService.exec(worktreePath, ['diff', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--merge-base', worktreeProperties.baseBranchName, '--']);
+			changes.push(...parseGitChangesRaw(worktreeProperties.worktreePath, result));
 		}
 
 		return changes.map(change => ({

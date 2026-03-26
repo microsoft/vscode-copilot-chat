@@ -8,6 +8,7 @@ import type { ChatHookCommand, ChatHookResult, ChatHookResultKind, ChatRequestHo
 import { IPostToolUseHookResult, IPreToolUseHookResult } from '../../../../platform/chat/common/chatHookService';
 import { HookCommandResultKind, IHookCommandResult } from '../../../../platform/chat/common/hookExecutor';
 import { IToolValidationResult } from '../../../tools/common/toolsService';
+import { isCompatibleHookEventName } from '../../vscode-node/chatHookService';
 
 function cmd(command: string, cwd?: Uri): ChatHookCommand {
 	return { command, cwd } as ChatHookCommand;
@@ -102,7 +103,7 @@ class TestableExecuteHookService {
 
 				// Check hookEventName at top level — if present and mismatched, skip this result
 				const topLevelHookEventName = resultObj['hookEventName'];
-				if (typeof topLevelHookEventName === 'string' && topLevelHookEventName !== hookType) {
+				if (typeof topLevelHookEventName === 'string' && !isCompatibleHookEventName(topLevelHookEventName, hookType)) {
 					return { resultKind: 'success', output: undefined };
 				}
 
@@ -111,7 +112,7 @@ class TestableExecuteHookService {
 				const hookSpecificOutput = resultObj['hookSpecificOutput'];
 				if (typeof hookSpecificOutput === 'object' && hookSpecificOutput !== null) {
 					const nestedHookEventName = (hookSpecificOutput as Record<string, unknown>)['hookEventName'];
-					if (typeof nestedHookEventName === 'string' && nestedHookEventName !== hookType) {
+					if (typeof nestedHookEventName === 'string' && !isCompatibleHookEventName(nestedHookEventName, hookType)) {
 						stripHookSpecificOutput = true;
 					}
 				}
@@ -367,6 +368,80 @@ describe('ChatHookService.executeHook', () => {
 
 		expect(results).toHaveLength(1);
 		expect(results[0].output).toEqual({ decision: 'block', reason: 'no event name' });
+	});
+
+	it('treats Stop hookEventName as compatible with SubagentStop hook type', async () => {
+		service.executorHandler = () => ({
+			kind: HookCommandResultKind.Success,
+			result: { hookSpecificOutput: { hookEventName: 'Stop', decision: 'block', reason: 'tests failing' } },
+		});
+		const results = await service.executeHook('SubagentStop', { SubagentStop: [cmd('test')] }, {});
+
+		expect(results).toHaveLength(1);
+		expect(results[0].resultKind).toBe('success');
+		expect(results[0].output).toEqual({ hookSpecificOutput: { hookEventName: 'Stop', decision: 'block', reason: 'tests failing' } });
+	});
+
+	it('does NOT treat SubagentStop hookEventName as compatible with Stop hook type', async () => {
+		service.executorHandler = () => ({
+			kind: HookCommandResultKind.Success,
+			result: { hookSpecificOutput: { hookEventName: 'SubagentStop', decision: 'block', reason: 'not done' } },
+		});
+		const results = await service.executeHook('Stop', { Stop: [cmd('test')] }, {});
+
+		expect(results).toHaveLength(1);
+		expect(results[0].resultKind).toBe('success');
+		// hookSpecificOutput should be stripped because SubagentStop -> Stop is not compatible
+		expect(results[0].output).toBeUndefined();
+	});
+
+	it('treats SessionStart hookEventName as compatible with SubagentStart hook type', async () => {
+		service.executorHandler = () => ({
+			kind: HookCommandResultKind.Success,
+			result: { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: 'context' } },
+		});
+		const results = await service.executeHook('SubagentStart', { SubagentStart: [cmd('test')] }, {});
+
+		expect(results).toHaveLength(1);
+		expect(results[0].resultKind).toBe('success');
+		expect(results[0].output).toEqual({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: 'context' } });
+	});
+
+	it('does NOT treat SubagentStart hookEventName as compatible with SessionStart hook type', async () => {
+		service.executorHandler = () => ({
+			kind: HookCommandResultKind.Success,
+			result: { hookSpecificOutput: { hookEventName: 'SubagentStart', additionalContext: 'context' } },
+		});
+		const results = await service.executeHook('SessionStart', { SessionStart: [cmd('test')] }, {});
+
+		expect(results).toHaveLength(1);
+		expect(results[0].resultKind).toBe('success');
+		// hookSpecificOutput should be stripped because SubagentStart -> SessionStart is not compatible
+		expect(results[0].output).toBeUndefined();
+	});
+
+	it('treats top-level Stop hookEventName as compatible with SubagentStop', async () => {
+		service.executorHandler = () => ({
+			kind: HookCommandResultKind.Success,
+			result: { hookEventName: 'Stop', decision: 'block', reason: 'from stop hook' },
+		});
+		const results = await service.executeHook('SubagentStop', { SubagentStop: [cmd('test')] }, {});
+
+		expect(results).toHaveLength(1);
+		expect(results[0].resultKind).toBe('success');
+		expect(results[0].output).toEqual({ hookEventName: 'Stop', decision: 'block', reason: 'from stop hook' });
+	});
+
+	it('still strips hookSpecificOutput when hookEventName is truly incompatible', async () => {
+		service.executorHandler = () => ({
+			kind: HookCommandResultKind.Success,
+			result: { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny' } },
+		});
+		const results = await service.executeHook('SubagentStop', { SubagentStop: [cmd('test')] }, {});
+
+		expect(results).toHaveLength(1);
+		expect(results[0].resultKind).toBe('success');
+		expect(results[0].output).toBeUndefined();
 	});
 });
 

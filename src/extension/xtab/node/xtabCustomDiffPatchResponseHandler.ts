@@ -78,10 +78,9 @@ export class XtabCustomDiffPatchResponseHandler {
 					: XtabCustomDiffPatchResponseHandler.resolveTargetDocument(edit.filePath, workspaceRoot) ?? activeDocumentId; // FIXME@ulugbekna: it's wrong to fallback to active document but just ignoring edits is also bad
 				yield {
 					edit: XtabCustomDiffPatchResponseHandler.resolveEdit(edit),
-					window,
-					originalWindow,
-					isFromCursorJump: true,
+					isFromCursorJump: false,
 					targetDocument,
+					window,
 				} satisfies StreamedEdit;
 			}
 		} catch (e: unknown) {

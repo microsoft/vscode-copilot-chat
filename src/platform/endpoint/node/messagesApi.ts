@@ -13,7 +13,7 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ChatLocation } from '../../chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, ContextManagementResponse, CUSTOM_TOOL_SEARCH_NAME, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled, isExtendedCacheTtlEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
+import { AnthropicMessagesTool, ContextManagementResponse, CUSTOM_TOOL_SEARCH_NAME, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
 import { FinishedCallback, IIPCodeCitation, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, rawMessageToCAPI } from '../../networking/common/openai';
@@ -135,7 +135,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	const reasoningEffort = options.reasoningEffort;
 	let thinkingConfig: { type: 'enabled' | 'adaptive'; budget_tokens?: number } | undefined;
 	if (options.enableThinking) {
-		const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
+		const configuredBudget = configurationService.getConfig(ConfigKey.AnthropicThinkingBudget);
 		const thinkingExplicitlyDisabled = configuredBudget === 0;
 		const forceExtendedThinking = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicForceExtendedThinking, experimentationService);
 		if (endpoint.supportsAdaptiveThinking && !thinkingExplicitlyDisabled && !forceExtendedThinking) {
@@ -158,9 +158,9 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	const thinkingEnabled = !!thinkingConfig;
 
-	// Build output config with effort level for adaptive thinking, validating reasoningEffort
+	// Build output config with effort level for thinking, validating reasoningEffort
 	let effort: 'low' | 'medium' | 'high' | undefined;
-	if (endpoint.supportsAdaptiveThinking && thinkingConfig?.type === 'adaptive') {
+	if (thinkingConfig) {
 		const candidateEffort = reasoningEffort;
 		if (candidateEffort === 'low' || candidateEffort === 'medium' || candidateEffort === 'high') {
 			effort = candidateEffort;
@@ -178,18 +178,13 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	// have access to the enabled tools for the request. For now, filter tool_reference blocks
 	// here against the actual tools sent to Anthropic to avoid 400 errors from unknown tool names.
 	const validToolNames = finalTools.length > 0 ? new Set(finalTools.map(t => t.name)) : undefined;
-
-	// Determine if extended (1h) cache TTL should be used (only for opus 1M model behind experiment)
-	const useExtendedCacheTtl = isExtendedCacheTtlEnabled(endpoint, configurationService, experimentationService);
-	const cacheTtl: '5m' | '1h' | undefined = useExtendedCacheTtl ? '1h' : undefined;
-
-	const messagesResult = rawMessagesToMessagesAPI(options.messages, customToolSearchEnabled ? validToolNames : undefined, cacheTtl);
+	const messagesResult = rawMessagesToMessagesAPI(options.messages, customToolSearchEnabled ? validToolNames : undefined);
 
 	// Add cache_control to the last tool and last system block so the stable tools+system
 	// prefix is cached across turns. Per the Anthropic docs, cache prefixes are created in
 	// order: tools → system → messages, and a max of 4 cache_control blocks is allowed.
 	// Count existing cache_control in messages+system first to stay within the limit.
-	addToolsAndSystemCacheControl(finalTools, messagesResult, cacheTtl);
+	addToolsAndSystemCacheControl(finalTools, messagesResult);
 
 	// Guard: The Anthropic Messages API requires the conversation to end with a user message.
 	// A trailing assistant message is treated as a prefill request, which is not supported
@@ -232,7 +227,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	};
 }
 
-export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[], validToolNames?: Set<string>, cacheTtl?: '5m' | '1h'): { messages: MessageParam[]; system?: TextBlockParam[] } {
+export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[], validToolNames?: Set<string>): { messages: MessageParam[]; system?: TextBlockParam[] } {
 	const unmergedMessages: MessageParam[] = [];
 	const systemBlocks: TextBlockParam[] = [];
 	const toolCallIdToName = new Map<string, string>();
@@ -240,11 +235,11 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[], v
 	for (const message of messages) {
 		switch (message.role) {
 			case Raw.ChatRole.System: {
-				systemBlocks.push(...rawContentToAnthropicContent(message.content, cacheTtl).filter((c): c is TextBlockParam => c.type === 'text'));
+				systemBlocks.push(...rawContentToAnthropicContent(message.content).filter((c): c is TextBlockParam => c.type === 'text'));
 				break;
 			}
 			case Raw.ChatRole.User: {
-				const content = rawContentToAnthropicContent(message.content, cacheTtl);
+				const content = rawContentToAnthropicContent(message.content);
 				if (content.length > 0) {
 					unmergedMessages.push({
 						role: 'user',
@@ -254,7 +249,7 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[], v
 				break;
 			}
 			case Raw.ChatRole.Assistant: {
-				const content = rawContentToAnthropicContent(message.content, cacheTtl);
+				const content = rawContentToAnthropicContent(message.content);
 				if (message.toolCalls) {
 					for (const toolCall of message.toolCalls) {
 						let parsedInput: Record<string, unknown> = {};
@@ -283,7 +278,7 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[], v
 			}
 			case Raw.ChatRole.Tool: {
 				if (message.toolCallId) {
-					const toolContent = rawContentToAnthropicContent(message.content, cacheTtl);
+					const toolContent = rawContentToAnthropicContent(message.content);
 					// Extract cache_control from content blocks - it belongs on the tool_result block, not inner content
 					let hasCacheControl = false;
 					for (const block of toolContent) {
@@ -315,7 +310,7 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[], v
 						content: validContent.length > 0 ? validContent : undefined,
 					};
 					if (hasCacheControl) {
-						toolResultBlock.cache_control = { type: 'ephemeral', ...(cacheTtl ? { ttl: cacheTtl } : {}) };
+						toolResultBlock.cache_control = { type: 'ephemeral' };
 					}
 					unmergedMessages.push({
 						role: 'user',
@@ -372,7 +367,7 @@ function tryParseToolReferences(content: ContentBlockParam[], validToolNames?: S
 		.map((name): ToolReferenceBlockParam => ({ type: 'tool_reference', tool_name: name }));
 }
 
-function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionContentPart[], cacheTtl?: '5m' | '1h'): ContentBlockParam[] {
+function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionContentPart[]): ContentBlockParam[] {
 	const convertedContent: ContentBlockParam[] = [];
 
 	for (const part of content) {
@@ -410,13 +405,13 @@ function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionConten
 			case Raw.ChatCompletionContentPartKind.CacheBreakpoint: {
 				const previousBlock = convertedContent.at(-1);
 				if (previousBlock && contentBlockSupportsCacheControl(previousBlock)) {
-					previousBlock.cache_control = { type: 'ephemeral', ...(cacheTtl ? { ttl: cacheTtl } : {}) };
+					previousBlock.cache_control = { type: 'ephemeral' };
 				} else {
 					// Empty string is invalid
 					convertedContent.push({
 						type: 'text',
 						text: ' ',
-						cache_control: { type: 'ephemeral', ...(cacheTtl ? { ttl: cacheTtl } : {}) }
+						cache_control: { type: 'ephemeral' }
 					});
 				}
 				break;
@@ -482,7 +477,6 @@ const maxCacheBreakpoints = 4;
 export function addToolsAndSystemCacheControl(
 	tools: AnthropicMessagesTool[],
 	messagesResult: { messages: MessageParam[]; system?: TextBlockParam[] },
-	cacheTtl?: '5m' | '1h',
 ): void {
 	// Count existing cache_control in messages and system
 	let existingCount = 0;
@@ -518,14 +512,14 @@ export function addToolsAndSystemCacheControl(
 	}
 
 	if (lastCacheableTool && slotsAvailable > 0) {
-		lastCacheableTool.cache_control = { type: 'ephemeral', ...(cacheTtl ? { ttl: cacheTtl } : {}) };
+		lastCacheableTool.cache_control = { type: 'ephemeral' };
 		slotsAvailable--;
 	}
 
 	// Add cache_control to the last system block (caches the stable system prompt)
 	const lastSystemBlock = messagesResult.system?.at(-1);
 	if (lastSystemBlock && !lastSystemBlock.cache_control && slotsAvailable > 0) {
-		lastSystemBlock.cache_control = { type: 'ephemeral', ...(cacheTtl ? { ttl: cacheTtl } : {}) };
+		lastSystemBlock.cache_control = { type: 'ephemeral' };
 	}
 }
 

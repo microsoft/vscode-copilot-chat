@@ -104,7 +104,6 @@ export class SimulationCodeSearchChunkSearchService extends Disposable implement
 			}, await query.resolveQuery(token), sizing.maxResults ?? 128, options, telemetryInfo, token);
 			return {
 				chunks: results.chunks,
-				isFullWorkspace: false
 			};
 		} catch (error) {
 			console.error('Error searching repo:', error);
@@ -112,7 +111,6 @@ export class SimulationCodeSearchChunkSearchService extends Disposable implement
 
 		return {
 			chunks: [],
-			isFullWorkspace: false
 		};
 	}
 
