@@ -1095,9 +1095,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let availableTools = await this.getAvailableTools(outputStream, token);
 		const context = this.createPromptContext(availableTools, outputStream);
 		const isContinuation = context.isContinuation || false;
-		markChatExt(this.options.request.id, ChatExtPerfMark.WillBuildPrompt);
+		markChatExt(this.options.conversation.sessionId, ChatExtPerfMark.WillBuildPrompt);
 		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
-		markChatExt(this.options.request.id, ChatExtPerfMark.DidBuildPrompt);
+		markChatExt(this.options.conversation.sessionId, ChatExtPerfMark.DidBuildPrompt);
 		this.throwIfCancelled(token);
 		this.turn.addReferences(buildPromptResult.references);
 		// Possible the tool call resulted in new tools getting added.
@@ -1207,7 +1207,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const enableThinking = !shouldDisableThinking;
 		let phase: string | undefined;
 		let compaction: OpenAIContextManagementResponse | undefined;
-		markChatExt(this.options.request.id, ChatExtPerfMark.WillFetch);
+		markChatExt(this.options.conversation.sessionId, ChatExtPerfMark.WillFetch);
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(effectiveBuildPromptResult.messages, { stripOrphanedToolCalls: isGeminiFamily(endpoint) }),
 			turnId: this.turn.id,
@@ -1258,7 +1258,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}, token).finally(() => {
 			this.stopHookUserInitiated = false;
 		});
-		markChatExt(this.options.request.id, ChatExtPerfMark.DidFetch);
+		markChatExt(this.options.conversation.sessionId, ChatExtPerfMark.DidFetch);
 
 		const promptTokenDetails = await computePromptTokenDetails({
 			messages: effectiveBuildPromptResult.messages,

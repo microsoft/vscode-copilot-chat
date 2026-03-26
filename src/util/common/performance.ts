@@ -13,7 +13,7 @@ const chatExtPrefix = 'code/chat/ext/';
  * These marks live inside the vscode-side `agent/willInvoke` → `agent/didInvoke`
  * window and break down what happens in the extension during a chat request.
  *
- * ## Per-Request Scenarios (scoped by requestId via {@link markChatExt})
+ * ## Per-Session Scenarios (scoped by sessionId via {@link markChatExt})
  *
  * **Extension Handler Duration** — total time in the participant handler:
  * `willHandleParticipant` → `didHandleParticipant`
@@ -51,24 +51,23 @@ export const ChatExtPerfMark = {
 } as const;
 
 /**
- * Emits a performance mark scoped to a chat request:
- * `code/chat/ext/<requestId>/<name>`
+ * Emits a performance mark scoped to a chat session:
+ * `code/chat/ext/<sessionId>/<name>`
  *
- * Marks are automatically cleaned up via {@link clearChatExtMarks}
- * when the request completes.
+ * Marks persist in the extension host process until explicitly cleared
+ * via {@link clearChatExtMarks}.
  */
-export function markChatExt(requestId: string | undefined, name: string): void {
-	if (requestId) {
-		performance.mark(`${chatExtPrefix}${requestId}/${name}`);
+export function markChatExt(sessionId: string | undefined, name: string): void {
+	if (sessionId) {
+		performance.mark(`${chatExtPrefix}${sessionId}/${name}`);
 	}
 }
 
 /**
- * Clears all performance marks for the given chat request.
- * Called when the request handler completes.
+ * Clears all performance marks for the given chat session.
  */
-export function clearChatExtMarks(requestId: string): void {
-	const prefix = `${chatExtPrefix}${requestId}/`;
+export function clearChatExtMarks(sessionId: string): void {
+	const prefix = `${chatExtPrefix}${sessionId}/`;
 	const toRemove = new Set<string>();
 	for (const entry of performance.getEntriesByType('mark')) {
 		if (entry.name.startsWith(prefix)) {

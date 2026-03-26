@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IChatAgentService, defaultAgentName, editingSessionAgentEditorName, editingSessionAgentName, editsAgentName, getChatParticipantIdFromName, notebookEditorAgentName, terminalAgentName, vscodeAgentName } from '../../../platform/chat/common/chatAgents';
 import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaService';
+import { IChatSessionService } from '../../../platform/chat/common/chatSessionService';
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
@@ -70,7 +71,10 @@ class ChatAgents implements IDisposable {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IPromptCategorizerService private readonly promptCategorizerService: IPromptCategorizerService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
-	) { }
+		@IChatSessionService chatSessionService: IChatSessionService,
+	) {
+		this._disposables.add(chatSessionService.onDidDisposeChatSession(sessionId => clearChatExtMarks(sessionId)));
+	}
 
 	dispose() {
 		this._disposables.dispose();
@@ -199,7 +203,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 
 	private getChatParticipantHandler(id: string, name: string, defaultIntentIdOrGetter: IntentOrGetter): vscode.ChatExtendedRequestHandler {
 		return async (request, context, stream, token): Promise<vscode.ChatResult> => {
-			markChatExt(request.id, ChatExtPerfMark.WillHandleParticipant);
+			markChatExt(request.sessionId, ChatExtPerfMark.WillHandleParticipant);
 			// If we need to switch to the base model, this function will handle it
 			// Otherwise it just returns the same request passed into it
 			request = await this.switchToBaseModel(request, stream);
@@ -261,8 +265,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 				}
 			}
 
-			markChatExt(request.id, ChatExtPerfMark.DidHandleParticipant);
-			clearChatExtMarks(request.id);
+			markChatExt(request.sessionId, ChatExtPerfMark.DidHandleParticipant);
 			return result;
 		};
 	}
