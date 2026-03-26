@@ -97,7 +97,7 @@ export class LintErrors {
 
 	/**
 	 * Collects URIs of the N most recently edited/viewed files from xtab history,
-	 * excluding the current document. Prefers edited files over viewed files.
+	 * excluding the current document. Files are selected in recency order.
 	 */
 	private _collectRecentFileUris(nRecentFiles: number): URI[] {
 		if (!this._xtabHistory) {
@@ -150,7 +150,14 @@ export class LintErrors {
 			throw new BugIndicatingError('No previous formatted diagnostics available to check line number against.');
 		}
 
+		const activeDocUri = this._documentId.toUri();
+
 		for (const diagnostic of this._previousFormttedDiagnostics) {
+			// Only consider diagnostics from the current file
+			if (!isEqual(diagnostic.documentUri, activeDocUri)) {
+				continue;
+			}
+
 			// Convert diagnostic position (1-based) to 0-based for comparison with formatted output
 			if (diagnostic.documentRange.getStartPosition().lineNumber - 1 === lineNumber) {
 				return true;
