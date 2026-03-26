@@ -20,13 +20,13 @@ import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { basename } from '../../../../util/vs/base/common/resources';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { IChatCustomAgentsService } from '../../common/chatCustomAgentsService';
+import { IChatPromptFileService } from '../../common/chatPromptFileService';
 import { getWorkingDirectory, IWorkspaceInfo } from '../../common/workspaceInfo';
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
 import { ensureRipgrepShim } from './ripgrepShim';
-import { URI } from '../../../../util/vs/base/common/uri';
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 const COPILOT_CLI_REQUEST_MAP_KEY = 'github.copilot.cli.requestMap';
@@ -255,7 +255,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	private readonly _onDidChangeAgents = this._register(new Emitter<void>());
 	readonly onDidChangeAgents: Event<void> = this._onDidChangeAgents.event;
 	constructor(
-		@IChatCustomAgentsService private readonly chatCustomAgentsService: IChatCustomAgentsService,
+		@IChatPromptFileService private readonly chatPromptFileService: IChatPromptFileService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
@@ -263,7 +263,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	) {
 		super();
 		void this.getAgents();
-		this._register(this.chatCustomAgentsService.onDidChangeCustomAgents(() => {
+		this._register(this.chatPromptFileService.onDidChangeCustomAgents(() => {
 			this._refreshAgents();
 		}));
 		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => {
@@ -312,7 +312,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	}
 
 	async resolveAgent(agentId: string): Promise<SweCustomAgent | undefined> {
-		for (const promptFile of this.chatCustomAgentsService.getCustomAgents()) {
+		for (const promptFile of this.chatPromptFileService.customAgentPromptFiles) {
 			if (agentId === promptFile.uri.toString()) {
 				return this.toCustomAgent(promptFile);
 			}
@@ -342,7 +342,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		for (const agent of await this.getSDKAgents()) {
 			mergedAgents.set(agent.name.toLowerCase(), this.cloneAgent(agent));
 		}
-		for (const promptFile of this.chatCustomAgentsService.getCustomAgents()) {
+		for (const promptFile of this.chatPromptFileService.customAgentPromptFiles) {
 			const agent = this.toCustomAgent(promptFile);
 			if (!agent) {
 				continue;

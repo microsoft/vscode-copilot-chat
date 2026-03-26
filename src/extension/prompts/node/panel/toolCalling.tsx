@@ -447,12 +447,25 @@ enum ToolInvocationOutcome {
 
 export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToken?: string, urlOrRequestMetadata?: string | RequestMetadata, logService?: ILogService, imageService?: IImageService) {
 	if (isImageDataPart(part)) {
-		const base64 = Buffer.from(part.data).toString('base64');
-		let imageSource = `data:${part.mimeType};base64,${base64}`;
+		let imageData: Uint8Array = part.data;
+		let mimeType = part.mimeType;
+
+		if (imageService) {
+			try {
+				const resized = await imageService.resizeImage(imageData, mimeType);
+				imageData = resized.data;
+				mimeType = resized.mimeType;
+			} catch (error) {
+				logService?.warn(`Image resize failed, using original: ${error}`);
+			}
+		}
+
+		const base64 = Buffer.from(imageData).toString('base64');
+		let imageSource = `data:${mimeType};base64,${base64}`;
 		const isChatRequest = typeof urlOrRequestMetadata !== 'string' && (urlOrRequestMetadata?.type === RequestType.ChatCompletions || urlOrRequestMetadata?.type === RequestType.ChatMessages);
 		if (githubToken && isChatRequest && imageService) {
 			try {
-				const uri = await imageService.uploadChatImageAttachment(part.data, 'tool-result-image', part.mimeType ?? 'image/png', githubToken);
+				const uri = await imageService.uploadChatImageAttachment(imageData, 'tool-result-image', mimeType ?? 'image/png', githubToken);
 				if (uri) {
 					imageSource = uri.toString();
 				}
@@ -463,7 +476,7 @@ export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToke
 			}
 		}
 
-		return <Image src={imageSource} mimeType={part.mimeType} />;
+		return <Image src={imageSource} mimeType={mimeType} />;
 	}
 }
 
