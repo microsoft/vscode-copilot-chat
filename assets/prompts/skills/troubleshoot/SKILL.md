@@ -20,7 +20,7 @@ Base conclusions on evidence from logs. Do not guess.
 
 ## Data Source
 
-{{DEBUG_LOG_RUNTIME_CONTEXT}}
+- Current session log directory: `{{VSCODE_CURRENT_SESSION_LOG}}`
 
 Use direct debug log files written by Copilot Chat:
 

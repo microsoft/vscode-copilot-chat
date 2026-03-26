@@ -21,6 +21,7 @@ import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelToolMCPSource } from '../../../../vscodeTypes';
+import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
 import { buildMcpServersFromRegistry } from '../common/claudeMcpServerRegistry';
@@ -213,8 +214,7 @@ export class ClaudeCodeSession extends Disposable {
 		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
 		@IMcpService private readonly mcpService: IMcpService,
 		@IOTelService private readonly _otelService: IOTelService,
-		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService,
-	) {
+		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService, @IPromptVariablesService private readonly _promptVariablesService: IPromptVariablesService,) {
 		super();
 		this._currentModelId = initialModelId;
 		this._currentPermissionMode = initialPermissionMode;
@@ -462,7 +462,8 @@ export class ClaudeCodeSession extends Disposable {
 			},
 			systemPrompt: {
 				type: 'preset',
-				preset: 'claude_code'
+				preset: 'claude_code',
+				append: this._promptVariablesService.buildTemplateVariablesContext(this.sessionId) || undefined,
 			},
 			settingSources: ['user', 'project', 'local'],
 			stderr: data => this.logService.error(`claude-agent-sdk stderr: ${data}`)

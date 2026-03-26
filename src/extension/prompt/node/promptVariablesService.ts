@@ -13,6 +13,14 @@ export interface IPromptVariablesService {
 	readonly _serviceBrand: undefined;
 	resolveVariablesInPrompt(message: string, variables: readonly ChatPromptReference[]): Promise<{ message: string }>;
 	resolveToolReferencesInPrompt(message: string, toolReferences: readonly ChatLanguageModelToolReference[]): Promise<string>;
+
+	/**
+	 * Builds a context string describing resolved template variables for
+	 * injection into system prompts. This allows skills that reference
+	 * `{{VARIABLE_NAME}}` placeholders to have their values available
+	 * via session context.
+	 */
+	buildTemplateVariablesContext(sessionId: string | undefined): string;
 }
 
 export class NullPromptVariablesService implements IPromptVariablesService {
@@ -24,5 +32,9 @@ export class NullPromptVariablesService implements IPromptVariablesService {
 
 	async resolveToolReferencesInPrompt(message: string, toolReferences: readonly ChatLanguageModelToolReference[]): Promise<string> {
 		return message;
+	}
+
+	buildTemplateVariablesContext(): string {
+		return '';
 	}
 }

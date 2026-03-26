@@ -6166,6 +6166,12 @@
 			{
 				"path": "./assets/prompts/skills/get-search-view-results/SKILL.md",
 				"when": "config.github.copilot.chat.getSearchViewResultsSkill.enabled"
+			},
+			{
+				"path": "./assets/prompts/skills/troubleshoot/SKILL.md"
+			},
+			{
+				"path": "./assets/prompts/skills/agent-customization/SKILL.md"
 			}
 		],
 		"terminal": {

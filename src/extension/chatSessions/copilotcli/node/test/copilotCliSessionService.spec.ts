@@ -24,6 +24,7 @@ import { mock } from '../../../../../util/common/test/simpleMock';
 import { DisposableStore, IReference, toDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { NullPromptVariablesService } from '../../../../prompt/node/promptVariablesService';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { IAgentSessionsWorkspace } from '../../../common/agentSessionsWorkspace';
 import { IChatPromptFileService } from '../../../common/chatPromptFileService';
@@ -149,7 +150,7 @@ describe('CopilotCLISessionService', () => {
 						}
 					}();
 				}
-				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, new MockChatSessionMetadataStore(), instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullChatDebugFileLoggerService(), new class extends mock<IChatPromptFileService>() { override get customAgentPromptFiles() { return []; } }));
+				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, new MockChatSessionMetadataStore(), instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullChatDebugFileLoggerService(), new class extends mock<IChatPromptFileService>() { override get customAgentPromptFiles() { return []; } }, new NullPromptVariablesService()));
 			}
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);

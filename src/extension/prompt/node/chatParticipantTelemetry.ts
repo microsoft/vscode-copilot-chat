@@ -222,9 +222,9 @@ function getSlashCommandForTelemetry(request: vscode.ChatRequest): string {
 		return command;
 	}
 
-	// Built-in skills (copilot-skill:// URIs) are safe to send as plain text
+	// Built-in skills (extension-provided) are safe to send as plain text
 	for (const ref of request.references) {
-		if (URI.isUri(ref.value) && ref.value.scheme === 'copilot-skill') {
+		if (URI.isUri(ref.value) && ref.value.path.includes('/assets/prompts/skills/')) {
 			return command;
 		}
 	}

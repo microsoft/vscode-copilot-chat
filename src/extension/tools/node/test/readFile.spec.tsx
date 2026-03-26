@@ -714,9 +714,9 @@ suite('ReadFile', () => {
 	});
 
 	suite('troubleshoot skill session log replacement', () => {
-		test('replaces {{CURRENT_SESSION_LOG}} placeholder for troubleshoot skill URI', async () => {
-			const skillUri = URI.from({ scheme: 'copilot-skill', path: '/troubleshoot/SKILL.md' });
-			const skillContent = '---\nname: troubleshoot\n---\n\nLog dir: `{{CURRENT_SESSION_LOG}}`\nMore content here.';
+		test('replaces {{VSCODE_CURRENT_SESSION_LOG}} placeholder for troubleshoot skill URI', async () => {
+			const skillUri = URI.file('/mock/extension/assets/prompts/skills/troubleshoot/SKILL.md');
+			const skillContent = '---\nname: troubleshoot\n---\n\nLog dir: `{{VSCODE_CURRENT_SESSION_LOG}}`\nMore content here.';
 			const skillDoc = createTextDocumentData(skillUri, skillContent, 'markdown').document;
 
 			const expectedLogDir = URI.file('/mock/storage/debug-logs/session-abc');
@@ -739,6 +739,10 @@ suite('ReadFile', () => {
 				debugLogsDir: dirname(expectedLogDir),
 			} satisfies IChatDebugFileLoggerService);
 
+			const mockCustomInstructionsService = new MockCustomInstructionsService();
+			mockCustomInstructionsService.setExtensionSkillInfos([{ uri: skillUri, skillName: 'troubleshoot', skillFolderUri: URI.file('/mock/extension/assets/prompts/skills/troubleshoot') }]);
+			services.define(ICustomInstructionsService, mockCustomInstructionsService);
+
 			const testAccessor = services.createTestingAccessor();
 			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
 			const promptPathRepresentationService = testAccessor.get(IPromptPathRepresentationService);
@@ -757,14 +761,14 @@ suite('ReadFile', () => {
 
 			const text = await toolResultToString(testAccessor, result);
 			expect(text).toContain(promptPathRepresentationService.getFilePath(expectedLogDir));
-			expect(text).not.toContain('{{CURRENT_SESSION_LOG}}');
+			expect(text).not.toContain('{{VSCODE_CURRENT_SESSION_LOG}}');
 
 			testAccessor.dispose();
 		});
 
 		test('leaves placeholder unreplaced when no sessionResource is set', async () => {
-			const skillUri = URI.from({ scheme: 'copilot-skill', path: '/troubleshoot/SKILL.md' });
-			const skillContent = '---\nname: troubleshoot\n---\n\nLog dir: `{{CURRENT_SESSION_LOG}}`';
+			const skillUri = URI.file('/mock/extension/assets/prompts/skills/troubleshoot/SKILL.md');
+			const skillContent = '---\nname: troubleshoot\n---\n\nLog dir: `{{VSCODE_CURRENT_SESSION_LOG}}`';
 			const skillDoc = createTextDocumentData(skillUri, skillContent, 'markdown').document;
 
 			const services = createExtensionUnitTestingServices();
@@ -772,6 +776,10 @@ suite('ReadFile', () => {
 				TestWorkspaceService,
 				[[URI.file('/workspace')], [skillDoc]]
 			));
+
+			const mockCustomInstructionsService2 = new MockCustomInstructionsService();
+			mockCustomInstructionsService2.setExtensionSkillInfos([{ uri: skillUri, skillName: 'troubleshoot', skillFolderUri: URI.file('/mock/extension/assets/prompts/skills/troubleshoot') }]);
+			services.define(ICustomInstructionsService, mockCustomInstructionsService2);
 
 			const testAccessor = services.createTestingAccessor();
 			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
@@ -783,15 +791,15 @@ suite('ReadFile', () => {
 			);
 
 			const text = await toolResultToString(testAccessor, result);
-			expect(text).toContain('{{CURRENT_SESSION_LOG}}');
+			expect(text).toContain('{{VSCODE_CURRENT_SESSION_LOG}}');
 
 			testAccessor.dispose();
 		});
 
 		test('does not replace placeholder for non-troubleshoot skill URIs', async () => {
-			const otherSkillUri = URI.from({ scheme: 'copilot-skill', path: '/other-skill/SKILL.md' });
-			const content = 'Some content with {{CURRENT_SESSION_LOG}} placeholder';
-			const doc = createTextDocumentData(otherSkillUri, content, 'markdown').document;
+			const otherSkillUri = URI.file('/mock/extension/assets/prompts/skills/other-skill/SKILL.md');
+			const otherContent = 'Some content with {{VSCODE_CURRENT_SESSION_LOG}} placeholder';
+			const doc = createTextDocumentData(otherSkillUri, otherContent, 'markdown').document;
 
 			const services = createExtensionUnitTestingServices();
 			services.define(IWorkspaceService, new SyncDescriptor(
@@ -826,7 +834,7 @@ suite('ReadFile', () => {
 			);
 
 			const text = await toolResultToString(testAccessor, result);
-			expect(text).toContain('{{CURRENT_SESSION_LOG}}');
+			expect(text).toContain('{{VSCODE_CURRENT_SESSION_LOG}}');
 			expect(text).not.toContain('/should/not/appear');
 
 			testAccessor.dispose();
