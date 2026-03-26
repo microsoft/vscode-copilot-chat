@@ -1949,8 +1949,9 @@ export function registerCLIChatCommands(
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
 		if (sessionItem?.resource) {
 			const id = SessionIdForCLI.parse(sessionItem.resource);
-			const worktree = await copilotCLIWorktreeManagerService.getWorktreeProperties(id);
-			const worktreePath = await copilotCLIWorktreeManagerService.getWorktreePath(id);
+			const sessionId = copilotcliSessionItemProvider.untitledSessionIdMapping.get(id) ?? id;
+			const worktree = await copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+			const worktreePath = await copilotCLIWorktreeManagerService.getWorktreePath(sessionId);
 
 			const confirmMessage = worktreePath
 				? l10n.t('Are you sure you want to delete the session and its associated worktree?')
@@ -1964,8 +1965,8 @@ export function registerCLIChatCommands(
 			);
 
 			if (result === deleteLabel) {
-				await copilotCLISessionService.deleteSession(id);
-				await copilotCliWorkspaceSession.deleteTrackedWorkspaceFolder(id);
+				await copilotCLISessionService.deleteSession(sessionId);
+				await copilotCliWorkspaceSession.deleteTrackedWorkspaceFolder(sessionId);
 
 				if (worktreePath) {
 					try {
@@ -1992,7 +1993,6 @@ export function registerCLIChatCommands(
 		if (!sessionItem?.resource) {
 			return;
 		}
-		const id = SessionIdForCLI.parse(sessionItem.resource);
 		const newTitle = await vscode.window.showInputBox({
 			prompt: l10n.t('New agent session title'),
 			value: sessionItem.label,
@@ -2006,7 +2006,9 @@ export function registerCLIChatCommands(
 		if (newTitle) {
 			const trimmedTitle = newTitle.trim();
 			if (trimmedTitle) {
-				await copilotCLISessionService.renameSession(id, trimmedTitle);
+				const id = SessionIdForCLI.parse(sessionItem.resource);
+				const sessionId = copilotcliSessionItemProvider.untitledSessionIdMapping.get(id) ?? id;
+				await copilotCLISessionService.renameSession(sessionId, trimmedTitle);
 				copilotcliSessionItemProvider.notifySessionsChange();
 			}
 		}
@@ -2027,7 +2029,8 @@ export function registerCLIChatCommands(
 		}
 
 		const id = SessionIdForCLI.parse(sessionItem.resource);
-		const folderInfo = await folderRepositoryManager.getFolderRepository(id, undefined, CancellationToken.None);
+		const sessionId = copilotcliSessionItemProvider.untitledSessionIdMapping.get(id) ?? id;
+		const folderInfo = await folderRepositoryManager.getFolderRepository(sessionId, undefined, CancellationToken.None);
 		const folder = folderInfo.worktree ?? folderInfo.repository ?? folderInfo.folder;
 		if (folder) {
 			await vscode.commands.executeCommand('vscode.openFolder', folder, { forceNewWindow: true });
@@ -2039,7 +2042,8 @@ export function registerCLIChatCommands(
 		}
 
 		const id = SessionIdForCLI.parse(sessionItem.resource);
-		const folderInfo = await folderRepositoryManager.getFolderRepository(id, undefined, CancellationToken.None);
+		const sessionId = copilotcliSessionItemProvider.untitledSessionIdMapping.get(id) ?? id;
+		const folderInfo = await folderRepositoryManager.getFolderRepository(sessionId, undefined, CancellationToken.None);
 		const folder = folderInfo.worktree ?? folderInfo.repository ?? folderInfo.folder;
 		if (folder) {
 			vscode.window.createTerminal({ cwd: folder }).show();
@@ -2051,7 +2055,8 @@ export function registerCLIChatCommands(
 		}
 
 		const id = SessionIdForCLI.parse(sessionItem.resource);
-		const worktreeProperties = await copilotCLIWorktreeManagerService.getWorktreeProperties(id);
+		const sessionId = copilotcliSessionItemProvider.untitledSessionIdMapping.get(id) ?? id;
+		const worktreeProperties = await copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
 		if (worktreeProperties?.branchName) {
 			await vscode.env.clipboard.writeText(worktreeProperties.branchName);
 		}

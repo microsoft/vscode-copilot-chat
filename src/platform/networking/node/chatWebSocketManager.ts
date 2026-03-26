@@ -27,7 +27,7 @@ export interface IChatWebSocketManager {
 	 * The connection is scoped to a single turn, reused across tool call rounds
 	 * within the same turn, but closed when a new turn starts.
 	 */
-	getOrCreateConnection(conversationId: string, turnId: string, headers: Record<string, string>): Promise<IChatWebSocketConnection>;
+	getOrCreateConnection(conversationId: string, turnId: string, headers: Record<string, string>): IChatWebSocketConnection;
 
 	/**
 	 * Returns true if there is an open WebSocket connection for the given
@@ -54,7 +54,7 @@ export interface IChatWebSocketManager {
  */
 export class NullChatWebSocketManager implements IChatWebSocketManager {
 	declare readonly _serviceBrand: undefined;
-	async getOrCreateConnection(_conversationId: string, _turnId: string, _headers?: Record<string, string>): Promise<IChatWebSocketConnection> {
+	getOrCreateConnection(_conversationId: string, _turnId: string, _headers?: Record<string, string>): IChatWebSocketConnection {
 		throw new Error('WebSocket not available');
 	}
 	hasActiveConnection(_conversationId: string, _turnId: string): boolean { return false; }
@@ -67,6 +67,9 @@ export interface IChatWebSocketRequestOptions {
 }
 
 export interface IChatWebSocketConnection extends IDisposable {
+	/** Opens the WebSocket connection. Must be called before sendRequest. */
+	connect(): Promise<void>;
+
 	/** Sends a response.create request and returns an async iterable of response events. */
 	sendRequest(
 		body: IEndpointBody,
@@ -85,6 +88,12 @@ export interface IChatWebSocketConnection extends IDisposable {
 
 	/** Response status text from the WebSocket connection handshake. */
 	readonly responseStatusText: string | undefined;
+
+	/** The request ID from response headers or the outgoing X-Request-Id header. */
+	readonly requestId: string;
+
+	/** The GitHub request ID from response headers. */
+	readonly gitHubRequestId: string;
 
 	/**
 	 * The response.id from the last completed response on this connection.
@@ -118,7 +127,7 @@ export class ChatWebSocketManager extends Disposable implements IChatWebSocketMa
 		super();
 	}
 
-	async getOrCreateConnection(conversationId: string, turnId: string, headers: Record<string, string>): Promise<IChatWebSocketConnection> {
+	getOrCreateConnection(conversationId: string, turnId: string, headers: Record<string, string>): IChatWebSocketConnection {
 		const existing = this._connections.get(conversationId);
 
 		// Reuse the connection if it's for the same turn and still open.
@@ -145,7 +154,6 @@ export class ChatWebSocketManager extends Disposable implements IChatWebSocketMa
 			}
 		});
 
-		await connection.connect();
 		return connection;
 	}
 
@@ -257,11 +265,11 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 		return this._responseStatusText;
 	}
 
-	private get _requestId(): string {
+	get requestId(): string {
 		return this._responseHeaders.get('x-request-id') || Object.entries(this._headers).find(([k]) => k.toLowerCase() === 'x-request-id')?.[1] || '';
 	}
 
-	private get _gitHubRequestId(): string {
+	get gitHubRequestId(): string {
 		return this._responseHeaders.get('x-github-request-id') || '';
 	}
 
@@ -295,8 +303,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 				ChatWebSocketTelemetrySender.sendConnectedTelemetry(this._telemetryService, {
 					conversationId: this._conversationId,
 					turnId: this._turnId,
-					requestId: this._requestId,
-					gitHubRequestId: this._gitHubRequestId,
+					requestId: this.requestId,
+					gitHubRequestId: this.gitHubRequestId,
 					connectDurationMs,
 				});
 				resolve();
@@ -314,8 +322,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 				ChatWebSocketTelemetrySender.sendConnectErrorTelemetry(this._telemetryService, {
 					conversationId: this._conversationId,
 					turnId: this._turnId,
-					requestId: this._requestId,
-					gitHubRequestId: this._gitHubRequestId,
+					requestId: this.requestId,
+					gitHubRequestId: this.gitHubRequestId,
 					error: errorMessage,
 					connectDurationMs,
 					responseStatusCode: this._responseStatusCode,
@@ -327,14 +335,17 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 			const onClose = (event: CloseEvent) => {
 				cleanup();
 				this._state = ConnectionState.Closed;
+				this._responseHeaders = connection.responseHeaders;
+				this._responseStatusCode = connection.responseStatusCode;
+				this._responseStatusText = connection.responseStatusText;
 				const connectDurationMs = Date.now() - (this._connectStartTime ?? Date.now());
 				const closeCodeDescription = wsCloseCodeToString(event.code);
 				this._logService.debug(`[ChatWebSocketManager] Connection closed during setup for conversation ${this._conversationId} turn ${this._turnId} (code: ${event.code} ${closeCodeDescription}, reason: ${event.reason || '<empty>'}, wasClean: ${event.wasClean})`);
 				ChatWebSocketTelemetrySender.sendCloseDuringSetupTelemetry(this._telemetryService, {
 					conversationId: this._conversationId,
 					turnId: this._turnId,
-					requestId: this._requestId,
-					gitHubRequestId: this._gitHubRequestId,
+					requestId: this.requestId,
+					gitHubRequestId: this.gitHubRequestId,
 					closeCode: event.code,
 					closeReason: closeCodeDescription,
 					closeEventReason: event.reason,
@@ -376,8 +387,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 				ChatWebSocketTelemetrySender.sendMessageParseErrorTelemetry(this._telemetryService, {
 					conversationId: this._conversationId,
 					turnId: this._turnId,
-					requestId: this._requestId,
-					gitHubRequestId: this._gitHubRequestId,
+					requestId: this.requestId,
+					gitHubRequestId: this.gitHubRequestId,
 					error: parseErrorMessage,
 					connectionDurationMs,
 					totalSentMessageCount: this._totalSentMessageCount,
@@ -404,8 +415,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 			ChatWebSocketTelemetrySender.sendCloseTelemetry(this._telemetryService, {
 				conversationId: this._conversationId,
 				turnId: this._turnId,
-				requestId: this._requestId,
-				gitHubRequestId: this._gitHubRequestId,
+				requestId: this.requestId,
+				gitHubRequestId: this.gitHubRequestId,
 				closeCode: event.code,
 				closeReason: closeCodeDescription,
 				closeEventReason: event.reason,
@@ -427,8 +438,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 			ChatWebSocketTelemetrySender.sendErrorTelemetry(this._telemetryService, {
 				conversationId: this._conversationId,
 				turnId: this._turnId,
-				requestId: this._requestId,
-				gitHubRequestId: this._gitHubRequestId,
+				requestId: this.requestId,
+				gitHubRequestId: this.gitHubRequestId,
 				error: errorMessage,
 				connectionDurationMs,
 				totalSentMessageCount: this._totalSentMessageCount,
@@ -475,8 +486,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 			ChatWebSocketTelemetrySender.sendRequestOutcomeTelemetry(this._telemetryService, {
 				conversationId: this._conversationId,
 				turnId: this._turnId,
-				requestId: this._requestId,
-				gitHubRequestId: this._gitHubRequestId,
+				requestId: this.requestId,
+				gitHubRequestId: this.gitHubRequestId,
 				requestOutcome: outcome,
 				statefulMarkerMatched,
 				previousResponseIdUnset,
@@ -524,8 +535,8 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 		ChatWebSocketTelemetrySender.sendRequestSentTelemetry(this._telemetryService, {
 			conversationId: this._conversationId,
 			turnId: this._turnId,
-			requestId: this._requestId,
-			gitHubRequestId: this._gitHubRequestId,
+			requestId: this.requestId,
+			gitHubRequestId: this.gitHubRequestId,
 			statefulMarkerMatched,
 			previousResponseIdUnset,
 			hasCompactionData,
