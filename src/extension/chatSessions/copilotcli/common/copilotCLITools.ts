@@ -9,6 +9,7 @@ import type { CancellationToken, ChatParticipantToolToken, ChatPromptReference, 
 import { ILogger } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { isLocation } from '../../../../util/common/types';
+import { findLast } from '../../../../util/vs/base/common/arraysFind';
 import { decodeBase64 } from '../../../../util/vs/base/common/buffer';
 import { Emitter } from '../../../../util/vs/base/common/event';
 import { ResourceMap } from '../../../../util/vs/base/common/map';
@@ -21,6 +22,7 @@ import { ToolName } from '../../../tools/common/toolNames';
 import { ICopilotTool } from '../../../tools/common/toolsRegistry';
 import { IOnWillInvokeToolEvent, IToolsService, IToolValidationResult } from '../../../tools/common/toolsService';
 import { formatUriForFileWidget } from '../../../tools/common/toolUtils';
+import { StoredModeInstructions } from '../../common/chatSessionMetadataStore';
 import { extractChatPromptReferences, getFolderAttachmentPath } from './copilotCLIPrompt';
 import { IChatDelegationSummaryService } from './delegationSummaryService';
 
@@ -512,16 +514,22 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
 	return { cleanedContent: content };
 }
 
+export interface RequestIdDetails {
+	readonly requestId: string;
+	readonly toolIdEditMap: Record<string, string>;
+	readonly modeInstructions?: StoredModeInstructions;
+}
+
 /**
  * Build chat history from SDK events for VS Code chat session
  * Converts SDKEvents into ChatRequestTurn2 and ChatResponseTurn2 objects
  */
-export function buildChatHistoryFromEvents(sessionId: string, modelId: string | undefined, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger, workingDirectory?: URI): (ChatRequestTurn2 | ChatResponseTurn2)[] {
+export function buildChatHistoryFromEvents(sessionId: string, modelId: string | undefined, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => RequestIdDetails | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger, workingDirectory?: URI, defaultModeInstructionsForLastRequest?: StoredModeInstructions): (ChatRequestTurn2 | ChatResponseTurn2)[] {
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
-	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
+	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
 
-	let details: { requestId: string; toolIdEditMap: Record<string, string> } | undefined;
+	let details: RequestIdDetails | undefined;
 	let isFirstUserMessage = true;
 	const currentAssistantMessage: { chunks: string[] } = { chunks: [] };
 	const processedMessages = new Set<string>();
@@ -547,7 +555,7 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 			processAssistantMessage(content);
 		}
 	}
-
+	const lastUserMessageId = findLast(events, event => event.type === 'user.message')?.id;
 	for (const event of events) {
 		if (event.type !== 'assistant.message') {
 			flushPendingAssistantMessage();
@@ -635,13 +643,33 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 					references.push(info.reference);
 				}
 				isFirstUserMessage = false;
-				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId ?? event.id, modelId));
+				let modeInstructions2 = details?.modeInstructions ? {
+					uri: details.modeInstructions.uri ? Uri.parse(details.modeInstructions.uri) : undefined,
+					name: details.modeInstructions.name,
+					content: details.modeInstructions.content,
+					metadata: details.modeInstructions.metadata,
+					isBuiltin: details.modeInstructions.isBuiltin,
+				} : undefined;
+
+				if (lastUserMessageId && event.id === lastUserMessageId && defaultModeInstructionsForLastRequest && !modeInstructions2) {
+					modeInstructions2 = modeInstructions2 ?? {
+						uri: defaultModeInstructionsForLastRequest.uri ? Uri.parse(defaultModeInstructionsForLastRequest.uri) : undefined,
+						name: defaultModeInstructionsForLastRequest.name,
+						content: defaultModeInstructionsForLastRequest.content,
+						metadata: defaultModeInstructionsForLastRequest.metadata,
+						isBuiltin: defaultModeInstructionsForLastRequest.isBuiltin,
+					};
+				}
+				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId ?? event.id, modelId, modeInstructions2));
 				break;
 			}
 			case 'assistant.message_delta': {
 				if (typeof event.data.deltaContent === 'string') {
-					processedMessages.add(event.data.messageId);
-					currentAssistantMessage.chunks.push(event.data.deltaContent);
+					// Skip sub-agent markdown — it will be captured in the subagent tool's result
+					if (!event.data.parentToolCallId) {
+						processedMessages.add(event.data.messageId);
+						currentAssistantMessage.chunks.push(event.data.deltaContent);
+					}
 				}
 				break;
 			}
@@ -650,7 +678,8 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 				break;
 			}
 			case 'assistant.message': {
-				if (event.data.content && !processedMessages.has(event.data.messageId)) {
+				// Skip sub-agent markdown — it will be captured in the subagent tool's result
+				if (event.data.content && !processedMessages.has(event.data.messageId) && !event.data.parentToolCallId) {
 					processAssistantMessage(event.data.content);
 				}
 				break;
@@ -667,7 +696,7 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 				if (responsePart && toolCall && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
 					const editId = details?.toolIdEditMap ? details.toolIdEditMap[toolCall.toolCallId] : undefined;
 					const editedUris = getAffectedUrisForEditTool(toolCall);
-					if (isCopilotCliEditToolCall(toolCall) && editId && editedUris.length > 0) {
+					if (!(responsePart instanceof ChatResponseMarkdownPart) && isCopilotCliEditToolCall(toolCall) && editId && editedUris.length > 0) {
 						responsePart.presentation = 'hidden';
 						currentResponseParts.push(responsePart);
 						for (const uri of editedUris) {
@@ -790,7 +819,7 @@ function convertMcpContentToToolInvocationData(result: ToolExecutionCompleteEven
 	return output;
 }
 
-export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart | undefined {
 	const toolInvocation = createCopilotCLIToolInvocation(event.data as ToolCall, undefined, workingDirectory);
 	if (toolInvocation) {
 		if (toolInvocation instanceof ChatToolInvocationPart && event.data.parentToolCallId) {
@@ -802,7 +831,7 @@ export function processToolExecutionStart(event: ToolExecutionStartEvent, pendin
 	return toolInvocation;
 }
 
-export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>, logger: ILogger, workingDirectory?: URI): [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined] | undefined {
+export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>, logger: ILogger, workingDirectory?: URI): [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined] | undefined {
 	const invocation = pendingToolInvocations.get(event.data.toolCallId);
 	pendingToolInvocations.delete(event.data.toolCallId);
 
@@ -818,7 +847,16 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 		const toolCall = invocation[1];
 		if (Object.hasOwn(ToolFriendlyNameAndHandlers, toolCall.toolName)) {
 			const [, , postFormatter] = ToolFriendlyNameAndHandlers[toolCall.toolName];
-			(postFormatter as PostInvocationFormatter)(invocation[0], toolCall, event.data, workingDirectory);
+			try {
+				(postFormatter as PostInvocationFormatter)(invocation[0], toolCall, event.data, workingDirectory);
+			} catch (err) {
+				logger.error(err, `Failed to format tool invocation completion for tool: ${toolCall.toolName}`);
+				try {
+					genericToolInvocationCompleted(invocation[0], toolCall, event.data);
+				} catch {
+					// ignore
+				}
+			}
 		} else if (toolCall.mcpServerName && toolCall.mcpToolName) {
 			const toolCall = invocation[1];
 			// Use tool arguments as input, formatted as JSON
@@ -843,7 +881,7 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 export function createCopilotCLIToolInvocation(data: {
 	toolCallId: string; toolName: string; arguments?: unknown; mcpServerName?: string | undefined;
 	mcpToolName?: string | undefined;
-}, editId?: string, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+}, editId?: string, workingDirectory?: URI, logger?: ILogger): ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart | undefined {
 	if (!Object.hasOwn(ToolFriendlyNameAndHandlers, data.toolName)) {
 		const mcpServer = l10n.t('MCP Server');
 		const toolName = data.mcpServerName && data.mcpToolName ? `${data.mcpServerName}, ${data.mcpToolName} (${mcpServer})` : data.toolName;
@@ -874,13 +912,25 @@ export function createCopilotCLIToolInvocation(data: {
 		// Its a WIP, no clear way to render in CLI either, hence decided to hide in VS Code.
 		return undefined;
 	}
+	if (toolCall.toolName === 'task_complete') {
+		if (toolCall.arguments.summary) {
+			const markdownContent = new MarkdownString();
+			markdownContent.appendMarkdown(toolCall.arguments.summary);
+			return new ChatResponseMarkdownPart(markdownContent);
+		}
+		return undefined;
+	}
 
 	const [friendlyToolName, formatter] = ToolFriendlyNameAndHandlers[toolCall.toolName];
 	const invocation = new ChatToolInvocationPart(friendlyToolName ?? toolCall.toolName ?? 'unknown', toolCall.toolCallId ?? '');
 	invocation.isConfirmed = false;
 	invocation.isComplete = false;
 
-	(formatter as Formatter)(invocation, toolCall, editId, workingDirectory);
+	try {
+		(formatter as Formatter)(invocation, toolCall, editId, workingDirectory);
+	} catch (err) {
+		logger?.error(err, `Failed to format tool invocation for tool: ${toolCall.toolName}`);
+	}
 	return invocation;
 }
 

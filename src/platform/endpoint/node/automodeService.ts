@@ -14,6 +14,7 @@ import { IAuthenticationService } from '../../authentication/common/authenticati
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
+import { isAbortError } from '../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../networking/common/networking';
 import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
@@ -36,6 +37,7 @@ interface AutoModelCacheEntry {
 	lastRoutedPrompt?: string;
 	routerFallbackReason?: string;
 	turnCount: number;
+	needsReEval: boolean;
 }
 
 class AutoModeTokenBank extends Disposable {
@@ -150,6 +152,13 @@ export interface IAutomodeService {
 	readonly _serviceBrand: undefined;
 
 	resolveAutoModeEndpoint(chatRequest: ChatRequest | undefined, knownEndpoints: IChatEndpoint[]): Promise<IChatEndpoint>;
+
+	/**
+	 * Marks the router cache for this conversation as needing re-evaluation.
+	 * The next call to {@link resolveAutoModeEndpoint} will re-run the router
+	 * instead of returning the cached endpoint.
+	 */
+	invalidateRouterCache(chatRequest: ChatRequest): void;
 }
 
 export class AutomodeService extends Disposable implements IAutomodeService {
@@ -198,6 +207,15 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 	 * Resolve an auto mode endpoint
 	 * Optionally uses a router model to select the best endpoint based on the prompt.
 	 */
+	invalidateRouterCache(chatRequest: ChatRequest): void {
+		const conversationId = chatRequest.sessionResource?.toString() ?? chatRequest.sessionId ?? 'unknown';
+		const entry = this._autoModelCache.get(conversationId);
+		if (entry) {
+			entry.needsReEval = true;
+			this._logService.trace(`[AutomodeService] Router cache invalidated for conversation ${conversationId}`);
+		}
+	}
+
 	async resolveAutoModeEndpoint(chatRequest: ChatRequest | undefined, knownEndpoints: IChatEndpoint[]): Promise<IChatEndpoint> {
 		if (!knownEndpoints.length) {
 			throw new Error('No auto mode endpoints provided.');
@@ -208,7 +226,17 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		const tokenBank = this._acquireTokenBank(entry, chatRequest?.location, conversationId);
 		const token = await tokenBank.getToken();
 
-		const routerResult = await this._tryRouterSelection(chatRequest, conversationId, entry, token, knownEndpoints);
+		// After the first turn, skip the router unless explicitly invalidated
+		// (e.g. after conversation compaction/summarization). Token refresh and
+		// default model selection still run so available-model changes are respected.
+		const skipRouter = entry !== undefined && entry.turnCount > 0 && !entry.needsReEval;
+		if (entry?.needsReEval) {
+			entry.needsReEval = false;
+		}
+
+		const routerResult = skipRouter
+			? { lastRoutedPrompt: chatRequest?.prompt?.trim() ?? entry?.lastRoutedPrompt }
+			: await this._tryRouterSelection(chatRequest, conversationId, entry, token, knownEndpoints);
 		let selectedModel = routerResult.selectedModel;
 		const lastRoutedPrompt = routerResult.lastRoutedPrompt;
 		const routerFallbackReason = routerResult.fallbackReason;
@@ -220,7 +248,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 					"automode.routerFallback" : {
 						"owner": "lramos15",
 						"comment": "Reports when the auto mode router is skipped or fails and falls back to default model selection",
-						"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The reason the router was skipped or failed (hasImage, noMatchingEndpoint, routerError)" }
+						"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The reason the router was skipped or failed (hasImage, noMatchingEndpoint, routerError, routerTimeout)" }
 					}
 				*/
 				this._telemetryService.sendMSFTTelemetryEvent('automode.routerFallback', {
@@ -244,7 +272,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			lastSessionToken: token.session_token,
 			lastRoutedPrompt,
 			routerFallbackReason,
-			turnCount: (entry?.turnCount ?? 0) + (isNewTurn ? 1 : 0)
+			turnCount: (entry?.turnCount ?? 0) + (isNewTurn ? 1 : 0),
+			needsReEval: false,
 		});
 		return autoEndpoint;
 	}
@@ -314,8 +343,10 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			}
 			return { selectedModel, lastRoutedPrompt: prompt };
 		} catch (e) {
-			this._logService.error(`Failed to get routed model for conversation ${conversationId}:`, (e as Error).message);
-			return { lastRoutedPrompt: prompt, fallbackReason: 'routerError' };
+			const isTimeout = isAbortError(e);
+			const fallbackReason = isTimeout ? 'routerTimeout' : 'routerError';
+			this._logService.error(`Failed to get routed model for conversation ${conversationId} (${fallbackReason}):`, (e as Error).message);
+			return { lastRoutedPrompt: prompt, fallbackReason };
 		}
 	}
 

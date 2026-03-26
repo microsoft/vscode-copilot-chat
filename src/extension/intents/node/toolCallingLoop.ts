@@ -27,7 +27,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { computePromptTokenDetails } from '../../../platform/tokenizer/node/promptTokenDetails';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
-import { timeout } from '../../../util/vs/base/common/async';
+import { DeferredPromise, timeout } from '../../../util/vs/base/common/async';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -48,7 +48,7 @@ import { ResponseProcessorContext } from '../../prompt/node/responseProcessorCon
 import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
 import { ToolFailureEncountered, ToolResultMetadata } from '../../prompts/node/panel/toolCalling';
 import { ToolName } from '../../tools/common/toolNames';
-import { ToolCallCancelledError } from '../../tools/common/toolsService';
+import { IToolsService, ToolCallCancelledError } from '../../tools/common/toolsService';
 import { ReadFileParams } from '../../tools/node/readFileTool';
 import { isHookAbortError, processHookResults } from './hookResultProcessor';
 import { applyPromptOverrides } from './promptOverride';
@@ -292,10 +292,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				onSuccess: (output) => {
 					if (typeof output === 'object' && output !== null) {
 						const hookOutput = output as StopHookOutput;
-						this._logService.trace(`[ToolCallingLoop] Checking hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
-						if (hookOutput.decision === 'block' && hookOutput.reason) {
-							this._logService.trace(`[ToolCallingLoop] Stop hook blocked: ${hookOutput.reason}`);
-							blockingReasons.add(hookOutput.reason);
+						const specific = hookOutput.hookSpecificOutput;
+						this._logService.trace(`[ToolCallingLoop] Checking hook output: decision=${specific?.decision}, reason=${specific?.reason}`);
+						if (specific?.decision === 'block' && specific.reason) {
+							this._logService.trace(`[ToolCallingLoop] Stop hook blocked: ${specific.reason}`);
+							blockingReasons.add(specific.reason);
 						}
 					}
 				},
@@ -346,6 +347,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 	private taskCompleted = false;
 	private autopilotStopHookActive = false;
+	private autopilotProgressDeferred: DeferredPromise<void> | undefined;
 
 	/**
 	 * Autopilot stop hook — the model needs to call `task_complete` to signal it's done.
@@ -376,7 +378,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		this.autopilotIterationCount++;
 		return 'You have not yet marked the task as complete using the task_complete tool. ' +
-			'You MUST call task_complete when done — whether the task involved code changes, answering a question, or any other interaction.\n\n' +
+			'You must call task_complete when done — whether the task involved code changes, answering a question, or any other interaction.\n\n' +
 			'Do NOT repeat or restate your previous response. Pick up where you left off.\n\n' +
 			'If you were planning, stop planning and start implementing. ' +
 			'You are not done until you have fully completed the task.\n\n' +
@@ -387,6 +389,53 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			'When you ARE done, first provide a brief text summary of what was accomplished, then call task_complete. ' +
 			'Both the summary message and the tool call are required.\n\n' +
 			'Keep working autonomously until the task is truly finished, then call task_complete.';
+	}
+
+	/**
+	 * Shows a progress spinner in the chat stream while autopilot continues.
+	 * The spinner resolves to the past-tense message when {@link resolveAutopilotProgress} is called.
+	 */
+	private showAutopilotProgress(outputStream: ChatResponseStream | undefined, message: string, pastTenseMessage: string): void {
+		this.resolveAutopilotProgress();
+		const deferred = new DeferredPromise<void>();
+		this.autopilotProgressDeferred = deferred;
+		outputStream?.progress(message, async () => {
+			await deferred.p;
+			return pastTenseMessage;
+		});
+	}
+
+	/**
+	 * Resolves any pending autopilot progress spinner, transitioning it to its past-tense message.
+	 */
+	private resolveAutopilotProgress(): void {
+		if (this.autopilotProgressDeferred) {
+			this.autopilotProgressDeferred.complete(undefined);
+			this.autopilotProgressDeferred = undefined;
+		}
+	}
+
+	/**
+	 * Ensures the `task_complete` tool is present in the available tools when running in
+	 * autopilot mode. If it's missing (e.g. filtered out by the tool picker), it's resolved
+	 * from the tools service and appended so the model can always signal completion.
+	 */
+	protected ensureAutopilotTools(availableTools: LanguageModelToolInformation[]): LanguageModelToolInformation[] {
+		if (this.options.request.permissionLevel !== 'autopilot') {
+			return availableTools;
+		}
+		if (availableTools.some(t => t.name === ToolCallingLoop.TASK_COMPLETE_TOOL_NAME)) {
+			return availableTools;
+		}
+		const taskCompleteTool = this._instantiationService.invokeFunction(
+			accessor => accessor.get(IToolsService).getTool(ToolCallingLoop.TASK_COMPLETE_TOOL_NAME)
+		);
+		if (taskCompleteTool) {
+			this._logService.info('[ToolCallingLoop] Added task_complete tool for autopilot mode');
+			return [...availableTools, taskCompleteTool];
+		}
+		this._logService.warn('[ToolCallingLoop] task_complete tool not found — autopilot completion may not work');
+		return availableTools;
 	}
 
 	/**
@@ -518,10 +567,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				onSuccess: (output) => {
 					if (typeof output === 'object' && output !== null) {
 						const hookOutput = output as SubagentStopHookOutput;
-						this._logService.trace(`[ToolCallingLoop] Checking SubagentStop hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
-						if (hookOutput.decision === 'block' && hookOutput.reason) {
-							this._logService.trace(`[ToolCallingLoop] SubagentStop hook blocked: ${hookOutput.reason}`);
-							blockingReasons.add(hookOutput.reason);
+						const specific = hookOutput.hookSpecificOutput;
+						this._logService.trace(`[ToolCallingLoop] Checking SubagentStop hook output: decision=${specific?.decision}, reason=${specific?.reason}`);
+						if (specific?.decision === 'block' && specific.reason) {
+							this._logService.trace(`[ToolCallingLoop] SubagentStop hook blocked: ${specific.reason}`);
+							blockingReasons.add(specific.reason);
 						}
 					}
 				},
@@ -787,6 +837,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				const permLevel = this.options.request.permissionLevel;
 				if (permLevel === 'autopilot' && this.options.toolCallLimit < 200) {
 					this.options.toolCallLimit = Math.min(Math.round(this.options.toolCallLimit * 3 / 2), 200);
+					this.showAutopilotProgress(outputStream, l10n.t('Extending tool call limit with Autopilot...'), l10n.t('Extended tool call limit with Autopilot'));
 				} else {
 					lastResult = this.hitToolCallLimit(outputStream, lastResult);
 					break;
@@ -804,6 +855,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			try {
 				const turnId = String(i);
 				this._sessionTranscriptService.logAssistantTurnStart(sessionId, turnId);
+				this.resolveAutopilotProgress();
 				const result = await this.runOne(outputStream, i, token);
 				if (lastRequestMessagesStartingIndexForRun === undefined) {
 					lastRequestMessagesStartingIndexForRun = result.lastRequestMessages.length - 1;
@@ -833,6 +885,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					if (result.response.type !== ChatFetchResponseType.Success && this.shouldAutoRetry(result.response)) {
 						this.autopilotRetryCount++;
 						this._logService.info(`[ToolCallingLoop] Auto-retrying on error (attempt ${this.autopilotRetryCount}/${ToolCallingLoop.MAX_AUTOPILOT_RETRIES}): ${result.response.type}`);
+						this.showAutopilotProgress(outputStream, l10n.t('Retrying with Autopilot...'), l10n.t('Retried with Autopilot'));
 						await timeout(1000, token);
 						continue;
 					}
@@ -881,6 +934,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						const autopilotContinue = this.shouldAutopilotContinue(result);
 						if (autopilotContinue) {
 							this._logService.info(`[ToolCallingLoop] Autopilot internal stop hook: continuing because task may not be complete`);
+							this.showAutopilotProgress(outputStream, l10n.t('Continuing with Autopilot...'), l10n.t('Continued with Autopilot'));
 							this.stopHookReason = autopilotContinue;
 							result.round.hookContext = formatHookContext([autopilotContinue]);
 							this.autopilotStopHookActive = true;
@@ -898,6 +952,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				throw e;
 			}
 		}
+
+		this.resolveAutopilotProgress();
 
 		this.emitReadFileTrajectories().catch(err => {
 			this._logService.error('Error emitting read file trajectories', err);
@@ -1058,6 +1114,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			effectiveBuildPromptResult = { ...buildPromptResult, messages: overrideResult.messages };
 			availableTools = overrideResult.tools;
 		}
+
+		// Ensure task_complete is available in autopilot mode so the model can signal completion
+		availableTools = this.ensureAutopilotTools(availableTools);
 
 		const isToolInputFailure = effectiveBuildPromptResult.metadata.get(ToolFailureEncountered);
 		const conversationSummary = effectiveBuildPromptResult.metadata.get(SummarizedConversationHistoryMetadata);
@@ -1408,7 +1467,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				if (next.role === Raw.ChatRole.Assistant) {
 					break;
 				}
-				if (next.role === Raw.ChatRole.Tool && next.toolCallId) {
+				if (next.role === Raw.ChatRole.Tool && next.toolCallId !== undefined) {
 					toolResultIds.add(next.toolCallId);
 				}
 			}

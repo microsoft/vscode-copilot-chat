@@ -75,13 +75,15 @@ export interface ICopilotCLISessionService {
 	getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
 
 	// SDK session management
+	createNewSessionId(): string;
+	isNewSessionId(sessionId: string): boolean;
 	deleteSession(sessionId: string): Promise<void>;
 
 	// Session rename
 	renameSession(sessionId: string, title: string): Promise<void>;
 
 	// Session wrapper tracking
-	getSession(sessionId: string, options: { model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
+	getSession(options: { sessionId: string; model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
 	createSession(options: { model?: string; workspaceInfo: IWorkspaceInfo; agent?: SweCustomAgent; sessionId?: string }, token: CancellationToken): Promise<IReference<ICopilotCLISession>>;
 	forkSession(sessionId: string, requestId: string | undefined, options: { workspaceInfo: IWorkspaceInfo }, token: CancellationToken): Promise<string>;
 	tryGetPartialSesionHistory(sessionId: string): Promise<readonly (ChatRequestTurn2 | ChatResponseTurn2)[] | undefined>;
@@ -120,7 +122,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	private readonly _onDidChangeSessionsThrottler = this._register(new ThrottledDelayer<void>(500));
 	private readonly _cachedSessionItems = new Map<string, ICopilotCLISessionItem>();
 	private readonly _sessionsBeingCreatedViaFork = new Set<string>();
-
+	private readonly _newSessionIds = new Set<string>();
 	/** Bridge processor that forwards SDK native OTel spans to the debug panel. */
 	private _bridgeProcessor: CopilotCliBridgeSpanProcessor | undefined;
 	/** Whether we've attempted to install the bridge (only try once). */
@@ -155,11 +157,21 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				if (!process.env['COPILOT_OTEL_ENABLED']) {
 					process.env['COPILOT_OTEL_ENABLED'] = 'true';
 				}
+				// Default content capture to 'true' for the debug panel. When user OTel
+				// is enabled, their captureContent setting overrides this default below.
+				// When user OTel is disabled, the default gives debug panel content.
+				// If the user explicitly set the env var, respect their choice.
+				if (!process.env['OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT']) {
+					process.env['OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT'] = 'true';
+				}
 				if (this._otelService.config.enabled) {
 					const otelEnv = deriveCopilotCliOTelEnv(this._otelService.config);
 					for (const [key, value] of Object.entries(otelEnv)) {
 						process.env[key] = value;
 					}
+					// When user OTel is enabled, their captureContent config takes
+					// precedence over the debug-panel default set above.
+					process.env['OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT'] = String(this._otelService.config.captureContent);
 				} else {
 					// User OTel disabled: ensure SDK doesn't export to any external collector.
 					// Use file exporter to /dev/null so the SDK creates OtelSessionTracker
@@ -193,6 +205,16 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 
 		this._onDidChangeSessionsThrottler.trigger(() => Promise.resolve(this._onDidChangeSessions.fire()));
+	}
+
+	public createNewSessionId(): string {
+		const sessionId = generateUuid();
+		this._newSessionIds.add(sessionId);
+		return sessionId;
+	}
+
+	public isNewSessionId(sessionId: string): boolean {
+		return this._newSessionIds.has(sessionId);
 	}
 
 	protected monitorSessionFiles() {
@@ -494,7 +516,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			const options = await this.createSessionsOptions({ model, workspaceInfo, mcpServers, agent, copilotUrl });
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 			const sdkSession = await sessionManager.createSession({ ...options.toSessionOptions(), sessionId });
-
+			this._newSessionIds.delete(sdkSession.sessionId);
 			// After the first session creation, the SDK's OTel TracerProvider is
 			// initialized. Install the bridge processor so SDK-native spans flow
 			// to the debug panel.
@@ -613,7 +635,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		return new CopilotCLISessionOptions({ ...options, customAgents, skillLocations }, this.logService);
 	}
 
-	public async getSession(sessionId: string, { model, workspaceInfo, readonly, agent }: { model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<RefCountedSession | undefined> {
+	public async getSession({ sessionId, model, workspaceInfo, readonly, agent }: { sessionId: string; model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<RefCountedSession | undefined> {
 		// https://github.com/microsoft/vscode/issues/276573
 		const lock = this.sessionMutexForGetSession.get(sessionId) ?? new Mutex();
 		this.sessionMutexForGetSession.set(sessionId, lock);
@@ -805,7 +827,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 		if (!firstUserMessage) {
 			try {
-				const session = await this.getSession(sessionId, { readonly: true, workspaceInfo: emptyWorkspaceInfo() }, token);
+				const session = await this.getSession({ sessionId, readonly: true, workspaceInfo: emptyWorkspaceInfo() }, token);
 				firstUserMessage = session?.object ? session.object.sdkSession.getEvents().find((msg: SessionEvent) => msg.type === 'user.message')?.data.content : undefined;
 				session?.dispose();
 			} catch (error) {

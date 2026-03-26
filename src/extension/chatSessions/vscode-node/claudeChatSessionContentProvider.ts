@@ -60,7 +60,6 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	private _lastUsedPermissionMode: PermissionMode = 'acceptEdits';
 
 	private readonly _controller: ClaudeChatSessionItemController;
-
 	constructor(
 		private readonly claudeAgentManager: ClaudeAgentManager,
 		@IClaudeCodeSessionService private readonly sessionService: IClaudeCodeSessionService,
@@ -203,12 +202,6 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
 		if (workspaceFolders.length > 0) {
 			return workspaceFolders[0];
-		}
-
-		// Empty workspace: try MRU
-		const lastUsed = this.folderRepositoryManager.getLastUsedFolderIdInUntitledWorkspace();
-		if (lastUsed) {
-			return URI.file(lastUsed);
 		}
 
 		const mru = await this.folderRepositoryManager.getFolderMRU();

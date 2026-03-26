@@ -224,6 +224,15 @@ suite('FindTextInFiles - absolute workspace folder path', () => {
 		expect(searchService.lastInclude![0]).toMatchObject({ pattern: 'src/**/*.ts' });
 		expect((searchService.lastInclude![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
 	});
+
+	test('passes caseInsensitive option to findTextInFiles2', async () => {
+		const searchService = setup();
+
+		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+		await tool.invoke({ input: { query: 'hello', includePattern: '*.ts' }, toolInvocationToken: null! }, CancellationToken.None);
+
+		expect(searchService.lastOptions?.caseInsensitive).toBe(true);
+	});
 });
 
 interface IRecordedSearchCall {
@@ -282,6 +291,7 @@ class TestSearchService extends AbstractSearchService {
 
 class RecordingSearchService extends AbstractSearchService {
 	public lastInclude: vscode.GlobPattern[] | undefined;
+	public lastOptions: vscode.FindTextInFilesOptions2 | undefined;
 
 	override async findTextInFiles(query: vscode.TextSearchQuery, options: vscode.FindTextInFilesOptions, progress: vscode.Progress<vscode.TextSearchResult>, token: vscode.CancellationToken): Promise<vscode.TextSearchComplete> {
 		throw new Error('Method not implemented.');
@@ -289,6 +299,7 @@ class RecordingSearchService extends AbstractSearchService {
 
 	override findTextInFiles2(query: vscode.TextSearchQuery2, options?: vscode.FindTextInFilesOptions2, token?: vscode.CancellationToken): vscode.FindTextInFilesResponse {
 		this.lastInclude = options?.include ? [...options.include] : undefined;
+		this.lastOptions = options;
 		return {
 			complete: Promise.resolve({}),
 			results: (async function* () { })()

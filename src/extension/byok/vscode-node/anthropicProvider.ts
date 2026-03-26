@@ -45,7 +45,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 	}
 
 	private _getThinkingBudget(modelId: string, maxOutputTokens: number): number | undefined {
-		const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._experimentationService);
+		const configuredBudget = this._configurationService.getConfig(ConfigKey.AnthropicThinkingBudget);
 		if (!configuredBudget || configuredBudget === 0) {
 			return undefined;
 		}

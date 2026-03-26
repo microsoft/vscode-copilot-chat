@@ -20,8 +20,9 @@ import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { basename } from '../../../../util/vs/base/common/resources';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { IChatCustomAgentsService } from '../../common/chatCustomAgentsService';
+import { IChatPromptFileService } from '../../common/chatPromptFileService';
 import { getWorkingDirectory, IWorkspaceInfo } from '../../common/workspaceInfo';
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
@@ -29,8 +30,6 @@ import { ensureRipgrepShim } from './ripgrepShim';
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 const COPILOT_CLI_REQUEST_MAP_KEY = 'github.copilot.cli.requestMap';
-// Store last used Agent per workspace.
-const COPILOT_CLI_AGENT_MEMENTO_KEY = 'github.copilot.cli.customAgent';
 // Store last used Agent for a Session.
 const COPILOT_CLI_SESSION_AGENTS_MEMENTO_KEY = 'github.copilot.cli.sessionAgents';
 /**
@@ -242,11 +241,8 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 export interface ICopilotCLIAgents {
 	readonly _serviceBrand: undefined;
 	readonly onDidChangeAgents: Event<void>;
-	getDefaultAgent(): Promise<string>;
 	resolveAgent(agentId: string): Promise<SweCustomAgent | undefined>;
-	setDefaultAgent(agent: string | undefined): Promise<void>;
 	getAgents(): Promise<Readonly<SweCustomAgent>[]>;
-	trackSessionAgent(sessionId: string, agent: string | undefined): Promise<void>;
 	getSessionAgent(sessionId: string): Promise<string | undefined>;
 }
 
@@ -259,7 +255,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	private readonly _onDidChangeAgents = this._register(new Emitter<void>());
 	readonly onDidChangeAgents: Event<void> = this._onDidChangeAgents.event;
 	constructor(
-		@IChatCustomAgentsService private readonly chatCustomAgentsService: IChatCustomAgentsService,
+		@IChatPromptFileService private readonly chatPromptFileService: IChatPromptFileService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
@@ -267,7 +263,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	) {
 		super();
 		void this.getAgents();
-		this._register(this.chatCustomAgentsService.onDidChangeCustomAgents(() => {
+		this._register(this.chatPromptFileService.onDidChangeCustomAgents(() => {
 			this._refreshAgents();
 		}));
 		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => {
@@ -315,22 +311,12 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		return agents.find(agent => agent.name.toLowerCase() === agentId)?.name;
 	}
 
-	async getDefaultAgent(): Promise<string> {
-		const agentId = this.extensionContext.workspaceState.get<string>(COPILOT_CLI_AGENT_MEMENTO_KEY, '').toLowerCase();
-		if (!agentId || agentId === COPILOT_CLI_DEFAULT_AGENT_ID) {
-			return '';
-		}
-
-		const agents = await this.getAgents();
-		return agents.find(agent => agent.name.toLowerCase() === agentId)?.name ?? '';
-	}
-	async setDefaultAgent(agent: string | undefined): Promise<void> {
-		await this.extensionContext.workspaceState.update(COPILOT_CLI_AGENT_MEMENTO_KEY, agent);
-	}
-	async trackUsedAgent(sessionId: string, agent: string | undefined): Promise<void> {
-		await this.extensionContext.workspaceState.update(COPILOT_CLI_AGENT_MEMENTO_KEY, agent);
-	}
 	async resolveAgent(agentId: string): Promise<SweCustomAgent | undefined> {
+		for (const promptFile of this.chatPromptFileService.customAgentPromptFiles) {
+			if (agentId === promptFile.uri.toString()) {
+				return this.toCustomAgent(promptFile);
+			}
+		}
 		const customAgents = await this.getAgents();
 		agentId = agentId.toLowerCase();
 		const agent = customAgents.find(agent => agent.name.toLowerCase() === agentId || agent.displayName?.toLowerCase() === agentId);
@@ -356,7 +342,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		for (const agent of await this.getSDKAgents()) {
 			mergedAgents.set(agent.name.toLowerCase(), this.cloneAgent(agent));
 		}
-		for (const promptFile of this.chatCustomAgentsService.getCustomAgents()) {
+		for (const promptFile of this.chatPromptFileService.customAgentPromptFiles) {
 			const agent = this.toCustomAgent(promptFile);
 			if (!agent) {
 				continue;
@@ -380,9 +366,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	}
 
 	private toCustomAgent(promptFile: ParsedPromptFile): SweCustomAgent | undefined {
-		const nameFromFile = basename(promptFile.uri);
-		const indexOfAgentMd = nameFromFile.toLowerCase().indexOf('.agent.md');
-		const agentName = indexOfAgentMd > 0 ? nameFromFile.substring(0, indexOfAgentMd) : nameFromFile;
+		const agentName = getAgentFileNameFromFilePath(promptFile.uri);
 		const headerName = promptFile.header?.name?.trim();
 		const name = headerName === undefined || headerName === '' ? agentName : headerName;
 		if (!name) {
@@ -411,6 +395,14 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	}
 }
 
+export function getAgentFileNameFromFilePath(filePath: URI): string {
+	const nameFromFile = basename(filePath);
+	const indexOfAgentMd = nameFromFile.toLowerCase().indexOf('.agent.md');
+	const agentName = indexOfAgentMd > 0 ? nameFromFile.substring(0, indexOfAgentMd) : nameFromFile;
+	return agentName;
+}
+
+
 /**
  * Service interface to abstract dynamic import of the Copilot CLI SDK for easier unit testing.
  * Tests can provide a mock implementation returning a stubbed SDK shape.
@@ -430,6 +422,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	declare _serviceBrand: undefined;
 	private requestMap: Record<string, RequestDetails> = {};
 	private _ensureShimsPromise?: Promise<void>;
+	private _initializeLogger = new Lazy<Promise<void>>(() => this.initLogger());
 	constructor(
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@IEnvService private readonly envService: IEnvService,
@@ -440,6 +433,9 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	) {
 		this.requestMap = this.extensionContext.workspaceState.get<Record<string, RequestDetails>>(COPILOT_CLI_REQUEST_MAP_KEY, {});
 		this._ensureShimsPromise = this.ensureShims();
+		this._initializeLogger.value.catch((error) => {
+			this.logService.error('[CopilotCLISDK] Failed to initialize logger', error);
+		});
 	}
 
 	/**
@@ -458,6 +454,29 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 			this.logService.error(`[CopilotCLISession] Failed to load @github/copilot/sdk: ${error}`);
 			throw error;
 		}
+	}
+
+	private async initLogger() {
+		const { logger } = await this.getPackage();
+		logger.setLogWriter({
+			outputPath: () => 'na',
+			writeLog: (level, message) => {
+				switch (level) {
+					case 'error':
+						this.logService.error(`[CopilotCLI] ${message}`);
+						break;
+					case 'warning':
+						this.logService.warn(`[CopilotCLI] ${message}`);
+						break;
+					case 'info':
+						this.logService.info(`[CopilotCLI] ${message}`);
+						break;
+					default:
+						this.logService.debug(`[CopilotCLI] ${message}`);
+				}
+				return Promise.resolve();
+			}
+		});
 	}
 
 	protected async ensureShims(): Promise<void> {

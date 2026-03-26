@@ -12,7 +12,7 @@ import {
 	ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString
 } from '../../../../../vscodeTypes';
 import {
-	buildChatHistoryFromEvents, createCopilotCLIToolInvocation, extractCdPrefix, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, stripReminders, ToolCall
+	buildChatHistoryFromEvents, createCopilotCLIToolInvocation, extractCdPrefix, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, RequestIdDetails, stripReminders, ToolCall
 } from '../copilotCLITools';
 import { IChatDelegationSummaryService } from '../delegationSummaryService';
 
@@ -137,6 +137,22 @@ describe('CopilotCLITools', () => {
 			expect(getInvocationMessageText(bashInvocation)).toContain('Echo');
 		});
 
+		it('renders task_complete summary as markdown in chat history', () => {
+			const events: any[] = [
+				{ type: 'user.message', data: { content: 'Finish task', attachments: [] } },
+				{ type: 'tool.execution_start', data: { toolName: 'task_complete', toolCallId: 'tc-1', arguments: { summary: 'All tests are passing.' } } },
+				{ type: 'tool.execution_complete', data: { toolName: 'task_complete', toolCallId: 'tc-1', success: true } }
+			];
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
+			expect(turns).toHaveLength(2);
+			const responseTurn = turns[1] as ChatResponseTurn2;
+			const responseParts: any = (responseTurn as any).response;
+			const parts: any[] = (responseParts.parts ?? responseParts._parts ?? responseParts);
+			const markdownParts = parts.filter(p => p instanceof ChatResponseMarkdownPart);
+			expect(markdownParts).toHaveLength(1);
+			expect((markdownParts[0] as any).value?.value || (markdownParts[0] as any).value).toContain('All tests are passing.');
+		});
+
 		it('converts file attachments to references on user messages', () => {
 			const events: any[] = [
 				{
@@ -223,6 +239,106 @@ describe('CopilotCLITools', () => {
 			const appRefs = requestTurn.references.filter(r => r.id === '/workspace/src/app.ts');
 			expect(appRefs).toHaveLength(2);
 		});
+
+		it('excludes subagent markdown from top-level history', () => {
+			const events: any[] = [
+				{ type: 'user.message', id: 'u1', data: { content: 'Do something', attachments: [] } },
+				// Top-level assistant message (no parentToolCallId)
+				{ type: 'assistant.message', id: 'a1', data: { messageId: 'msg-1', content: 'Top-level reply' } },
+				// Sub-agent delta (has parentToolCallId) — should be excluded
+				{ type: 'assistant.message_delta', id: 'a2', data: { messageId: 'msg-2', deltaContent: 'sub-agent thinking...', parentToolCallId: 'task-1' } },
+				// Sub-agent full message (has parentToolCallId) — should be excluded
+				{ type: 'assistant.message', id: 'a3', data: { messageId: 'msg-3', content: 'sub-agent result text', parentToolCallId: 'task-1' } },
+				// Top-level assistant message after subagent
+				{ type: 'assistant.message', id: 'a4', data: { messageId: 'msg-4', content: 'Final answer' } },
+			];
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
+			expect(turns).toHaveLength(2); // 1 request + 1 response
+			const responseTurn = turns[1] as ChatResponseTurn2;
+			const parts: any[] = ((responseTurn as any).response.parts ?? (responseTurn as any).response._parts ?? (responseTurn as any).response);
+			const markdownParts = parts.filter(p => p instanceof ChatResponseMarkdownPart);
+			const allText = markdownParts.map(p => (p as any).value?.value ?? (p as any).value).join('');
+			// Top-level messages should be present
+			expect(allText).toContain('Top-level reply');
+			expect(allText).toContain('Final answer');
+			// Sub-agent messages should NOT be present
+			expect(allText).not.toContain('sub-agent thinking');
+			expect(allText).not.toContain('sub-agent result text');
+		});
+
+		it('populates modeInstructions2 on ChatRequestTurn2 from stored modeInstructions', () => {
+			const events: any[] = [
+				{ type: 'user.message', id: 'sdk-req-1', data: { content: 'Hello', attachments: [] } },
+				{ type: 'assistant.message', data: { content: 'Hi there', messageId: 'msg-1' } }
+			];
+			const getRequestId = (sdkRequestId: string): RequestIdDetails | undefined => {
+				if (sdkRequestId === 'sdk-req-1') {
+					return {
+						requestId: 'vscode-req-1',
+						toolIdEditMap: {},
+						modeInstructions: {
+							uri: 'file:///workspace/.github/agents/my-agent.agent.md',
+							name: 'my-agent',
+							content: 'You are a helpful agent',
+							metadata: { key: 'value' },
+							isBuiltin: false,
+						}
+					};
+				}
+				return undefined;
+			};
+			const turns = buildChatHistoryFromEvents('', undefined, events, getRequestId, delegationSummary, logger);
+			expect(turns).toHaveLength(2);
+			const requestTurn = turns[0] as ChatRequestTurn2;
+			expect(requestTurn.modeInstructions2).toBeDefined();
+			expect(requestTurn.modeInstructions2!.name).toBe('my-agent');
+			expect(requestTurn.modeInstructions2!.content).toBe('You are a helpful agent');
+			expect(requestTurn.modeInstructions2!.uri?.toString()).toBe('file:///workspace/.github/agents/my-agent.agent.md');
+			expect(requestTurn.modeInstructions2!.metadata).toEqual({ key: 'value' });
+			expect(requestTurn.modeInstructions2!.isBuiltin).toBe(false);
+		});
+
+		it('does not set modeInstructions2 when modeInstructions is undefined', () => {
+			const events: any[] = [
+				{ type: 'user.message', id: 'sdk-req-1', data: { content: 'Hello', attachments: [] } },
+			];
+			const getRequestId = (sdkRequestId: string): RequestIdDetails | undefined => {
+				if (sdkRequestId === 'sdk-req-1') {
+					return { requestId: 'vscode-req-1', toolIdEditMap: {} };
+				}
+				return undefined;
+			};
+			const turns = buildChatHistoryFromEvents('', undefined, events, getRequestId, delegationSummary, logger);
+			expect(turns).toHaveLength(1);
+			const requestTurn = turns[0] as ChatRequestTurn2;
+			expect(requestTurn.modeInstructions2).toBeUndefined();
+		});
+
+		it('handles modeInstructions without uri', () => {
+			const events: any[] = [
+				{ type: 'user.message', id: 'sdk-req-1', data: { content: 'Hello', attachments: [] } },
+			];
+			const getRequestId = (sdkRequestId: string): RequestIdDetails | undefined => {
+				if (sdkRequestId === 'sdk-req-1') {
+					return {
+						requestId: 'vscode-req-1',
+						toolIdEditMap: {},
+						modeInstructions: {
+							name: 'builtin-agent',
+							content: 'System instructions',
+							isBuiltin: true,
+						}
+					};
+				}
+				return undefined;
+			};
+			const turns = buildChatHistoryFromEvents('', undefined, events, getRequestId, delegationSummary, logger);
+			const requestTurn = turns[0] as ChatRequestTurn2;
+			expect(requestTurn.modeInstructions2).toBeDefined();
+			expect(requestTurn.modeInstructions2!.uri).toBeUndefined();
+			expect(requestTurn.modeInstructions2!.name).toBe('builtin-agent');
+			expect(requestTurn.modeInstructions2!.isBuiltin).toBe(true);
+		});
 	});
 
 	describe('createCopilotCLIToolInvocation', () => {
@@ -266,15 +382,14 @@ describe('CopilotCLITools', () => {
 			expect(part).toBeInstanceOf(ChatToolInvocationPart);
 			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('Refactor auth');
 		});
-		it('formats task_complete invocation with summary', () => {
+		it('returns markdown part for task_complete invocation with summary', () => {
 			const part = createCopilotCLIToolInvocation({ toolName: 'task_complete', toolCallId: 'tc1', arguments: { summary: 'Fixed the bug' } });
-			expect(part).toBeInstanceOf(ChatToolInvocationPart);
-			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('Fixed the bug');
+			expect(part).toBeInstanceOf(ChatResponseMarkdownPart);
+			expect((part as ChatResponseMarkdownPart).value.value).toContain('Fixed the bug');
 		});
-		it('formats task_complete invocation without summary', () => {
+		it('returns undefined for task_complete invocation without summary', () => {
 			const part = createCopilotCLIToolInvocation({ toolName: 'task_complete', toolCallId: 'tc2', arguments: {} });
-			expect(part).toBeInstanceOf(ChatToolInvocationPart);
-			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toBeTruthy();
+			expect(part).toBeUndefined();
 		});
 		it('formats ask_user invocation with question', () => {
 			const part = createCopilotCLIToolInvocation({ toolName: 'ask_user', toolCallId: 'au1', arguments: { question: 'Which DB?' } });
@@ -426,6 +541,36 @@ describe('CopilotCLITools', () => {
 			expect(completed.isError).toBe(true);
 			expect(completed.isConfirmed).toBe(false);
 			expect(getInvocationMessageText(completed)).toContain('Denied');
+		});
+
+		it('adds task_complete markdown start event to pending invocations', () => {
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
+			const part = processToolExecutionStart({
+				type: 'tool.execution_start',
+				data: { toolName: 'task_complete', toolCallId: 'tc-start', arguments: { summary: 'Task done.' } }
+			} as any, pending);
+
+			expect(part).toBeInstanceOf(ChatResponseMarkdownPart);
+			expect((part as ChatResponseMarkdownPart).value.value).toContain('Task done.');
+			expect(pending.size).toBe(1);
+		});
+
+		it('returns task_complete markdown part on completion', () => {
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
+			processToolExecutionStart({
+				type: 'tool.execution_start',
+				data: { toolName: 'task_complete', toolCallId: 'tc-complete', arguments: { summary: 'Done.' } }
+			} as any, pending);
+
+			const completed = processToolExecutionComplete({
+				type: 'tool.execution_complete',
+				data: { toolName: 'task_complete', toolCallId: 'tc-complete', success: true }
+			} as any, pending, logger);
+
+			expect(completed).toBeDefined();
+			const [part] = completed!;
+			expect(part).toBeInstanceOf(ChatResponseMarkdownPart);
+			expect((part as ChatResponseMarkdownPart).value.value).toContain('Done.');
 		});
 	});
 
