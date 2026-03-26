@@ -14,27 +14,11 @@ import {
 } from '../../../platform/otel/common/atif/atifTypes';
 import { convertTraceToAtif } from '../../../platform/otel/node/atif/otelToAtifConverter';
 import { IOTelSqliteStore, type OTelSqliteStore } from '../../../platform/otel/node/sqlite/otelSqliteStore';
+import { decodeSessionId } from '../../../platform/otel/common/sessionUtils';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IExtensionContribution } from '../../common/contributions';
 
 const exportCommand = 'github.copilot.chat.debug.exportATIFTrajectories';
-
-/**
- * Decode a VS Code chat session resource URI to extract the raw session ID.
- * Same logic as the debug panel (otelChatDebugLogProvider.ts decodeSessionId).
- */
-function decodeSessionResource(sessionResource: vscode.Uri): string {
-	if (sessionResource.scheme === 'copilotcli' || sessionResource.scheme === 'claude-code') {
-		return sessionResource.path.replace(/^\//, '');
-	}
-	const pathSegment = sessionResource.path.replace(/^\//, '').split('/').pop() || '';
-	if (pathSegment) {
-		try {
-			return Buffer.from(pathSegment, 'base64').toString('utf-8');
-		} catch { /* not base64, use as-is */ }
-	}
-	return sessionResource.toString();
-}
 
 /**
  * Export agent trajectories in ATIF format from the OTel SQLite store.
@@ -76,7 +60,7 @@ export class AtifExportCommands extends Disposable implements IExtensionContribu
 			}
 			return;
 		}
-		const sessionId = decodeSessionResource(sessionResource);
+		const sessionId = decodeSessionId(sessionResource);
 
 		// Get traces for this session
 		const traceIds = this._sqliteStore.getTraceIds(sessionId);
