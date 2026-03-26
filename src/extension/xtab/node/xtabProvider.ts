@@ -1481,8 +1481,13 @@ export function overrideModelConfig(modelConfig: ModelConfig, overridingConfig: 
 	};
 }
 
+const DEFAULT_XTAB_PROVIDER_LINT_OPTIONS: xtabPromptOptions.LintOptions = {
+	...xtabPromptOptions.DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS,
+	maxLineDistance: 10,
+};
+
 function mergeLintOptions(base: xtabPromptOptions.LintOptions | undefined, override: Partial<xtabPromptOptions.LintOptions>): xtabPromptOptions.LintOptions {
-	const resolved = base ?? xtabPromptOptions.DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS;
+	const resolved = base ?? DEFAULT_XTAB_PROVIDER_LINT_OPTIONS;
 	return { ...resolved, ...override };
 }
 
