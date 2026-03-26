@@ -8,15 +8,14 @@ import { IGitService } from '../../../platform/git/common/gitService';
 import { RepositoryState } from '../../../platform/git/vscode/git';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable, DisposableMap, DisposableStore } from '../../../util/vs/base/common/lifecycle';
-import { ResourceMap } from '../../../util/vs/base/common/map';
 import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import { ICopilotCLIChatSessionItemProvider } from './copilotCLIChatSessions';
 
 export class ChatSessionRepositoryTracker extends Disposable {
-	private readonly trackers = new DisposableMap<vscode.Uri>();
-	private readonly repositories = new ResourceMap<RepositoryState>();
+	private readonly trackers = new DisposableMap<string>();
+	private readonly repositories = new Map<string, RepositoryState>();
 
 	constructor(
 		private readonly sessionItemProvider: ICopilotCLIChatSessionItemProvider,
@@ -59,8 +58,8 @@ export class ChatSessionRepositoryTracker extends Disposable {
 			return;
 		}
 
-		if (this.repositories.has(uri)) {
-			const trackedRepositoryState = this.repositories.get(uri);
+		if (this.repositories.has(uri.fsPath)) {
+			const trackedRepositoryState = this.repositories.get(uri.fsPath);
 
 			// If the repository state is the same as the one we are already tracking,
 			// do nothing. But if a new repository state is detected, which can happen
@@ -71,8 +70,8 @@ export class ChatSessionRepositoryTracker extends Disposable {
 			}
 
 			this.logService.trace(`[ChatSessionRepositoryTracker][trackFolderChanges] Replacing stale tracker for ${uri.toString()}.`);
-			this.trackers.deleteAndDispose(uri);
-			this.repositories.delete(uri);
+			this.trackers.deleteAndDispose(uri.fsPath);
+			this.repositories.delete(uri.fsPath);
 		}
 
 		// Setup event listeners to track changes in the worktree repository in order to
@@ -84,8 +83,8 @@ export class ChatSessionRepositoryTracker extends Disposable {
 		disposables.add(repositoryState.onDidChange(async () =>
 			await this.onDidChangeRepositoryState(uri)));
 
-		this.trackers.set(uri, disposables);
-		this.repositories.set(uri, repositoryState);
+		this.trackers.set(uri.fsPath, disposables);
+		this.repositories.set(uri.fsPath, repositoryState);
 	}
 
 	private async onDidChangeRepositoryState(uri: vscode.Uri): Promise<void> {
@@ -122,14 +121,14 @@ export class ChatSessionRepositoryTracker extends Disposable {
 	}
 
 	private disposeFolderTracker(uri: vscode.Uri): void {
-		if (!this.trackers.has(uri)) {
+		if (!this.trackers.has(uri.fsPath)) {
 			return;
 		}
 
 		this.logService.trace(`[ChatSessionRepositoryTracker][disposeFolderTracker] Disposing tracker for ${uri.toString()}.`);
 
-		this.trackers.deleteAndDispose(uri);
-		this.repositories.delete(uri);
+		this.trackers.deleteAndDispose(uri.fsPath);
+		this.repositories.delete(uri.fsPath);
 	}
 
 	override dispose(): void {
