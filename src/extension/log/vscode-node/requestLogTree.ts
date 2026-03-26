@@ -13,7 +13,7 @@ import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { outputChannel } from '../../../platform/log/vscode/outputChannelLogTarget';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
-import { ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, IRequestLogger, LoggedInfo, LoggedInfoKind, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
+import { ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, IRequestLogger, LoggedInfo, LoggedInfoKind, LoggedRequestKind, resolveMarkdownIcon } from '../../../platform/requestLogger/node/requestLogger';
 import { filterMap } from '../../../util/common/arrays';
 import { assert, assertNever } from '../../../util/vs/base/common/assert';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -600,6 +600,13 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 			const tokenToPrompt = new Map<CapturingToken, ChatPromptItem>();
 
 			for (const currReq of this.requestLogger.getRequests()) {
+				// Skip entries that are dynamically hidden (e.g. skipped/cancelled live NES requests)
+				if (currReq.kind === LoggedInfoKind.Request &&
+					currReq.entry.type === LoggedRequestKind.MarkdownContentRequest &&
+					currReq.entry.isVisible && !currReq.entry.isVisible()) {
+					continue;
+				}
+
 				const currReqTreeItem = this.logToTreeItem(currReq);
 
 				if (!currReq.token) {
@@ -784,7 +791,8 @@ class ChatRequestItem extends vscode.TreeItem {
 		this.id = info.id;
 
 		if (info.entry.type === LoggedRequestKind.MarkdownContentRequest) {
-			this.iconPath = info.entry.icon === undefined ? undefined : new vscode.ThemeIcon(info.entry.icon.id);
+			const resolvedIcon = resolveMarkdownIcon(info.entry);
+			this.iconPath = resolvedIcon === undefined ? undefined : new vscode.ThemeIcon(resolvedIcon.id);
 			const startTimeStr = new Date(info.entry.startTimeMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 			this.description = startTimeStr;
 		} else {

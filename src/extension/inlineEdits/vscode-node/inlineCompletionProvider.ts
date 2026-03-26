@@ -33,7 +33,6 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { clamp } from '../../../util/vs/base/common/numbers';
 import { autorun, IObservable, observableFromEvent } from '../../../util/vs/base/common/observable';
 import { basename } from '../../../util/vs/base/common/path';
-import { URI } from '../../../util/vs/base/common/uri';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LineCheck } from '../../inlineChat/vscode-node/naturalLanguageHint';
@@ -274,6 +273,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		const documentVersion = (isNotebookCell(document.uri) ? findNotebook(document.uri, workspace.notebookDocuments)?.version : undefined) || document.version;
 		const logContext = new InlineEditRequestLogContext(doc.id.uri, documentVersion, context);
 		logContext.recordingBookmark = this.model.debugRecorder.createBookmark();
+		this.logger.addLive(logContext);
 
 		const telemetryBuilder = new NextEditProviderTelemetryBuilder(this._gitExtensionService, this._notebookService, this._workspaceService, this.model.nextEditProvider.ID, doc, this.model.debugRecorder, logContext.recordingBookmark);
 		telemetryBuilder.setOpportunityId(context.requestUuid);
@@ -417,7 +417,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 				isInlineCompletion = !!inlineSuggestion;
 				completionItem = serveAsCompletionsProvider && !isInlineCompletion ?
 					undefined :
-					this.createCompletionItem(doc, document, position, inlineSuggestion?.range ?? range, result, inlineSuggestion?.newText, targetDocument.uri);
+					this.createCompletionItem(doc, document, inlineSuggestion?.range ?? range, result, inlineSuggestion?.newText);
 			} else { // NES is not for the active doc but a different one
 				completionItem = serveAsCompletionsProvider ? undefined : {
 					range,
@@ -478,6 +478,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 
 			throw e;
 		} finally {
+			logContext.markCompleted();
 			requestCancellationTokenSource.dispose();
 			this.logger.add(logContext);
 		}
@@ -517,11 +518,9 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 	private createCompletionItem(
 		doc: IVSCodeObservableDocument,
 		document: TextDocument,
-		position: Position,
 		range: Range,
 		result: NonNullable<(NextEditResult | DiagnosticsNextEditResult)['result']>,
 		insertTextOverride?: string,
-		uri?: URI,
 	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined {
 
 		if (!result.edit) {
@@ -541,7 +540,6 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			insertText: insertTextOverride ?? result.edit.newText,
 			displayLocation,
 			command: result.action,
-			uri,
 		};
 	}
 

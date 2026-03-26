@@ -3,25 +3,21 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { execFile } from 'child_process';
 import { promises as fs } from 'fs';
-import { promisify } from 'util';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
+
+import { Uri } from 'vscode';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
+import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeCheckpointService } from '../common/chatSessionWorktreeCheckpointService';
-import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
-
-const execFileAsync = promisify(execFile);
+import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 
 const CHECKPOINT_REF_PREFIX = 'refs/sessions/';
-
-function isAutoCommitFeatureEnabled(configurationService: IConfigurationService): boolean {
-	return configurationService.getConfig(ConfigKey.Advanced.CLIAutoCommitEnabled);
-}
 
 function getCheckpointRef(sessionId: string, turnNumber: number): string {
 	return `${CHECKPOINT_REF_PREFIX}${sessionId}/checkpoints/turn/${turnNumber}`;
@@ -31,10 +27,12 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 	declare _serviceBrand: undefined;
 
 	constructor(
-		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IGitExtensionService private readonly gitExtensionService: IGitExtensionService,
+		@IChatSessionMetadataStore private readonly metadataStore: IChatSessionMetadataStore,
+		@IChatSessionWorkspaceFolderService private readonly workspaceFolderService: IChatSessionWorkspaceFolderService,
 		@IChatSessionWorktreeService private readonly worktreeService: IChatSessionWorktreeService,
+		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
+		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 	) {
 		super();
 	}
@@ -42,13 +40,15 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 	async handleRequest(sessionId: string): Promise<void> {
 		const checkpointSupport = await this.getWorktreeCheckpointSupport(sessionId);
 		if (!checkpointSupport) {
-			this.logService.trace('[ChatSessionWorktreeCheckpointService][handleRequest] Worktree does not support checkpoints, skipping baseline checkpoint creation');
+			this.logService.trace('[ChatSessionWorktreeCheckpointService][handleRequest] Session does not support checkpoints, skipping baseline checkpoint creation');
 			return;
 		}
 
-		const worktreeProperties = await this.worktreeService.getWorktreeProperties(sessionId);
-		if (!worktreeProperties || typeof worktreeProperties === 'string' || worktreeProperties.version === 1) {
-			this.logService.warn(`[ChatSessionWorktreeCheckpointService][handleRequest] No checkpoint properties found for session ${sessionId}, skipping baseline checkpoint creation`);
+		const repositoryUri = await this._getSessionRepository(sessionId);
+		const repository = repositoryUri ? await this.gitService.getRepository(repositoryUri) : undefined;
+
+		if (!repository) {
+			this.logService.warn(`[ChatSessionWorktreeCheckpointService][handleRequest] No repository found for session ${sessionId}, skipping baseline checkpoint creation`);
 			return;
 		}
 
@@ -59,81 +59,101 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 		}
 
 		// Initialize checkpoint state and capture baseline checkpoint
-		const checkpointRef = await this._createCheckpoint(sessionId, worktreeProperties, 0);
-
-		if (checkpointRef) {
-			// Update worktree properties
-			await this.worktreeService.setWorktreeProperties(sessionId, {
-				...worktreeProperties,
-				firstCheckpointRef: checkpointRef,
-				baseCheckpointRef: checkpointRef,
-				lastCheckpointRef: checkpointRef
-			});
-		}
-	}
-
-	async handleRequestCompleted(sessionId: string): Promise<void> {
-		const checkpointSupport = await this.getWorktreeCheckpointSupport(sessionId);
-		if (!checkpointSupport) {
-			this.logService.trace('[ChatSessionWorktreeCheckpointService][handleRequestCompleted] Worktree does not support checkpoints, skipping post-turn checkpoint');
+		const checkpointRef = await this._createCheckpoint(sessionId, repository.rootUri, 0);
+		if (!checkpointRef) {
 			return;
 		}
 
+		// Update session metadata
 		const worktreeProperties = await this.worktreeService.getWorktreeProperties(sessionId);
 		if (!worktreeProperties || typeof worktreeProperties === 'string' || worktreeProperties.version === 1) {
-			this.logService.warn(`[ChatSessionWorktreeCheckpointService][handleRequestCompleted] No checkpoint properties found for session ${sessionId}, skipping post-turn checkpoint`);
+			this.logService.trace(`[ChatSessionWorktreeCheckpointService][handleRequest] Session ${sessionId} does not use a git worktree, skipping checkpoint metadata update`);
 			return;
 		}
 
-		const latestCheckpointRef = await this._getLatestCheckpointRef(sessionId);
-		if (!latestCheckpointRef) {
+		await this.worktreeService.setWorktreeProperties(sessionId, {
+			...worktreeProperties,
+			firstCheckpointRef: checkpointRef,
+			baseCheckpointRef: checkpointRef,
+			lastCheckpointRef: checkpointRef
+		});
+	}
+
+	async handleRequestCompleted(sessionId: string, requestId: string): Promise<void> {
+		const checkpointSupport = await this.getWorktreeCheckpointSupport(sessionId);
+		if (!checkpointSupport) {
+			this.logService.trace('[ChatSessionWorktreeCheckpointService][handleRequestCompleted] Session does not support checkpoints, skipping post-turn checkpoint');
+			return;
+		}
+
+		const repositoryUri = await this._getSessionRepository(sessionId);
+		const repository = repositoryUri ? await this.gitService.getRepository(repositoryUri) : undefined;
+
+		if (!repository) {
+			this.logService.warn(`[ChatSessionWorktreeCheckpointService][handleRequestCompleted] No repository found for session ${sessionId}, skipping post-turn checkpoint`);
+			return;
+		}
+
+		const parentCheckpointRef = await this._getLatestCheckpointRef(sessionId);
+		if (!parentCheckpointRef) {
 			this.logService.warn(`[ChatSessionWorktreeCheckpointService][handleRequestCompleted] No existing checkpoint ref found for session ${sessionId} on request completion, skipping post-turn checkpoint`);
 			return;
 		}
 
 		// Create checkpoint
-		const currentTurn = parseInt(latestCheckpointRef.split('/').pop() ?? '0') + 1;
-		const checkpointRef = await this._createCheckpoint(sessionId, worktreeProperties, currentTurn, latestCheckpointRef);
+		const currentTurn = parseInt(parentCheckpointRef.split('/').pop() ?? '0') + 1;
+		const checkpointRef = await this._createCheckpoint(sessionId, repository.rootUri, currentTurn, parentCheckpointRef);
+		if (!checkpointRef) {
+			return;
+		}
 
-		if (checkpointRef) {
-			// Update worktree properties
+		const worktreeProperties = await this.worktreeService.getWorktreeProperties(sessionId);
+		if (worktreeProperties && typeof worktreeProperties !== 'string' && worktreeProperties.version === 2) {
+			// Worktree isolation mode
 			await this.worktreeService.setWorktreeProperties(sessionId, {
 				...worktreeProperties,
 				changes: undefined,
 				lastCheckpointRef: checkpointRef
 			});
 		}
+
+		// Update request metadata with new checkpoint ref
+		await this.metadataStore.updateRequestDetails(sessionId, [{ vscodeRequestId: requestId, checkpointRef }]);
 	}
 
 	async getWorktreeCheckpointSupport(sessionId: string): Promise<boolean> {
+		// Checkpoint support:
+		// - isolation mode is workspace
+		// - isolation mode is worktree (version 2) and auto-commit is disabled
 		const worktreeProperties = await this.worktreeService.getWorktreeProperties(sessionId);
-		if (!worktreeProperties || typeof worktreeProperties === 'string' || worktreeProperties.version === 1) {
-			return false;
+		return worktreeProperties === undefined || (worktreeProperties.version === 2 && worktreeProperties.autoCommit === false);
+	}
+
+	private async _getSessionRepository(sessionId: string): Promise<Uri | undefined> {
+		const worktreeProperties = await this.worktreeService.getWorktreeProperties(sessionId);
+		if (worktreeProperties) {
+			// Worktree isolation mode
+			if (typeof worktreeProperties === 'string' || worktreeProperties.version === 1) {
+				return undefined;
+			}
+
+			return Uri.file(worktreeProperties.worktreePath);
 		}
 
-		return worktreeProperties.version === 2 && (
-			isAutoCommitFeatureEnabled(this.configurationService) ||
-			(worktreeProperties.autoCommit === false &&
-				worktreeProperties.firstCheckpointRef !== undefined &&
-				worktreeProperties.baseCheckpointRef !== undefined &&
-				worktreeProperties.lastCheckpointRef !== undefined));
+		// Workspace isolation mode
+		return this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
 	}
 
 	private async _getLatestCheckpointRef(sessionId: string): Promise<string | undefined> {
-		const worktreeProperties = await this.worktreeService.getWorktreeProperties(sessionId);
-		if (!worktreeProperties || typeof worktreeProperties === 'string') {
-			return undefined;
-		}
-
-		const gitPath = this._getGitPath();
-		if (!gitPath) {
-			this.logService.warn('[ChatSessionWorktreeCheckpointService][_getLatestCheckpointRef] Git binary path not available');
+		const repositoryUri = await this._getSessionRepository(sessionId);
+		const repository = repositoryUri ? await this.gitService.getRepository(repositoryUri) : undefined;
+		if (!repository) {
 			return undefined;
 		}
 
 		try {
 			const refPattern = `${CHECKPOINT_REF_PREFIX}${sessionId}/checkpoints/turn/`;
-			const refs = await this._runGit(gitPath, worktreeProperties.worktreePath, [
+			const refs = await this.gitService.exec(repository.rootUri, [
 				'for-each-ref', '--sort=-committerdate', '--format=%(refname)', refPattern]);
 
 			return refs ? refs.split('\n')[0] : undefined;
@@ -143,40 +163,35 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 		}
 	}
 
-	private async _createCheckpoint(sessionId: string, worktreeProperties: ChatSessionWorktreeProperties, turnNumber: number, parentCheckpointRef?: string): Promise<string | undefined> {
-		const gitPath = this._getGitPath();
-		if (!gitPath) {
-			this.logService.warn('[ChatSessionWorktreeCheckpointService][_createCheckpoint] Git binary path not available');
-			return undefined;
-		}
-
-		const worktreePath = worktreeProperties.worktreePath;
-		const checkpointIndexFile = path.join(worktreeProperties.repositoryPath, '.git', `${worktreeProperties.branchName}/${generateUuid()}.index`);
+	private async _createCheckpoint(sessionId: string, repositoryUri: Uri, turnNumber: number, parentCheckpointRef?: string): Promise<string | undefined> {
+		const tmpDirName = `vscode-sessions-${sessionId}-${generateUuid()}`;
+		const checkpointIndexFile = path.join(this.extensionContext.globalStorageUri.fsPath, tmpDirName, `checkpoint.index`);
 
 		try {
+			// Create temp index file directory
 			await fs.mkdir(path.dirname(checkpointIndexFile), { recursive: true });
 
 			// Resolve parent checkpoint ref
 			const parentCommitOid = parentCheckpointRef
-				? await this._runGit(gitPath, worktreeProperties.worktreePath, ['rev-parse', parentCheckpointRef])
+				? await this.gitService.exec(repositoryUri, ['rev-parse', parentCheckpointRef])
 				: undefined;
 
 			// Populate temp index from previous checkpoint tree (or HEAD for the baseline)
-			await this._runGit(gitPath, worktreePath, ['read-tree', parentCommitOid ?? 'HEAD'], { GIT_INDEX_FILE: checkpointIndexFile });
+			await this.gitService.exec(repositoryUri, ['read-tree', parentCommitOid ?? 'HEAD'], { GIT_INDEX_FILE: checkpointIndexFile });
 
 			// Stage entire working directory into temp index
-			await this._runGit(gitPath, worktreePath, ['add', '-A', '--', '.'], { GIT_INDEX_FILE: checkpointIndexFile });
+			await this.gitService.exec(repositoryUri, ['add', '-A', '--', '.'], { GIT_INDEX_FILE: checkpointIndexFile });
 
 			// Write the temp index as a tree object
-			const treeOid = await this._runGit(gitPath, worktreePath, ['write-tree'], { GIT_INDEX_FILE: checkpointIndexFile });
+			const treeOid = await this.gitService.exec(repositoryUri, ['write-tree'], { GIT_INDEX_FILE: checkpointIndexFile });
 
 			// Create a commit pointing to the tree, chained to the previous checkpoint
 			const commitTreeArgs = ['commit-tree', treeOid, ...(parentCommitOid ? ['-p', parentCommitOid] : []), '-m', `Session ${sessionId} - checkpoint turn ${turnNumber}`];
-			const commitOid = await this._runGit(gitPath, worktreePath, commitTreeArgs);
+			const commitOid = await this.gitService.exec(repositoryUri, commitTreeArgs);
 
 			// Point a new ref at the commit
 			const checkpointRef = getCheckpointRef(sessionId, turnNumber);
-			await this._runGit(gitPath, worktreePath, ['update-ref', checkpointRef, commitOid]);
+			await this.gitService.exec(repositoryUri, ['update-ref', checkpointRef, commitOid]);
 
 			this.logService.trace(`[ChatSessionWorktreeCheckpointService][_createCheckpoint] Captured checkpoint turn ${turnNumber} for session ${sessionId} at ${checkpointRef}`);
 			return checkpointRef;
@@ -184,35 +199,11 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 			this.logService.error(`[ChatSessionWorktreeCheckpointService][_createCheckpoint] Failed to capture checkpoint turn ${turnNumber} for session ${sessionId}: `, error);
 			return undefined;
 		} finally {
-			await fs.rm(checkpointIndexFile, { recursive: true, force: true });
+			try {
+				await fs.rm(path.dirname(checkpointIndexFile), { recursive: true, force: true });
+			} catch (error) {
+				this.logService.error(`[ChatSessionWorktreeCheckpointService][_createCheckpoint] Error while cleaning up temp index file for session ${sessionId}: ${error}`);
+			}
 		}
-	}
-
-	private async _runGit(gitPath: string, cwd: string, args: string[], env?: Record<string, string>): Promise<string> {
-		const gitEnv = Object.assign({}, process.env, env, {
-			GIT_AUTHOR_NAME: 'VS Code Sessions',
-			GIT_AUTHOR_EMAIL: 'vscode-sessions@users.noreply.github.com',
-			GIT_COMMITTER_NAME: 'VS Code Sessions',
-			GIT_COMMITTER_EMAIL: 'vscode-sessions@users.noreply.github.com',
-			LANG: 'en_US.UTF-8',
-			LANGUAGE: 'en',
-			LC_ALL: 'en_US.UTF-8'
-		} satisfies Record<string, string>);
-
-		const result = await execFileAsync(gitPath, args, {
-			cwd,
-			encoding: 'utf8',
-			env: gitEnv
-		});
-
-		if (result.stderr) {
-			this.logService.trace(`[ChatSessionWorktreeCheckpointService][_runGit] git ${args[0]} stderr: ${result.stderr.trim()}`);
-		}
-
-		return result.stdout.trim();
-	}
-
-	private _getGitPath(): string | undefined {
-		return this.gitExtensionService.getExtensionApi()?.git.path;
 	}
 }

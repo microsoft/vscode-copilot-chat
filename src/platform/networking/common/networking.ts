@@ -104,6 +104,7 @@ export interface IEndpointBody {
 	/** Responses API: */
 	input?: readonly any[];
 	truncation?: 'auto' | 'disabled';
+	prompt_cache_key?: string;
 	include?: ['reasoning.encrypted_content'];
 	store?: boolean;
 	text?: {

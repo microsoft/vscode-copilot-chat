@@ -70,11 +70,13 @@ describe('ChatWebSocketManager', () => {
 			new NullTelemetryService(),
 		);
 		disposables.add(manager);
-		const connectPromise = manager.getOrCreateConnection('conv-1', 'turn-1', headers);
+		const connection = manager.getOrCreateConnection('conv-1', 'turn-1', headers);
+		const connectPromise = connection.connect();
 		// Defer open event to allow connect() to attach listeners first
 		await Promise.resolve();
 		ws.simulateOpen();
-		return connectPromise;
+		await connectPromise;
+		return connection;
 	}
 
 	const completedEvent = JSON.stringify({ type: 'response.completed', response: { id: 'resp-1' } });

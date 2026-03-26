@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
+import { promises as fs } from 'fs';
 import * as vscode from 'vscode';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -11,11 +12,14 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
+import { parseGitChangesRaw } from '../../../platform/git/vscode-node/utils';
+import { DiffChange } from '../../../platform/git/vscode/git';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { isEqual } from '../../../util/vs/base/common/resources';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
 import { ChatSessionWorktreeData, ChatSessionWorktreeFile, ChatSessionWorktreeProperties, ChatSessionWorktreePropertiesV2, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 
@@ -475,9 +479,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		// not need to open the worktree repository.
 		const diff = await this.gitService.diffBetweenWithStats(
 			repository.rootUri,
-			vscode.workspace.isAgentSessionsWorkspace
-				? worktreeProperties.baseBranchName
-				: worktreeProperties.baseCommit,
+			worktreeProperties.baseCommit,
 			worktreeProperties.branchName);
 
 		if (!diff) {
@@ -512,7 +514,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 	private async _getWorktreeChanges(sessionId: string, worktreeProperties: ChatSessionWorktreeProperties): Promise<readonly ChatSessionWorktreeFile[] | undefined> {
 		if (worktreeProperties.version !== 2) {
-			this.logService.warn(`[ChatSessionWorktreeCheckpointService][_getWorktreeChanges] Worktree properties for session ${sessionId} is not version 2.`);
+			this.logService.warn(`[ChatSessionWorktreeService][_getWorktreeChanges] Worktree properties for session ${sessionId} is not version 2.`);
 			return undefined;
 		}
 
@@ -522,15 +524,55 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		const worktreeRepository = await this.gitService.getRepository(vscode.Uri.file(worktreeProperties.worktreePath));
 
 		if (!worktreeRepository) {
-			this.logService.warn(`[ChatSessionWorktreeCheckpointService][_getWorktreeChanges] Unable to open worktree repository for session ${sessionId} at path ${worktreeProperties.worktreePath}`);
+			this.logService.warn(`[ChatSessionWorktreeService][_getWorktreeChanges] Unable to open worktree repository for session ${sessionId} at path ${worktreeProperties.worktreePath}`);
 			return undefined;
 		}
 
-		// Tracked changes
-		const trackedChanges = await this.gitService.diffBetweenWithStats2(
-			worktreeRepository.rootUri, worktreeProperties.baseBranchName) ?? [];
+		// Check for untracked changes
+		const hasUntrackedChanges = [
+			...worktreeRepository.changes?.workingTree ?? [],
+			...worktreeRepository.changes?.untrackedChanges ?? [],
+		].some(change => change.status === 7 /* UNTRACKED */);
 
-		return trackedChanges.map(change => ({
+		const changes: DiffChange[] = [];
+		const worktreePath = vscode.Uri.file(worktreeProperties.worktreePath);
+
+		if (hasUntrackedChanges) {
+			// Tracked + untracked changes
+			const tmpDirName = `vscode-sessions-${sessionId}-${generateUuid()}`;
+			const diffIndexFile = path.join(this.extensionContext.globalStorageUri.fsPath, tmpDirName, 'diff.index');
+
+			try {
+
+				// Create temp index file directory
+				await fs.mkdir(path.dirname(diffIndexFile), { recursive: true });
+
+				// Populate temp index from HEAD
+				await this.gitService.exec(worktreePath, ['read-tree', 'HEAD'], { GIT_INDEX_FILE: diffIndexFile });
+
+				// Stage entire working directory into temp index
+				await this.gitService.exec(worktreePath, ['add', '-A', '--', '.'], { GIT_INDEX_FILE: diffIndexFile });
+
+				// Diff the temp index with the base branch
+				const result = await this.gitService.exec(worktreePath, ['diff', '--cached', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--merge-base', worktreeProperties.baseBranchName, '--'], { GIT_INDEX_FILE: diffIndexFile });
+				changes.push(...parseGitChangesRaw(worktreeProperties.worktreePath, result));
+			} catch (error) {
+				this.logService.error(`[ChatSessionWorktreeService][_getWorktreeChanges] Error while processing worktree changes for session ${sessionId}: ${error}`);
+				return undefined;
+			} finally {
+				try {
+					await fs.rm(path.dirname(diffIndexFile), { recursive: true, force: true });
+				} catch (error) {
+					this.logService.error(`[ChatSessionWorktreeService][_getWorktreeChanges] Error while cleaning up temp index file for session ${sessionId}: ${error}`);
+				}
+			}
+		} else {
+			// Tracked changes
+			const result = await this.gitService.exec(worktreePath, ['diff', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--merge-base', worktreeProperties.baseBranchName, '--']);
+			changes.push(...parseGitChangesRaw(worktreeProperties.worktreePath, result));
+		}
+
+		return changes.map(change => ({
 			filePath: change.uri.fsPath,
 			originalFilePath: change.status !== 1 /* INDEX_ADDED */
 				? change.originalUri?.fsPath
