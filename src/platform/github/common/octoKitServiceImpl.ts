@@ -9,7 +9,7 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { AssignableActor, getAssignableActorsWithAssignableUsers, getAssignableActorsWithSuggestedActors, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
-import { AuthOptions, BaseOctoKitService, CCAEnabledResult, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PermissiveAuthRequiredError, PullRequestFile, RemoteAgentJobResponse } from './githubService';
+import { AuthOptions, BaseOctoKitService, CCAEnabledResult, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PermissiveAuthRequiredError, PullRequestFile, RemoteAgentJobResponse, SkillDetails, SkillListItem, SkillListOptions } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
 	declare readonly _serviceBrand: undefined;
@@ -304,6 +304,80 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			}
 
 			const data = await response.json() as CustomAgentDetails;
+			return data;
+		} catch (e) {
+			this._logService.error(e);
+			return undefined;
+		}
+	}
+
+	async getSkills(owner: string, repo: string, options: SkillListOptions, authOptions: { createIfNone?: boolean }): Promise<SkillListItem[]> {
+		try {
+			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
+			if (!authToken) {
+				this._logService.trace('No authentication token available for getSkills');
+				throw new PermissiveAuthRequiredError();
+			}
+
+			const response = await this._capiClientService.makeRequest<Response>({
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				}
+			}, {
+				type: RequestType.CopilotSkills,
+				owner,
+				repo,
+				dedupe: options?.dedupe,
+				include_sources: options?.includeSources,
+			});
+
+			if (!response.ok) {
+				throw new Error(`Failed to fetch skills for ${owner}/${repo}: ${response.statusText}`);
+			}
+
+			const data = await response.json() as { skills?: SkillListItem[] };
+			if (data && Array.isArray(data.skills)) {
+				return data.skills;
+			}
+
+			throw new Error('Invalid response format');
+		} catch (e) {
+			this._logService.error(e);
+			return [];
+		}
+	}
+
+	async getSkillDetails(owner: string, repo: string, skillName: string, version: string, authOptions: { createIfNone?: boolean }): Promise<SkillDetails | undefined> {
+		try {
+			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
+			if (!authToken) {
+				this._logService.trace('No authentication token available for getSkillDetails');
+				throw new PermissiveAuthRequiredError();
+			}
+
+			const response = await this._capiClientService.makeRequest<Response>({
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				}
+			}, {
+				type: RequestType.CopilotSkillsDetail,
+				owner,
+				repo,
+				skillName,
+				version,
+			});
+
+			if (!response.ok) {
+				if (response.status === 404) {
+					this._logService.trace(`Skill '${skillName}' not found for ${owner}/${repo}`);
+					return undefined;
+				}
+				throw new Error(`Failed to fetch skill details for ${skillName}: ${response.statusText}`);
+			}
+
+			const data = await response.json() as SkillDetails;
 			return data;
 		} catch (e) {
 			this._logService.error(e);

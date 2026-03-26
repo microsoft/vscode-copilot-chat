@@ -15,6 +15,7 @@ import { EditModeAgentProvider } from './editModeAgentProvider';
 import { ExploreAgentProvider } from './exploreAgentProvider';
 import { GitHubOrgCustomAgentProvider } from './githubOrgCustomAgentProvider';
 import { GitHubOrgInstructionsProvider } from './githubOrgInstructionsProvider';
+import { GitHubOrgSkillProvider } from './githubOrgSkillProvider';
 import { PlanAgentProvider } from './planAgentProvider';
 import { TroubleshootSkillProvider } from './troubleshootSkillProvider';
 
@@ -79,6 +80,11 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 
 		// Register skill provider for built-in agent customization skill
 		if ('registerSkillProvider' in vscode.chat) {
+			if (configurationService.getConfig(ConfigKey.EnableOrganizationSkills)) {
+				const githubOrgSkillProvider: vscode.ChatSkillProvider = instantiationService.createInstance(new SyncDescriptor(GitHubOrgSkillProvider));
+				this._register(vscode.chat.registerSkillProvider(githubOrgSkillProvider));
+			}
+
 			const agentCustomizationSkillProvider: vscode.ChatSkillProvider = instantiationService.createInstance(new SyncDescriptor(AgentCustomizationSkillProvider));
 			this._register(vscode.chat.registerSkillProvider(agentCustomizationSkillProvider));
 

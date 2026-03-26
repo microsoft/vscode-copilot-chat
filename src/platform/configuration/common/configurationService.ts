@@ -960,6 +960,7 @@ export namespace ConfigKey {
 
 	export const EnableOrganizationCustomAgents = defineSetting<boolean>('chat.organizationCustomAgents.enabled', ConfigType.Simple, true);
 	export const EnableOrganizationInstructions = defineSetting<boolean>('chat.organizationInstructions.enabled', ConfigType.Simple, true);
+	export const EnableOrganizationSkills = defineSetting<boolean>('chat.organizationSkills.enabled', ConfigType.Simple, true);
 
 	export const CompletionsFetcher = defineSetting<FetcherId | undefined>('chat.completionsFetcher', ConfigType.ExperimentBased, undefined);
 	export const NextEditSuggestionsFetcher = defineSetting<FetcherId | undefined>('chat.nesFetcher', ConfigType.ExperimentBased, undefined);

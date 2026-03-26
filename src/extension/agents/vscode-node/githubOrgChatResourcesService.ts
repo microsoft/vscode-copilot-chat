@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { AGENT_FILE_EXTENSION, INSTRUCTION_FILE_EXTENSION, PromptsType } from '../../../platform/customInstructions/common/promptTypes';
+import { AGENT_FILE_EXTENSION, INSTRUCTION_FILE_EXTENSION, PromptsType, SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
@@ -67,6 +67,8 @@ function getCacheSubdirectory(type: PromptsType): string {
 			return 'instructions';
 		case PromptsType.agent:
 			return 'agents';
+		case PromptsType.skill:
+			return 'skills';
 		default:
 			throw new Error(`Unsupported PromptsType: ${type}`);
 	}
@@ -81,6 +83,8 @@ function isValidFile(type: PromptsType, fileName: string): boolean {
 			return fileName.endsWith(INSTRUCTION_FILE_EXTENSION);
 		case PromptsType.agent:
 			return fileName.endsWith(AGENT_FILE_EXTENSION);
+		case PromptsType.skill:
+			return fileName.toLowerCase() === SKILL_FILENAME.toLowerCase();
 		default:
 			throw new Error(`Unsupported PromptsType: ${type}`);
 	}
@@ -267,6 +271,21 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 		}
 	}
 
+	private async ensureCacheParentDir(orgName: string, type: PromptsType, filename: string): Promise<void> {
+		const parentSegments = filename.split('/').slice(0, -1);
+		if (parentSegments.length === 0) {
+			await this.ensureCacheDir(orgName, type);
+			return;
+		}
+
+		const parentDir = vscode.Uri.joinPath(this.getCacheDir(orgName, type), ...parentSegments);
+		try {
+			await this.fileSystem.stat(parentDir);
+		} catch {
+			await this.fileSystem.createDirectory(parentDir);
+		}
+	}
+
 	async readCacheFile(type: PromptsType, orgName: string, filename: string): Promise<string | undefined> {
 		try {
 			const fileUri = this.getCacheFileUri(orgName, type, filename);
@@ -279,7 +298,7 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 	}
 
 	async writeCacheFile(type: PromptsType, orgName: string, filename: string, content: string, options?: { checkForChanges?: boolean }): Promise<boolean> {
-		await this.ensureCacheDir(orgName, type);
+		await this.ensureCacheParentDir(orgName, type, filename);
 		const fileUri = this.getCacheFileUri(orgName, type, filename);
 		const contentBytes = new TextEncoder().encode(content);
 
@@ -317,6 +336,11 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 	}
 
 	async clearCache(type: PromptsType, orgName: string, exclude?: Set<string>): Promise<void> {
+		if (type === PromptsType.skill) {
+			await this.clearSkillCache(orgName, exclude);
+			return;
+		}
+
 		const cacheDir = this.getCacheDir(orgName, type);
 
 		try {
@@ -333,6 +357,10 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 	}
 
 	async listCachedFiles(type: PromptsType, orgName: string): Promise<vscode.ChatResource[]> {
+		if (type === PromptsType.skill) {
+			return this.listCachedSkillFiles(orgName);
+		}
+
 		const resources: vscode.ChatResource[] = [];
 		const cacheDir = this.getCacheDir(orgName, type);
 
@@ -347,6 +375,50 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 		} catch {
 			// Directory might not exist yet
 			this.logService.trace(`[GitHubOrgChatResourcesService] Cache directory does not exist: ${cacheDir.toString()}`);
+		}
+
+		return resources;
+	}
+
+	private async clearSkillCache(orgName: string, exclude?: Set<string>): Promise<void> {
+		const cacheDir = this.getCacheDir(orgName, PromptsType.skill);
+
+		try {
+			const entries = await this.fileSystem.readDirectory(cacheDir);
+			for (const [entryName, fileType] of entries) {
+				if (fileType === FileType.Directory && !exclude?.has(entryName)) {
+					await this.fileSystem.delete(vscode.Uri.joinPath(cacheDir, entryName), { recursive: true });
+					this.logService.trace(`[GitHubOrgChatResourcesService] Deleted skill cache directory: ${entryName}`);
+				}
+			}
+		} catch {
+			// Directory might not exist
+		}
+	}
+
+	private async listCachedSkillFiles(orgName: string): Promise<vscode.ChatResource[]> {
+		const resources: vscode.ChatResource[] = [];
+		const cacheDir = this.getCacheDir(orgName, PromptsType.skill);
+
+		try {
+			const entries = await this.fileSystem.readDirectory(cacheDir);
+			for (const [entryName, fileType] of entries) {
+				if (fileType !== FileType.Directory) {
+					continue;
+				}
+
+				const skillFileUri = vscode.Uri.joinPath(cacheDir, entryName, SKILL_FILENAME);
+				try {
+					const stat = await this.fileSystem.stat(skillFileUri);
+					if (stat.type === FileType.File) {
+						resources.push({ uri: skillFileUri });
+					}
+				} catch {
+					// Ignore invalid skill cache folders missing SKILL.md.
+				}
+			}
+		} catch {
+			this.logService.trace(`[GitHubOrgChatResourcesService] Skill cache directory does not exist: ${cacheDir.toString()}`);
 		}
 
 		return resources;

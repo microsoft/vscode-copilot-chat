@@ -180,6 +180,30 @@ export interface CustomAgentDetails extends CustomAgentListItem {
 	prompt: string;
 }
 
+export interface SkillListItem {
+	name: string;
+	display_name: string;
+	description: string;
+	repo_owner_id: number;
+	repo_owner: string;
+	repo_id: number;
+	repo_name: string;
+	version: string;
+	file_path: string;
+	allowed_tools: string[];
+	user_invocable?: boolean;
+	disable_model_invocation?: boolean;
+}
+
+export interface SkillListOptions {
+	dedupe?: boolean;
+	includeSources?: ('repo' | 'org' | 'enterprise')[];
+}
+
+export interface SkillDetails extends SkillListItem {
+	content: string;
+}
+
 export interface PullRequestFile {
 	filename: string;
 	status: 'added' | 'removed' | 'modified' | 'renamed' | 'copied' | 'changed' | 'unchanged';
@@ -316,6 +340,28 @@ export interface IOctoKitService {
 	 * @returns The complete custom agent configuration including the prompt
 	 */
 	getCustomAgentDetails(owner: string, repo: string, agentName: string, version: string, authOptions: AuthOptions): Promise<CustomAgentDetails | undefined>;
+
+	/**
+	 * Gets the list of skills available for a repository.
+	 * This includes repo-level and org/enterprise-level skills based on the provided filters.
+	 * @param owner The repository owner
+	 * @param repo The repository name
+	 * @param options Optional filtering options for source selection and deduplication.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
+	 * @returns An array of skill list items with basic metadata
+	 */
+	getSkills(owner: string, repo: string, options: SkillListOptions, authOptions: AuthOptions): Promise<SkillListItem[]>;
+
+	/**
+	 * Gets the full configuration for a specific skill, including the SKILL.md contents.
+	 * @param owner The repository owner
+	 * @param repo The repository name
+	 * @param skillName The name of the skill
+	 * @param version Optional git ref (branch, tag, or commit SHA) to fetch from
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
+	 * @returns The complete skill configuration including the SKILL.md content
+	 */
+	getSkillDetails(owner: string, repo: string, skillName: string, version: string, authOptions: AuthOptions): Promise<SkillDetails | undefined>;
 
 	/**
 	 * Gets the list of files changed in a pull request.

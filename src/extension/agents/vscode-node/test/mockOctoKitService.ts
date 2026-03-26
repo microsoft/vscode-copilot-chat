@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CCAEnabledResult, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, GitHubOutageStatus, IOctoKitService, PermissiveAuthRequiredError } from '../../../../platform/github/common/githubService';
+import { CCAEnabledResult, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, GitHubOutageStatus, IOctoKitService, PermissiveAuthRequiredError, SkillDetails, SkillListItem, SkillListOptions } from '../../../../platform/github/common/githubService';
 
 /**
  * Mock implementation of IOctoKitService for testing
@@ -13,6 +13,8 @@ export class MockOctoKitService implements IOctoKitService {
 
 	private customAgents: CustomAgentListItem[] = [];
 	private agentDetails: Map<string, CustomAgentDetails> = new Map();
+	private skills: SkillListItem[] = [];
+	private skillDetails: Map<string, SkillDetails> = new Map();
 	private orgInstructions: Map<string, string> = new Map();
 	private userOrganizations: string[] = ['testorg'];
 
@@ -59,6 +61,17 @@ export class MockOctoKitService implements IOctoKitService {
 		return this.agentDetails.get(agentName);
 	}
 
+	async getSkills(_owner: string, _repo: string, _options: SkillListOptions, _authOptions: { createIfNone?: boolean }): Promise<SkillListItem[]> {
+		if (!(await this.getCurrentAuthedUser())) {
+			throw new PermissiveAuthRequiredError();
+		}
+		return this.skills;
+	}
+
+	async getSkillDetails(_owner: string, _repo: string, skillName: string, _version: string, _authOptions: { createIfNone?: boolean }): Promise<SkillDetails | undefined> {
+		return this.skillDetails.get(skillName);
+	}
+
 	// Helper methods for test setup
 
 	setOrgInstructions(orgLogin: string, instructions: string | undefined) {
@@ -81,6 +94,14 @@ export class MockOctoKitService implements IOctoKitService {
 		this.agentDetails.set(name, details);
 	}
 
+	setSkills(skills: SkillListItem[]) {
+		this.skills = skills;
+	}
+
+	setSkillDetails(name: string, details: SkillDetails) {
+		this.skillDetails.set(name, details);
+	}
+
 	setUserOrganizations(orgs: string[]) {
 		this.userOrganizations = orgs;
 	}
@@ -90,12 +111,18 @@ export class MockOctoKitService implements IOctoKitService {
 		this.agentDetails.clear();
 	}
 
+	clearSkills() {
+		this.skills = [];
+		this.skillDetails.clear();
+	}
+
 	/**
 	 * Resets all mock state
 	 */
 	reset() {
 		this.clearInstructions();
 		this.clearAgents();
+		this.clearSkills();
 		this.userOrganizations = ['testorg'];
 	}
 }
