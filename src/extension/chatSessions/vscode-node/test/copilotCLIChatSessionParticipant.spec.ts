@@ -52,7 +52,6 @@ import { MockCliSdkSession, MockCliSdkSessionManager, MockSkillLocations, NullCo
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../copilotcli/node/userInputHelpers';
 import { CustomSessionTitleService } from '../../copilotcli/vscode-node/customSessionTitleServiceImpl';
 import { MockChatPromptFileService } from '../../copilotcli/vscode-node/test/testHelpers';
-import { ChatSessionRepositoryTracker } from '../chatSessionRepositoryTracker';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant } from '../copilotCLIChatSessionsContribution';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
 import { CopilotCLIFolderRepositoryManager } from '../folderRepositoryManagerImpl';
@@ -367,8 +366,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 						}
 					}();
 				}
-				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, new MockChatSessionMetadataStore(), instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullChatDebugFileLoggerService(), disposables.add(new 
-        ()));
+				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, new MockChatSessionMetadataStore(), instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullChatDebugFileLoggerService(), disposables.add(new MockChatPromptFileService()));
 				cliSessions.push(session);
 				return disposables.add(session);
 			}
