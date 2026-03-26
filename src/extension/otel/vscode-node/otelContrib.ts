@@ -73,6 +73,10 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 				dest = result;
 			}
 
+			// Checkpoint WAL so all data is flushed into the main .db file before copying.
+			// Without this, the copy would be empty because data lives in the -wal file.
+			this._sqliteStore.checkpoint();
+
 			await vscode.workspace.fs.copy(src, dest, { overwrite: true });
 			this._logService.info(`[OTel] Exported agent-traces.db to ${dest.fsPath}`);
 		}));

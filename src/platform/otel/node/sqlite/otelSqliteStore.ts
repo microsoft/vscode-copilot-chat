@@ -272,6 +272,15 @@ export class OTelSqliteStore {
 		return Number(result.changes);
 	}
 
+	/**
+	 * Checkpoint WAL to flush all pending writes into the main .db file.
+	 * This must be called before copying the .db file, otherwise the copy
+	 * will be missing data that lives only in the -wal file.
+	 */
+	checkpoint(): void {
+		this._ensureDb().exec('PRAGMA wal_checkpoint(TRUNCATE)');
+	}
+
 	close(): void {
 		if (this._db) {
 			this._db.close();
