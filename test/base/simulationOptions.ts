@@ -69,7 +69,6 @@ export class SimulationOptions {
 
 	public readonly nesDatagen: {
 		readonly input: string;
-		readonly strategy: string | undefined;
 		readonly output: string | undefined;
 		readonly rowOffset: number;
 		readonly workerMode: boolean;
@@ -171,7 +170,6 @@ export class SimulationOptions {
 		this.nesDatagen = isNesDatagen && argv['input']
 			? {
 				input: argv['input'],
-				strategy: argv['strategy'],
 				output: argv['out'],
 				rowOffset: typeof argv['row-offset'] === 'number' ? argv['row-offset'] : 0,
 				workerMode: boolean(argv['worker'], false),
@@ -243,24 +241,26 @@ export class SimulationOptions {
 
 	public printTrainHelp(): void {
 		console.log([
-			`Usage: npm run simulate -- [global options] nes-datagen --input=<path> [options]`,
+			`Usage: npm run simulate -- --config-file=<path> [global options] nes-datagen --input=<path> [options]`,
 			``,
 			`Generate training data by replaying alternative action recordings through the NES prompt pipeline.`,
+			`The prompting strategy is read from the model configuration in --config-file.`,
 			``,
 			`Options:`,
 			`  --input                            Path to a JSON file with training data recordings (required)`,
-			`  --strategy                         Prompting strategy (e.g. patchBased02, xtab275). Default: patchBased02`,
 			`  --out                              Output path for JSON file. Default: <input-path>_output.json`,
 			``,
 			`Global options (placed before 'nes-datagen'):`,
+			`  --config-file                      Path to a JSON config file (required for nes-datagen)`,
+			`                                     Must include "chat.advanced.inlineEdits.xtabProvider.modelConfiguration"`,
+			`                                     with at least { "modelName", "promptingStrategy", "includeTagsInCurrentFile" }`,
 			`  -p, --parallelism                  Number of parallel workers (default: 20)`,
 			`  --verbose                          Print detailed progress and error information`,
 			`  --help                             Show this help message`,
 			``,
 			`Examples:`,
-			`  npm run simulate -- nes-datagen --input=data.json`,
-			`  npm run simulate -- nes-datagen --input=data.json --strategy=xtab275 --out=output.json`,
-			`  npm run simulate -- --parallelism=10 --verbose nes-datagen --input=data.json`,
+			`  npm run simulate -- --config-file=config.json nes-datagen --input=data.json`,
+			`  npm run simulate -- --config-file=config.json --parallelism=10 --verbose nes-datagen --input=data.json`,
 			``,
 		].join('\n'));
 	}

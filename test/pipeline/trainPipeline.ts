@@ -10,23 +10,13 @@ import * as path from 'path';
 import { createExtensionUnitTestingServices } from '../../src/extension/test/node/services';
 import { ConfigKey, IConfigurationService } from '../../src/platform/configuration/common/configurationService';
 import { PromptingStrategy } from '../../src/platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { applyConfigFile, loadConfigFile } from '../base/simulationContext';
 import { SimulationOptions } from '../base/simulationOptions';
 import { assembleSample, ISample, resolveOutputPath, writeSamples } from './output';
 import { loadAndParseInput } from './parseInput';
 import { generatePromptFromRecording, IGeneratedPrompt } from './promptStep';
 import { parseSuggestedEdit, processAllRows } from './replayRecording';
 import { generateAllResponses, generateResponse, IResponseGenerationInput } from './responseStep';
-
-/** Case-insensitive lookup of CLI strategy value against PromptingStrategy enum. */
-export function resolvePromptingStrategy(input: string): PromptingStrategy {
-	const lowerInput = input.toLowerCase();
-	for (const value of Object.values(PromptingStrategy)) {
-		if (value.toLowerCase() === lowerInput) {
-			return value;
-		}
-	}
-	throw new Error(`Unknown strategy: '${input}'. Supported: ${Object.values(PromptingStrategy).join(', ')}`);
-}
 
 function logErrors(errors: readonly { error: string }[], verbose: boolean): void {
 	if (errors.length > 0 && verbose) {
@@ -68,14 +58,17 @@ function formatElapsed(startTime: number): string {
 export async function runInputPipeline(opts: SimulationOptions): Promise<void> {
 	const nesDatagenOpts = opts.nesDatagen!;
 	const inputPath = nesDatagenOpts.input;
-	const strategy = resolvePromptingStrategy(nesDatagenOpts.strategy ?? 'patchBased02');
+	if (!opts.configFile) {
+		throw new Error('nes-datagen requires --config-file');
+	}
+	const configs = loadConfigFile(opts.configFile);
 	const verbose = !!opts.verbose;
 	const concurrency = opts.parallelism;
 	const rowOffset = nesDatagenOpts.rowOffset;
 
 	console.log(`\n=== Pipeline ===`);
 	console.log(`  Input: ${inputPath}`);
-	console.log(`  Strategy: ${strategy}, Concurrency: ${concurrency}\n`);
+	console.log(`  Concurrency: ${concurrency}`);
 
 	// Step 1: Parse input
 	const { rows, errors } = await loadAndParseInput(inputPath, verbose);
@@ -96,19 +89,18 @@ export async function runInputPipeline(opts: SimulationOptions): Promise<void> {
 	try {
 		const configService = testAccessor.get(IConfigurationService);
 
-		//FIXME @ulugbekna: we should take this from `--config` not hard-code
-		await configService.setConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfiguration, {
-			modelName: 'pipeline',
-			promptingStrategy: strategy,
-			includeTagsInCurrentFile: true,
-			lintOptions: undefined,
-		});
+		await applyConfigFile(configService, configs);
 
 		// Disable interactive debounce for batch mode
 		await configService.setConfig(ConfigKey.TeamInternal.InlineEditsDebounce, 0);
 		await configService.setConfig(ConfigKey.TeamInternal.InlineEditsCacheDelay, 0);
 		await configService.setConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceEndOfLine, 0);
 		await configService.setConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceInlineSuggestion, 0);
+
+		const modelConfig = configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfiguration);
+		const strategy = modelConfig?.promptingStrategy ?? PromptingStrategy.PatchBased02;
+
+		console.log(`  Local model configuration: ${JSON.stringify(modelConfig)}`);
 
 		const prompts: { index: number; prompt: IGeneratedPrompt }[] = [];
 		const promptErrors: { index: number; error: string }[] = [];
@@ -247,7 +239,7 @@ export async function runInputPipelineParallel(opts: SimulationOptions): Promise
 			const args = [
 				'nes-datagen',
 				'--input', chunkPath,
-				'--strategy', nesDatagenOpts.strategy ?? 'patchBased02',
+				'--config-file', opts.configFile!,
 				'--out', resultPath,
 				'--row-offset', String(start),
 				'--parallelism', String(opts.parallelism),

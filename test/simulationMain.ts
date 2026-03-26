@@ -36,7 +36,7 @@ import { CompletionsSQLiteCache, ICompletionsCache } from './base/completionsCac
 import { usedEmbeddingsCaches } from './base/embeddingsCache';
 import { TestingCacheSalts } from './base/salts';
 import { ICompleteBaselineComparison, IModifiedScenario, SimulationBaseline } from './base/simulationBaseline';
-import { CacheMode, CurrentTestRunInfo, SimulationServicesOptions, createSimulationChatModelThrottlingTaskLaunchers } from './base/simulationContext';
+import { CacheMode, CurrentTestRunInfo, SimulationServicesOptions, createSimulationChatModelThrottlingTaskLaunchers, loadConfigFile } from './base/simulationContext';
 import { ProxiedSimulationEndpointHealth, SimulationEndpointHealthImpl } from './base/simulationEndpointHealth';
 import { BASELINE_RUN_COUNT, SimulationOptions } from './base/simulationOptions';
 import { ProxiedSimulationOutcome, SimulationOutcomeImpl } from './base/simulationOutcome';
@@ -275,15 +275,7 @@ async function prepareTestEnvironment(opts: SimulationOptions, jsonOutputPrinter
 		await fs.promises.copyFile(baseline.baselinePath, path.join(outputPath, OLD_BASELINE_FILENAME));
 	}
 
-	let configs: Record<string, unknown> | undefined;
-	if (opts.configFile) {
-		const configFilePath = path.isAbsolute(opts.configFile) ? opts.configFile : path.join(process.cwd(), opts.configFile);
-		const configFileContents = await fs.promises.readFile(configFilePath, 'utf-8');
-		configs = JSON.parse(configFileContents);
-		if (!configs || typeof configs !== 'object') {
-			throw new Error('Invalid configuration file ' + opts.configFile);
-		}
-	}
+	const configs = opts.configFile ? loadConfigFile(opts.configFile) : undefined;
 
 	return {
 		...createSimulationTestContext(opts, runningAllTests, baseline, canUseBaseline, jsonOutputPrinter, outputPath, externalScenariosPath, rpcInExtensionHost, configs),
