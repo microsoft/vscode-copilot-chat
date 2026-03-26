@@ -325,9 +325,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 			return this.workspaceService.openNotebookDocumentAndSnapshot(uri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model));
 		}
 
-		const snapshot = TextDocumentSnapshot.create(await this.workspaceService.openTextDocument(uri));
-
-		return snapshot;
+		return TextDocumentSnapshot.create(await this.workspaceService.openTextDocument(uri));
 	}
 
 	private async sendReadFileTelemetry(outcome: string, options: Pick<vscode.LanguageModelToolInvocationOptions<ReadFileParams>, 'model' | 'chatRequestId' | 'input'>, { start, end, truncated }: IParamRanges, uri: URI | undefined) {

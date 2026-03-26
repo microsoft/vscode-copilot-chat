@@ -6,6 +6,7 @@
 import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { HTMLTracer, IChatEndpointInfo, RenderPromptResult } from '@vscode/prompt-tsx';
 import { CancellationToken, DocumentLink, DocumentLinkProvider, ExtendedLanguageModelToolResult, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult2, languages, Range, TextDocument, Uri, workspace } from 'vscode';
+import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { IModelAPIResponse } from '../../../platform/endpoint/common/endpointProvider';
@@ -283,6 +284,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		@ILogService private readonly _logService: ILogService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IChatDebugFileLoggerService private readonly _chatDebugFileLoggerService: IChatDebugFileLoggerService,
 	) {
 		super();
 
@@ -330,6 +332,7 @@ export class RequestLogger extends AbstractRequestLogger {
 	public readonly onDidChangeRequests = this._onDidChangeRequests.event;
 
 	public override logModelListCall(id: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void {
+		this._chatDebugFileLoggerService.setModelSnapshot(models);
 		this.addEntry({
 			type: LoggedRequestKind.MarkdownContentRequest,
 			debugName: 'modelList',

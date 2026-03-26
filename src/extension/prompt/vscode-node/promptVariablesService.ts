@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
+import { getCurrentCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
 import { getToolName } from '../../tools/common/toolNames';
 import { IPromptVariablesService } from '../node/promptVariablesService';
 
@@ -38,6 +39,14 @@ export class PromptVariablesServiceImpl implements IPromptVariablesService {
 				return userPromptsFolderUri.fsPath;
 			}],
 			['VSCODE_CURRENT_SESSION_LOG', sessionId => {
+				const token = getCurrentCapturingToken();
+				const sessionIds = token?.debugTargetSessionIds;
+				if (sessionIds && sessionIds.length > 0) {
+					return sessionIds.map(id => {
+						const sessionDir = this.chatDebugFileLoggerService.getSessionDir(id);
+						return sessionDir ? this.promptPathRepresentationService.getFilePath(sessionDir) : undefined;
+					}).filter((path): path is string => path !== undefined).join(', ');
+				}
 				if (!sessionId) {
 					return undefined;
 				}

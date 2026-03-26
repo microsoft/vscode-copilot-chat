@@ -458,4 +458,58 @@ describe('ChatDebugFileLoggerService', () => {
 		expect(userMsgEntry!.sid).toBe('session-1');
 		expect((userMsgEntry!.attrs as Record<string, unknown>).content).toBe('hello world');
 	});
+
+	it('writes models.json when model snapshot is set before session starts', async () => {
+		const models = [{ id: 'gpt-4o', name: 'GPT-4o', capabilities: { type: 'chat', family: 'gpt-4o' } }];
+		service.setModelSnapshot(models);
+
+		await service.startSession('session-models');
+		await service.flush('session-models');
+
+		const sessionDir = service.getSessionDir('session-models');
+		expect(sessionDir).toBeDefined();
+		const modelsPath = path.join(sessionDir!.fsPath, 'models.json');
+		const content = await fs.promises.readFile(modelsPath, 'utf-8');
+		const parsed = JSON.parse(content);
+		expect(parsed).toHaveLength(1);
+		expect(parsed[0].id).toBe('gpt-4o');
+	});
+
+	it('writes models.json when model snapshot arrives after session starts', async () => {
+		await service.startSession('session-late');
+		await service.flush('session-late');
+
+		// Model snapshot arrives after session already started
+		const models = [{ id: 'claude-sonnet', name: 'Claude Sonnet' }];
+		service.setModelSnapshot(models);
+		await service.flush('session-late');
+
+		const sessionDir = service.getSessionDir('session-late');
+		expect(sessionDir).toBeDefined();
+		const modelsPath = path.join(sessionDir!.fsPath, 'models.json');
+		const content = await fs.promises.readFile(modelsPath, 'utf-8');
+		const parsed = JSON.parse(content);
+		expect(parsed).toHaveLength(1);
+		expect(parsed[0].id).toBe('claude-sonnet');
+	});
+
+	it('does not write models.json more than once per session', async () => {
+		const models = [{ id: 'gpt-4o', name: 'GPT-4o' }];
+		service.setModelSnapshot(models);
+
+		await service.startSession('session-dedup');
+		await service.flush('session-dedup');
+
+		const sessionDir = service.getSessionDir('session-dedup');
+		const modelsPath = path.join(sessionDir!.fsPath, 'models.json');
+
+		// Overwrite the file with different content to detect if it gets rewritten
+		await fs.promises.writeFile(modelsPath, '"sentinel"', 'utf-8');
+
+		// Calling setModelSnapshot again should NOT overwrite for existing sessions
+		service.setModelSnapshot([{ id: 'new-model' }]);
+
+		const content = await fs.promises.readFile(modelsPath, 'utf-8');
+		expect(content).toBe('"sentinel"');
+	});
 });

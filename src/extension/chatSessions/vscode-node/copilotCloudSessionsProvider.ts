@@ -2062,6 +2062,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					return;
 				}
 				isCompleted = true;
+				this.refresh();
 				resolve();
 			};
 
@@ -2118,7 +2119,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					if (!token.isCancellationRequested && sessionInfo.state === 'in_progress') {
 						if (!hasActiveProgress) {
 							this.logService.trace(`Showing progress indicator (hasActiveProgress was false)`);
-							stream.progress('Working...');
 							hasActiveProgress = true;
 						} else {
 							this.logService.trace(`NOT showing progress indicator (hasActiveProgress was true)`);

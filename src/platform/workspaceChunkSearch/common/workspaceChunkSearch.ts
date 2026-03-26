@@ -11,38 +11,11 @@ import { FileChunkAndScore } from '../../chunking/common/chunk';
 import { Embedding } from '../../embeddings/common/embeddingsComputer';
 import { IChatEndpoint } from '../../networking/common/networking';
 
-export interface KeywordItem {
-	readonly keyword: string;
-	readonly variations: readonly string[];
-}
-
-export interface ResolvedWorkspaceChunkQuery {
-	/**
-	 * The resolved text of the query.
-	 *
-	 * This resolves ambagious pronouns and words in the query.
-	 */
-	readonly rephrasedQuery: string;
-	readonly keywords: readonly KeywordItem[];
-}
-
 export interface WorkspaceChunkQuery {
 	/**
 	 * The original text of the query.
 	 */
-	readonly rawQuery: string;
-
-	/**
-	 * Only resolves the query part of the query, not the keywords.
-	 *
-	 * May skip resolving if the query does not appear ambiguous.
-	 */
-	resolveQuery(token: CancellationToken): Promise<string>;
-
-	/**
-	 * Fully resolves the query and generates keywords for it.
-	 */
-	resolveQueryAndKeywords(token: CancellationToken): Promise<ResolvedWorkspaceChunkQuery>;
+	readonly queryText: string;
 }
 
 export interface WorkspaceChunkQueryWithEmbeddings extends WorkspaceChunkQuery {

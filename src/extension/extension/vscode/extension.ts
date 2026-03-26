@@ -9,6 +9,7 @@ import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { isProduction } from '../../../platform/env/common/packagejson';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ChatExtGlobalPerfMark, markChatExtGlobal } from '../../../util/common/performance';
 import { IInstantiationServiceBuilder, InstantiationServiceBuilder } from '../../../util/common/services';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotExtensionApi } from '../../api/vscode/extensionApi';
@@ -31,6 +32,7 @@ export interface IExtensionActivationConfiguration {
 }
 
 export async function baseActivate(configuration: IExtensionActivationConfiguration) {
+	markChatExtGlobal(ChatExtGlobalPerfMark.WillActivate);
 	const context = configuration.context;
 	if (context.extensionMode === ExtensionMode.Test && !configuration.forceActivation && !isScenarioAutomation) {
 		// FIXME Running in tests, don't activate the extension
@@ -78,7 +80,7 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 		return instantiationService; // The returned accessor is used in tests
 	}
 
-	return {
+	const result = {
 		getAPI(version: number) {
 			if (version > CopilotExtensionApi.version) {
 				throw new Error('Invalid Copilot Chat extension API version. Please upgrade Copilot Chat.');
@@ -87,6 +89,8 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 			return instantiationService.createInstance(CopilotExtensionApi);
 		}
 	};
+	markChatExtGlobal(ChatExtGlobalPerfMark.DidActivate);
+	return result;
 }
 
 export function createInstantiationService(configuration: IExtensionActivationConfiguration): IInstantiationService {
