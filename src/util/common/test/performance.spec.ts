@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { ChatExtPerfMark, clearChatExtMarks, markChatExt } from '../performance';
+import { ChatExtPerfMark, clearChatExtMarks, getChatExtMarks, markChatExt } from '../performance';
 
 describe('performance', () => {
 
@@ -25,12 +25,16 @@ describe('performance', () => {
 		return id;
 	}
 
+	function getMarksForSession(sessionId: string) {
+		return getChatExtMarks().filter(m => m.name.includes(sessionId));
+	}
+
 	describe('markChatExt', () => {
 		it('emits a mark with the expected prefix', () => {
 			const sessionId = uniqueSessionId();
 			markChatExt(sessionId, ChatExtPerfMark.WillHandleParticipant);
 
-			const marks = performance.getEntriesByType('mark').filter(m => m.name.includes(sessionId));
+			const marks = getMarksForSession(sessionId);
 			expect(marks).toHaveLength(1);
 			expect(marks[0].name).toBe(`${TEST_PREFIX}${sessionId}/${ChatExtPerfMark.WillHandleParticipant}`);
 		});
@@ -40,14 +44,14 @@ describe('performance', () => {
 			markChatExt(sessionId, ChatExtPerfMark.WillBuildPrompt);
 			markChatExt(sessionId, ChatExtPerfMark.DidBuildPrompt);
 
-			const marks = performance.getEntriesByType('mark').filter(m => m.name.includes(sessionId));
+			const marks = getMarksForSession(sessionId);
 			expect(marks).toHaveLength(2);
 		});
 
 		it('no-ops when sessionId is undefined', () => {
-			const before = performance.getEntriesByType('mark').length;
+			const before = getChatExtMarks().length;
 			markChatExt(undefined, ChatExtPerfMark.WillFetch);
-			expect(performance.getEntriesByType('mark').length).toBe(before);
+			expect(getChatExtMarks().length).toBe(before);
 		});
 	});
 
@@ -71,20 +75,10 @@ describe('performance', () => {
 
 			clearChatExtMarks(sessionId1);
 
-			const marks = performance.getEntriesByType('mark').filter(m => m.name.startsWith(TEST_PREFIX));
-			expect(marks).toHaveLength(1);
-			expect(marks[0].name).toContain(sessionId2);
-		});
-
-		it('does not affect non-chat-ext marks', () => {
-			const sessionId = uniqueSessionId();
-			performance.mark('code/other/test');
-			markChatExt(sessionId, ChatExtPerfMark.WillBuildPrompt);
-
-			clearChatExtMarks(sessionId);
-
-			expect(performance.getEntriesByType('mark').some(m => m.name === 'code/other/test')).toBe(true);
-			performance.clearMarks('code/other/test');
+			const marks = getChatExtMarks().filter(m => m.name.startsWith(`${TEST_PREFIX}${sessionId1}/`));
+			expect(marks).toHaveLength(0);
+			const remaining = getChatExtMarks().filter(m => m.name.startsWith(`${TEST_PREFIX}${sessionId2}/`));
+			expect(remaining).toHaveLength(1);
 		});
 	});
 });

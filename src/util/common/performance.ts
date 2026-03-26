@@ -3,6 +3,28 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+interface IMonacoPerformanceMarks {
+	mark(name: string, markOptions?: { startTime?: number }): void;
+	getMarks(): { name: string; startTime: number }[];
+	clearMarks(prefix: string): void;
+}
+
+function _getNativePolyfill(): IMonacoPerformanceMarks {
+	return {
+		mark: (name, markOptions) => performance.mark(name, markOptions),
+		getMarks: () => performance.getEntries().filter(e => e.entryType === 'mark').map(e => ({ name: e.name, startTime: e.startTime })),
+		clearMarks: prefix => {
+			for (const entry of performance.getEntries()) {
+				if (entry.entryType === 'mark' && entry.name.startsWith(prefix)) {
+					performance.clearMarks(entry.name);
+				}
+			}
+		},
+	};
+}
+
+const perf: IMonacoPerformanceMarks = (globalThis as { MonacoPerformanceMarks?: IMonacoPerformanceMarks }).MonacoPerformanceMarks ?? _getNativePolyfill();
+
 const chatExtPrefix = 'code/chat/ext/';
 
 /**
@@ -59,7 +81,7 @@ export const ChatExtPerfMark = {
  */
 export function markChatExt(sessionId: string | undefined, name: string): void {
 	if (sessionId) {
-		performance.mark(`${chatExtPrefix}${sessionId}/${name}`);
+		perf.mark(`${chatExtPrefix}${sessionId}/${name}`);
 	}
 }
 
@@ -67,14 +89,23 @@ export function markChatExt(sessionId: string | undefined, name: string): void {
  * Clears all performance marks for the given chat session.
  */
 export function clearChatExtMarks(sessionId: string): void {
-	const prefix = `${chatExtPrefix}${sessionId}/`;
-	const toRemove = new Set<string>();
-	for (const entry of performance.getEntriesByType('mark')) {
-		if (entry.name.startsWith(prefix)) {
-			toRemove.add(entry.name);
-		}
-	}
-	for (const name of toRemove) {
-		performance.clearMarks(name);
-	}
+	perf.clearMarks(`${chatExtPrefix}${sessionId}/`);
+}
+
+/**
+ * Emits a global (non-session-scoped) performance mark:
+ * `code/chat/ext/<name>`
+ *
+ * Used for one-time activation marks like `willActivate` / `didActivate`.
+ */
+export function markChatExtGlobal(name: string): void {
+	perf.mark(`${chatExtPrefix}${name}`);
+}
+
+/**
+ * Returns all marks currently stored in the polyfill.
+ * Useful for tests and diagnostics.
+ */
+export function getChatExtMarks(): { name: string; startTime: number }[] {
+	return perf.getMarks();
 }
