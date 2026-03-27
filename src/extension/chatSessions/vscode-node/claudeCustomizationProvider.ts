@@ -4,12 +4,40 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { INativeEnvService } from '../../../platform/env/common/envService';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { AGENT_FILE_EXTENSION, INSTRUCTION_FILE_EXTENSION, SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { basename } from '../../../util/vs/base/common/resources';
+import { URI } from '../../../util/vs/base/common/uri';
 import { IChatPromptFileService } from '../common/chatPromptFileService';
+
+/**
+ * Hook event IDs that Claude supports, matching the HookEvent types from
+ * the Claude Agent SDK. Used to discover hooks from .claude/settings.json.
+ */
+const HOOK_EVENT_IDS = [
+	'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest',
+	'UserPromptSubmit', 'Stop', 'SubagentStart', 'SubagentStop',
+	'PreCompact', 'SessionStart', 'SessionEnd', 'Notification',
+] as const;
+
+interface HookConfig {
+	readonly type: string;
+	readonly command: string;
+}
+
+interface MatcherConfig {
+	readonly matcher: string;
+	readonly hooks: HookConfig[];
+}
+
+interface HooksSettings {
+	readonly hooks?: Partial<Record<string, MatcherConfig[]>>;
+}
 
 export class ClaudeCustomizationProvider extends Disposable implements vscode.ChatSessionCustomizationProvider {
 
@@ -27,6 +55,9 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 
 	constructor(
 		@IChatPromptFileService private readonly chatPromptFileService: IChatPromptFileService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+		@INativeEnvService private readonly envService: INativeEnvService,
 		@ILogService private readonly logService: ILogService,
 	) {
 		super();
@@ -36,7 +67,7 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 		this._register(this.chatPromptFileService.onDidChangeSkills(() => this._onDidChange.fire()));
 	}
 
-	provideChatSessionCustomizations(_token: vscode.CancellationToken): vscode.ChatSessionCustomizationItem[] {
+	async provideChatSessionCustomizations(_token: vscode.CancellationToken): Promise<vscode.ChatSessionCustomizationItem[]> {
 		const items: vscode.ChatSessionCustomizationItem[] = [];
 
 		for (const agent of this.chatPromptFileService.customAgents) {
@@ -63,8 +94,62 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 			});
 		}
 
+		// Discover hooks from .claude/settings.json files
+		const hookItems = await this.discoverHooks();
+		items.push(...hookItems);
+
 		this.logService.trace(`[ClaudeCustomizationProvider] Provided ${items.length} customization items`);
 		return items;
+	}
+
+	private async discoverHooks(): Promise<vscode.ChatSessionCustomizationItem[]> {
+		const items: vscode.ChatSessionCustomizationItem[] = [];
+		const settingsPaths = this.getSettingsFilePaths();
+
+		for (const settingsUri of settingsPaths) {
+			try {
+				const content = await this.fileSystemService.readFile(settingsUri);
+				const settings: HooksSettings = JSON.parse(new TextDecoder().decode(content));
+				if (!settings.hooks) {
+					continue;
+				}
+
+				for (const eventId of HOOK_EVENT_IDS) {
+					const matchers = settings.hooks[eventId];
+					if (!matchers || matchers.length === 0) {
+						continue;
+					}
+
+					for (const matcher of matchers) {
+						for (const hook of matcher.hooks) {
+							const matcherLabel = matcher.matcher === '*' ? '' : ` (${matcher.matcher})`;
+							items.push({
+								uri: settingsUri,
+								type: vscode.ChatSessionCustomizationType.Hook,
+								name: `${eventId}${matcherLabel}`,
+								description: hook.command,
+							});
+						}
+					}
+				}
+			} catch {
+				// Settings file doesn't exist or is invalid — skip
+			}
+		}
+
+		return items;
+	}
+
+	private getSettingsFilePaths(): URI[] {
+		const paths: URI[] = [];
+
+		for (const folder of this.workspaceService.getWorkspaceFolders()) {
+			paths.push(URI.joinPath(folder, '.claude', 'settings.json'));
+			paths.push(URI.joinPath(folder, '.claude', 'settings.local.json'));
+		}
+
+		paths.push(URI.joinPath(this.envService.userHome, '.claude', 'settings.json'));
+		return paths;
 	}
 }
 
