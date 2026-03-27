@@ -114,6 +114,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		// #region Claude Code Chat Sessions
 		const claudeAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
+				[IAgentSessionsWorkspace, new SyncDescriptor(AgentSessionsWorkspace)],
 				[IClaudeCodeSessionService, new SyncDescriptor(ClaudeCodeSessionService)],
 				[IClaudeCodeSdkService, new SyncDescriptor(ClaudeCodeSdkService)],
 				[IClaudeCodeModels, new SyncDescriptor(ClaudeCodeModels)],
