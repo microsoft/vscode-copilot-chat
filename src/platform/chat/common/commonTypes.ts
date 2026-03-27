@@ -153,7 +153,7 @@ export type ChatFetchError =
 	/**
 	 * We requested conversation, but didn't come up with any results because the free tier quota was exceeded.
 	 */
-	| { type: ChatFetchResponseType.QuotaExceeded; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined; retryAfter: Date; capiError?: { code?: string; message?: string } }
+	| { type: ChatFetchResponseType.QuotaExceeded; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined; retryAfter: Date | undefined; capiError?: { code?: string; message?: string } }
 	/**
 	 * We requested conversation, but the extension is blocked
 	 */
