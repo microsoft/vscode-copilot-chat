@@ -1483,7 +1483,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			});
 			await this.contentProvider.refreshSession({ reason: 'update', sessionId: session.sessionId });
 		} catch (error) {
-			this.logService.error(`Failed to persist pull request metadata for session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+			this.logService.error(error instanceof Error ? error : new Error(String(error)), `Failed to persist pull request metadata for session ${sessionId}`);
 		}
 	}
 
