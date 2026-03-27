@@ -20,7 +20,7 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 		return {
 			label: 'Copilot CLI',
 			iconId: 'worktree',
-			unsupportedTypes: [vscode.ChatSessionCustomizationType.Hook],
+			unsupportedTypes: [vscode.ChatSessionCustomizationType.Hook, vscode.ChatSessionCustomizationType.Prompt],
 			workspaceSubpaths: ['.github', '.copilot'],
 		};
 	}

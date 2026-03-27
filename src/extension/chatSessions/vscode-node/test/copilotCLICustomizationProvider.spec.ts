@@ -82,11 +82,12 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(CopilotCLICustomizationProvider.metadata.iconId).toBe('worktree');
 		});
 
-		it('marks Hook type as unsupported', () => {
+		it('marks Hook and Prompt types as unsupported', () => {
 			const unsupported = CopilotCLICustomizationProvider.metadata.unsupportedTypes;
 			expect(unsupported).toBeDefined();
-			expect(unsupported).toHaveLength(1);
+			expect(unsupported).toHaveLength(2);
 			expect(unsupported![0]).toBe(FakeChatSessionCustomizationType.Hook);
+			expect(unsupported![1]).toBe(FakeChatSessionCustomizationType.Prompt);
 		});
 
 		it('scopes to .github and .copilot workspace subpaths', () => {
