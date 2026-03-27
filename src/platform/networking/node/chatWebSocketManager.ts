@@ -144,6 +144,18 @@ export function isCAPIWebSocketError(event: OpenAI.Responses.ResponseStreamEvent
 	return event.type === 'error' && 'error' in event && typeof (event as CAPIWebSocketErrorEvent).error?.code === 'string';
 }
 
+const streamTerminatingOutcomes: Readonly<Record<string, ChatWebSocketRequestOutcome>> = {
+	'response.completed': 'completed',
+	'response.failed': 'response_failed',
+	'response.incomplete': 'response_incomplete',
+	'response.cancelled': 'response_cancelled',
+	'error': 'upstream_error',
+};
+
+export function getStreamTerminatingOutcome(event: OpenAI.Responses.ResponseStreamEvent | CAPIWebSocketErrorEvent): ChatWebSocketRequestOutcome | undefined {
+	return streamTerminatingOutcomes[event.type];
+}
+
 export class ChatWebSocketManager extends Disposable implements IChatWebSocketManager {
 	declare readonly _serviceBrand: undefined;
 
@@ -670,8 +682,9 @@ class ChatWebSocketActiveRequest implements IChatWebSocketRequestHandle {
 
 		this._onEvent.fire(event);
 
-		if (event.type === 'response.completed') {
-			this._finalizeSuccess('completed');
+		const outcome = getStreamTerminatingOutcome(event);
+		if (outcome) {
+			this._finalizeSuccess(outcome);
 		}
 	}
 
