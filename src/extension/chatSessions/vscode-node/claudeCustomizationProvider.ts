@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import { INativeEnvService } from '../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { AGENT_FILE_EXTENSION, INSTRUCTION_FILE_EXTENSION, SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
+import { INSTRUCTION_FILE_EXTENSION, SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -48,7 +48,7 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 		return {
 			label: 'Claude',
 			iconId: 'claude',
-			unsupportedTypes: [vscode.ChatSessionCustomizationType.Prompt],
+			unsupportedTypes: [vscode.ChatSessionCustomizationType.Agent, vscode.ChatSessionCustomizationType.Prompt],
 			workspaceSubpaths: ['.claude'],
 		};
 	}
@@ -69,14 +69,6 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 
 	async provideChatSessionCustomizations(_token: vscode.CancellationToken): Promise<vscode.ChatSessionCustomizationItem[]> {
 		const items: vscode.ChatSessionCustomizationItem[] = [];
-
-		for (const agent of this.chatPromptFileService.customAgents) {
-			items.push({
-				uri: agent.uri,
-				type: vscode.ChatSessionCustomizationType.Agent,
-				name: deriveNameFromUri(agent.uri, AGENT_FILE_EXTENSION),
-			});
-		}
 
 		for (const instruction of this.chatPromptFileService.instructions) {
 			items.push({

@@ -116,11 +116,12 @@ describe('ClaudeCustomizationProvider', () => {
 			expect(ClaudeCustomizationProvider.metadata.iconId).toBe('claude');
 		});
 
-		it('marks Prompt type as unsupported', () => {
+		it('marks Agent and Prompt types as unsupported', () => {
 			const unsupported = ClaudeCustomizationProvider.metadata.unsupportedTypes;
 			expect(unsupported).toBeDefined();
-			expect(unsupported).toHaveLength(1);
-			expect(unsupported![0]).toBe(FakeChatSessionCustomizationType.Prompt);
+			expect(unsupported).toHaveLength(2);
+			expect(unsupported![0]).toBe(FakeChatSessionCustomizationType.Agent);
+			expect(unsupported![1]).toBe(FakeChatSessionCustomizationType.Prompt);
 		});
 
 		it('scopes to .claude workspace subpath', () => {
@@ -132,17 +133,6 @@ describe('ClaudeCustomizationProvider', () => {
 		it('returns empty array when no files exist', async () => {
 			const items = await provider.provideChatSessionCustomizations(undefined!);
 			expect(items).toEqual([]);
-		});
-
-		it('returns agents with Agent type', async () => {
-			const uri = URI.file('/workspace/.claude/my-helper.agent.md');
-			mockPromptFileService.setCustomAgents([{ uri }]);
-
-			const items = await provider.provideChatSessionCustomizations(undefined!);
-			expect(items).toHaveLength(1);
-			expect(items[0].uri).toBe(uri);
-			expect(items[0].type).toBe(FakeChatSessionCustomizationType.Agent);
-			expect(items[0].name).toBe('my-helper');
 		});
 
 		it('returns instructions with Instructions type', async () => {
@@ -167,13 +157,12 @@ describe('ClaudeCustomizationProvider', () => {
 			expect(items[0].name).toBe('my-skill');
 		});
 
-		it('returns all types combined', async () => {
-			mockPromptFileService.setCustomAgents([{ uri: URI.file('/a.agent.md') }]);
+		it('returns instructions and skills combined', async () => {
 			mockPromptFileService.setInstructions([{ uri: URI.file('/b.instructions.md') }]);
 			mockPromptFileService.setSkills([{ uri: URI.file('/skills/c/SKILL.md') }]);
 
 			const items = await provider.provideChatSessionCustomizations(undefined!);
-			expect(items).toHaveLength(3);
+			expect(items).toHaveLength(2);
 		});
 	});
 
