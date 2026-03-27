@@ -146,7 +146,8 @@
 		"workspaceTrust",
 		"environmentPower",
 		"terminalTitle",
-		"toolInvocationApproveCombination"
+		"toolInvocationApproveCombination",
+		"chatSessionCustomizationProvider"
 	],
 	"contributes": {
 		"languageModelTools": [
