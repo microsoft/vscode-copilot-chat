@@ -315,7 +315,7 @@ describe('CopilotCLISessionService', () => {
 					return undefined;
 				}
 			}();
-			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService(), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullChatDebugFileLoggerService()));
+			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService(), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullPromptVariablesService(), new NullChatDebugFileLoggerService()));
 
 			await mkdir(sessionDir.fsPath, { recursive: true });
 			await writeNodeFile(join(sessionDir.fsPath, 'events.jsonl'), [
@@ -350,7 +350,7 @@ describe('CopilotCLISessionService', () => {
 			const delegationService = new class extends mock<IChatDelegationSummaryService>() {
 				override extractPrompt(): { prompt: string; reference: never } | undefined { return undefined; }
 			}();
-			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService(), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullChatDebugFileLoggerService()));
+			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService(), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullPromptVariablesService(), new NullChatDebugFileLoggerService()));
 
 			await mkdir(sessionDir.fsPath, { recursive: true });
 			const eventsFilePath = join(sessionDir.fsPath, 'events.jsonl');
@@ -419,7 +419,7 @@ describe('CopilotCLISessionService', () => {
 					return undefined;
 				}
 			}();
-			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService(), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullChatDebugFileLoggerService()));
+			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService(), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullPromptVariablesService(), new NullChatDebugFileLoggerService()));
 			const partialManager = await partialService.getSessionManager() as unknown as MockCliSdkSessionManager;
 
 			const session = new MockCliSdkSession(sessionId, new Date('2024-01-01T00:00:00.000Z'));
@@ -461,7 +461,7 @@ describe('CopilotCLISessionService', () => {
 			const delegationService = new class extends mock<IChatDelegationSummaryService>() {
 				override extractPrompt(): { prompt: string; reference: never } | undefined { return undefined; }
 			}();
-			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService(), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullChatDebugFileLoggerService()));
+			const partialService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), fileSystem, new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), new NullCopilotCLIAgents(), new NullWorkspaceService(), titleService, configurationService, new MockSkillLocations(), delegationService, new MockChatSessionMetadataStore(), new NullAgentSessionsWorkspace(), new NullChatSessionWorkspaceFolderService(), new NullChatSessionWorktreeService(), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new NullPromptVariablesService(), new NullChatDebugFileLoggerService()));
 			const partialManager = await partialService.getSessionManager() as unknown as MockCliSdkSessionManager;
 
 			// Session has a summary with '<' (which forces the session-load fallback path)
