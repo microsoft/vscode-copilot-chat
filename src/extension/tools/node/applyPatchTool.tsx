@@ -63,6 +63,7 @@ export const applyPatch5Description = 'Use the `apply_patch` tool to edit files.
 
 export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 	public static toolName = ToolName.ApplyPatch;
+	public static readonly nonDeferred = true;
 
 	private _promptContext: IBuildPromptContext | undefined;
 

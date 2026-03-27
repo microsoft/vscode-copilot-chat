@@ -16,6 +16,7 @@ interface ISwitchAgentParams {
 
 export class SwitchAgentTool implements ICopilotTool<ISwitchAgentParams> {
 	public static readonly toolName = ToolName.SwitchAgent;
+	public static readonly nonDeferred = true;
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ISwitchAgentParams>, token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
 		const { agentName } = options.input;

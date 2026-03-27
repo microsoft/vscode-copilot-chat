@@ -41,6 +41,7 @@ export interface ICodebaseToolParams {
 
 export class CodebaseTool implements vscode.LanguageModelTool<ICodebaseToolParams> {
 	public static readonly toolName = ToolName.Codebase;
+	public static readonly nonDeferred = true;
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,

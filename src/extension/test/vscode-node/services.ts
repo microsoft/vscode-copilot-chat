@@ -123,6 +123,8 @@ import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inli
 import { WorkspaceMutationManager } from '../../testing/node/setupTestsFileManager';
 import { AgentMemoryService, IAgentMemoryService } from '../../tools/common/agentMemoryService';
 import { EditToolLearningService, IEditToolLearningService } from '../../tools/common/editToolLearningService';
+import { IToolDeferralService } from '../../../platform/networking/common/toolDeferralService';
+import { ToolDeferralService } from '../../tools/common/toolDeferralService';
 import { IToolsService, NullToolsService } from '../../tools/common/toolsService';
 import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
 import { ToolGroupingCache } from '../../tools/common/virtualTools/virtualToolGroupCache';
@@ -201,6 +203,7 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(IPromptPathRepresentationService, new SyncDescriptor(PromptPathRepresentationService));
 	testingServiceCollection.define(IPromptsService, new SyncDescriptor(PromptsServiceImpl));
 	testingServiceCollection.define(IToolsService, new SyncDescriptor(NullToolsService));
+	testingServiceCollection.define(IToolDeferralService, new ToolDeferralService());
 	testingServiceCollection.define(IChatDiskSessionResources, new SyncDescriptor(ChatDiskSessionResources));
 	testingServiceCollection.define(IChatSessionService, new SyncDescriptor(TestChatSessionService));
 	testingServiceCollection.define(INotebookService, new SyncDescriptor(SimulationNotebookService));

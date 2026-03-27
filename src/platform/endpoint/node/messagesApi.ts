@@ -13,10 +13,11 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ChatLocation } from '../../chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, ContextManagementResponse, CUSTOM_TOOL_SEARCH_NAME, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
+import { AnthropicMessagesTool, ContextManagementResponse, CUSTOM_TOOL_SEARCH_NAME, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
 import { FinishedCallback, IIPCodeCitation, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, rawMessageToCAPI } from '../../networking/common/openai';
+import { IToolDeferralService } from '../../networking/common/toolDeferralService';
 import { sendEngineMessagesTelemetry } from '../../networking/node/chatStream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -85,6 +86,7 @@ interface AnthropicStreamEvent {
 export function createMessagesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, endpoint: IChatEndpoint): IEndpointBody {
 	const configurationService = accessor.get(IConfigurationService);
 	const experimentationService = accessor.get(IExperimentationService);
+	const toolDeferralService = accessor.get(IToolDeferralService);
 
 	const toolSearchEnabled = isAnthropicToolSearchEnabled(endpoint, configurationService);
 	const customToolSearchEnabled = isAnthropicCustomToolSearchEnabled(endpoint, configurationService, experimentationService);
@@ -102,7 +104,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 			if (!tool.function.name || tool.function.name.length === 0) {
 				continue;
 			}
-			const isDeferred = toolSearchEnabled && isAllowedConversationAgent && !isSubagent && !nonDeferredToolNames.has(tool.function.name);
+			const isDeferred = toolSearchEnabled && isAllowedConversationAgent && !isSubagent && !toolDeferralService.isNonDeferredTool(tool.function.name);
 			const anthropicTool: AnthropicMessagesTool = {
 				name: tool.function.name,
 				description: tool.function.description || '',

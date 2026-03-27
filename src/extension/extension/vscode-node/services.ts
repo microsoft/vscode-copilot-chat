@@ -136,6 +136,8 @@ import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inli
 import { WorkspaceMutationManager } from '../../testing/node/setupTestsFileManager';
 import { AgentMemoryService, IAgentMemoryService } from '../../tools/common/agentMemoryService';
 import { IMemoryCleanupService, MemoryCleanupService } from '../../tools/common/memoryCleanupService';
+import { IToolDeferralService } from '../../../platform/networking/common/toolDeferralService';
+import { ToolDeferralService } from '../../tools/common/toolDeferralService';
 import { IToolsService } from '../../tools/common/toolsService';
 import { ToolsService } from '../../tools/vscode-node/toolsService';
 import { LanguageContextServiceImpl } from '../../typescriptContext/vscode-node/languageContextService';
@@ -162,6 +164,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IDiffService, new DiffServiceImpl());
 	builder.define(ITokenizerProvider, new SyncDescriptor(TokenizerProvider, [true]));
 	builder.define(IToolsService, new SyncDescriptor(ToolsService));
+	builder.define(IToolDeferralService, new ToolDeferralService());
 	builder.define(IAgentMemoryService, new SyncDescriptor(AgentMemoryService));
 	builder.define(IMemoryCleanupService, new SyncDescriptor(MemoryCleanupService));
 	builder.define(IChatDiskSessionResources, new SyncDescriptor(ChatDiskSessionResources));

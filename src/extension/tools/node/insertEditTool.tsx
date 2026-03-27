@@ -37,6 +37,7 @@ export const InternalEditToolId = 'vscode_editFile_internal';
 
 export class EditFileTool implements ICopilotTool<IEditFileParams> {
 	public static toolName = ToolName.EditFile;
+	public static readonly nonDeferred = true;
 	private promptContext?: IBuildPromptContext;
 	constructor(
 		@IPromptPathRepresentationService protected readonly promptPathRepresentationService: IPromptPathRepresentationService,

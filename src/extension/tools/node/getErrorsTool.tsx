@@ -42,6 +42,7 @@ interface IGetErrorsParams {
 
 export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams> {
 	public static readonly toolName = ToolName.GetErrors;
+	public static readonly nonDeferred = true;
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,

@@ -43,6 +43,7 @@ export interface ICreateFileParams {
 
 export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 	public static toolName = ToolName.CreateFile;
+	public static readonly nonDeferred = true;
 
 	private _promptContext: IBuildPromptContext | undefined;
 

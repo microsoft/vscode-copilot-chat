@@ -114,6 +114,7 @@ const getParamRanges = (params: ReadFileParams, snapshot: NotebookDocumentSnapsh
 
 export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 	public static toolName = ToolName.ReadFile;
+	public static readonly nonDeferred = true;
 	private _promptContext: IBuildPromptContext | undefined;
 
 	constructor(
