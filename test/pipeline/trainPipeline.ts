@@ -9,7 +9,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { createExtensionUnitTestingServices } from '../../src/extension/test/node/services';
 import { ConfigKey, IConfigurationService } from '../../src/platform/configuration/common/configurationService';
-import { PromptingStrategy } from '../../src/platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { ResponseFormat } from '../../src/platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { Limiter } from '../../src/util/vs/base/common/async';
 import { applyConfigFile, loadConfigFile } from '../base/simulationContext';
 import { SimulationOptions } from '../base/simulationOptions';
 import { assembleSample, ISample, resolveOutputPath, writeSamples } from './output';
@@ -24,30 +25,6 @@ function logErrors(errors: readonly { error: string }[], verbose: boolean): void
 			console.log(`    ${err.error}`);
 		}
 	}
-}
-
-/**
- * Run N async tasks concurrently with a maximum degree of parallelism.
- * Spawns `concurrency` worker coroutines that pull items from a shared queue.
- */
-async function runWithConcurrency<T>(
-	items: readonly T[],
-	concurrency: number,
-	fn: (item: T, index: number) => Promise<void>,
-): Promise<void> {
-	const effectiveConcurrency = Math.max(1, Math.min(concurrency, items.length));
-	let nextIndex = 0;
-	async function worker(): Promise<void> {
-		while (nextIndex < items.length) {
-			const idx = nextIndex++;
-			await fn(items[idx], idx);
-		}
-	}
-	const workers = Array.from(
-		{ length: effectiveConcurrency },
-		() => worker(),
-	);
-	await Promise.all(workers);
 }
 
 function formatElapsed(startTime: number): string {
@@ -98,7 +75,7 @@ export async function runInputPipeline(opts: SimulationOptions): Promise<void> {
 		await configService.setConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceInlineSuggestion, 0);
 
 		const modelConfig = configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfiguration);
-		const strategy = modelConfig?.promptingStrategy ?? PromptingStrategy.PatchBased02;
+		const responseFormat = ResponseFormat.fromPromptingStrategy(modelConfig?.promptingStrategy);
 
 		console.log(`  Local model configuration: ${JSON.stringify(modelConfig)}`);
 
@@ -107,19 +84,22 @@ export async function runInputPipeline(opts: SimulationOptions): Promise<void> {
 		let promptsCompleted = 0;
 		const promptStartTime = Date.now();
 
-		await runWithConcurrency(processed, concurrency, async (p, _i) => {
-			const globalIdx = p.originalRowIndex + rowOffset;
-			const result = await generatePromptFromRecording(testAccessor, p.recordingInfo);
-			if ('error' in result) {
-				promptErrors.push({ index: p.originalRowIndex, error: `[sample ${globalIdx}, ${p.row.activeDocumentLanguageId}, ${p.activeFilePath}] ${result.error}` });
-			} else {
-				prompts.push({ index: p.originalRowIndex, prompt: result });
-			}
-			promptsCompleted++;
-			if (verbose && (promptsCompleted % 50 === 0 || promptsCompleted === processed.length)) {
-				console.log(`    Progress: ${promptsCompleted}/${processed.length} (${formatElapsed(promptStartTime)})`);
-			}
-		});
+		const limiter = new Limiter<void>(concurrency);
+		await Promise.all(processed.map(p =>
+			limiter.queue(async () => {
+				const globalIdx = p.originalRowIndex + rowOffset;
+				const result = await generatePromptFromRecording(testAccessor, p.recordingInfo);
+				if ('error' in result) {
+					promptErrors.push({ index: p.originalRowIndex, error: `[sample ${globalIdx}, ${p.row.activeDocumentLanguageId}, ${p.activeFilePath}] ${result.error}` });
+				} else {
+					prompts.push({ index: p.originalRowIndex, prompt: result });
+				}
+				promptsCompleted++;
+				if (verbose && (promptsCompleted % 50 === 0 || promptsCompleted === processed.length)) {
+					console.log(`    Progress: ${promptsCompleted}/${processed.length} (${formatElapsed(promptStartTime)})`);
+				}
+			})
+		));
 
 		console.log(`  [3/5] Prompts generated: ${prompts.length} ok, ${promptErrors.length} errors (${formatElapsed(promptStartTime)})`);
 		logErrors(promptErrors, verbose);
@@ -142,7 +122,7 @@ export async function runInputPipeline(opts: SimulationOptions): Promise<void> {
 			});
 		}
 
-		const { responses, errors: responseErrors } = generateAllResponses(strategy, responseInputs);
+		const { responses, errors: responseErrors } = generateAllResponses(responseFormat, responseInputs);
 		console.log(`  [4/5] Responses generated: ${responses.length} ok, ${responseErrors.length} errors`);
 		logErrors(responseErrors.map(e => {
 			const p = processedByOriginalIndex.get(e.index);
@@ -165,9 +145,9 @@ export async function runInputPipeline(opts: SimulationOptions): Promise<void> {
 			}
 			const suggestedEdit = parseSuggestedEdit(p.row.postProcessingOutcome.suggestedEdit);
 			const modelEdits = suggestedEdit ? [suggestedEdit] as const : undefined;
-			const modelResult = generateResponse(strategy, modelEdits, p.activeDocument.value.get().value, p.activeFilePath, prompt.user);
+			const modelResult = generateResponse(responseFormat, modelEdits, p.activeDocument.value.get().value, p.activeFilePath, prompt.user);
 			const formattedModelResponse = 'error' in modelResult ? '' : modelResult.assistant;
-			samples.push(assembleSample(index + rowOffset, prompt, response, p, strategy, formattedModelResponse));
+			samples.push(assembleSample(index + rowOffset, prompt, response, p, responseFormat, formattedModelResponse));
 		}
 
 		const writeResult = await writeSamples(outputPath, samples);

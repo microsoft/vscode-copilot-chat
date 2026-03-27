@@ -3,7 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { PromptingStrategy } from '../../src/platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { ResponseFormat } from '../../src/platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { assertNever } from '../../src/util/vs/base/common/assert';
 import { splitLines } from '../../src/util/vs/base/common/strings';
 
 export interface IGeneratedResponse {
@@ -252,13 +253,12 @@ function stripLineNumber(line: string): string {
 }
 
 /**
- * Format edits as the expected assistant response for the given strategy.
+ * Format edits as the expected assistant response for the given response format.
  *
- * Only PatchBased and Xtab strategies are supported. Formats offset-based
- * edits into the same structure the model is expected to produce.
+ * Only CustomDiffPatch and EditWindowOnly are supported.
  */
 export function generateResponse(
-	strategy: PromptingStrategy,
+	responseFormat: ResponseFormat,
 	edits: readonly (readonly [start: number, endEx: number, text: string])[] | undefined,
 	docContent: string,
 	filePath: string,
@@ -268,44 +268,63 @@ export function generateResponse(
 		return { error: `No edits available (file: ${filePath})` };
 	}
 
-	// FIXME @ulugbekna: make the match of strategies exhaustive using a switch statement
+	switch (responseFormat) {
+		case ResponseFormat.CustomDiffPatch:
+			return generateCustomDiffPatchResponse(edits, docContent, filePath);
+		case ResponseFormat.EditWindowOnly:
+			return generateEditWindowOnlyResponse(edits, docContent, filePath, userPrompt);
+		case ResponseFormat.UnifiedWithXml:
+		case ResponseFormat.CodeBlock:
+		case ResponseFormat.EditWindowWithEditIntent:
+		case ResponseFormat.EditWindowWithEditIntentShort:
+			return { error: `Unsupported response format: ${responseFormat}` };
+		default:
+			assertNever(responseFormat);
+	}
+}
 
-	if (strategy === PromptingStrategy.PatchBased02 || strategy === PromptingStrategy.PatchBased01 || strategy === PromptingStrategy.PatchBased) {
-		const assistant = formatAsCustomDiffPatch(edits, docContent, filePath);
-		if (!assistant) {
-			return { error: `formatAsCustomDiffPatch produced empty result (file: ${filePath}, ${edits.length} edits)` };
-		}
-		return { assistant };
+function generateCustomDiffPatchResponse(
+	edits: readonly (readonly [start: number, endEx: number, text: string])[],
+	docContent: string,
+	filePath: string,
+): IGeneratedResponse | { error: string } {
+	const assistant = formatAsCustomDiffPatch(edits, docContent, filePath);
+	if (!assistant) {
+		return { error: `formatAsCustomDiffPatch produced empty result (file: ${filePath}, ${edits.length} edits)` };
+	}
+	return { assistant };
+}
+
+function generateEditWindowOnlyResponse(
+	edits: readonly (readonly [start: number, endEx: number, text: string])[],
+	docContent: string,
+	filePath: string,
+	userPrompt: string,
+): IGeneratedResponse | { error: string } {
+	const editWindow = parseEditWindowFromPrompt(userPrompt);
+
+	let startLine: number;
+	let lineCount: number;
+
+	if (editWindow) {
+		startLine = findEditWindowStartLine(docContent, editWindow.lines);
+		lineCount = editWindow.lineCount;
+	} else {
+		const editStartLine = offsetToLineNumber(docContent, edits[0][0]);
+		const lastEdit = edits[edits.length - 1];
+		const editEndLine = offsetToLineNumber(docContent, lastEdit[1]);
+		const editSpan = editEndLine - editStartLine + 1;
+		const padding = Math.max(10, Math.floor(editSpan * 0.5));
+		const docLines = splitLines(docContent);
+		startLine = Math.max(0, editStartLine - padding);
+		lineCount = Math.min(editSpan + padding * 2, docLines.length - startLine);
 	}
 
-	if (strategy === PromptingStrategy.Xtab275 || strategy === PromptingStrategy.XtabAggressiveness || strategy === PromptingStrategy.Xtab275Aggressiveness) {
-		const editWindow = parseEditWindowFromPrompt(userPrompt);
-
-		let startLine: number;
-		let lineCount: number;
-
-		if (editWindow) {
-			startLine = findEditWindowStartLine(docContent, editWindow.lines);
-			lineCount = editWindow.lineCount;
-		} else {
-			const editStartLine = offsetToLineNumber(docContent, edits[0][0]);
-			const lastEdit = edits[edits.length - 1];
-			const editEndLine = offsetToLineNumber(docContent, lastEdit[1]);
-			const editSpan = editEndLine - editStartLine + 1;
-			const padding = Math.max(10, Math.floor(editSpan * 0.5));
-			const docLines = splitLines(docContent);
-			startLine = Math.max(0, editStartLine - padding);
-			lineCount = Math.min(editSpan + padding * 2, docLines.length - startLine);
-		}
-
-		const assistant = formatAsEditWindowOnly(edits, docContent, startLine, lineCount);
-		if (!assistant || !assistant.trim()) {
-			return { error: `formatAsEditWindowOnly produced empty result (file: ${filePath}, ${edits.length} edits, window: ${startLine}+${lineCount})` };
-		}
-		return { assistant };
+	const assistant = formatAsEditWindowOnly(edits, docContent, startLine, lineCount);
+	if (!assistant || !assistant.trim()) {
+		return { error: `formatAsEditWindowOnly produced empty result (file: ${filePath}, ${edits.length} edits, window: ${startLine}+${lineCount})` };
 	}
-
-	return { error: `Unsupported strategy: ${strategy}. Supported: patchBased02, xtab275` };
+	return { assistant };
 }
 
 export interface IResponseGenerationInput {
@@ -317,7 +336,7 @@ export interface IResponseGenerationInput {
 }
 
 export function generateAllResponses(
-	strategy: PromptingStrategy,
+	responseFormat: ResponseFormat,
 	inputs: readonly IResponseGenerationInput[],
 ): {
 	responses: { index: number; response: IGeneratedResponse }[];
@@ -328,7 +347,7 @@ export function generateAllResponses(
 
 	for (const input of inputs) {
 		const result = generateResponse(
-			strategy,
+			responseFormat,
 			input.oracleEdits, input.docContent, input.filePath,
 			input.userPrompt,
 		);

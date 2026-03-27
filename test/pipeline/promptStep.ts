@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Raw } from '@vscode/prompt-tsx';
 import { IRecordingInformation, ObservableWorkspaceRecordingReplayer } from '../../src/extension/inlineEdits/common/observableWorkspaceRecordingReplayer';
 import { createNextEditProvider } from '../../src/extension/inlineEdits/node/createNextEditProvider';
 import { DebugRecorder } from '../../src/extension/inlineEdits/node/debugRecorder';
@@ -12,48 +13,32 @@ import { ConfigKey, IConfigurationService } from '../../src/platform/configurati
 import { IGitExtensionService } from '../../src/platform/git/common/gitExtensionService';
 import { InlineEditRequestLogContext } from '../../src/platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../src/platform/inlineEdits/common/observableGit';
+import { NesHistoryContextProvider } from '../../src/platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
+import { NesXtabHistoryTracker } from '../../src/platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { INotebookService } from '../../src/platform/notebook/common/notebookService';
 import { IExperimentationService } from '../../src/platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../src/platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
 import { generateUuid } from '../../src/util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../src/util/vs/platform/instantiation/common/instantiation';
-import { NesHistoryContextProvider } from '../../src/platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
-import { NesXtabHistoryTracker } from '../../src/platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 
 export interface IGeneratedPrompt {
 	readonly system: string;
 	readonly user: string;
-	readonly rawPrompt: string;
 }
 
-/**
- * Parse the stringified prompt from `InlineEditRequestLogContext` into system and user parts.
- * Expected format: `System\n------\n{system}\n==================\n\nUser\n------\n{user}\n==================`
- */
-function parsePromptParts(rawPrompt: string): { system: string; user: string } {
-	const separator = '==================';
-	const parts = rawPrompt.split(separator);
+function extractTextContent(message: Raw.ChatMessage): string {
+	const textPart = message.content.find(p => p.type === Raw.ChatCompletionContentPartKind.Text);
+	return textPart && 'text' in textPart ? textPart.text : '';
+}
 
-	if (parts.length < 2) {
-		return { system: '', user: rawPrompt };
-	}
-
-	const systemPart = parts[0].trim();
-	const systemLines = systemPart.split('\n');
-	const systemStartIdx = systemLines.findIndex(l => l.trim() === '------');
-	const system = systemStartIdx >= 0
-		? systemLines.slice(systemStartIdx + 1).join('\n').trim()
-		: systemPart;
-
-	const userPart = parts[1].trim();
-	const userLines = userPart.split('\n');
-	const userStartIdx = userLines.findIndex(l => l.trim() === '------');
-	const user = userStartIdx >= 0
-		? userLines.slice(userStartIdx + 1).join('\n').trim()
-		: userPart;
-
-	return { system, user };
+function extractPromptParts(messages: Raw.ChatMessage[]): { system: string; user: string } {
+	const systemMsg = messages.find(m => m.role === Raw.ChatRole.System);
+	const userMsg = messages.find(m => m.role === Raw.ChatRole.User);
+	return {
+		system: systemMsg ? extractTextContent(systemMsg) : '',
+		user: userMsg ? extractTextContent(userMsg) : '',
+	};
 }
 
 /**
@@ -119,13 +104,13 @@ export async function generatePromptFromRecording(
 			telemetryBuilder.dispose();
 		}
 
-		const rawPrompt = logContext.prompt;
-		if (!rawPrompt) {
+		const rawMessages = logContext.rawMessages;
+		if (!rawMessages) {
 			return { error: 'Prompt was not captured in logContext (pipeline returned early before prompt construction)' };
 		}
 
-		const { system, user } = parsePromptParts(rawPrompt);
-		return { system, user, rawPrompt };
+		const { system, user } = extractPromptParts(rawMessages);
+		return { system, user };
 
 	} catch (e) {
 		const detail = e instanceof Error && e.stack
