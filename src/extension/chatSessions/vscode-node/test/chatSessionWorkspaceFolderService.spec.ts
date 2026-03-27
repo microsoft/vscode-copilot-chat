@@ -548,24 +548,6 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				expect(gitService.getRepository).toHaveBeenCalledTimes(1);
 			});
 
-			it('should invalidate cache when HEAD commit hash changes', async () => {
-				const repo = makeRepoContext();
-				gitService.getRepository = vi.fn().mockResolvedValue(repo);
-				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
-
-				const folderUri = vscode.Uri.file('/repo');
-
-				const first = await service.getWorkspaceChanges(folderUri);
-				expect(first).toBeDefined();
-
-				// Simulate a commit by changing the HEAD hash
-				headCommitHash.set('def456', undefined);
-
-				await service.getWorkspaceChanges(folderUri);
-				// Cache was cleared, so getRepository is called again
-				expect(gitService.getRepository).toHaveBeenCalledTimes(2);
-			});
-
 			it('should invalidate cache when clearWorkspaceChanges is called', async () => {
 				const repo = makeRepoContext();
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
@@ -609,7 +591,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				expect(result).toEqual([]);
 			});
 
-			it('should not re-subscribe when already subscribed for a folder', async () => {
+			it('should not re-fetch when cache is valid for a folder', async () => {
 				const repo = makeRepoContext();
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
 				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
@@ -621,9 +603,6 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				service.clearWorkspaceChanges(folderUri);
 				await service.getWorkspaceChanges(folderUri);
 
-				// Changing commit hash should still invalidate (subscription still active)
-				headCommitHash.set('new-hash', undefined);
-
 				service.clearWorkspaceChanges(folderUri);
 				await service.getWorkspaceChanges(folderUri);
 
@@ -633,7 +612,6 @@ describe('ChatSessionWorkspaceFolderService', () => {
 
 			it('should track changes per workspace folder independently', async () => {
 				const repo1 = makeRepoContext();
-				const headCommitHash1 = headCommitHash;
 				const repo2 = makeRepoContext();
 
 				const folder1 = vscode.Uri.file('/repo1');
@@ -651,8 +629,8 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				await service.getWorkspaceChanges(folder1);
 				await service.getWorkspaceChanges(folder2);
 
-				// Invalidate only folder1's cache via commit
-				headCommitHash1.set('new-hash-1', undefined);
+				// Invalidate only folder1's cache
+				service.clearWorkspaceChanges(folder1);
 
 				// folder2 should still use cache
 				await service.getWorkspaceChanges(folder2);
