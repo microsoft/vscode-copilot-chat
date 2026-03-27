@@ -6,11 +6,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { IConfigurationService } from '../../../configuration/common/configurationService';
 import { ICAPIClientService } from '../../../endpoint/common/capiClient';
 import { NullTelemetryService } from '../../../telemetry/common/nullTelemetryService';
 import { TestLogService } from '../../../testing/common/testLogService';
 import { HeadersImpl, WebSocketConnection } from '../../common/fetcherService';
-import { ChatWebSocketManager } from '../chatWebSocketManager';
+import { CAPIWebSocketErrorEvent, ChatWebSocketManager, isCAPIWebSocketError } from '../chatWebSocketManager';
 
 class FakeWebSocket extends EventTarget {
 	readonly CONNECTING = 0;
@@ -68,6 +69,7 @@ describe('ChatWebSocketManager', () => {
 			new TestLogService(),
 			createFakeCAPIClientService(ws),
 			new NullTelemetryService(),
+			{ getConfig: () => undefined } as unknown as IConfigurationService,
 		);
 		disposables.add(manager);
 		const connection = manager.getOrCreateConnection('conv-1', 'turn-1', headers);
@@ -132,6 +134,189 @@ describe('ChatWebSocketManager', () => {
 
 			ws.simulateMessage(completedEvent);
 			await handle.done;
+		});
+	});
+
+	describe('firstEvent promise', () => {
+		it('resolves with the first stream event', async () => {
+			const connection = await getConnection();
+			const cts = disposables.add(new CancellationTokenSource());
+			const handle = connection.sendRequest(
+				{ model: 'test-model', messages: [], stream: true },
+				{ userInitiated: true },
+				cts.token,
+			);
+
+			const textDelta = JSON.stringify({ type: 'response.output_text.delta', delta: 'hello' });
+			ws.simulateMessage(textDelta);
+
+			const first = await handle.firstEvent;
+			expect(first.type).toBe('response.output_text.delta');
+			expect(isCAPIWebSocketError(first)).toBe(false);
+
+			ws.simulateMessage(completedEvent);
+			await handle.done;
+		});
+
+		it('resolves with CAPI error when that is the first message', async () => {
+			const connection = await getConnection();
+			const cts = disposables.add(new CancellationTokenSource());
+			const handle = connection.sendRequest(
+				{ model: 'test-model', messages: [], stream: true },
+				{ userInitiated: true },
+				cts.token,
+			);
+
+			const capiError = JSON.stringify({ type: 'error', error: { code: 'rate_limited', message: 'Too many requests' } });
+			ws.simulateMessage(capiError);
+
+			const first = await handle.firstEvent;
+			expect(isCAPIWebSocketError(first)).toBe(true);
+			expect((first as CAPIWebSocketErrorEvent).error.code).toBe('rate_limited');
+
+			await expect(handle.done).rejects.toThrow('Too many requests');
+		});
+
+		it('rejects when connection closes before any event', async () => {
+			const connection = await getConnection();
+			const cts = disposables.add(new CancellationTokenSource());
+			const handle = connection.sendRequest(
+				{ model: 'test-model', messages: [], stream: true },
+				{ userInitiated: true },
+				cts.token,
+			);
+
+			ws.dispatchEvent(Object.assign(new Event('close'), { code: 1006, reason: '', wasClean: false }));
+
+			await expect(handle.firstEvent).rejects.toThrow();
+			await expect(handle.done).rejects.toThrow();
+		});
+	});
+
+	describe('CAPI error handling', () => {
+		it('fires onCAPIError for nested CAPI error events', async () => {
+			const connection = await getConnection();
+			const cts = disposables.add(new CancellationTokenSource());
+			const handle = connection.sendRequest(
+				{ model: 'test-model', messages: [], stream: true },
+				{ userInitiated: true },
+				cts.token,
+			);
+
+			const capiErrors: CAPIWebSocketErrorEvent[] = [];
+			handle.onCAPIError(e => capiErrors.push(e));
+
+			const capiError = JSON.stringify({ type: 'error', error: { code: 'quota_exceeded', message: 'Monthly quota exceeded' } });
+			ws.simulateMessage(capiError);
+
+			expect(capiErrors).toHaveLength(1);
+			expect(capiErrors[0].error.code).toBe('quota_exceeded');
+			expect(capiErrors[0].error.message).toBe('Monthly quota exceeded');
+
+			await expect(handle.done).rejects.toThrow('Monthly quota exceeded');
+		});
+
+		it('does not fire onEvent for CAPI error events', async () => {
+			const connection = await getConnection();
+			const cts = disposables.add(new CancellationTokenSource());
+			const handle = connection.sendRequest(
+				{ model: 'test-model', messages: [], stream: true },
+				{ userInitiated: true },
+				cts.token,
+			);
+
+			const events: unknown[] = [];
+			handle.onEvent(e => events.push(e));
+
+			const capiError = JSON.stringify({ type: 'error', error: { code: 'rate_limited', message: 'Rate limited' } });
+			ws.simulateMessage(capiError);
+
+			expect(events).toHaveLength(0);
+			await expect(handle.done).rejects.toThrow();
+		});
+
+		it('includes copilot_quota_snapshots when present', async () => {
+			const connection = await getConnection();
+			const cts = disposables.add(new CancellationTokenSource());
+			const handle = connection.sendRequest(
+				{ model: 'test-model', messages: [], stream: true },
+				{ userInitiated: true },
+				cts.token,
+			);
+
+			const capiErrors: CAPIWebSocketErrorEvent[] = [];
+			handle.onCAPIError(e => capiErrors.push(e));
+
+			const capiError = JSON.stringify({
+				type: 'error',
+				error: { code: 'quota_exceeded', message: 'Quota exceeded' },
+				copilot_quota_snapshots: {
+					'premium-chat-requests': {
+						entitlement: '300',
+						percent_remaining: 0,
+						overage_permitted: false,
+						overage_count: 0,
+					}
+				}
+			});
+			ws.simulateMessage(capiError);
+
+			expect(capiErrors[0].copilot_quota_snapshots).toBeDefined();
+			expect(capiErrors[0].copilot_quota_snapshots!['premium-chat-requests'].percent_remaining).toBe(0);
+
+			await expect(handle.done).rejects.toThrow();
+		});
+	});
+
+	describe('stateful marker', () => {
+		it('updates statefulMarker on response.completed', async () => {
+			const connection = await getConnection();
+			expect(connection.statefulMarker).toBeUndefined();
+
+			const cts = disposables.add(new CancellationTokenSource());
+			const handle = connection.sendRequest(
+				{ model: 'test-model', messages: [], stream: true },
+				{ userInitiated: true },
+				cts.token,
+			);
+
+			ws.simulateMessage(completedEvent);
+			await handle.done;
+
+			expect(connection.statefulMarker).toBe('resp-1');
+		});
+
+		it('does not update statefulMarker on CAPI error', async () => {
+			const connection = await getConnection();
+			const cts = disposables.add(new CancellationTokenSource());
+			const handle = connection.sendRequest(
+				{ model: 'test-model', messages: [], stream: true },
+				{ userInitiated: true },
+				cts.token,
+			);
+
+			const capiError = JSON.stringify({ type: 'error', error: { code: 'rate_limited', message: 'Rate limited' } });
+			ws.simulateMessage(capiError);
+
+			expect(connection.statefulMarker).toBeUndefined();
+			await expect(handle.done).rejects.toThrow();
+		});
+	});
+
+	describe('isCAPIWebSocketError', () => {
+		it('returns true for nested CAPI error shape', () => {
+			const event = { type: 'error' as const, error: { code: 'rate_limited', message: 'test' } };
+			expect(isCAPIWebSocketError(event)).toBe(true);
+		});
+
+		it('returns false for flat OpenAI error shape', () => {
+			const event = { type: 'error' as const, code: 'server_error', message: 'test', param: null, sequence_number: 0 };
+			expect(isCAPIWebSocketError(event)).toBe(false);
+		});
+
+		it('returns false for non-error event types', () => {
+			const event = { type: 'response.created' as const, response: {} };
+			expect(isCAPIWebSocketError(event as any)).toBe(false);
 		});
 	});
 });
