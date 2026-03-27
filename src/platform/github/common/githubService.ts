@@ -466,10 +466,6 @@ export class BaseOctoKitService {
 		return this._makeGHAPIRequest('user', 'GET', token, undefined, undefined, 'github-rest-get-user');
 	}
 
-	async getTeamMembershipWithToken(teamId: number, token: string, username: string): Promise<any | undefined> {
-		return this._makeGHAPIRequest(`teams/${teamId}/memberships/${username}`, 'GET', token, undefined, undefined, 'github-rest-get-team-membership');
-	}
-
 	async getGitHubOutageStatus(): Promise<GitHubOutageStatus> {
 		const now = Date.now();
 		if (this._cachedOutageStatus && (now - this._cachedOutageStatus.timestamp) < BaseOctoKitService._outageStatusCacheTTL) {

@@ -149,6 +149,7 @@ interface MemoryToolResult {
 
 export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 	public static readonly toolName = ToolName.Memory;
+	public static readonly nonDeferred = true;
 
 	constructor(
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,

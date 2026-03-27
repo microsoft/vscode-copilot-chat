@@ -90,6 +90,13 @@ export function isVscodeLanguageModelTool(tool: ICopilotTool<unknown>): tool is 
 
 export interface ICopilotToolCtor {
 	readonly toolName: ToolName;
+	/**
+	 * If true, this tool should always be immediately available (non-deferred)
+	 * when Anthropic tool search is enabled. Non-deferred tools are sent without
+	 * `defer_loading: true` and can receive cache_control breakpoints.
+	 * Defaults to false (deferred) when not set.
+	 */
+	readonly nonDeferred?: boolean;
 	new(...args: never[]): ICopilotTool<unknown>;
 }
 
@@ -106,6 +113,7 @@ export const ToolRegistry = new class {
 	private _tools: Array<ICopilotToolCtor> = [];
 	private _toolExtensions: Array<ICopilotToolExtensionCtor> = [];
 	private _modelSpecificTools = new ObservableMap<string, { definition: vscode.LanguageModelToolDefinition; tool: IModelSpecificToolCtor }>();
+	private _nonDeferredToolNames = new Set<string>();
 
 	public get modelSpecificTools() {
 		return this._modelSpecificTools.observable.map(v => [...v.values()]);
@@ -113,10 +121,17 @@ export const ToolRegistry = new class {
 
 	public registerTool(tool: ICopilotToolCtor) {
 		this._tools.push(tool);
+		if (tool.nonDeferred) {
+			this._nonDeferredToolNames.add(tool.toolName);
+		}
 	}
 
 	public getTools(): readonly ICopilotToolCtor[] {
 		return this._tools;
+	}
+
+	public get nonDeferredToolNames(): ReadonlySet<string> {
+		return this._nonDeferredToolNames;
 	}
 
 	public registerToolExtension(tool: ICopilotToolExtensionCtor) {

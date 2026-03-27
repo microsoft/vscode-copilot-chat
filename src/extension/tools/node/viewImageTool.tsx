@@ -26,6 +26,7 @@ export interface IViewImageParams {
 
 export class ViewImageTool implements ICopilotTool<IViewImageParams> {
 	public static readonly toolName = ToolName.ViewImage;
+	public static readonly nonDeferred = true;
 
 	private _promptContext: IBuildPromptContext | undefined;
 

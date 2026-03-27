@@ -44,6 +44,7 @@ import { ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK, isWelcomeView } f
 import { CopilotCLIPromptResolver } from '../copilotcli/node/copilotcliPromptResolver';
 import { builtinSlashSCommands, CopilotCLICommand, copilotCLICommands, ICopilotCLISession } from '../copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
+import { buildMcpServerMappings } from '../copilotcli/node/mcpHandler';
 import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
 import { ICopilotCLITerminalIntegration, TerminalOpenLocation } from './copilotCLITerminalIntegration';
@@ -378,6 +379,9 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			metadata = {
 				autoCommit: worktreeProperties.autoCommit !== false,
 				baseCommit: worktreeProperties?.baseCommit,
+				baseBranchName: worktreeProperties.version === 2
+					? worktreeProperties.baseBranchName
+					: undefined,
 				baseBranchProtected: worktreeProperties.version === 2
 					? worktreeProperties.baseBranchProtected === true
 					: undefined,
@@ -414,9 +418,14 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				}
 			}
 
+			const firstCheckpointRef = lastCheckpointRef
+				? `${lastCheckpointRef.slice(0, lastCheckpointRef.lastIndexOf('/'))}/0`
+				: undefined;
+
 			metadata = {
 				isolationMode: IsolationMode.Workspace,
 				workingDirectoryPath: workingDirectory?.fsPath,
+				firstCheckpointRef,
 				lastCheckpointRef
 			} satisfies { readonly [key: string]: unknown };
 		}
@@ -1243,10 +1252,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				return {};
 			}
 
-			// Create baseline checkpoint for the session. This will only be created for sessions
-			// that have auto-commit disabled. We will also create the baseline checkpoint before
-			// handling the first request of the session.
-			await this.copilotCLIWorktreeCheckpointService.handleRequest(session.object.sessionId);
+			if (context.history.length === 0) {
+				// Create baseline checkpoint when handling the first request
+				await this.copilotCLIWorktreeCheckpointService.handleRequest(session.object.sessionId);
+			}
 
 			sdkSessionId = session.object.sessionId;
 			const modeInstructions = this.createModeInstructions(request);
@@ -1440,20 +1449,34 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await this.copilotCLIWorktreeCheckpointService.handleRequestCompleted(session.sessionId, request.id);
 			}
 
-			await this.handlePullRequestCreated(session);
+			void this.handlePullRequestCreated(session).catch(ex => this.logService.error(ex, 'Failed to handle pull request creation'));
 		} finally {
 			pendingRequests?.delete(request);
 		}
 	}
 
+	private static readonly _PR_DETECTION_RETRY_COUNT = 3;
+	private static readonly _PR_DETECTION_INITIAL_DELAY_MS = 2_000;
+
 	private async handlePullRequestCreated(session: ICopilotCLISession): Promise<void> {
+		const sessionId = session.sessionId;
 		let prUrl = session.createdPullRequestUrl;
-		let prState: string | undefined;
+		let prState = 'open';
+
+		const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+		if (!worktreeProperties || worktreeProperties.version !== 2) {
+			return;
+		}
 
 		if (!prUrl) {
-			const detectedPr = await this.detectPullRequestForSession(session.sessionId);
-			prUrl = detectedPr?.url;
-			prState = detectedPr?.state;
+			// Only attempt retry detection if the session has v2 worktree properties
+			// with branch info — v1 worktrees can't store PR URLs, and sessions
+			// without worktree properties have nothing to look up.
+			if (worktreeProperties.branchName && worktreeProperties.repositoryPath) {
+				const prResult = await this.detectPullRequestWithRetry(sessionId);
+				prUrl = prResult?.url;
+				prState = prResult?.state ?? 'open';
+			}
 		}
 
 		if (!prUrl) {
@@ -1461,20 +1484,41 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		try {
-			const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(session.sessionId);
-			if (worktreeProperties && worktreeProperties.version === 2) {
-				await this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.sessionId, {
-					...worktreeProperties,
-					pullRequestUrl: prUrl,
-					pullRequestState: prState,
-					changes: undefined,
-				});
-				await this.contentProvider.refreshSession({ reason: 'update', sessionId: session.sessionId });
-			}
+			await this.copilotCLIWorktreeManagerService.setWorktreeProperties(sessionId, {
+				...worktreeProperties,
+				pullRequestUrl: prUrl,
+				pullRequestState: prState,
+				changes: undefined,
+			});
+			await this.contentProvider.refreshSession({ reason: 'update', sessionId: session.sessionId });
 		} catch (error) {
-			this.logService.error(`Failed to persist pull request metadata: ${error instanceof Error ? error.message : String(error)}`);
+			this.logService.error(error instanceof Error ? error : new Error(String(error)), `Failed to persist pull request metadata for session ${sessionId}`);
 		}
 	}
+
+	/**
+	 * Attempts to detect a pull request for a freshly-completed session using
+	 * exponential backoff. The GitHub API may not have indexed the PR immediately
+	 * after `gh pr create` returns, so we retry with increasing delays:
+	 * attempt 1: 2s, attempt 2: 4s, attempt 3: 8s.
+	 */
+	private async detectPullRequestWithRetry(sessionId: string): Promise<{ url: string; state: string } | undefined> {
+		const maxRetries = CopilotCLIChatSessionParticipant._PR_DETECTION_RETRY_COUNT;
+		const initialDelay = CopilotCLIChatSessionParticipant._PR_DETECTION_INITIAL_DELAY_MS;
+
+		for (let attempt = 0; attempt < maxRetries; attempt++) {
+			const delay = initialDelay * Math.pow(2, attempt);
+			await new Promise<void>(resolve => setTimeout(resolve, delay));
+
+			const prResult = await this.detectPullRequestForSession(sessionId);
+			if (prResult) {
+				return prResult;
+			}
+		}
+
+		return undefined;
+	}
+
 
 	/**
 	 * Queries the GitHub API to find a pull request whose head branch matches the
@@ -1551,9 +1595,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const model = options.model;
 		const agent = options.agent;
 		const debugTargetSessionIds = extractDebugTargetSessionIds(request.references);
+		const mcpServerMappings = buildMcpServerMappings(request.tools);
 		const session = isNewSession ?
-			await this.sessionService.createSession({ sessionId, model, workspaceInfo, agent, debugTargetSessionIds }, token) :
-			await this.sessionService.getSession({ sessionId, model, workspaceInfo, agent, readonly: false, debugTargetSessionIds }, token);
+			await this.sessionService.createSession({ sessionId, model, workspaceInfo, agent, debugTargetSessionIds, mcpServerMappings }, token) :
+			await this.sessionService.getSession({ sessionId, model, workspaceInfo, agent, readonly: false, debugTargetSessionIds, mcpServerMappings }, token);
 		// TODO @DonJayamanne We need to refresh to add this new session, but we need a label.
 		// So when creating a session we need a dummy label (or an initial prompt).
 
@@ -1694,7 +1739,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const worktreeProperties = workspaceInfo.worktreeProperties;
 		const { prompt, attachments, references } = await this.promptResolver.resolvePrompt(request, await requestPromptPromise, (otherReferences || []).concat([]), workspaceInfo, [], token);
 
-		const session = await this.sessionService.createSession({ workspaceInfo, agent, model }, token);
+		const mcpServerMappings = buildMcpServerMappings(request.tools);
+		const session = await this.sessionService.createSession({ workspaceInfo, agent, model, mcpServerMappings }, token);
 		const modeInstructions = this.createModeInstructions(request);
 		this.chatSessionMetadataStore.updateRequestDetails(session.object.sessionId, [{ vscodeRequestId: request.id, agentId: agent?.name ?? '', modeInstructions }]).catch(ex => this.logService.error(ex, 'Failed to update request details'));
 		if (summary) {
@@ -1868,6 +1914,17 @@ export function registerCLIChatCommands(
 				await copilotCLISessionService.renameSession(id, trimmedTitle);
 				await contentProvider.refreshSession({ reason: 'update', sessionId: id });
 			}
+		}
+	}));
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.setTitle', async (sessionItem?: vscode.ChatSessionItem, title?: string) => {
+		if (!sessionItem?.resource || !title) {
+			return;
+		}
+		const trimmedTitle = title.trim();
+		if (trimmedTitle) {
+			const id = SessionIdForCLI.parse(sessionItem.resource);
+			await copilotCLISessionService.renameSession(id, trimmedTitle);
+			await contentProvider.refreshSession({ reason: 'update', sessionId: id });
 		}
 	}));
 

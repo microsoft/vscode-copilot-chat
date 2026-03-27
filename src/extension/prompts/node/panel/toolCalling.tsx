@@ -21,6 +21,7 @@ import { IFileSystemService } from '../../../../platform/filesystem/common/fileS
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { IImageService } from '../../../../platform/image/common/imageService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IOTelService } from '../../../../platform/otel/common/otelService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { toErrorMessage } from '../../../../util/common/errorMessage';
@@ -195,6 +196,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	const promptContext: IBuildPromptContext = accessor.get(IBuildPromptContext);
 	const sessionTranscriptService = accessor.get(ISessionTranscriptService);
 	const chatHookService = accessor.get(IChatHookService);
+	const otelService = accessor.get(IOTelService);
 	const tool = toolsService.getTool(props.toolCall.name);
 
 	async function getToolResult(sizing: PromptSizing) {
@@ -254,6 +256,10 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 					}
 
 					const subAgentInvocationId = promptContext.request?.subAgentInvocationId;
+					// Capture the active trace context (from the invoke_agent span) so that
+					// the execute_tool span is properly parented even when async context
+					// propagation doesn't carry the active span.
+					const parentTraceContext = otelService.getActiveTraceContext();
 					const invocationOptions: LanguageModelToolInvocationOptions<unknown> = {
 						input: inputObj,
 						toolInvocationToken: props.toolInvocationToken,
@@ -269,6 +275,8 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 							updatedInput: hookResult.updatedInput,
 						} : undefined,
 					};
+					// Attach trace context for span parenting (not in the VS Code API type)
+					(invocationOptions as { parentTraceContext?: { traceId: string; spanId: string } }).parentTraceContext = parentTraceContext;
 
 					const transcriptSessionId = promptContext.conversation?.sessionId;
 					if (transcriptSessionId) {

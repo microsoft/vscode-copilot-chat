@@ -858,17 +858,28 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 				}
 			}
 		} else if (toolCall.mcpServerName && toolCall.mcpToolName) {
-			const toolCall = invocation[1];
 			// Use tool arguments as input, formatted as JSON
 			const input = toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : '';
 			const output = convertMcpContentToToolInvocationData(event.data.result, logger);
-
-			invocation[0].toolSpecificData = {
-				input,
-				output
-			} satisfies ChatMcpToolInvocationData;
+			if (output.length) {
+				invocation[0].toolSpecificData = {
+					input,
+					output
+				} satisfies ChatMcpToolInvocationData;
+			} else {
+				// If we don't have any structured output, at least include the raw text of the result for visibility in the chat UI.
+				genericToolInvocationCompleted(invocation[0], toolCall, event.data);
+			}
 		} else {
-			genericToolInvocationCompleted(invocation[0], toolCall, event.data);
+			if (!!event.data.error && event.data.error?.message) {
+				invocation[0] = new ChatToolInvocationPart(invocation[0].toolName, invocation[0].toolCallId, event.data.error.message);
+				invocation[0].isComplete = true;
+				invocation[0].isError = true;
+				invocation[0].invocationMessage = event.data.error?.message || invocation[0].invocationMessage;
+				invocation[0].pastTenseMessage = `Used tool: ${invocation[0].toolName}`;
+			} else {
+				genericToolInvocationCompleted(invocation[0], toolCall, event.data);
+			}
 		}
 	}
 

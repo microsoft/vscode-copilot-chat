@@ -5,11 +5,15 @@
 
 import { createServiceIdentifier } from '../../../util/common/services';
 
-export const IChatSessionWorktreeCheckpointService = createServiceIdentifier<IChatSessionWorktreeCheckpointService>('IChatSessionWorktreeCheckpointService');
+export const IToolDeferralService = createServiceIdentifier<IToolDeferralService>('IToolDeferralService');
 
-export interface IChatSessionWorktreeCheckpointService {
+export interface IToolDeferralService {
 	readonly _serviceBrand: undefined;
 
-	handleRequest(sessionId: string): Promise<void>;
-	handleRequestCompleted(sessionId: string, requestId: string): Promise<void>;
+	/**
+	 * Check whether a tool (by its API-facing name) should be non-deferred.
+	 * Returns true if the tool should always be immediately available when
+	 * tool search is enabled.
+	 */
+	isNonDeferredTool(name: string): boolean;
 }

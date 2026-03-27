@@ -2192,6 +2192,11 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.cli.sessions.setTitle",
+				"title": "%github.copilot.command.cli.sessions.setTitle%",
+				"category": "Copilot CLI"
+			},
+			{
 				"command": "github.copilot.claude.sessions.rename",
 				"title": "%github.copilot.command.claude.sessions.rename%",
 				"icon": "$(edit)",
@@ -2670,14 +2675,10 @@
 				"icon": "$(export)"
 			},
 			{
-				"command": "github.copilot.chat.debug.exportTrajectories",
-				"title": "Export Agent Trajectories",
-				"category": "Chat"
-			},
-			{
-				"command": "github.copilot.chat.debug.exportSingleTrajectory",
-				"title": "Export Trajectory...",
-				"category": "Chat"
+				"command": "github.copilot.chat.otel.exportAgentTracesDB",
+				"title": "Export Agent Traces DB",
+				"category": "Chat",
+				"enablement": "config.github.copilot.chat.otel.dbSpanExporter.enabled"
 			},
 			{
 				"command": "github.copilot.nes.captureExpected.start",
@@ -4673,7 +4674,7 @@
 					"github.copilot.chat.otel.enabled": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "Enable OpenTelemetry trace/metric/log emission for Copilot Chat operations. Env var `COPILOT_OTEL_ENABLED` takes precedence.",
+						"markdownDescription": "Enable OpenTelemetry trace/metric/log emission for Copilot Chat operations. Env var `COPILOT_OTEL_ENABLED` takes precedence. Requires window reload.",
 						"tags": [
 							"advanced"
 						]
@@ -4687,7 +4688,7 @@
 							"file"
 						],
 						"default": "otlp-http",
-						"markdownDescription": "OTel exporter type for Copilot Chat telemetry.",
+						"markdownDescription": "OTel exporter type for Copilot Chat telemetry. Requires window reload.",
 						"tags": [
 							"advanced"
 						]
@@ -4695,7 +4696,7 @@
 					"github.copilot.chat.otel.otlpEndpoint": {
 						"type": "string",
 						"default": "http://localhost:4318",
-						"markdownDescription": "OTLP collector endpoint URL for Copilot Chat OTel data. Env var `OTEL_EXPORTER_OTLP_ENDPOINT` takes precedence.",
+						"markdownDescription": "OTLP collector endpoint URL for Copilot Chat OTel data. Env var `OTEL_EXPORTER_OTLP_ENDPOINT` takes precedence. Requires window reload.",
 						"tags": [
 							"advanced"
 						]
@@ -4703,7 +4704,7 @@
 					"github.copilot.chat.otel.captureContent": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "Capture input/output messages, system instructions, and tool definitions in OTel telemetry. **Contains potentially sensitive data.** Env var `COPILOT_OTEL_CAPTURE_CONTENT` takes precedence.",
+						"markdownDescription": "Capture input/output messages, system instructions, and tool definitions in OTel telemetry. **Contains potentially sensitive data.** Env var `COPILOT_OTEL_CAPTURE_CONTENT` takes precedence. Requires window reload.",
 						"tags": [
 							"advanced"
 						]
@@ -4711,7 +4712,15 @@
 					"github.copilot.chat.otel.outfile": {
 						"type": "string",
 						"default": "",
-						"markdownDescription": "File path for file-based OTel exporter output (JSON-lines). When set, overrides exporter type to `file`.",
+						"markdownDescription": "File path for file-based OTel exporter output (JSON-lines). When set, overrides exporter type to `file`. Requires window reload.",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.otel.dbSpanExporter.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "Enable SQLite DB span exporter. Persists OTel spans to a local SQLite database. Automatically enables OTel when set to true. Requires window reload.",
 						"tags": [
 							"advanced"
 						]
@@ -4930,10 +4939,6 @@
 					"when": "false"
 				},
 				{
-					"command": "github.copilot.chat.debug.exportSingleTrajectory",
-					"when": "false"
-				},
-				{
 					"command": "github.copilot.chat.triggerPermissiveSignIn",
 					"when": "false"
 				},
@@ -5142,6 +5147,10 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.cli.sessions.setTitle",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.cli.sessions.openRepository",
 					"when": "false"
 				},
@@ -5289,11 +5298,6 @@
 					"command": "github.copilot.chat.debug.exportPromptLogsAsJson",
 					"when": "view == copilot-chat && viewItem == chatprompt",
 					"group": "export@3"
-				},
-				{
-					"command": "github.copilot.chat.debug.exportSingleTrajectory",
-					"when": "view == copilot-chat && viewItem == chatprompt",
-					"group": "export@4"
 				}
 			],
 			"searchPanel/aiResults/commands": [
@@ -6374,5 +6378,5 @@
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
 	},
-	"vscodeCommit": "cdf4f2f548f0cd60f7804b6837a0512a15a02889"
+	"vscodeCommit": "e1ab55e1215fa458d1aeabcf8afd1a9478d2c47f"
 }
