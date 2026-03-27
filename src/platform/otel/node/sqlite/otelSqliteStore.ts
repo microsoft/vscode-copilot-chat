@@ -312,7 +312,7 @@ export class OTelSqliteStore {
 			this._ensureSchema();
 
 			// Auto-cleanup on startup: remove spans older than 7 days,
-			// then cap to the most recent 50 sessions by conversation_id.
+			// then cap to the most recent DEFAULT_MAX_SESSIONS sessions by conversation_id.
 			this._cleanupOnStartup(db);
 		} catch (err) {
 			db.close();
@@ -333,8 +333,8 @@ export class OTelSqliteStore {
 		if ((versionRow?.version ?? 0) >= SCHEMA_VERSION) { return; }
 
 		db.exec(`
-			CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
-			INSERT INTO schema_version (version) VALUES (${SCHEMA_VERSION});
+			CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);
+			INSERT OR REPLACE INTO schema_version (version) VALUES (${SCHEMA_VERSION});
 
 			CREATE TABLE IF NOT EXISTS spans (
 				span_id TEXT PRIMARY KEY, trace_id TEXT NOT NULL, parent_span_id TEXT,
