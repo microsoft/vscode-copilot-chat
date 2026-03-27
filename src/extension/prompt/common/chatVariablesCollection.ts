@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { sessionResourceToId } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { URI } from '../../../util/vs/base/common/uri';
 
 export interface PromptVariable {
@@ -147,4 +148,13 @@ export function isSessionReferenceScheme(scheme: string): boolean {
  */
 export function isSessionReference(variable: PromptVariable): variable is PromptVariable & { value: vscode.Uri } {
 	return URI.isUri(variable.value) && isSessionReferenceScheme(variable.value.scheme);
+}
+
+/**
+ * Extract debug-target session IDs from chat prompt references.
+ * Returns `undefined` when no session references are present.
+ */
+export function extractDebugTargetSessionIds(references: readonly vscode.ChatPromptReference[]): readonly string[] | undefined {
+	const sessionRefs = references.filter(ref => URI.isUri(ref.value) && isSessionReferenceScheme(ref.value.scheme));
+	return sessionRefs.length > 0 ? sessionRefs.map(ref => sessionResourceToId(ref.value as URI)) : undefined;
 }

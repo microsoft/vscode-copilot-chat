@@ -46,7 +46,8 @@ export class CopilotCLISessionOptions {
 	private readonly mcpServers?: SessionOptions['mcpServers'];
 	private readonly copilotUrl?: string;
 	private readonly skillLocations?: Uri[];
-	constructor(options: { model?: string; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[]; copilotUrl?: string; skillLocations?: Uri[] }, private readonly logService: ILogService) {
+	private readonly systemMessage?: SessionOptions['systemMessage'];
+	constructor(options: { model?: string; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[]; copilotUrl?: string; skillLocations?: Uri[]; systemMessage?: SessionOptions['systemMessage'] }, private readonly logService: ILogService) {
 		this.workspaceInfo = options.workspaceInfo;
 		this.model = options.model;
 		this.mcpServers = options.mcpServers;
@@ -54,6 +55,7 @@ export class CopilotCLISessionOptions {
 		this.customAgents = options.customAgents;
 		this.copilotUrl = options.copilotUrl;
 		this.skillLocations = options.skillLocations;
+		this.systemMessage = options.systemMessage;
 	}
 
 	public get agentName(): string | undefined {
@@ -93,6 +95,9 @@ export class CopilotCLISessionOptions {
 		allOptions.enableStreaming = true;
 		if (this.copilotUrl) {
 			allOptions.copilotUrl = this.copilotUrl;
+		}
+		if (this.systemMessage) {
+			allOptions.systemMessage = this.systemMessage;
 		}
 		allOptions.sessionCapabilities = new Set(['plan-mode', 'memory', 'cli-documentation', 'ask-user', 'interactive-mode', 'system-notifications']);
 		return allOptions as Readonly<SessionOptions>;

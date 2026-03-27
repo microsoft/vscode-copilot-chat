@@ -21,7 +21,6 @@ import * as path from '../../../../../util/vs/base/common/path';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus, ChatToolInvocationPart, Uri } from '../../../../../vscodeTypes';
-import { NullPromptVariablesService } from '../../../../prompt/node/promptVariablesService';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { IChatPromptFileService } from '../../../common/chatPromptFileService';
@@ -239,7 +238,6 @@ describe('CopilotCLISession', () => {
 			new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })),
 			new NullChatDebugFileLoggerService(),
 			new class extends mock<IChatPromptFileService>() { override get customAgentPromptFiles() { return []; } }(),
-			new NullPromptVariablesService(),
 		));
 	}
 

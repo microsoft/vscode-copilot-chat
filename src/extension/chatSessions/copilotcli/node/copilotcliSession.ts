@@ -25,7 +25,6 @@ import { truncate } from '../../../../util/vs/base/common/strings';
 import { ThemeIcon } from '../../../../util/vs/base/common/themables';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, LanguageModelTextPart, Uri } from '../../../../vscodeTypes';
-import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { IChatPromptFileService } from '../../common/chatPromptFileService';
@@ -162,26 +161,17 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@IOTelService private readonly _otelService: IOTelService,
 		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService,
 		@IChatPromptFileService private readonly _chatPromptFileService: IChatPromptFileService,
-		@IPromptVariablesService private readonly _promptVariablesService: IPromptVariablesService,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
 		this._debugFileLogger.startSession(this.sessionId).catch(err => {
 			this.logService.error('[CopilotCLISession] Failed to start debug log session', err);
 		});
-		this._injectSkillVariables();
 		this.add(toDisposable(() => {
 			this._debugFileLogger.endSession(this.sessionId).catch(err => {
 				this.logService.error('[CopilotCLISession] Failed to end debug log session', err);
 			});
 		}));
-	}
-
-	private _injectSkillVariables(): void {
-		const context = this._promptVariablesService.buildTemplateVariablesContext(this.sessionId);
-		if (context) {
-			this._sdkSession.updateOptions({ systemMessage: { mode: 'append', content: context } });
-		}
 	}
 
 	attachStream(stream: vscode.ChatResponseStream): IDisposable {

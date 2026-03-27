@@ -6,6 +6,7 @@
 import { BasePromptElementProps, PromptElement, PromptSizing, UserMessage } from '@vscode/prompt-tsx';
 import { ChatCompletionContentPartKind, ChatRole } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
 import type { ChatRequestEditedFileEvent } from 'vscode';
+import { sessionResourceToId } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
@@ -133,10 +134,10 @@ export async function generateUserPrompt(request: ChatRequest, prompt: string | 
 async function renderResourceVariables(chatVariables: ChatVariablesCollection, fileSystemService: IFileSystemService, promptPathRepresentationService: IPromptPathRepresentationService): Promise<PromptElement[]> {
 	const elements: PromptElement[] = [];
 	await Promise.all(Array.from(chatVariables).map(async variable => {
-		if (isSessionReference(variable)) {
+		if (isSessionReference(variable) && URI.isUri(variable.reference.value)) {
 			const attrs: Record<string, string> = {};
 			if (variable.uniqueName) {
-				attrs.id = `${variable.uniqueName} (${variable.reference.id})`;
+				attrs.id = `${variable.uniqueName} (${sessionResourceToId(variable.reference.value)})`;
 			}
 			attrs.filePath = variable.value.toString();
 			elements.push(<Tag name='attachment' attrs={attrs} />);

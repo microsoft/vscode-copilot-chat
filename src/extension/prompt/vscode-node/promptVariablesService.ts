@@ -8,7 +8,6 @@ import * as vscode from 'vscode';
 import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
-import { getCurrentCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
 import { getToolName } from '../../tools/common/toolNames';
 import { IPromptVariablesService } from '../node/promptVariablesService';
 
@@ -18,7 +17,7 @@ import { IPromptVariablesService } from '../node/promptVariablesService';
  * resolver that produces the replacement string, or `undefined` if the
  * variable cannot be resolved in the current context.
  */
-type VariableResolver = (sessionId: string | undefined) => string | undefined;
+type VariableResolver = (sessionId: string | undefined, debugTargetSessionIds: readonly string[] | undefined) => string | undefined;
 
 export class PromptVariablesServiceImpl implements IPromptVariablesService {
 
@@ -38,11 +37,9 @@ export class PromptVariablesServiceImpl implements IPromptVariablesService {
 				const userPromptsFolderUri = vscode.Uri.joinPath(userFolderUri, 'prompts');
 				return userPromptsFolderUri.fsPath;
 			}],
-			['VSCODE_TARGET_SESSION_LOG', sessionId => {
-				const token = getCurrentCapturingToken();
-				const sessionIds = token?.debugTargetSessionIds;
-				if (sessionIds && sessionIds.length > 0) {
-					return sessionIds.map(id => {
+			['VSCODE_TARGET_SESSION_LOG', (sessionId, debugTargetSessionIds) => {
+				if (debugTargetSessionIds && debugTargetSessionIds.length > 0) {
+					return debugTargetSessionIds.map(id => {
 						const sessionDir = this.chatDebugFileLoggerService.getSessionDir(id);
 						return sessionDir ? this.promptPathRepresentationService.getFilePath(sessionDir) : undefined;
 					}).filter((path): path is string => path !== undefined).join(', ');
@@ -85,10 +82,10 @@ export class PromptVariablesServiceImpl implements IPromptVariablesService {
 		return message;
 	}
 
-	buildTemplateVariablesContext(sessionId: string | undefined): string {
+	buildTemplateVariablesContext(sessionId: string | undefined, debugTargetSessionIds?: readonly string[]): string {
 		const entries: [string, string][] = [];
 		for (const [name, resolve] of this._resolvers) {
-			const value = resolve(sessionId);
+			const value = resolve(sessionId, debugTargetSessionIds);
 			if (value !== undefined) {
 				entries.push([name, value]);
 			}

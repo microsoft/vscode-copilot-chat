@@ -30,7 +30,7 @@ import { relative } from '../../../util/vs/base/common/path';
 import { basename, dirname, extUri, isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { EXTENSION_ID } from '../../common/constants';
-import { ChatVariablesCollection, isPromptFile } from '../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, extractDebugTargetSessionIds, isPromptFile } from '../../prompt/common/chatVariablesCollection';
 import { IChatSessionMetadataStore, StoredModeInstructions } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeCheckpointService } from '../common/chatSessionWorktreeCheckpointService';
@@ -1550,9 +1550,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 		const model = options.model;
 		const agent = options.agent;
+		const debugTargetSessionIds = extractDebugTargetSessionIds(request.references);
 		const session = isNewSession ?
-			await this.sessionService.createSession({ sessionId, model, workspaceInfo, agent }, token) :
-			await this.sessionService.getSession({ sessionId, model, workspaceInfo, agent, readonly: false }, token);
+			await this.sessionService.createSession({ sessionId, model, workspaceInfo, agent, debugTargetSessionIds }, token) :
+			await this.sessionService.getSession({ sessionId, model, workspaceInfo, agent, readonly: false, debugTargetSessionIds }, token);
 		// TODO @DonJayamanne We need to refresh to add this new session, but we need a label.
 		// So when creating a session we need a dummy label (or an initial prompt).
 

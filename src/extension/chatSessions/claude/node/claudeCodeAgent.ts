@@ -21,6 +21,7 @@ import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelToolMCPSource } from '../../../../vscodeTypes';
+import { extractDebugTargetSessionIds } from '../../../prompt/common/chatVariablesCollection';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
@@ -169,6 +170,7 @@ export class ClaudeCodeSession extends Disposable {
 	private _currentToolNames: ReadonlySet<string> | undefined;
 	private _gateway: vscode.McpGateway | undefined;
 	private _gatewayIdleTimeout: ReturnType<typeof setTimeout> | undefined;
+	private _debugTargetSessionIds: readonly string[] | undefined;
 
 	/**
 	 * Sets the model on the active SDK session, or stores it for the next session start.
@@ -343,6 +345,8 @@ export class ClaudeCodeSession extends Disposable {
 		}
 		await this._setPermissionMode(permissionMode);
 
+		this._debugTargetSessionIds = extractDebugTargetSessionIds(request.references);
+
 		if (!this._queryGenerator) {
 			await this._startSession(token);
 		}
@@ -463,7 +467,7 @@ export class ClaudeCodeSession extends Disposable {
 			systemPrompt: {
 				type: 'preset',
 				preset: 'claude_code',
-				append: this._promptVariablesService.buildTemplateVariablesContext(this.sessionId) || undefined,
+				append: this._promptVariablesService.buildTemplateVariablesContext(this.sessionId, this._debugTargetSessionIds) || undefined,
 			},
 			settingSources: ['user', 'project', 'local'],
 			stderr: data => this.logService.error(`claude-agent-sdk stderr: ${data}`)

@@ -20,7 +20,7 @@ export interface IPromptVariablesService {
 	 * `{{VARIABLE_NAME}}` placeholders to have their values available
 	 * via session context.
 	 */
-	buildTemplateVariablesContext(sessionId: string | undefined): string;
+	buildTemplateVariablesContext(sessionId: string | undefined, debugTargetSessionIds?: readonly string[]): string;
 }
 
 export class NullPromptVariablesService implements IPromptVariablesService {

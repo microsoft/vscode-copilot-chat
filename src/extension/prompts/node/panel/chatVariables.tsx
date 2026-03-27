@@ -242,8 +242,8 @@ export async function renderChatVariables(chatVariables: ChatVariablesCollection
 			continue;
 		}
 
-		if (isSessionReference(variable)) {
-			const uri = variableValue as URI;
+		if (isSessionReference(variable) && URI.isUri(variableValue)) {
+			const uri = variableValue;
 			const attrs: Record<string, string> = {};
 			if (variableName) {
 				attrs.id = `${variableName} (${sessionResourceToId(uri)})`;

@@ -246,7 +246,7 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 		override async monitorSessionFiles() {
 			// Override to do nothing in tests
 		}
-		protected override async createSessionsOptions(options: { model?: string; workingDirectory?: Uri; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers'] }): Promise<CopilotCLISessionOptions> {
+		protected override async createSessionsOptions(options: { model?: string; workingDirectory?: Uri; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; sessionId?: string; debugTargetSessionIds?: readonly string[] }): Promise<CopilotCLISessionOptions> {
 			const testOptionsProvider = this.instantiationService.invokeFunction((accessor) => accessor.get(ITestSessionOptionsProvider));
 			const overrideOptions = await testOptionsProvider.getOptions();
 			const sessionOptions = new TestCopilotCLISessionOptions(options, this.logService, overrideOptions);
