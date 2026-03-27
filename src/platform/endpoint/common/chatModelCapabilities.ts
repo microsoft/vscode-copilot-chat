@@ -196,7 +196,7 @@ export function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpo
  * Model supports multi_replace_string_in_file as an edit tool.
  */
 export function modelSupportsMultiReplaceString(model: LanguageModelChat | IChatEndpoint): boolean {
-	return isAnthropicFamily(model) || isHiddenModelE(model) || isVSCModelC(model);
+	return isAnthropicFamily(model) || isHiddenModelE(model) || isVSCModelC(model) || isMinimaxFamily(model);
 }
 
 /**

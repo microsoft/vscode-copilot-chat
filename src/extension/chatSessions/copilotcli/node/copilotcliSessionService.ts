@@ -7,7 +7,7 @@ import type { internal, LocalSessionMetadata, Session, SessionContext, SessionEv
 import * as l10n from '@vscode/l10n';
 import { createReadStream } from 'node:fs';
 import * as fs from 'node:fs/promises';
-import { EOL } from 'node:os';
+import { devNull, EOL } from 'node:os';
 import { createInterface } from 'node:readline';
 import type { ChatRequest, ChatSessionItem } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -46,7 +46,8 @@ import { CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLISDK } from './c
 import { CopilotCliBridgeSpanProcessor } from './copilotCliBridgeSpanProcessor';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { ICopilotCLISkills } from './copilotCLISkills';
-import { ICopilotCLIMCPHandler } from './mcpHandler';
+import { ICopilotCLIMCPHandler, McpServerMappings } from './mcpHandler';
+import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 
 const COPILOT_CLI_WORKSPACE_JSON_FILE_KEY = 'github.copilot.cli.workspaceSessionFile';
 
@@ -83,8 +84,8 @@ export interface ICopilotCLISessionService {
 	renameSession(sessionId: string, title: string): Promise<void>;
 
 	// Session wrapper tracking
-	getSession(options: { sessionId: string; model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
-	createSession(options: { model?: string; workspaceInfo: IWorkspaceInfo; agent?: SweCustomAgent; sessionId?: string }, token: CancellationToken): Promise<IReference<ICopilotCLISession>>;
+	getSession(options: { sessionId: string; model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent; mcpServerMappings?: McpServerMappings }, token: CancellationToken): Promise<IReference<ICopilotCLISession> | undefined>;
+	createSession(options: { model?: string; workspaceInfo: IWorkspaceInfo; agent?: SweCustomAgent; sessionId?: string; mcpServerMappings?: McpServerMappings }, token: CancellationToken): Promise<IReference<ICopilotCLISession>>;
 	forkSession(sessionId: string, requestId: string | undefined, options: { workspaceInfo: IWorkspaceInfo }, token: CancellationToken): Promise<string>;
 	tryGetPartialSesionHistory(sessionId: string): Promise<readonly (ChatRequestTurn2 | ChatResponseTurn2)[] | undefined>;
 }
@@ -145,6 +146,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@IChatSessionWorkspaceFolderService private readonly workspaceFolderService: IChatSessionWorkspaceFolderService,
 		@IChatSessionWorktreeService private readonly worktreeManager: IChatSessionWorktreeService,
 		@IOTelService private readonly _otelService: IOTelService,
+		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService,
 	) {
 		super();
 		this.monitorSessionFiles();
@@ -177,7 +179,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					// Use file exporter to /dev/null so the SDK creates OtelSessionTracker
 					// (for debug panel) but writes spans nowhere.
 					process.env['COPILOT_OTEL_EXPORTER_TYPE'] = 'file';
-					process.env['COPILOT_OTEL_FILE_EXPORTER_PATH'] = process.platform === 'win32' ? 'NUL' : '/dev/null';
+					process.env['COPILOT_OTEL_FILE_EXPORTER_PATH'] = devNull;
 				}
 				return new internal.LocalSessionManager({ telemetryService: new internal.NoopTelemetryService(), flushDebounceMs: undefined, settings: undefined, version: undefined });
 			}
@@ -509,13 +511,13 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 	}
 
-	public async createSession({ model, workspaceInfo, agent, sessionId }: { model?: string; workspaceInfo: IWorkspaceInfo; agent?: SweCustomAgent; sessionId?: string }, token: CancellationToken): Promise<RefCountedSession> {
+	public async createSession({ model, workspaceInfo, agent, sessionId, mcpServerMappings }: { model?: string; workspaceInfo: IWorkspaceInfo; agent?: SweCustomAgent; sessionId?: string; mcpServerMappings?: McpServerMappings }, token: CancellationToken): Promise<RefCountedSession> {
 		const { mcpConfig: mcpServers, disposable: mcpGateway } = await this.mcpHandler.loadMcpConfig();
 		try {
 			const copilotUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl) || undefined;
 			const options = await this.createSessionsOptions({ model, workspaceInfo, mcpServers, agent, copilotUrl });
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
-			const sdkSession = await sessionManager.createSession({ ...options.toSessionOptions(), sessionId });
+			const sdkSession = await sessionManager.createSession({ ...options.toSessionOptions(mcpServerMappings), sessionId });
 			this._newSessionIds.delete(sdkSession.sessionId);
 			// After the first session creation, the SDK's OTel TracerProvider is
 			// initialized. Install the bridge processor so SDK-native spans flow
@@ -635,7 +637,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		return new CopilotCLISessionOptions({ ...options, customAgents, skillLocations }, this.logService);
 	}
 
-	public async getSession({ sessionId, model, workspaceInfo, readonly, agent }: { sessionId: string; model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<RefCountedSession | undefined> {
+	public async getSession({ sessionId, model, workspaceInfo, readonly, agent, mcpServerMappings }: { sessionId: string; model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent; mcpServerMappings?: McpServerMappings }, token: CancellationToken): Promise<RefCountedSession | undefined> {
 		// https://github.com/microsoft/vscode/issues/276573
 		const lock = this.sessionMutexForGetSession.get(sessionId) ?? new Mutex();
 		this.sessionMutexForGetSession.set(sessionId, lock);
@@ -666,7 +668,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				const copilotUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl) || undefined;
 				const options = await this.createSessionsOptions({ model, agent, workspaceInfo, mcpServers, copilotUrl }, readonly);
 
-				const sdkSession = await sessionManager.getSession({ ...options.toSessionOptions(), sessionId }, !readonly);
+				const sdkSession = await sessionManager.getSession({ ...options.toSessionOptions(mcpServerMappings), sessionId }, !readonly);
 				if (!sdkSession) {
 					this.logService.error(`[CopilotCLISession] CopilotCLI failed to get session ${sessionId}.`);
 					return undefined;
@@ -844,6 +846,14 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	private createCopilotSession(sdkSession: Session, options: CopilotCLISessionOptions, sessionManager: internal.LocalSessionManager, readonly = false, nowait = false): RefCountedSession {
 		const session = this.instantiationService.createInstance(CopilotCLISession, options, sdkSession);
+		this._debugFileLogger.startSession(session.sessionId).catch(err => {
+			this.logService.error('[CopilotCLISession] Failed to start debug log session', err);
+		});
+		session.add(toDisposable(() => {
+			this._debugFileLogger.endSession(session.sessionId).catch(err => {
+				this.logService.error('[CopilotCLISession] Failed to end debug log session', err);
+			});
+		}));
 		// Wire the bridge processor so the session can register traceId → sessionId mappings
 		session.setBridgeProcessor(this._bridgeProcessor);
 		// Wire SDK trace context updater so the session can propagate traceparent to SDK spans

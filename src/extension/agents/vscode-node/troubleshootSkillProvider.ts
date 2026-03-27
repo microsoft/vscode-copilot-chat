@@ -29,7 +29,8 @@ export class TroubleshootSkillProvider extends BaseSkillProvider {
 		// tool, which has access to the correct session context.
 		const storageUri = this.extensionContext.storageUri;
 		if (storageUri) {
-			lines.push('- Current session log directory: `{{CURRENT_SESSION_LOG}}`');
+			lines.push('- Session log directories: `{{CURRENT_SESSION_LOG}}`');
+			lines.push('- If multiple directories are listed, compare the sessions to identify common issues and differences.');
 		} else {
 			lines.push('- Debug-logs directory: unavailable in this environment. Abort now and tell the user that troubleshooting is only available if a workspace is open.');
 		}

@@ -368,8 +368,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 			// If explicit rerank is enabled, use the remote reranker
 			if (options.enableRerank && this._rerankerService.isAvailable) {
 				try {
-					const queryString = await query.resolveQuery(token);
-					const reranked = await this._rerankerService.rerank(queryString, filteredResult.result.chunks, token);
+					const reranked = await this._rerankerService.rerank(query.queryText, filteredResult.result.chunks, token);
 					return {
 						chunks: reranked.slice(0, this.getMaxChunks(sizing)),
 						alerts: filteredResult.result.alerts,
@@ -405,15 +404,14 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 	}
 
 	private toQueryWithEmbeddings(query: WorkspaceChunkQuery, token: CancellationToken): WorkspaceChunkQueryWithEmbeddings {
-		const queryEmbeddings: Promise<Embedding> = logExecTime(this._logService, 'WorkspaceChunkSearch.resolveQueryEmbeddings', () =>
-			query.resolveQuery(token).then(async (queryStr) => {
-				const result = await this.computeEmbeddings('query', [queryStr], token);
-				const first = result.values.at(0);
-				if (!first) {
-					throw new Error('Could not resolve query embeddings');
-				}
-				return first;
-			}));
+		const queryEmbeddings: Promise<Embedding> = logExecTime(this._logService, 'WorkspaceChunkSearch.resolveQueryEmbeddings', async () => {
+			const result = await this.computeEmbeddings('query', [query.queryText], token);
+			const first = result.values.at(0);
+			if (!first) {
+				throw new Error('Could not resolve query embeddings');
+			}
+			return first;
+		});
 
 		return {
 			...query,

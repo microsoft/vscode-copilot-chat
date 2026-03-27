@@ -4,32 +4,26 @@
  *--------------------------------------------------------------------------------------------*/
 import { BasePromptElementProps, PromptElement, PromptPiece, PromptSizing, TextChunk } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
-import { ChatFetchResponseType, ChatLocation } from '../../../../../platform/chat/common/commonTypes';
 import { FileChunk } from '../../../../../platform/chunking/common/chunk';
-import { IEndpointProvider } from '../../../../../platform/endpoint/common/endpointProvider';
 import { logExecTime, MeasureExecTime } from '../../../../../platform/log/common/logExecTime';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../../../platform/prompts/common/promptPathRepresentationService';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
-import { KeywordItem, ResolvedWorkspaceChunkQuery, WorkspaceChunkQuery } from '../../../../../platform/workspaceChunkSearch/common/workspaceChunkSearch';
+import { WorkspaceChunkQuery } from '../../../../../platform/workspaceChunkSearch/common/workspaceChunkSearch';
 import { IWorkspaceChunkSearchService, WorkspaceChunkSearchResult } from '../../../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { GlobIncludeOptions } from '../../../../../util/common/glob';
 import { createFencedCodeBlock, getLanguageId } from '../../../../../util/common/markdown';
 import { TelemetryCorrelationId } from '../../../../../util/common/telemetryCorrelationId';
-import { DeferredPromise, raceCancellation, raceCancellationError } from '../../../../../util/vs/base/common/async';
+import { raceCancellationError } from '../../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
-import { CancellationError } from '../../../../../util/vs/base/common/errors';
-import { Lazy } from '../../../../../util/vs/base/common/lazy';
 import { ResourceMap } from '../../../../../util/vs/base/common/map';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { Range } from '../../../../../util/vs/editor/common/core/range';
-import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { Location, Range as VSCodeRange } from '../../../../../vscodeTypes';
 import { PromptReference } from '../../../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../../../prompt/common/intents';
 import { IPromptEndpoint } from '../../base/promptRenderer';
-import { buildWorkspaceMetaPrompt, parseMetaPromptResponse } from './metaPrompt';
 import { DirectoryStructure, WorkspaceStructure } from './workspaceStructure';
 
 /**
@@ -238,11 +232,9 @@ export type WorkspaceContextState = WorkspaceChunkQuery | undefined;
 
 export class WorkspaceContext extends PromptElement<WorkspaceContextProps, WorkspaceContextState> {
 
-	constructor(props: WorkspaceContextProps,
-		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@ILogService private readonly logService: ILogService,
+	constructor(
+		props: WorkspaceContextProps,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
-		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 	) {
 		super(props);
 	}
@@ -265,143 +257,8 @@ export class WorkspaceContext extends PromptElement<WorkspaceContextProps, Works
 			return;
 		}
 
-		const contextEndpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
-		if (token.isCancellationRequested) {
-			throw new CancellationError();
-		}
-
-		const { messages } = await this.instantiationService.invokeFunction(accessor => buildWorkspaceMetaPrompt(accessor, this.props.promptContext, contextEndpoint, this.props.scopedDirectories));
-		if (token.isCancellationRequested) {
-			throw new CancellationError();
-		}
-
-		const metaPrompt = new Lazy<{
-			readonly query: Promise<string | undefined>;
-			readonly queryAndKeywords: Promise<ResolvedWorkspaceChunkQuery>;
-		}>(() => {
-			this.logService.debug('[Workspace Resolver] Asking the model to update the user question and provide queries...');
-
-			const keywordTokenBudget = 200;
-
-			// Just the rephrased question
-			const queryP = new DeferredPromise<string>();
-
-			// Get the token length first
-			const questionTokenLengthP = contextEndpoint.acquireTokenizer().tokenLength(message);
-
-			// The entire response
-			const requestP = questionTokenLengthP.then(questionTokenLength => contextEndpoint.makeChatRequest(
-				'workspaceContext',
-				messages,
-				async (text) => {
-					if (!queryP.isSettled && /^#+\s*Keywords/gm.test(text)) {
-						queryP.complete(parseMetaPromptResponse(message, text).rephrasedQuestion);
-					}
-					return undefined;
-				},
-				token,
-				ChatLocation.Panel,
-				undefined,
-				{
-					temperature: 0,
-					max_tokens: questionTokenLength + keywordTokenBudget,
-				},
-			)).then(fetchResult => {
-				if (token.isCancellationRequested) {
-					throw new CancellationError();
-				}
-
-				let fetchMessage: string;
-				if (fetchResult.type !== ChatFetchResponseType.Success) {
-					/* __GDPR__
-						"workspaceResolver.error" : {
-							"owner": "mjbvz",
-							"comment": "Tracks errors for resolving workspace information",
-							"type": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Error type" },
-							"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Detailed error reason" },
-							"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn." }
-						}
-					*/
-					this.telemetryService.sendMSFTTelemetryEvent('workspaceResolver.error', {
-						type: fetchResult.type,
-						reason: fetchResult.reason,
-						requestId: fetchResult.requestId,
-					});
-
-					if (fetchResult.type === ChatFetchResponseType.Length) {
-						fetchMessage = fetchResult.truncatedValue;
-					} else {
-						// Fall back to using the original message
-						const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
-						return {
-							rephrasedQuery: message,
-							keywords: Array.from(segmenter.segment(message)).map((x): KeywordItem => ({ keyword: x.segment, variations: [] })),
-						};
-					}
-				} else {
-					fetchMessage = fetchResult.value;
-				}
-
-				const metaResponse = parseMetaPromptResponse(message, fetchMessage);
-				/* __GDPR__
-					"workspaceResolver.success" : {
-						"owner": "mjbvz",
-						"comment": "Tracks errors for resolving workspace information",
-						"type": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Success type" },
-						"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn." },
-						"totalKeywordCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of keywords returned." }
-					}
-				*/
-				this.telemetryService.sendMSFTTelemetryEvent('workspaceResolver.success', {
-					type: fetchResult.type,
-					requestId: fetchResult.requestId,
-				}, {
-					totalKeywordCount: metaResponse.keywords.flatMap(x => [x.keyword, x.variations]).length
-				});
-
-				return {
-					rephrasedQuery: metaResponse.rephrasedQuestion,
-					keywords: metaResponse.keywords,
-				};
-			});
-
-			return {
-				query: queryP.p,
-				queryAndKeywords: requestP,
-			};
-		});
-
-		const maySkipResolve = (): boolean => {
-			if (props.isToolCall) {
-				return true;
-			}
-
-			const rewrittenMessage = props.promptContext.chatVariables.substituteVariablesWithReferences(message);
-			if (rewrittenMessage !== message) {
-				return false;
-			}
-
-			const containsAmbiguousWord = /\b(it|that|this)\b/i.test(message);
-			return !containsAmbiguousWord;
-		};
-
 		return {
-			rawQuery: message,
-
-			resolveQueryAndKeywords(token: CancellationToken) {
-				return metaPrompt.value.queryAndKeywords;
-			},
-
-			async resolveQuery(token: CancellationToken) {
-				if (maySkipResolve()) {
-					return message;
-				} else {
-					return (await raceCancellation(Promise.race([
-						metaPrompt.value?.query,
-						metaPrompt.value.queryAndKeywords.then(x => x?.rephrasedQuery),
-					]), token)) ?? message;
-				}
-			},
+			queryText: message,
 		} satisfies WorkspaceChunkQuery;
 	}
 

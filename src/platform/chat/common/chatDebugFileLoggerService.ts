@@ -11,20 +11,22 @@ export const IChatDebugFileLoggerService = createServiceIdentifier<IChatDebugFil
 
 /**
  * Extract the chat session ID string from a session resource URI.
- * The URI is typically `vscode-chat-session://local/<base64EncodedSessionId>`.
  *
- * Decodes the last path segment from base64 if valid, otherwise
- * returns the raw segment as-is.
+ * - `vscode-chat-session://local/<base64EncodedSessionId>` — decodes base64
+ * - `copilotcli:///<sessionId>` and `claude-code:///<sessionId>` — uses raw path segment
  */
 export function sessionResourceToId(sessionResource: URI): string {
 	const pathSegment = sessionResource.path.replace(/^\//, '').split('/').pop() || '';
 	if (!pathSegment) {
 		return pathSegment;
 	}
-	try {
-		return new TextDecoder().decode(decodeBase64(pathSegment).buffer);
-	} catch {
-		// Not valid base64 — use raw segment
+	// Only vscode-chat-session URIs use base64-encoded session IDs
+	if (sessionResource.scheme === 'vscode-chat-session') {
+		try {
+			return new TextDecoder().decode(decodeBase64(pathSegment).buffer);
+		} catch {
+			// Not valid base64 — fall through to raw segment
+		}
 	}
 	return pathSegment;
 }
@@ -90,6 +92,12 @@ export interface IChatDebugFileLoggerService {
 	 * session directory, or `undefined` if the session is unknown.
 	 */
 	getSessionDirForResource(sessionResource: URI): URI | undefined;
+
+	/**
+	 * Cache the latest model list snapshot from the API. The data is written
+	 * as `models.json` into each session directory when a session starts.
+	 */
+	setModelSnapshot(models: readonly unknown[]): void;
 }
 
 /**
@@ -106,5 +114,6 @@ export class NullChatDebugFileLoggerService implements IChatDebugFileLoggerServi
 	getActiveSessionIds(): string[] { return []; }
 	isDebugLogUri(): boolean { return false; }
 	getSessionDirForResource(): URI | undefined { return undefined; }
+	setModelSnapshot(): void { }
 	readonly debugLogsDir: URI | undefined = undefined;
 }

@@ -25,6 +25,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { IChatPromptFileService } from '../../common/chatPromptFileService';
 import { getWorkingDirectory, IWorkspaceInfo } from '../../common/workspaceInfo';
 import { getCopilotLogger } from './logger';
+import { remapCustomAgentTools, type McpServerMappings } from './mcpHandler';
 import { ensureNodePtyShim } from './nodePtyShim';
 import { ensureRipgrepShim } from './ripgrepShim';
 
@@ -60,7 +61,7 @@ export class CopilotCLISessionOptions {
 		return this.agent?.name;
 	}
 
-	public toSessionOptions(): Readonly<SessionOptions> {
+	public toSessionOptions(mcpServerMappings?: McpServerMappings): Readonly<SessionOptions> {
 		const allOptions: SessionOptions = {
 			clientName: 'vscode',
 		};
@@ -83,6 +84,9 @@ export class CopilotCLISessionOptions {
 		}
 		if (this.skillLocations) {
 			allOptions.skillDirectories = this.skillLocations.map(uri => uri.fsPath);
+		}
+		if (mcpServerMappings?.size && this.customAgents && this.mcpServers) {
+			remapCustomAgentTools(this.customAgents, mcpServerMappings, this.mcpServers, this.agent);
 		}
 		if (this.agent) {
 			allOptions.selectedCustomAgent = this.agent;
@@ -334,7 +338,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 			});
 		}
 
-		return this._agentsPromise;
+		return this._agentsPromise.then(agents => agents.map(agent => this.cloneAgent(agent)));
 	}
 
 	async getAgentsImpl(): Promise<Readonly<SweCustomAgent>[]> {

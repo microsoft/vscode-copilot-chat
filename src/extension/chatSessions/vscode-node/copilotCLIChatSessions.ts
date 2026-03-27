@@ -48,6 +48,7 @@ import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLIS
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
 import { ICopilotCLITerminalIntegration, TerminalOpenLocation } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
+import { buildMcpServerMappings } from '../copilotcli/node/mcpHandler';
 
 
 export interface ICopilotCLIChatSessionItemProvider extends IDisposable {
@@ -180,6 +181,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	constructor(
 		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
 		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
+		@IChatSessionMetadataStore private readonly chatSessionMetadataStore: IChatSessionMetadataStore,
 		@IChatSessionWorktreeService private readonly copilotCLIWorktreeManagerService: IChatSessionWorktreeService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
@@ -370,8 +372,12 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
 
 		// Metadata
-		const metadata = worktreeProperties
-			? {
+		let metadata: { readonly [key: string]: unknown };
+
+		if (worktreeProperties) {
+			// Worktree
+			metadata = {
+				autoCommit: worktreeProperties.autoCommit !== false,
 				baseCommit: worktreeProperties?.baseCommit,
 				baseBranchProtected: worktreeProperties.version === 2
 					? worktreeProperties.baseBranchProtected === true
@@ -395,11 +401,26 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				lastCheckpointRef: worktreeProperties.version === 2
 					? worktreeProperties.lastCheckpointRef
 					: undefined
-			} satisfies { readonly [key: string]: unknown }
-			: {
-				isolationMode: IsolationMode.Workspace,
-				workingDirectoryPath: workingDirectory?.fsPath
 			} satisfies { readonly [key: string]: unknown };
+		} else {
+			// Workspace
+			const sessionRequestDetails = await this.chatSessionMetadataStore.getRequestDetails(session.id);
+
+			let lastCheckpointRef: string | undefined;
+			for (let i = sessionRequestDetails.length - 1; i >= 0; i--) {
+				const checkpointRef = sessionRequestDetails[i]?.checkpointRef;
+				if (checkpointRef !== undefined) {
+					lastCheckpointRef = checkpointRef;
+					break;
+				}
+			}
+
+			metadata = {
+				isolationMode: IsolationMode.Workspace,
+				workingDirectoryPath: workingDirectory?.fsPath,
+				lastCheckpointRef
+			} satisfies { readonly [key: string]: unknown };
+		}
 
 		const item = this.controller.createChatSessionItem(resource, label);
 		item.badge = badge;
@@ -1530,9 +1551,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 		const model = options.model;
 		const agent = options.agent;
+		const mcpServerMappings = buildMcpServerMappings(request.tools);
 		const session = isNewSession ?
-			await this.sessionService.createSession({ sessionId, model, workspaceInfo, agent }, token) :
-			await this.sessionService.getSession({ sessionId, model, workspaceInfo, agent, readonly: false }, token);
+			await this.sessionService.createSession({ sessionId, model, workspaceInfo, agent, mcpServerMappings }, token) :
+			await this.sessionService.getSession({ sessionId, model, workspaceInfo, agent, readonly: false, mcpServerMappings }, token);
 		// TODO @DonJayamanne We need to refresh to add this new session, but we need a label.
 		// So when creating a session we need a dummy label (or an initial prompt).
 
@@ -1673,7 +1695,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const worktreeProperties = workspaceInfo.worktreeProperties;
 		const { prompt, attachments, references } = await this.promptResolver.resolvePrompt(request, await requestPromptPromise, (otherReferences || []).concat([]), workspaceInfo, [], token);
 
-		const session = await this.sessionService.createSession({ workspaceInfo, agent, model }, token);
+		const mcpServerMappings = buildMcpServerMappings(request.tools);
+		const session = await this.sessionService.createSession({ workspaceInfo, agent, model, mcpServerMappings }, token);
 		const modeInstructions = this.createModeInstructions(request);
 		this.chatSessionMetadataStore.updateRequestDetails(session.object.sessionId, [{ vscodeRequestId: request.id, agentId: agent?.name ?? '', modeInstructions }]).catch(ex => this.logService.error(ex, 'Failed to update request details'));
 		if (summary) {
