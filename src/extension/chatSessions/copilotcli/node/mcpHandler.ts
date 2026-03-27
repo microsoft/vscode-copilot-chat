@@ -204,7 +204,7 @@ export function buildMcpServerMappings(tools: ReadonlyMap<LanguageModelToolInfor
 		const slashIndex = tool.fullReferenceName.lastIndexOf('/');
 		if (slashIndex > 0) {
 			const serverName = tool.fullReferenceName.substring(0, slashIndex);
-			if (serverName && !mappings.has(serverName)) {
+			if (serverName && !mappings.has(serverName) && tool.source.label) {
 				mappings.set(serverName, tool.source.label);
 			}
 		}
@@ -243,7 +243,7 @@ export function remapCustomAgentTools(
 
 	const agentsToRemap = selectedAgent ? [...customAgents, selectedAgent] : customAgents;
 	for (const agent of agentsToRemap) {
-		if (!agent.tools) {
+		if (!agent.tools?.length) {
 			continue;
 		}
 		for (let i = 0; i < agent.tools.length; i++) {
@@ -254,7 +254,9 @@ export function remapCustomAgentTools(
 			}
 			const serverName = tool.substring(0, slashIndex);
 			const toolName = tool.substring(slashIndex + 1);
-
+			if (!serverName || !toolName) {
+				continue;
+			}
 			// First try: map through mcpServerMappings (friendly name → display name) then to gateway name.
 			const displayName = mcpServerMappings.get(serverName);
 			// Also try to look up the server name directly as a display name in the gateway map.
