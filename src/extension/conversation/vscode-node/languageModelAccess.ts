@@ -17,6 +17,7 @@ import { IEndpointProvider } from '../../../platform/endpoint/common/endpointPro
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { ModelAliasRegistry } from '../../../platform/endpoint/common/modelAliasRegistry';
 import { encodePhaseData } from '../../../platform/endpoint/common/phaseDataContainer';
+import { encodeResponseOutputMessageId } from '../../../platform/endpoint/common/responseOutputMessageIdContainer';
 import { encodeStatefulMarker } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { AutoChatEndpoint } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
@@ -720,8 +721,13 @@ export class CopilotLanguageModelWrapper extends Disposable {
 				progress.report(
 					new vscode.LanguageModelDataPart(encodePhaseData({
 						phase: delta.phase,
-						responseOutputMessageId: delta.responseOutputMessageId,
 					}), CustomDataPartMimeTypes.PhaseData)
+				);
+			}
+
+			if (delta.responseOutputMessageId) {
+				progress.report(
+					new vscode.LanguageModelDataPart(encodeResponseOutputMessageId(delta.responseOutputMessageId), CustomDataPartMimeTypes.ResponseOutputMessageId)
 				);
 			}
 

@@ -15,6 +15,7 @@ import { CompactionDataContainer } from '../../../../platform/endpoint/common/co
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { PhaseDataContainer } from '../../../../platform/endpoint/common/phaseDataContainer';
+import { ResponseOutputMessageIdContainer } from '../../../../platform/endpoint/common/responseOutputMessageIdContainer';
 import { StatefulMarkerContainer } from '../../../../platform/endpoint/common/statefulMarkerContainer';
 import { ThinkingDataContainer } from '../../../../platform/endpoint/common/thinkingDataContainer';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
@@ -117,12 +118,14 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 		// Don't include this when rendering and triggering summarization
 		const statefulMarker = round.statefulMarker && <StatefulMarkerContainer statefulMarker={{ modelId: this.promptEndpoint.model, marker: round.statefulMarker }} />;
 		const thinking = (!this.props.isHistorical) && round.thinking && <ThinkingDataContainer thinking={round.thinking} />;
-		const phase = (round.phase && round.phaseModelId === this.promptEndpoint.model) ? <PhaseDataContainer phase={round.phase} responseOutputMessageId={round.responseOutputMessageId} /> : undefined;
+		const responseOutputMessageId = round.responseOutputMessageId && <ResponseOutputMessageIdContainer responseOutputMessageId={round.responseOutputMessageId} />;
+		const phase = (round.phase && round.phaseModelId === this.promptEndpoint.model) ? <PhaseDataContainer phase={round.phase} /> : undefined;
 		const compaction = round.compaction && <CompactionDataContainer compaction={round.compaction} />;
 		children.push(
 			<AssistantMessage toolCalls={assistantToolCalls}>
 				{statefulMarker}
 				{thinking}
+				{responseOutputMessageId}
 				{phase}
 				{compaction}
 				{round.response}

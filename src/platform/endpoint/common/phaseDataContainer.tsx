@@ -16,7 +16,6 @@ interface IPhaseDataOpaque extends IPhaseData {
 
 export interface IPhaseDataContainerProps extends BasePromptElementProps {
 	phase: string;
-	responseOutputMessageId?: string;
 }
 
 /**
@@ -25,8 +24,8 @@ export interface IPhaseDataContainerProps extends BasePromptElementProps {
  */
 export class PhaseDataContainer extends PromptElement<IPhaseDataContainerProps> {
 	render() {
-		const { phase, responseOutputMessageId } = this.props;
-		const container: IPhaseDataOpaque = { type: CustomDataPartMimeTypes.PhaseData, phase, responseOutputMessageId };
+		const { phase } = this.props;
+		const container: IPhaseDataOpaque = { type: CustomDataPartMimeTypes.PhaseData, phase };
 		return <opaque value={container} />;
 	}
 }
