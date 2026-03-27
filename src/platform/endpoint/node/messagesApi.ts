@@ -334,10 +334,59 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[], v
 		}
 	}
 
+	// a temporary limitation while we wait on CAPI limitation increase.
+	limitImages(mergedMessages);
+
 	return {
 		messages: mergedMessages,
 		...(systemBlocks.length ? { system: systemBlocks } : {}),
 	};
+}
+
+/**
+ * The maximum number of images allowed in a single Claude messages API request.
+ * Claude has an upstream limit where more than 20 images causes issues.
+ */
+const MAX_IMAGES = 20;
+
+/**
+ * Limits the number of images in the messages to {@link MAX_IMAGES}, keeping only the most recent ones.
+ *
+ * Single reverse pass: walks backwards through user messages (assistant messages never
+ * contain images), keeps the first {@link MAX_IMAGES} images encountered, and splices out
+ * the rest. When images are within the limit, no splicing occurs and the pass is effectively
+ * a lightweight scan that skips assistant messages entirely.
+ */
+export function limitImages(messages: MessageParam[]): void {
+	let remainingQuota = MAX_IMAGES;
+
+	for (let messageIdx = messages.length - 1; messageIdx >= 0; messageIdx--) {
+		const message = messages[messageIdx];
+		if (message.role !== 'user' || !Array.isArray(message.content)) {
+			continue;
+		}
+
+		for (let blockIdx = message.content.length - 1; blockIdx >= 0; blockIdx--) {
+			const block = message.content[blockIdx];
+			if (block.type === 'image') {
+				if (remainingQuota > 0) {
+					remainingQuota--;
+				} else {
+					message.content.splice(blockIdx, 1);
+				}
+			} else if (block.type === 'tool_result' && Array.isArray(block.content)) {
+				for (let innerIdx = block.content.length - 1; innerIdx >= 0; innerIdx--) {
+					if (block.content[innerIdx].type === 'image') {
+						if (remainingQuota > 0) {
+							remainingQuota--;
+						} else {
+							block.content.splice(innerIdx, 1);
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 /**

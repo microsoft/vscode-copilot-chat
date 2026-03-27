@@ -374,6 +374,53 @@ suite('rawMessagesToMessagesAPI', function () {
 		// The dummy whitespace-only text block should be filtered out
 		expect(toolResult!.content).toBeUndefined();
 	});
+
+	test('limits images to 20, removing oldest first', function () {
+		// Create 25 user messages, each with one image
+		const messages: Raw.ChatMessage[] = [];
+		for (let i = 0; i < 25; i++) {
+			messages.push({
+				role: Raw.ChatRole.User,
+				content: [{
+					type: Raw.ChatCompletionContentPartKind.Image,
+					imageUrl: { url: `data:image/png;base64,img${i}` },
+				}],
+			});
+			messages.push({
+				role: Raw.ChatRole.Assistant,
+				content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: `response ${i}` }],
+			});
+		}
+
+		const result = rawMessagesToMessagesAPI(messages);
+
+		// Count remaining images
+		let imageCount = 0;
+		for (const msg of result.messages) {
+			if (Array.isArray(msg.content)) {
+				for (const block of msg.content) {
+					if (block.type === 'image') {
+						imageCount++;
+					}
+				}
+			}
+		}
+		expect(imageCount).toBe(20);
+
+		// The oldest 5 images (img0-img4) should be removed, newest 20 (img5-img24) kept
+		const remainingImages: string[] = [];
+		for (const msg of result.messages) {
+			if (Array.isArray(msg.content)) {
+				for (const block of msg.content) {
+					if (block.type === 'image' && block.source.type === 'base64') {
+						remainingImages.push(block.source.data);
+					}
+				}
+			}
+		}
+		expect(remainingImages[0]).toBe('img5');
+		expect(remainingImages[19]).toBe('img24');
+	});
 });
 
 suite('addToolsAndSystemCacheControl', function () {
