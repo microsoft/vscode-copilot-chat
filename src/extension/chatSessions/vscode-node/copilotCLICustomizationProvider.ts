@@ -3,6 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+// TODO(joshspicer): Work in progress — depends on the proposed chatSessionCustomizationProvider
+// API which is off by default in VS Code.
+
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { AGENT_FILE_EXTENSION, INSTRUCTION_FILE_EXTENSION, SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
