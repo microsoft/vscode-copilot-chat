@@ -109,8 +109,8 @@ export class NullChatDebugFileLoggerService implements IChatDebugFileLoggerServi
 	async startSession(): Promise<void> { }
 	async endSession(): Promise<void> { }
 	async flush(): Promise<void> { }
-	getLogPath(): URI | undefined { return undefined; }
-	getSessionDir(): URI | undefined { return undefined; }
+	getLogPath(_sessionId?: string): URI | undefined { return undefined; }
+	getSessionDir(_sessionId?: string): URI | undefined { return undefined; }
 	getActiveSessionIds(): string[] { return []; }
 	isDebugLogUri(): boolean { return false; }
 	getSessionDirForResource(): URI | undefined { return undefined; }

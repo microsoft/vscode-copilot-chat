@@ -169,7 +169,7 @@ describe('PromptVariablesServiceImpl', () => {
 			expect(result).not.toContain('target-1');
 		});
 
-		test('omits VSCODE_TARGET_SESSION_LOG when all debugTargetSessionIds have missing dirs', () => {
+		test('includes VSCODE_TARGET_SESSION_LOG with empty value when all debugTargetSessionIds have missing dirs', () => {
 			const mockLogger = new MockChatDebugFileLoggerService();
 			// No session dirs set at all
 			const { testingServiceCollection } = createServicesWithLogger(mockLogger);
@@ -177,7 +177,10 @@ describe('PromptVariablesServiceImpl', () => {
 			const svc = acc.get(IInstantiationService).createInstance(PromptVariablesServiceImpl);
 
 			const result = svc.buildTemplateVariablesContext(undefined, ['no-such-session']);
-			expect(result).not.toContain('VSCODE_TARGET_SESSION_LOG');
+			// The resolver returns '' (empty string) when all dirs are missing, not undefined,
+			// so the variable is still present in the output with an empty value.
+			expect(result).toContain('VSCODE_TARGET_SESSION_LOG');
+			expect(result).toMatch(/VSCODE_TARGET_SESSION_LOG:\s*$/m);
 		});
 
 		test('includes VSCODE_USER_PROMPTS_FOLDER derived from global storage URI', () => {
