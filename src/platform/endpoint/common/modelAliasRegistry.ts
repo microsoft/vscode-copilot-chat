@@ -46,5 +46,3 @@ export class ModelAliasRegistry {
 		return this._instance._modelIdToAliases.get(modelId) ?? [];
 	}
 }
-
-ModelAliasRegistry.registerAlias('copilot-fast', 'gpt-4o-mini');

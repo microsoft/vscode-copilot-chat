@@ -9,7 +9,7 @@ import { IConfigurationService } from '../../../platform/configuration/common/co
 import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { AutoChatEndpoint } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
-import { CopilotChatEndpoint } from '../../../platform/endpoint/node/copilotChatEndpoint';
+import { CopilotChatEndpoint, CopilotFastChatEndpoint } from '../../../platform/endpoint/node/copilotChatEndpoint';
 import { EmbeddingEndpoint } from '../../../platform/endpoint/node/embeddingsEndpoint';
 import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
 import { ExtensionContributedChatEndpoint } from '../../../platform/endpoint/vscode-node/extChatEndpoint';
@@ -44,12 +44,28 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 			false,
 		);
 
-		// When new models come in from CAPI we want to clear our local caches and let the endpoints be recreated since there may be new info
+		// When models refresh, also clear the copilot-fast endpoint cache
 		this._register(this._modelFetcher.onDidModelsRefresh(() => {
 			this._chatEndpoints.clear();
 			this._embeddingEndpoints.clear();
+			this._copilotFastEndpoint = undefined;
 			this._onDidModelsRefresh.fire();
 		}));
+	}
+
+	private _copilotFastEndpoint: IChatEndpoint | undefined;
+
+	private async _getOrCreateCopilotFastEndpoint(): Promise<IChatEndpoint> {
+		if (!this._copilotFastEndpoint) {
+			let modelMetadata: IChatModelInformation;
+			try {
+				modelMetadata = await this._modelFetcher.getChatModelFromFamily(CopilotFastChatEndpoint.primaryFamily as ChatEndpointFamily);
+			} catch {
+				modelMetadata = await this._modelFetcher.getChatModelFromFamily(CopilotFastChatEndpoint.fallbackFamily as ChatEndpointFamily);
+			}
+			this._copilotFastEndpoint = this._instantiationService.createInstance(CopilotFastChatEndpoint, modelMetadata);
+		}
+		return this._copilotFastEndpoint;
 	}
 
 	private getOrCreateChatEndpointInstance(modelMetadata: IChatModelInformation): IChatEndpoint {
@@ -66,6 +82,9 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 		this._logService.trace(`Resolving chat model`);
 
 		if (typeof requestOrFamilyOrModel === 'string') {
+			if (requestOrFamilyOrModel === 'copilot-fast') {
+				return this._getOrCreateCopilotFastEndpoint();
+			}
 			const modelMetadata = await this._modelFetcher.getChatModelFromFamily(requestOrFamilyOrModel);
 			return this.getOrCreateChatEndpointInstance(modelMetadata!);
 		}

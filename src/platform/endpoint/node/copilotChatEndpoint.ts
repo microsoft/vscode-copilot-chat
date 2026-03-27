@@ -4,12 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
 import { IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
+import { IMakeChatRequestOptions } from '../../networking/common/networking';
 import { RawMessageConversionCallback } from '../../networking/common/openai';
 import { IChatWebSocketManager } from '../../networking/node/chatWebSocketManager';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
@@ -57,5 +59,26 @@ export class CopilotChatEndpoint extends ChatEndpoint {
 				out.reasoning_text = Array.isArray(data.text) ? data.text.join('') : data.text;
 			}
 		};
+	}
+}
+
+/**
+ * Endpoint for the `copilot-fast` internal family. Prefers {@link primaryFamily} but falls back to
+ * {@link fallbackFamily} when the primary model is not available to the user.
+ *
+ * When the primary model uses the Responses API, reasoning effort is forced to `'none'` so that
+ * background tasks (title generation, rename suggestions, etc.) are fast and cheap. When the same
+ * model is selected explicitly in the model picker it uses a regular {@link CopilotChatEndpoint}
+ * and respects the user's chosen reasoning effort.
+ */
+export class CopilotFastChatEndpoint extends CopilotChatEndpoint {
+	static readonly primaryFamily = 'gpt-5.4-nano';
+	static readonly fallbackFamily = 'gpt-4o-mini';
+
+	protected override async _makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken) {
+		return super._makeChatRequest2(
+			this.useResponsesApi ? { ...options, reasoningEffort: 'none' } : options,
+			token
+		);
 	}
 }
