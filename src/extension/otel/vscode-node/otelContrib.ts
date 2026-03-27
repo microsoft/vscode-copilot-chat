@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import os from 'os';
+import * as os from 'os';
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IOTelService } from '../../../platform/otel/common/otelService';
