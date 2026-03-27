@@ -5,8 +5,8 @@
 
 import { describe, expect, test } from 'vitest';
 import { URI } from '../../../../../util/vs/base/common/uri';
-import type { PromptVariable } from '../../../../prompt/common/chatVariablesCollection';
-import { buildSlashCommandUserMessage, getPromptFileSlashCommandId, type PromptFileSlashCommandId } from '../chatVariables';
+import { getPromptFileSlashCommandId, type PromptFileSlashCommandId, type PromptVariable } from '../../../../prompt/common/chatVariablesCollection';
+import { buildSlashCommandUserMessage } from '../chatVariables';
 
 function makePromptVariable(name: string, value: PromptVariable['value']): PromptVariable {
 	return {

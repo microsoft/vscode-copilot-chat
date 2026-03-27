@@ -27,6 +27,7 @@ import { EditCodeIntent } from '../../intents/node/editCodeIntent';
 import { DocumentToAstSelectionData } from '../../prompts/node/inline/inlineChatEditCodePrompt';
 import { getCustomInstructionTelemetry } from '../../prompts/node/panel/customInstructions';
 import { PATCH_PREFIX } from '../../tools/node/applyPatch/parseApplyPatch';
+import { ChatVariablesCollection, getPromptFileSlashCommandId, isPromptFile } from '../common/chatVariablesCollection';
 import { Conversation } from '../common/conversation';
 import { IToolCall, IToolCallRound } from '../common/intents';
 import { IDocumentContext } from './documentContext';
@@ -223,24 +224,31 @@ function getSlashCommandForTelemetry(request: vscode.ChatRequest, customInstruct
 		return command;
 	}
 
-	// Built-in skills (extension-provided) are safe to send as plain text
-	for (const ref of request.references) {
-		if (!URI.isUri(ref.value)) {
+	// Match against prompt file references using the same ID extraction as the chat UI
+	const chatVariables = new ChatVariablesCollection(request.references);
+	for (const variable of chatVariables) {
+		if (!isPromptFile(variable)) {
 			continue;
 		}
-
-		const extensionSkillInfo = customInstructionsService.getExtensionSkillInfo(ref.value);
-		if (extensionSkillInfo?.extensionId === EXTENSION_ID && extensionSkillInfo.skillName === command) {
-			return command;
-		}
-
-		const extensionPromptFileInfo = customInstructionsService.getExtensionPromptFileInfo(ref.value);
-		if (extensionPromptFileInfo?.extensionId === EXTENSION_ID && extensionPromptFileInfo.uri.path.toLowerCase().endsWith(`/${command.toLowerCase()}.prompt.md`)) {
-			return command;
+		const { id } = getPromptFileSlashCommandId(variable);
+		if (id === command) {
+			// Extension-provided prompt files are safe to send as plain text
+			if (URI.isUri(variable.value)) {
+				const extensionSkillInfo = customInstructionsService.getExtensionSkillInfo(variable.value);
+				if (extensionSkillInfo?.extensionId === EXTENSION_ID) {
+					return command;
+				}
+				const extensionPromptFileInfo = customInstructionsService.getExtensionPromptFileInfo(variable.value);
+				if (extensionPromptFileInfo?.extensionId === EXTENSION_ID) {
+					return command;
+				}
+			}
+			// User-defined prompt file slash commands may contain PII — hash them
+			return getCachedSha256Hash(command);
 		}
 	}
 
-	// User-defined prompt file slash commands may contain PII — hash them
+	// No matching prompt file found — hash the command
 	return getCachedSha256Hash(command);
 }
 
