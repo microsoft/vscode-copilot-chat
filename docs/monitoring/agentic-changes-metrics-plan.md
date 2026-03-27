@@ -119,119 +119,64 @@ We have **four agentic surfaces**, each with different OTel coverage levels:
 
 ---
 
-## Proposed OTel Signals
+## Proposed OTel Signals — 3-Pillar Mapping
 
-### Category A: Edit Quality (Accept Rate + Survival + ARC)
+### Signal Type Decision Guide
 
-These are the highest-value metrics — they directly feed the PowerBI dashboard.
+| Timing | OTel Pillar | Mechanism | Example |
+|--------|-------------|-----------|---------|
+| During agent span | **Trace** — span attribute | `span.setAttribute()` on existing `invoke_agent` span | codeblock_count, edit_step_count |
+| During agent span (milestone) | **Trace** — span event | `span.addEvent()` on existing `invoke_agent` span | summarization applied/failed |
+| After agent span ends | **Event** — standalone log record | `otel.emitLogRecord()` | edit accepted/rejected, survival rate |
+| Aggregate/dashboard | **Metric** — counter or histogram | `otel.incrementCounter()` / `otel.recordMetric()` | accept count, lines of code |
 
-```
-copilot_chat.edit.feedback                     ← #1 panel.edit.feedback
-├── event.name: 'copilot_chat.edit.feedback'
-├── outcome: 'accepted' | 'rejected'
-├── language_id: string
-├── participant: string
-├── edit_surface: 'agent' | 'inline_chat'
-├── request_id: string
-├── has_remaining_edits: boolean
-└── is_notebook: boolean
+### Complete Signal Map
 
-copilot_chat.edit.hunk.action                  ← #2 edit.hunk.action
-├── event.name: 'copilot_chat.edit.hunk.action'
-├── outcome: 'accepted' | 'rejected'
-├── language_id: string
-├── request_id: string
-├── line_count: number
-├── lines_added: number
-└── lines_removed: number
+| # | Source MSFT Event | OTel Pillar | Signal Type | OTel Signal Name | Key Attributes | Timing |
+|---|------------------|-------------|-------------|-----------------|----------------|--------|
+| **Edit Quality (Accept Rate)** | | | | | | |
+| 1 | `panel.edit.feedback` | Event + Metric | Log record + Counter | `copilot_chat.edit.feedback` / `copilot_chat.edit.accept.count` | `outcome`, `language_id`, `participant`, `edit_surface` | Post-span |
+| 2 | `edit.hunk.action` | Event + Metric | Log record + Counter × 2 | `copilot_chat.edit.hunk.action` / `copilot_chat.edit.hunk.count` / `copilot_chat.lines_of_code.count` | `outcome`, `language_id`, `lines_added`, `lines_removed` | Post-span |
+| 10 | `inline.done` | Event + Metric | Log record + Counter | `copilot_chat.inline.done` / `copilot_chat.edit.accept.count` | `accepted`, `language_id`, `edit_count`, `edit_line_count` | Post-span (no parent span) |
+| **Edit Quality (Survival)** | | | | | | |
+| 11 | `inline.trackEditSurvival` | Event + Metric | Log record + Histogram | `copilot_chat.edit.survival` / `copilot_chat.edit.survival_rate` | `edit_source: 'inline_chat'`, `survival_rate_four_gram`, `time_delay_ms` | 5s–15min post-span |
+| 12 | `applyPatch.trackEditSurvival` | Event + Metric | Log record + Histogram | `copilot_chat.edit.survival` / `copilot_chat.edit.survival_rate` | `edit_source: 'apply_patch'`, same attrs | 5s–15min post-span |
+| 13 | `codeMapper.trackEditSurvival` (replace_string) | Event + Metric | Log record + Histogram | `copilot_chat.edit.survival` / `copilot_chat.edit.survival_rate` | `edit_source: 'replace_string'`, same attrs | 5s–15min post-span |
+| 14 | `codeMapper.trackEditSurvival` (code_mapper) | Event + Metric | Log record + Histogram | `copilot_chat.edit.survival` / `copilot_chat.edit.survival_rate` | `edit_source: 'code_mapper'`, same attrs | 5s–15min post-span |
+| **User Engagement** | | | | | | |
+| 3 | `panel.action.copy` | Event + Metric | Log record + Counter | `copilot_chat.user.action` / `copilot_chat.user.action.count` | `action: 'copy'`, `character_count`, `line_count` | Post-span |
+| 4 | `panel.action.insert` | Event + Metric | Log record + Counter | `copilot_chat.user.action` / `copilot_chat.user.action.count` | `action: 'insert'`, `character_count` | Post-span |
+| 5 | `panel.action.followup` | Event + Metric | Log record + Counter | `copilot_chat.user.action` / `copilot_chat.user.action.count` | `action: 'followup'` | Post-span |
+| 6 | `conversation.acceptedCopy/Insert` | — | Skip (duplicate of #3/#4 with extra attrs) | — | — | — |
+| 7 | `conversation.appliedCodeblock` | Event + Metric | Log record + Counter | `copilot_chat.user.action` / `copilot_chat.user.action.count` | `action: 'apply'`, `total_lines`, `is_agent` | Post-span |
+| 8–9 | `panel.action.vote` / `conversation.messageRating` | Event + Metric | Log record + Counter | `copilot_chat.user.feedback` / `copilot_chat.user.feedback.count` | `rating`, `participant`, `conversation_id` | Post-span |
+| **Agent Internals** | | | | | | |
+| 15 | `panel.edit.codeblocks` | **Trace** | **Span attributes** on `invoke_agent` | — (attrs on existing span) | `codeblock_count`, `edit_step_count`, `working_set_count`, `session_duration_ms` | During span |
+| 16 | `editCodeIntent.promptRender` | **Trace** | **Span attributes** on `invoke_agent` | — | `prompt_render_duration_ms`, `is_agent_mode` | During span |
+| 17 | `triggerSummarizeFailed` | **Trace** | **Span event** via `addEvent()` | `summarization_failed` | `error_kind`, `model` | During span |
+| 18 | `backgroundSummarizationApplied` | **Trace** | **Span event** via `addEvent()` | `summarization_applied` | `trigger`, `outcome`, `context_ratio`, `model` | During span |
+| 19–20 | `readFileTrajectory` / `toolCalling.invalidToolMessages` | — | Skip (internal debugging, low dashboard value) | — | — | — |
+| **Background Agent (CLI)** | | | | | | |
+| 21 | `copilotcli.terminal.open` | — | Skip (already has env config bridge) | — | — | — |
+| 22 | `copilotcli.chat.invoke` | — | Skip (already has span bridge) | — | — | — |
+| — | CLI PR creation | Metric | Counter | `copilot_chat.pull_request.count` | — | On tool success |
+| — | CLI git commit | Metric | Counter | `copilot_chat.commit.count` | — | On tool success |
+| **Cloud Sessions** | | | | | | |
+| 23 | `copilotcloud.chat.invoke` | Event | Log record | `copilot_chat.cloud.session.invoke` | `partner_agent`, `model`, `request_id` | On invocation |
+| 24–25 | `confirmationCancelled` / `followupComment` | — | Skip (low dashboard value) | — | — | — |
+| 26 | `remoteAgentJobPullRequestReady` | Event | Log record | `copilot_chat.cloud.pr_ready` | `request_id` | On notification |
+| 27–28 | `remoteAgentJobInvoke` / `truncation` | — | Skip (operational, low dashboard value) | — | — | — |
 
-copilot_chat.edit.survival                     ← #11-14 all trackEditSurvival events
-├── event.name: 'copilot_chat.edit.survival'
-├── edit_source: 'apply_patch' | 'replace_string' | 'code_mapper' | 'inline_chat'
-├── survival_rate_four_gram: number (0-1)
-├── survival_rate_no_revert: number (0-1)
-├── time_delay_ms: number
-├── did_branch_change: boolean
-├── request_id: string
-└── arc?: number (committed characters, when available)
-```
+### Summary by Pillar
 
-### Category B: User Engagement
-
-```
-copilot_chat.user.action                       ← #3-7 copy/insert/apply/followup
-├── event.name: 'copilot_chat.user.action'
-├── action: 'copy' | 'insert' | 'apply' | 'followup'
-├── language_id: string
-├── participant: string
-├── character_count?: number
-├── line_count?: number
-└── is_agent: boolean
-
-copilot_chat.user.feedback                     ← #8-9 vote/rating
-├── event.name: 'copilot_chat.user.feedback'
-├── rating: 'positive' | 'negative'
-├── participant: string
-├── conversation_id: string
-└── request_id: string
-
-copilot_chat.inline.done                       ← #10 inline.done
-├── event.name: 'copilot_chat.inline.done'
-├── accepted: boolean
-├── language_id: string
-├── edit_count: number
-├── edit_line_count: number
-├── reply_type: string
-└── is_notebook: boolean
-```
-
-### Category C: Agent Internals (operational observability)
-
-```
-copilot_chat.agent.edit_response               ← #15 panel.edit.codeblocks
-├── event.name: 'copilot_chat.agent.edit_response'
-├── outcome: 'success' | 'error'
-├── codeblock_count: number
-├── edit_step_count: number
-├── session_duration_ms: number
-└── working_set_count: number
-
-copilot_chat.agent.summarization               ← #17-18 triggerSummarizeFailed, backgroundSummarizationApplied
-├── event.name: 'copilot_chat.agent.summarization'
-├── outcome: 'applied' | 'failed'
-├── trigger: string
-├── error_kind?: string
-├── context_ratio?: number
-└── model: string
-```
-
-### Category D: Cloud/Remote Agent Sessions
-
-```
-copilot_chat.cloud.session.invoke              ← #23 copilotcloud.chat.invoke
-├── event.name: 'copilot_chat.cloud.session.invoke'
-├── partner_agent: 'copilot' | 'claude' | 'codex'
-├── model: string
-├── request_id: string
-└── is_untitled: boolean
-
-copilot_chat.cloud.pr_ready                    ← #26 remoteAgentJobPullRequestReady
-├── event.name: 'copilot_chat.cloud.pr_ready'
-└── request_id: string
-```
-
-### New Metrics (Counters & Histograms)
-
-| Metric Name | Type | Attributes | Source Events |
-|-------------|------|------------|---------------|
-| `copilot_chat.edit.accept.count` | Counter | `outcome`, `edit_surface` | #1, #10 |
-| `copilot_chat.edit.hunk.count` | Counter | `outcome` | #2 |
-| `copilot_chat.lines_of_code.count` | Counter | `type` (added/removed), `language_id` | #2 (on accept) |
-| `copilot_chat.edit.survival_rate` | Histogram | `edit_source`, `time_delay_ms` | #11-14 |
-| `copilot_chat.user.action.count` | Counter | `action`, `participant` | #3-7 |
-| `copilot_chat.user.feedback.count` | Counter | `rating`, `participant` | #8-9 |
-| `copilot_chat.pull_request.count` | Counter | — | CLI PR creation |
-| `copilot_chat.commit.count` | Counter | — | CLI git commit detection |
+| Pillar | Count | Details |
+|--------|-------|---------|
+| **Metrics** (counters) | 6 | `edit.accept.count`, `edit.hunk.count`, `lines_of_code.count`, `user.action.count`, `user.feedback.count`, `pull_request.count`, `commit.count` |
+| **Metrics** (histograms) | 1 | `edit.survival_rate` |
+| **Events** (log records) | 7 | `edit.feedback`, `edit.hunk.action`, `inline.done`, `edit.survival`, `user.action`, `user.feedback`, `cloud.session.invoke`, `cloud.pr_ready` |
+| **Trace** (span attributes) | 2 | `codeblock_count`+`edit_step_count`+`working_set_count` on `invoke_agent`; `prompt_render_duration_ms` on `invoke_agent` |
+| **Trace** (span events) | 2 | `summarization_failed`, `summarization_applied` on `invoke_agent` |
+| **Skipped** | 8 | #6 (duplicate), #19-20 (debug), #21-22 (already bridged), #24-25, #27-28 (low value) |
 
 ---
 
@@ -243,10 +188,9 @@ Add event emitters to `src/platform/otel/common/genAiEvents.ts`:
 - `emitEditFeedbackEvent()` — for #1 panel.edit.feedback
 - `emitEditHunkActionEvent()` — for #2 edit.hunk.action
 - `emitEditSurvivalEvent()` — for #11-14 all survival tracking
-- `emitUserActionEvent()` — for #3-7 copy/insert/apply/followup
+- `emitUserActionEvent()` — for #3-5, #7 copy/insert/apply/followup
 - `emitUserFeedbackEvent()` — for #8-9 vote/rating
 - `emitInlineDoneEvent()` — for #10 inline.done
-- `emitAgentEditResponseEvent()` — for #15 panel.edit.codeblocks
 - `emitCloudSessionInvokeEvent()` — for #23 cloud session invoke
 
 Add metrics to `src/platform/otel/common/genAiMetrics.ts`:
@@ -261,17 +205,17 @@ Add metrics to `src/platform/otel/common/genAiMetrics.ts`:
 
 ### Phase 2: Wire into call sites
 
-| # | File | Events to Emit | Approach |
-|---|------|----------------|----------|
-| 1 | `src/extension/conversation/vscode-node/userActions.ts` | #1-9 (edit feedback, hunk, copy, insert, followup, apply, vote) | Inject `@IOTelService` into `UserFeedbackService` constructor |
-| 2 | `src/extension/conversation/vscode-node/userActions.ts` | #10-11 (inline.done, inline.trackEditSurvival) | Same service, inline chat path |
-| 3 | `src/extension/tools/node/applyPatchTool.tsx` | #12 (apply_patch survival) | Inject `@IOTelService` into tool constructor |
-| 4 | `src/extension/tools/node/abstractReplaceStringTool.tsx` | #13 (replace_string survival) | Inject `@IOTelService` into tool constructor |
-| 5 | `src/extension/prompts/node/codeMapper/codeMapperService.ts` | #14 (code mapper survival) | Pass `IOTelService` to survival callback |
-| 6 | `src/extension/intents/node/editCodeIntent.ts` | #15 (panel.edit.codeblocks) | Already has access via toolCallingLoop |
-| 7 | `src/extension/intents/node/agentIntent.ts` | #17-18 (summarization) | Already has `IOTelService` nearby |
-| 8 | `src/extension/chatSessions/vscode-node/copilotCloudSessionsProvider.ts` | #23, #26 (cloud session invoke, PR ready) | Inject `@IOTelService` |
-| 9 | `src/extension/chatSessions/copilotcli/node/copilotcliSession.ts` | PR count, commit count | Inject `@IOTelService` |
+| # | File | What to Add | Approach | Effort |
+|---|------|-------------|----------|--------|
+| 1 | `userActions.ts` | Events #1-5, #7-9 + counters | Inject `@IOTelService` into `UserFeedbackService` | Medium |
+| 2 | `userActions.ts` | Events #10-11 + counter | Same service, inline chat path | Small |
+| 3 | `applyPatchTool.tsx` | Event #12 + histogram | Inject `@IOTelService` into tool constructor | Small |
+| 4 | `abstractReplaceStringTool.tsx` | Event #13 + histogram | Inject `@IOTelService` into tool constructor | Small |
+| 5 | `codeMapperService.ts` | Event #14 + histogram | Pass `IOTelService` to survival callback | Small |
+| 6 | `editCodeIntent.ts` | **Span attrs** #15-16 on `invoke_agent` | `span.setAttribute()` — no new injection needed | Trivial (~5 lines) |
+| 7 | `agentIntent.ts` | **Span events** #17-18 on `invoke_agent` | `span.addEvent()` — no new injection needed | Trivial (~5 lines) |
+| 8 | `copilotCloudSessionsProvider.ts` | Events #23, #26 | Inject `@IOTelService` | Small |
+| 9 | `copilotcliSession.ts` | Counters for PR + commit | Inject `@IOTelService` | Small |
 
 ### Phase 3: Documentation
 
