@@ -25,7 +25,6 @@ import { IExperimentationService } from '../../../telemetry/common/nullExperimen
 import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../common/endpointProvider';
 import { EmbeddingEndpoint } from '../../node/embeddingsEndpoint';
 import { ModelMetadataFetcher } from '../../node/modelMetadataFetcher';
-import { CopilotFastChatEndpoint } from '../../node/copilotChatEndpoint';
 import { AzureTestEndpoint } from './azureEndpoint';
 import { CAPITestEndpoint } from './capiEndpoint';
 import { CustomNesEndpoint } from './customNesEndpoint';
