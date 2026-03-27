@@ -276,8 +276,8 @@ function agreementIndexOf<T extends IEditData<T>>(content: string, ourE: Annotat
 		return j + baseE.newText.length;
 	}
 	// User typed text not found in suggestion (or rejected by strict limits) — absorb if it aligns as a subsequence.
-	// Guard: only attempt for short typed text to avoid expensive matching on long pastes
-	// and to stay consistent with the existing strict safeguards.
+	// Guard: restrict to known editor auto-close pairs via isAutoClosePair(...) (effectively 2-character pairs)
+	// to avoid expensive matching on long pastes and to stay consistent with the existing strict safeguards.
 	if (nesConfigs.absorbSubsequenceTyping && isAutoClosePair(originalBaseNewText) && isSubsequenceOf(originalBaseNewText, ourE.newText.substring(ourNewTextOffset))) {
 		return ourNewTextOffset;
 	}
