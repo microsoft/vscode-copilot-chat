@@ -564,7 +564,7 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 				this._activeRequest = undefined;
 			}
 		});
-		request.done.finally(() => cancelDisposable.dispose());
+		request.done.finally(() => cancelDisposable.dispose()).catch(() => { });
 
 		const { stream: _, ...rest } = body;
 		const message = {

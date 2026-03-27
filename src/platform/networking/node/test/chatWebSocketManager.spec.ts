@@ -188,6 +188,7 @@ describe('ChatWebSocketManager', () => {
 				cts.token,
 			);
 
+			handle.firstEvent.catch(() => { });
 			ws.dispatchEvent(Object.assign(new Event('close'), { code: 1006, reason: '', wasClean: false }));
 
 			await expect(handle.firstEvent).rejects.toThrow();
