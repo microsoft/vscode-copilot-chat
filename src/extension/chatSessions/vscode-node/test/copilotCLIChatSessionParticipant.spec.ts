@@ -825,7 +825,9 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 	it('handles /delegate command from another chat (has uncommitted changes and user copies changes)', async () => {
 		expect(manager.sessions.size).toBe(0);
-		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}workspace`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
+		const repoContext = { rootUri: Uri.file(`${sep}workspace`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext;
+		git.activeRepository = { get: () => repoContext } as unknown as IGitService['activeRepository'];
+		git.setRepo(repoContext);
 		tools.nextConfirmationButton = 'Copy Changes';
 		const request = new TestChatRequest('/delegate Build feature');
 		const context = { chatSessionContext: undefined } as vscode.ChatContext;

@@ -6,8 +6,6 @@
 import { promises as fs } from 'fs';
 import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
-import { RelativePattern } from '../../../platform/filesystem/common/fileTypes';
 import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { parseGitChangesRaw } from '../../../platform/git/vscode-node/utils';
 import { DiffChange } from '../../../platform/git/vscode/git';
@@ -44,7 +42,6 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 		@ILogService private readonly logService: ILogService,
 		@IChatSessionMetadataStore private readonly metadataStore: IChatSessionMetadataStore,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
-		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@IAgentSessionsWorkspace private readonly agentSessionsWorkspace: IAgentSessionsWorkspace,
 	) {
 		super();
@@ -235,16 +232,6 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 			repository.headCommitHashObs.read(reader);
 			this.workspaceFolderChanges.delete(workspaceFolderUri);
 		}));
-
-		// Invalidate cache when files change in the workspace folder
-		const watcher = this.fileSystemService.createFileSystemWatcher(new RelativePattern(workspaceFolderUri, '**'));
-		disposables.add(watcher);
-		const onFileChange = () => {
-			this.workspaceFolderChanges.delete(workspaceFolderUri);
-		};
-		disposables.add(watcher.onDidChange(onFileChange));
-		disposables.add(watcher.onDidCreate(onFileChange));
-		disposables.add(watcher.onDidDelete(onFileChange));
 
 		this.repoStateSubscriptions.set(workspaceFolderUri, disposables);
 	}
