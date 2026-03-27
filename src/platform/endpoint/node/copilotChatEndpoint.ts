@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import type { CancellationToken } from 'vscode';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
 import { IConfigurationService } from '../../configuration/common/configurationService';
@@ -20,8 +20,8 @@ import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { ChatEndpointFamily, IChatModelInformation } from '../common/endpointProvider';
-import { IModelMetadataFetcher } from './modelMetadataFetcher';
 import { ChatEndpoint } from './chatEndpoint';
+import { IModelMetadataFetcher } from './modelMetadataFetcher';
 
 export class CopilotChatEndpoint extends ChatEndpoint {
 	constructor(
