@@ -16,12 +16,14 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 	private readonly _onDidChange = this._register(new Emitter<void>());
 	readonly onDidChange = this._onDidChange.event;
 
-	static readonly metadata: vscode.ChatSessionCustomizationProviderMetadata = {
-		label: 'Claude',
-		iconId: 'claude',
-		unsupportedTypes: [vscode.ChatSessionCustomizationType.Prompt],
-		workspaceSubpaths: ['.claude'],
-	};
+	static get metadata(): vscode.ChatSessionCustomizationProviderMetadata {
+		return {
+			label: 'Claude',
+			iconId: 'claude',
+			unsupportedTypes: [vscode.ChatSessionCustomizationType.Prompt],
+			workspaceSubpaths: ['.claude'],
+		};
+	}
 
 	constructor(
 		@IChatPromptFileService private readonly chatPromptFileService: IChatPromptFileService,

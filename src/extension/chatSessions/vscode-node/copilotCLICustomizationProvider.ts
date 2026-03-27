@@ -16,12 +16,14 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 	private readonly _onDidChange = this._register(new Emitter<void>());
 	readonly onDidChange = this._onDidChange.event;
 
-	static readonly metadata: vscode.ChatSessionCustomizationProviderMetadata = {
-		label: 'Copilot CLI',
-		iconId: 'worktree',
-		unsupportedTypes: [vscode.ChatSessionCustomizationType.Hook],
-		workspaceSubpaths: ['.github', '.copilot'],
-	};
+	static get metadata(): vscode.ChatSessionCustomizationProviderMetadata {
+		return {
+			label: 'Copilot CLI',
+			iconId: 'worktree',
+			unsupportedTypes: [vscode.ChatSessionCustomizationType.Hook],
+			workspaceSubpaths: ['.github', '.copilot'],
+		};
+	}
 
 	constructor(
 		@IChatPromptFileService private readonly chatPromptFileService: IChatPromptFileService,
