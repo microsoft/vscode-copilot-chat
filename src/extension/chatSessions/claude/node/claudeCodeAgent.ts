@@ -8,6 +8,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
+import { IConfigurationService, ConfigKey } from '../../../../platform/configuration/common/configurationService';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IMcpService } from '../../../../platform/mcp/common/mcpService';
@@ -214,6 +215,7 @@ export class ClaudeCodeSession extends Disposable {
 		@IMcpService private readonly mcpService: IMcpService,
 		@IOTelService private readonly _otelService: IOTelService,
 		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
 		this._currentModelId = initialModelId;
@@ -448,6 +450,7 @@ export class ClaudeCodeSession extends Disposable {
 					USE_BUILTIN_RIPGREP: '0',
 					PATH: `${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin${pathSep}${process.env.PATH}`
 				},
+				includeCoAuthoredBy: this.configurationService.getConfig(ConfigKey.ClaudeAgentIncludeCoAuthoredBy),
 			},
 			canUseTool: async (name, input) => {
 				if (!this._currentRequest) {
