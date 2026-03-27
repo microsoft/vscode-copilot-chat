@@ -1510,7 +1510,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await this.copilotCLIWorktreeCheckpointService.handleRequestCompleted(session.sessionId, request.id);
 			}
 
-			this.handlePullRequestCreated(session).then().catch(ex => this.logService.error(ex, 'Failed to handle pull request creation'));
+			void this.handlePullRequestCreated(session).catch(ex => this.logService.error(ex, 'Failed to handle pull request creation'));
 		} finally {
 			pendingRequests?.delete(request);
 		}
