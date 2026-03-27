@@ -47,12 +47,12 @@ import { ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK, isWelcomeView } f
 import { CopilotCLIPromptResolver } from '../copilotcli/node/copilotcliPromptResolver';
 import { builtinSlashSCommands, CopilotCLICommand, copilotCLICommands, ICopilotCLISession } from '../copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
+import { buildMcpServerMappings } from '../copilotcli/node/mcpHandler';
 import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
 import { ICopilotCLIChatSessionItemProvider } from './copilotCLIChatSessions';
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
 import { ICopilotCLITerminalIntegration, TerminalOpenLocation } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
-import { buildMcpServerMappings } from '../copilotcli/node/mcpHandler';
 
 const REPOSITORY_OPTION_ID = 'repository';
 
@@ -1965,13 +1965,13 @@ export function registerCLIChatCommands(
 			}
 		}
 	}));
-	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.setTitle', async (resource?: vscode.Uri, title?: string) => {
-		if (!resource || !title) {
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.setTitle', async (sessionItem?: vscode.ChatSessionItem, title?: string) => {
+		if (!sessionItem?.resource || !title) {
 			return;
 		}
 		const trimmedTitle = title.trim();
 		if (trimmedTitle) {
-			const id = SessionIdForCLI.parse(resource);
+			const id = SessionIdForCLI.parse(sessionItem.resource);
 			const sessionId = copilotcliSessionItemProvider.untitledSessionIdMapping.get(id) ?? id;
 			await copilotCLISessionService.renameSession(sessionId, trimmedTitle);
 			copilotcliSessionItemProvider.notifySessionsChange();

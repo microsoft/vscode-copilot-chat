@@ -1907,13 +1907,13 @@ export function registerCLIChatCommands(
 			}
 		}
 	}));
-	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.setTitle', async (resource?: vscode.Uri, title?: string) => {
-		if (!resource || !title) {
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.setTitle', async (sessionItem?: vscode.ChatSessionItem, title?: string) => {
+		if (!sessionItem?.resource || !title) {
 			return;
 		}
 		const trimmedTitle = title.trim();
 		if (trimmedTitle) {
-			const id = SessionIdForCLI.parse(resource);
+			const id = SessionIdForCLI.parse(sessionItem.resource);
 			await copilotCLISessionService.renameSession(id, trimmedTitle);
 			await contentProvider.refreshSession({ reason: 'update', sessionId: id });
 		}
