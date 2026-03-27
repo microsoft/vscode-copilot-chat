@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { SDKAssistantMessage, SDKCompactBoundaryMessage, SDKMessage, SDKResultMessage, SDKUserMessage, SDKUserMessageReplay } from '@anthropic-ai/claude-agent-sdk';
+import type { SDKAssistantMessage, SDKCompactBoundaryMessage, SDKHookResponseMessage, SDKHookStartedMessage, SDKMessage, SDKResultMessage, SDKUserMessage, SDKUserMessageReplay } from '@anthropic-ai/claude-agent-sdk';
 import type { TodoWriteInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
 import type Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
@@ -30,6 +30,7 @@ export interface MessageHandlerRequestContext {
 export interface MessageHandlerState {
 	readonly unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>;
 	readonly otelToolSpans: Map<string, ISpanHandle>;
+	readonly otelHookSpans: Map<string, ISpanHandle>;
 }
 
 export interface MessageHandlerResult {
@@ -67,20 +68,36 @@ export const ALL_KNOWN_MESSAGE_KEYS = new Set([
 	'user',
 	'result',
 	'stream_event',
+	// TODO: Show `tool_progress` — has `tool_name` and `elapsed_time_seconds` for live tool status
+	// low pri, where would we show this?
 	'tool_progress',
+	// TODO: Show `tool_use_summary` — has `summary` text describing tool execution results
+	// low pri, where would we show this?
 	'tool_use_summary',
+	// TODO: Show `auth_status` — has `output` lines and `error` for auth failures
 	'auth_status',
+	// TODO: Show `rate_limit_event` — has `rate_limit_info.status` (allowed_warning | rejected) and reset time
 	'rate_limit_event',
+	// TODO: Show `prompt_suggestion` — has `suggestion` text for follow-up prompts
+	// low pri, follow ups are dead
 	'prompt_suggestion',
 	'system:init',
 	'system:compact_boundary',
 	'system:status',
+	// TODO: Show `system:api_retry` — has `error`, `attempt`, `max_retries` for retry visibility
+	'system:api_retry',
+	// TODO: Show `system:local_command_output` — has `content` text from local slash commands
 	'system:local_command_output',
 	'system:hook_started',
+	// TODO: Show `system:hook_progress` — has `stdout`, `stderr`, `output` for streaming hook output
 	'system:hook_progress',
+	// TODO: Show `system:hook_response` — has `output`, `stderr`, `outcome` — surface errors to user
 	'system:hook_response',
+	// TODO: Show `system:task_notification` — has `summary` and `status` for subagent completion
 	'system:task_notification',
+	// TODO: Show `system:task_started` — has `description` and `prompt` for subagent launch
 	'system:task_started',
+	// TODO: Show `system:task_progress` — has `description` and `summary` for subagent progress
 	'system:task_progress',
 	'system:files_persisted',
 	'system:elicitation_complete',
@@ -274,6 +291,61 @@ export function handleCompactBoundary(
 	request.stream.markdown(`*${l10n.t('Conversation compacted')}*`);
 }
 
+export function handleHookStarted(
+	message: SDKHookStartedMessage,
+	accessor: ServicesAccessor,
+	sessionId: string,
+	state: MessageHandlerState,
+): void {
+	const otelService = accessor.get(IOTelService);
+	const span = otelService.startSpan(`user_hook ${message.hook_event}:${message.hook_name}`, {
+		kind: SpanKind.INTERNAL,
+		attributes: {
+			[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_HOOK,
+			'copilot_chat.hook_type': message.hook_event,
+			'copilot_chat.hook_command': message.hook_name,
+			'copilot_chat.hook_id': message.hook_id,
+			[CopilotChatAttr.CHAT_SESSION_ID]: sessionId,
+		},
+	});
+	state.otelHookSpans.set(message.hook_id, span);
+}
+
+export function handleHookResponse(
+	message: SDKHookResponseMessage,
+	accessor: ServicesAccessor,
+	request: MessageHandlerRequestContext,
+	state: MessageHandlerState,
+): void {
+	const logService = accessor.get(ILogService);
+	const span = state.otelHookSpans.get(message.hook_id);
+	if (span) {
+		if (message.outcome === 'error') {
+			span.setStatus(SpanStatusCode.ERROR, message.stderr || message.output);
+		} else if (message.outcome === 'cancelled') {
+			span.setStatus(SpanStatusCode.ERROR, 'cancelled');
+		} else {
+			span.setStatus(SpanStatusCode.OK);
+		}
+		if (message.exit_code !== undefined) {
+			span.setAttribute('copilot_chat.hook_exit_code', message.exit_code);
+		}
+		if (message.output) {
+			span.setAttribute('copilot_chat.hook_output', truncateForOTel(message.output));
+		}
+		span.end();
+		state.otelHookSpans.delete(message.hook_id);
+	}
+
+	if (message.outcome === 'error') {
+		logService.warn(`[ClaudeMessageDispatch] Hook "${message.hook_name}" (${message.hook_event}) failed: ${message.stderr || message.output}`);
+		request.stream.markdown(`*${l10n.t('Hook "{0}" failed', message.hook_name)}*\n`);
+		if (message.stderr) {
+			request.stream.markdown(`\`\`\`\n${message.stderr}\n\`\`\`\n`);
+		}
+	}
+}
+
 export function handleResultMessage(
 	message: SDKResultMessage,
 	request: MessageHandlerRequestContext,
@@ -322,6 +394,14 @@ export function dispatchMessage(
 		case 'system':
 			if (message.subtype === 'compact_boundary') {
 				handleCompactBoundary(message, request);
+				return;
+			}
+			if (message.subtype === 'hook_started') {
+				handleHookStarted(message, accessor, sessionId, state);
+				return;
+			}
+			if (message.subtype === 'hook_response') {
+				handleHookResponse(message, accessor, request, state);
 				return;
 			}
 			break;

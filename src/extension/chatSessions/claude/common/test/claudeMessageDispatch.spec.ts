@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { NonNullableUsage, SDKAssistantMessage, SDKCompactBoundaryMessage, SDKResultError, SDKResultSuccess, SDKStatusMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { NonNullableUsage, SDKAssistantMessage, SDKCompactBoundaryMessage, SDKHookResponseMessage, SDKHookStartedMessage, SDKResultError, SDKResultSuccess, SDKStatusMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type Anthropic from '@anthropic-ai/sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
@@ -18,6 +18,8 @@ import {
 	dispatchMessage,
 	handleAssistantMessage,
 	handleCompactBoundary,
+	handleHookResponse,
+	handleHookStarted,
 	handleResultMessage,
 	handleUserMessage,
 	KnownClaudeError,
@@ -84,6 +86,7 @@ function createState(): MessageHandlerState {
 	return {
 		unprocessedToolCalls: new Map(),
 		otelToolSpans: new Map(),
+		otelHookSpans: new Map(),
 	};
 }
 
@@ -219,6 +222,39 @@ function makeStatusMessage(): SDKStatusMessage {
 		type: 'system',
 		subtype: 'status',
 		status: null,
+		uuid: TEST_UUID,
+		session_id: TEST_SESSION,
+	};
+}
+
+function makeHookStarted(hookId = 'hook-1', hookName = 'my-hook', hookEvent = 'PreToolUse'): SDKHookStartedMessage {
+	return {
+		type: 'system',
+		subtype: 'hook_started',
+		hook_id: hookId,
+		hook_name: hookName,
+		hook_event: hookEvent,
+		uuid: TEST_UUID,
+		session_id: TEST_SESSION,
+	};
+}
+
+function makeHookResponse(
+	hookId = 'hook-1',
+	outcome: 'success' | 'error' | 'cancelled' = 'success',
+	overrides: Partial<Pick<SDKHookResponseMessage, 'output' | 'stderr' | 'stdout' | 'exit_code' | 'hook_name' | 'hook_event'>> = {},
+): SDKHookResponseMessage {
+	return {
+		type: 'system',
+		subtype: 'hook_response',
+		hook_id: hookId,
+		hook_name: overrides.hook_name ?? 'my-hook',
+		hook_event: overrides.hook_event ?? 'PreToolUse',
+		output: overrides.output ?? '',
+		stdout: overrides.stdout ?? '',
+		stderr: overrides.stderr ?? '',
+		exit_code: overrides.exit_code,
+		outcome,
 		uuid: TEST_UUID,
 		session_id: TEST_SESSION,
 	};
@@ -477,6 +513,102 @@ describe('handleCompactBoundary', () => {
 
 // #endregion
 
+// #region handleHookStarted / handleHookResponse
+
+describe('handleHookStarted', () => {
+	let services: TestServices;
+	let accessor: ServicesAccessor;
+	let state: MessageHandlerState;
+
+	beforeEach(() => {
+		services = createTestServices();
+		accessor = createAccessor(services);
+		state = createState();
+	});
+
+	it('creates an OTel span and stores it by hook_id', () => {
+		const startSpanSpy = vi.spyOn(services.otelService, 'startSpan');
+		handleHookStarted(makeHookStarted('hook-42', 'lint-check', 'PreToolUse'), accessor, TEST_SESSION_ID, state);
+
+		expect(startSpanSpy).toHaveBeenCalledWith(
+			'user_hook PreToolUse:lint-check',
+			expect.objectContaining({ attributes: expect.any(Object) }),
+		);
+		expect(state.otelHookSpans.has('hook-42')).toBe(true);
+	});
+});
+
+describe('handleHookResponse', () => {
+	let services: TestServices;
+	let accessor: ServicesAccessor;
+	let request: MessageHandlerRequestContext;
+	let state: MessageHandlerState;
+
+	beforeEach(() => {
+		services = createTestServices();
+		accessor = createAccessor(services);
+		request = createRequestContext();
+		state = createState();
+	});
+
+	it('ends the OTel span with OK on success', () => {
+		const mockSpan = createMockSpan();
+		state.otelHookSpans.set('hook-1', mockSpan);
+
+		handleHookResponse(makeHookResponse('hook-1', 'success'), accessor, request, state);
+
+		expect(mockSpan.setStatus).toHaveBeenCalledWith(expect.anything()); // SpanStatusCode.OK
+		expect(mockSpan.end).toHaveBeenCalled();
+		expect(state.otelHookSpans.has('hook-1')).toBe(false);
+	});
+
+	it('ends the OTel span with ERROR on failure and surfaces error to user', () => {
+		const mockSpan = createMockSpan();
+		state.otelHookSpans.set('hook-1', mockSpan);
+
+		handleHookResponse(
+			makeHookResponse('hook-1', 'error', { stderr: 'lint failed', hook_name: 'lint-check' }),
+			accessor, request, state,
+		);
+
+		expect(mockSpan.setStatus).toHaveBeenCalledWith(expect.anything(), 'lint failed');
+		expect(mockSpan.end).toHaveBeenCalled();
+		expect(request.stream.markdown).toHaveBeenCalledWith(expect.stringContaining('lint-check'));
+		expect(request.stream.markdown).toHaveBeenCalledWith(expect.stringContaining('lint failed'));
+	});
+
+	it('does not surface anything to user on success', () => {
+		const mockSpan = createMockSpan();
+		state.otelHookSpans.set('hook-1', mockSpan);
+
+		handleHookResponse(makeHookResponse('hook-1', 'success'), accessor, request, state);
+
+		expect(request.stream.markdown).not.toHaveBeenCalled();
+	});
+
+	it('handles cancelled outcome', () => {
+		const mockSpan = createMockSpan();
+		state.otelHookSpans.set('hook-1', mockSpan);
+
+		handleHookResponse(makeHookResponse('hook-1', 'cancelled'), accessor, request, state);
+
+		expect(mockSpan.setStatus).toHaveBeenCalledWith(expect.anything(), 'cancelled');
+		expect(mockSpan.end).toHaveBeenCalled();
+	});
+
+	it('handles response without a matching started span gracefully', () => {
+		// No span in otelHookSpans — should not throw
+		handleHookResponse(
+			makeHookResponse('nonexistent', 'error', { stderr: 'some error', hook_name: 'my-hook' }),
+			accessor, request, state,
+		);
+		// Still surfaces the error to user
+		expect(request.stream.markdown).toHaveBeenCalledWith(expect.stringContaining('my-hook'));
+	});
+});
+
+// #endregion
+
 // #region handleResultMessage
 
 describe('handleResultMessage', () => {
@@ -517,7 +649,7 @@ describe('ALL_KNOWN_MESSAGE_KEYS', () => {
 
 	it('contains entries for all system subtype values', () => {
 		const expectedSystemSubtypes = [
-			'init', 'compact_boundary', 'status', 'local_command_output',
+			'init', 'compact_boundary', 'status', 'api_retry', 'local_command_output',
 			'hook_started', 'hook_progress', 'hook_response',
 			'task_notification', 'task_started', 'task_progress',
 			'files_persisted', 'elicitation_complete',
