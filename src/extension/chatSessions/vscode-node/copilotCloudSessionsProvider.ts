@@ -27,7 +27,7 @@ import { isUntitledSessionId } from '../common/utils';
 import { IChatDelegationSummaryService } from '../copilotcli/common/delegationSummaryService';
 import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getAuthorDisplayName, getRepoId, JOBS_API_VERSION, SessionIdForPr, toOpenPullRequestWebviewUri, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
 import { CopilotCloudGitOperationsManager } from './copilotCloudGitOperationsManager';
-import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
+import { ChatSessionContentBuilder, SessionResponseLogChunk } from './copilotCloudSessionContentBuilder';
 import { IPullRequestFileChangesService } from './pullRequestFileChangesService';
 import MarkdownIt = require('markdown-it');
 
@@ -36,6 +36,11 @@ interface ConfirmationMetadata {
 	references?: readonly vscode.ChatPromptReference[];
 	chatContext: vscode.ChatContext;
 }
+
+type InitialSessionOption = {
+	readonly optionId: string;
+	readonly value: string | vscode.ChatSessionProviderOptionItem;
+};
 
 function validateMetadata(metadata: unknown): asserts metadata is ConfirmationMetadata {
 	if (typeof metadata !== 'object') {
@@ -49,6 +54,82 @@ function validateMetadata(metadata: unknown): asserts metadata is ConfirmationMe
 	}
 	if (typeof (metadata as ConfirmationMetadata).chatContext !== 'object' || (metadata as ConfirmationMetadata).chatContext === null) {
 		throw new Error('Invalid confirmation metadata: missing or invalid chatContext.');
+	}
+}
+
+function describeRuntimeValue(value: unknown): string {
+	if (Array.isArray(value)) {
+		return `array(length=${value.length})`;
+	}
+
+	if (value === null) {
+		return 'null';
+	}
+
+	if (value === undefined) {
+		return 'undefined';
+	}
+
+	if (typeof value === 'object') {
+		const keys = Object.keys(value);
+		return `object(keys=${keys.slice(0, 5).join(',')}${keys.length > 5 ? ',…' : ''})`;
+	}
+
+	return typeof value;
+}
+
+function isOptionItemValue(value: unknown): value is vscode.ChatSessionProviderOptionItem {
+	return typeof value === 'object' && value !== null && 'id' in value && typeof value.id === 'string';
+}
+
+function isInitialSessionOption(value: unknown): value is InitialSessionOption {
+	if (typeof value !== 'object' || value === null || !('optionId' in value) || typeof value.optionId !== 'string' || !('value' in value)) {
+		return false;
+	}
+
+	return typeof value.value === 'string' || isOptionItemValue(value.value);
+}
+
+export function normalizeInitialSessionOptions(initialOptions: unknown, logService?: ILogService, chatResource?: vscode.Uri): readonly InitialSessionOption[] {
+	if (!initialOptions) {
+		return [];
+	}
+
+	if (Array.isArray(initialOptions)) {
+		const normalized = initialOptions.filter(isInitialSessionOption);
+		if (logService && normalized.length !== initialOptions.length) {
+			logService.warn(`[chatParticipantImpl] Ignoring ${initialOptions.length - normalized.length} malformed initialSessionOptions entries for ${chatResource?.toString() ?? 'unknown-resource'}. Received ${describeRuntimeValue(initialOptions)}.`);
+		}
+
+		return normalized;
+	}
+
+	if (typeof initialOptions === 'object') {
+		const normalized: InitialSessionOption[] = [];
+		for (const [optionId, value] of Object.entries(initialOptions)) {
+			if (isInitialSessionOption(value)) {
+				normalized.push(value);
+			} else if (typeof value === 'string' || isOptionItemValue(value)) {
+				normalized.push({ optionId, value });
+			}
+		}
+
+		if (normalized.length > 0) {
+			logService?.warn(`[chatParticipantImpl] Coerced object-shaped initialSessionOptions for ${chatResource?.toString() ?? 'unknown-resource'}. Received ${describeRuntimeValue(initialOptions)} and recovered ${normalized.length} entries.`);
+			return normalized;
+		}
+	}
+
+	logService?.warn(`[chatParticipantImpl] Ignoring unsupported initialSessionOptions for ${chatResource?.toString() ?? 'unknown-resource'}. Received ${describeRuntimeValue(initialOptions)}.`);
+	return [];
+}
+
+export function parseSessionLogChunksSafely(rawText: string, logService: ILogService, parser: (value: string) => SessionResponseLogChunk[]): SessionResponseLogChunk[] {
+	try {
+		return parser(rawText);
+	} catch (error) {
+		logService.error(error instanceof Error ? error : new Error(String(error)), `[streamNewLogContent] Failed to parse streamed log content (${rawText.length} chars).`);
+		return [];
 	}
 }
 
@@ -1839,8 +1920,11 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		const chatResource = context.chatSessionContext?.chatSessionItem?.resource;
 
 		const initialOptions = context.chatSessionContext?.initialSessionOptions;
-		if (chatResource && initialOptions) {
-			for (const opt of initialOptions) {
+		if (chatResource) {
+			this.logService.trace(`[chatParticipantImpl] initialSessionOptions for ${chatResource.toString()}: ${describeRuntimeValue(initialOptions)}`);
+		}
+		if (chatResource) {
+			for (const opt of normalizeInitialSessionOptions(initialOptions, this.logService, chatResource)) {
 				const value = typeof opt.value === 'string' ? opt.value : opt.value.id;
 				if (opt.optionId === CUSTOM_AGENTS_OPTION_GROUP_ID) {
 					this.sessionCustomAgentMap.set(chatResource, value);
@@ -2150,19 +2234,32 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			// Parse the new log content
 			const contentBuilder = new ChatSessionContentBuilder(CopilotCloudSessionsProvider.TYPE, this._gitService);
-
-			const logChunks = contentBuilder.parseSessionLogs(newLogContent);
+			const logChunks = parseSessionLogChunksSafely(newLogContent, this.logService, value => contentBuilder.parseSessionLogs(value));
 			let hasStreamedContent = false;
 			let hasSetupStepProgress = false;
 
-			for (const chunk of logChunks) {
+			for (const [chunkIndex, chunk] of logChunks.entries()) {
+				if (!Array.isArray(chunk.choices)) {
+					this.logService.warn(`[streamNewLogContent] Ignoring chunk ${chunkIndex} with non-array choices for PR #${pullRequest.number}.`);
+					continue;
+				}
+
 				for (const choice of chunk.choices) {
+					if (!choice?.delta) {
+						this.logService.warn(`[streamNewLogContent] Ignoring chunk ${chunkIndex} with missing delta for PR #${pullRequest.number}.`);
+						continue;
+					}
+
 					const delta = choice.delta;
+					const toolCalls = Array.isArray(delta.tool_calls) ? delta.tool_calls : undefined;
+					if (delta.tool_calls && !toolCalls) {
+						this.logService.warn(`[streamNewLogContent] Ignoring non-array tool_calls for PR #${pullRequest.number}.`);
+					}
 
 					if (delta.role === 'assistant') {
 						// Handle special case for run_custom_setup_step/run_setup
-						if (choice.finish_reason === 'tool_calls' && delta.tool_calls?.length && (delta.tool_calls[0].function.name === 'run_custom_setup_step' || delta.tool_calls[0].function.name === 'run_setup')) {
-							const toolCall = delta.tool_calls[0];
+						if (choice.finish_reason === 'tool_calls' && toolCalls?.length && (toolCalls[0].function.name === 'run_custom_setup_step' || toolCalls[0].function.name === 'run_setup')) {
+							const toolCall = toolCalls[0];
 							let args: any = {};
 							try {
 								args = JSON.parse(toolCall.function.arguments);
@@ -2193,8 +2290,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 								}
 							}
 
-							if (delta.tool_calls) {
-								for (const toolCall of delta.tool_calls) {
+							if (toolCalls) {
+								for (const toolCall of toolCalls) {
 									const toolPart = contentBuilder.createToolInvocationPart(pullRequest, toolCall, delta.content || '');
 									if (toolPart) {
 										stream.push(toolPart);
