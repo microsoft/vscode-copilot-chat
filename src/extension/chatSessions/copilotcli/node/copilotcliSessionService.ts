@@ -7,7 +7,7 @@ import type { internal, LocalSessionMetadata, Session, SessionContext, SessionEv
 import * as l10n from '@vscode/l10n';
 import { createReadStream } from 'node:fs';
 import * as fs from 'node:fs/promises';
-import { EOL } from 'node:os';
+import { devNull, EOL } from 'node:os';
 import { createInterface } from 'node:readline';
 import type { ChatRequest, ChatSessionItem } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -177,7 +177,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					// Use file exporter to /dev/null so the SDK creates OtelSessionTracker
 					// (for debug panel) but writes spans nowhere.
 					process.env['COPILOT_OTEL_EXPORTER_TYPE'] = 'file';
-					process.env['COPILOT_OTEL_FILE_EXPORTER_PATH'] = process.platform === 'win32' ? 'NUL' : '/dev/null';
+					process.env['COPILOT_OTEL_FILE_EXPORTER_PATH'] = devNull;
 				}
 				return new internal.LocalSessionManager({ telemetryService: new internal.NoopTelemetryService(), flushDebounceMs: undefined, settings: undefined, version: undefined });
 			}
