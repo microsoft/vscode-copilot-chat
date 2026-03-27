@@ -336,6 +336,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			metadata = {
 				isolationMode: IsolationMode.Workspace,
 				workingDirectoryPath: workingDirectory?.fsPath,
+				firstCheckpointRef: sessionRequestDetails[0]?.checkpointRef,
 				lastCheckpointRef
 			} satisfies { readonly [key: string]: unknown };
 		}
