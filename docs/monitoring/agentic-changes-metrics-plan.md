@@ -33,55 +33,117 @@ The PowerBI dashboard tracks three key metrics computed from MSFT telemetry:
 
 ---
 
-## MSFT Telemetry Events to Backfill
+## Agentic Surfaces & Current OTel Coverage
 
-### 1. Accept Rate (agentic edits)
+We have **four agentic surfaces**, each with different OTel coverage levels:
 
-| MSFT Event | Surface | Key Properties |
-|------------|---------|----------------|
-| `panel.edit.feedback` | Agent proposes file edit → user accepts/rejects per-file | `outcome` (accepted/rejected), `languageId`, `participant`, `requestId` |
-| `edit.hunk.action` | User accepts/rejects individual hunks within a file | `outcome`, `languageId`, `lineCount`, `linesAdded`, `linesRemoved` |
+| Surface | Description | OTel Coverage |
+|---------|-------------|---------------|
+| **Foreground Agent (Chat Agent mode)** | Panel chat with tool-calling loop | Partial — spans for `invoke_agent`, `chat`, `execute_tool`, but no user action/quality events |
+| **Inline Chat** | `Ctrl+I` inline editing with AI | None — pure MSFT telemetry |
+| **Background Agent (Copilot CLI)** | Worktree sessions, background tasks | Partial — spans bridged from CLI's own OTel, but no user action events |
+| **Claude Code Agent** | Claude terminal agent | Good — hooks wrapped in OTel spans, but no edit quality metrics |
+| **Cloud Sessions (CCA/Remote)** | Remote agent jobs (Copilot/Claude/Codex) | None — pure MSFT telemetry |
+
+---
+
+## Complete MSFT Telemetry Inventory to Backfill
+
+### Surface 1: Panel Chat / Agent Mode User Actions
 
 **Source**: `src/extension/conversation/vscode-node/userActions.ts`
 
-### 2. Commit Survival (agentic edits)
+| # | Event Name | Channel | Description | Key Properties | OTel? |
+|---|-----------|---------|-------------|----------------|-------|
+| 1 | `panel.edit.feedback` | MSFT+GH+Internal | **File-level accept/reject of agent edit** | `outcome` (accepted/rejected), `languageId`, `participant`, `requestId`, `hasRemainingEdits` | ❌ |
+| 2 | `edit.hunk.action` | GH | **Hunk-level accept/reject** | `outcome`, `languageId`, `lineCount`, `linesAdded`, `linesRemoved`, `hasRemainingEdits` | ❌ |
+| 3 | `panel.action.copy` | MSFT | User copies code block from response | `languageId`, `codeBlockIndex`, `characterCount`, `lineCount` | ❌ |
+| 4 | `panel.action.insert` | MSFT | User inserts code block into editor | `languageId`, `codeBlockIndex`, `characterCount`, `newFile` | ❌ |
+| 5 | `panel.action.followup` | MSFT | User clicks follow-up suggestion | `languageId`, `participant` | ❌ |
+| 6 | `conversation.acceptedCopy` / `conversation.acceptedInsert` | GH | Extended copy/insert with model metadata | `participant`, `modelId`, `mode`, `totalCharacters`, `totalLines` | ❌ |
+| 7 | `conversation.appliedCodeblock` | GH | User applies (keeps) a code block | `participant`, `modelId`, `totalLines`, `isAgent` | ❌ |
+| 8 | `panel.action.vote` | MSFT | Thumbs up/down on chat response | `direction` (1=helpful/2=unhelpful), `participant`, `conversationId` | ❌ |
+| 9 | `conversation.messageRating` | GH | Same vote to GH channel | `rating` (positive/negative), `messageId` | ❌ |
 
-| MSFT Event | Tool | Key Properties |
-|------------|------|----------------|
-| `applyPatch.trackEditSurvival` | `apply_patch` tool | `survivalRateFourGram` (0-1), `survivalRateNoRevert` (0-1), `timeDelayMs`, `didBranchChange` |
-| `codeMapper.trackEditSurvival` | `replace_string` tool | same as above |
+### Surface 2: Inline Chat (Ctrl+I)
 
-**Sources**:
-- `src/extension/tools/node/applyPatchTool.tsx`
-- `src/extension/tools/node/abstractReplaceStringTool.tsx`
+**Source**: `src/extension/conversation/vscode-node/userActions.ts`
 
-### 3. Committed Characters (ARC)
+| # | Event Name | Channel | Description | Key Properties | OTel? |
+|---|-----------|---------|-------------|----------------|-------|
+| 10 | `inline.done` | MSFT | **Inline edit accepted/rejected** | `accepted` (0/1), `languageId`, `editCount`, `editLineCount`, `replyType`, `conversationId` | ❌ |
+| 11 | `inline.trackEditSurvival` | MSFT | **Survival rate over time** | `survivalRateFourGram` (0-1), `survivalRateNoRevert` (0-1), `timeDelayMs`, `didBranchChange` | ❌ |
 
-| MSFT Event | Surface | Key Properties |
-|------------|---------|----------------|
-| `reportInlineEditSurvivalRate` | NES inline edits | `arc` (character count), `survivalRateFourGram`, `timeDelayMs` |
+### Surface 3: Agent Edit Tools (survival tracking)
 
-**Source**: `src/extension/inlineEdits/vscode-node/inlineCompletionProvider.ts`
+| # | Event Name | Channel | Source File | Description | Key Properties | OTel? |
+|---|-----------|---------|------------|-------------|----------------|-------|
+| 12 | `applyPatch.trackEditSurvival` | MSFT+GH+Internal | `src/extension/tools/node/applyPatchTool.tsx` | **apply_patch tool edit survival** | `survivalRateFourGram`, `survivalRateNoRevert`, `timeDelayMs`, `didBranchChange`, `requestSource: 'agent'` | ❌ |
+| 13 | `codeMapper.trackEditSurvival` | MSFT+GH+Internal | `src/extension/tools/node/abstractReplaceStringTool.tsx` | **replace_string tool edit survival** | same as above, `mapper: 'stringReplaceTool'` | ❌ |
+| 14 | `codeMapper.trackEditSurvival` | MSFT+GH+Internal | `src/extension/prompts/node/codeMapper/codeMapperService.ts` | **Code mapper (fast apply) survival** | same + `speculationRequestId`, `chatRequestModel`, `mapper` | ❌ |
 
-> **Note**: ARC is currently only measured for NES inline edits. If we want ARC for agent edits (apply_patch / replace_string), we'd need to pass `{ includeArc: true }` to `EditSurvivalReporter` in those tools. This is a separate change.
+### Surface 4: NES Inline Edits (survival + ARC)
+
+| # | Event Name | Channel | Source File | Description | Key Properties | OTel? |
+|---|-----------|---------|------------|-------------|----------------|-------|
+| 15 | `reportInlineEditSurvivalRate` | MSFT+GH | `src/extension/inlineEdits/vscode-node/inlineCompletionProvider.ts` | **NES survival + ARC** | `survivalRateFourGram`, `timeDelayMs`, `arc` (committed characters), `didBranchChange` | ❌ |
+| 16 | `provideInlineEdit` | MSFT+GH | `src/extension/inlineEdits/node/nextEditProviderTelemetry.ts` | **NES inline edit provided** (shown/accepted/rejected) | `acceptance`, `isShown`, `status`, `languageId` | ❌ |
+
+### Surface 5: Agent Mode Internals
+
+**Source**: `src/extension/intents/node/agentIntent.ts`, `toolCallingLoop.ts`, `editCodeIntent.ts`
+
+| # | Event Name | Channel | Description | Key Properties | OTel? |
+|---|-----------|---------|-------------|----------------|-------|
+| 17 | `panel.edit.codeblocks` | MSFT | Edit response codeblock stats | `outcome`, `codeblockCount`, `editStepCount`, `sessionDuration`, `workingSetCount` | ❌ |
+| 18 | `editCodeIntent.promptRender` | MSFT | Prompt rendering perf | `promptRenderDurationIncludingRunningTools`, `isAgentMode` | ❌ |
+| 19 | `triggerSummarizeFailed` | MSFT | Context summarization failed | `errorKind`, `model` | ❌ |
+| 20 | `backgroundSummarizationApplied` | MSFT | Background context compaction | `trigger`, `outcome`, `contextRatio` | ❌ |
+| 21 | `readFileTrajectory` | MSFT | File read tool pattern | `rounds`, `avgChunkSize`, `model` | ❌ |
+| 22 | `toolCalling.invalidToolMessages` | MSFT | Invalid tool messages filtered | `filterReasons`, `filterCount` | ❌ |
+
+### Surface 6: Background Agent (Copilot CLI Sessions)
+
+**Source**: `src/extension/chatSessions/vscode-node/copilotCLIChatSessions*.ts`, `copilotcliSession.ts`
+
+| # | Event Name | Channel | Description | Key Properties | OTel? |
+|---|-----------|---------|-------------|----------------|-------|
+| 23 | `copilotcli.terminal.open` | MSFT | CLI terminal session created | `sessionType`, `shell`, `location` | ⚠️ Partial (env config forwarded) |
+| 24 | `copilotcli.chat.invoke` | MSFT | CLI chat request initiated | `chatRequestId`, `hasChatSessionItem` | ⚠️ Partial (span bridge exists) |
+
+### Surface 7: Cloud Sessions (CCA/Remote Agent)
+
+**Source**: `src/extension/chatSessions/vscode-node/copilotCloudSessionsProvider.ts`
+
+| # | Event Name | Channel | Description | Key Properties | OTel? |
+|---|-----------|---------|-------------|----------------|-------|
+| 25 | `copilotcloud.chat.invoke` | MSFT | Cloud agent invocation | `chatRequestId`, `partnerAgent` (Copilot/Claude/Codex), `model` | ❌ |
+| 26 | `copilotcloud.chat.confirmationCancelled` | MSFT | User cancels cloud session confirmation | `tokenCancelled` | ❌ |
+| 27 | `copilotcloud.chat.followupComment` | MSFT | Follow-up on existing PR | `targetAgent` | ❌ |
+| 28 | `copilotcloud.chat.remoteAgentJobPullRequestReady` | MSFT | Remote job PR ready | — | ❌ |
+| 29 | `copilotcloud.chat.remoteAgentJobInvoke` | MSFT | Remote agent job start | `hasHeadRef` | ❌ |
+| 30 | `copilot.codingAgent.truncation` | MSFT | Prompt truncation dialog | `isCancelled` | ❌ |
 
 ---
 
 ## Proposed OTel Signals
 
-### New Events (via `emitLogRecord`)
+### Category A: Edit Quality (Accept Rate + Survival + ARC)
+
+These are the highest-value metrics — they directly feed the PowerBI dashboard.
 
 ```
-copilot_chat.edit.feedback
+copilot_chat.edit.feedback                     ← #1 panel.edit.feedback
 ├── event.name: 'copilot_chat.edit.feedback'
 ├── outcome: 'accepted' | 'rejected'
 ├── language_id: string
 ├── participant: string
+├── edit_surface: 'agent' | 'inline_chat'
 ├── request_id: string
 ├── has_remaining_edits: boolean
 └── is_notebook: boolean
 
-copilot_chat.edit.hunk.action
+copilot_chat.edit.hunk.action                  ← #2 edit.hunk.action
 ├── event.name: 'copilot_chat.edit.hunk.action'
 ├── outcome: 'accepted' | 'rejected'
 ├── language_id: string
@@ -90,62 +152,166 @@ copilot_chat.edit.hunk.action
 ├── lines_added: number
 └── lines_removed: number
 
-copilot_chat.edit.survival
+copilot_chat.edit.survival                     ← #11-15 all trackEditSurvival events
 ├── event.name: 'copilot_chat.edit.survival'
-├── edit_source: 'apply_patch' | 'replace_string' | 'inline_chat' | 'nes'
+├── edit_source: 'apply_patch' | 'replace_string' | 'code_mapper' | 'inline_chat' | 'nes'
 ├── survival_rate_four_gram: number (0-1)
 ├── survival_rate_no_revert: number (0-1)
 ├── time_delay_ms: number
 ├── did_branch_change: boolean
 ├── request_id: string
-└── arc?: number (only when available)
+└── arc?: number (committed characters, when available)
 ```
 
-### New Metrics
+### Category B: User Engagement
 
-| Metric Name | Type | Attributes | Purpose |
-|-------------|------|------------|---------|
-| `copilot_chat.edit.accept.count` | Counter | `outcome`, `edit_source` | Accept rate numerator/denominator |
-| `copilot_chat.edit.survival_rate` | Histogram | `edit_source`, `time_delay_ms` | Survival distribution |
-| `copilot_chat.edit.committed_characters` | Histogram | `edit_source`, `language_id` | ARC distribution |
+```
+copilot_chat.user.action                       ← #3-7 copy/insert/apply/followup
+├── event.name: 'copilot_chat.user.action'
+├── action: 'copy' | 'insert' | 'apply' | 'followup'
+├── language_id: string
+├── participant: string
+├── character_count?: number
+├── line_count?: number
+└── is_agent: boolean
 
-### Attribute Namespace
+copilot_chat.user.feedback                     ← #8-9 vote/rating
+├── event.name: 'copilot_chat.user.feedback'
+├── rating: 'positive' | 'negative'
+├── participant: string
+├── conversation_id: string
+└── request_id: string
 
-All new attributes use `copilot_chat.edit.*` — consistent with existing `copilot_chat.tool.*` and `copilot_chat.agent.*` namespaces.
+copilot_chat.inline.done                       ← #10 inline.done
+├── event.name: 'copilot_chat.inline.done'
+├── accepted: boolean
+├── language_id: string
+├── edit_count: number
+├── edit_line_count: number
+├── reply_type: string
+└── is_notebook: boolean
+```
+
+### Category C: Agent Internals (operational observability)
+
+```
+copilot_chat.agent.edit_response               ← #17 panel.edit.codeblocks
+├── event.name: 'copilot_chat.agent.edit_response'
+├── outcome: 'success' | 'error'
+├── codeblock_count: number
+├── edit_step_count: number
+├── session_duration_ms: number
+└── working_set_count: number
+
+copilot_chat.agent.summarization               ← #19-20 triggerSummarizeFailed, backgroundSummarizationApplied
+├── event.name: 'copilot_chat.agent.summarization'
+├── outcome: 'applied' | 'failed'
+├── trigger: string
+├── error_kind?: string
+├── context_ratio?: number
+└── model: string
+```
+
+### Category D: Cloud/Remote Agent Sessions
+
+```
+copilot_chat.cloud.session.invoke              ← #25 copilotcloud.chat.invoke
+├── event.name: 'copilot_chat.cloud.session.invoke'
+├── partner_agent: 'copilot' | 'claude' | 'codex'
+├── model: string
+├── request_id: string
+└── is_untitled: boolean
+
+copilot_chat.cloud.pr_ready                    ← #28 remoteAgentJobPullRequestReady
+├── event.name: 'copilot_chat.cloud.pr_ready'
+└── request_id: string
+```
+
+### New Metrics (Counters & Histograms)
+
+| Metric Name | Type | Attributes | Source Events |
+|-------------|------|------------|---------------|
+| `copilot_chat.edit.accept.count` | Counter | `outcome`, `edit_surface` | #1, #10 |
+| `copilot_chat.edit.hunk.count` | Counter | `outcome` | #2 |
+| `copilot_chat.lines_of_code.count` | Counter | `type` (added/removed), `language_id` | #2 (on accept) |
+| `copilot_chat.edit.survival_rate` | Histogram | `edit_source`, `time_delay_ms` | #11-15 |
+| `copilot_chat.edit.committed_characters` | Histogram | `edit_source`, `language_id` | #15 (ARC) |
+| `copilot_chat.user.action.count` | Counter | `action`, `participant` | #3-7 |
+| `copilot_chat.user.feedback.count` | Counter | `rating`, `participant` | #8-9 |
+| `copilot_chat.pull_request.count` | Counter | — | CLI PR creation |
+| `copilot_chat.commit.count` | Counter | — | CLI git commit detection |
 
 ---
 
 ## Implementation Plan
 
-### Phase 1: Platform helpers (~60 lines)
+### Phase 1: Platform OTel helpers
 
-Add to `src/platform/otel/common/genAiEvents.ts`:
-- `emitEditFeedbackEvent(otel, outcome, languageId, participant, requestId, ...)`
-- `emitEditHunkActionEvent(otel, outcome, languageId, requestId, lineCount, ...)`
-- `emitEditSurvivalEvent(otel, editSource, survivalRateFourGram, survivalRateNoRevert, timeDelayMs, ...)`
+Add event emitters to `src/platform/otel/common/genAiEvents.ts`:
+- `emitEditFeedbackEvent()` — for #1 panel.edit.feedback
+- `emitEditHunkActionEvent()` — for #2 edit.hunk.action
+- `emitEditSurvivalEvent()` — for #11-15 all survival tracking
+- `emitUserActionEvent()` — for #3-7 copy/insert/apply/followup
+- `emitUserFeedbackEvent()` — for #8-9 vote/rating
+- `emitInlineDoneEvent()` — for #10 inline.done
+- `emitAgentEditResponseEvent()` — for #17 panel.edit.codeblocks
+- `emitCloudSessionInvokeEvent()` — for #25 cloud session invoke
 
-Add to `src/platform/otel/common/genAiMetrics.ts`:
-- `GenAiMetrics.incrementEditAcceptCount(otel, outcome, editSource)`
-- `GenAiMetrics.recordEditSurvivalRate(otel, editSource, survivalRate, timeDelayMs)`
-- `GenAiMetrics.recordEditCommittedCharacters(otel, editSource, arc, languageId)`
+Add metrics to `src/platform/otel/common/genAiMetrics.ts`:
+- `incrementEditAcceptCount()`
+- `incrementEditHunkCount()`
+- `incrementLinesOfCode()`
+- `recordEditSurvivalRate()`
+- `recordEditCommittedCharacters()`
+- `incrementUserActionCount()`
+- `incrementUserFeedbackCount()`
+- `incrementPullRequestCount()`
+- `incrementCommitCount()`
 
 ### Phase 2: Wire into call sites
 
-| # | File | Change | Approach |
-|---|------|--------|----------|
-| 1 | `src/extension/conversation/vscode-node/userActions.ts` | Inject `IOTelService` into `UserFeedbackService`, emit `copilot_chat.edit.feedback` alongside `panel.edit.feedback`, emit `copilot_chat.edit.hunk.action` alongside `edit.hunk.action` | Add `@IOTelService` to constructor |
-| 2 | `src/extension/tools/node/applyPatchTool.tsx` | Inject `IOTelService`, emit `copilot_chat.edit.survival` in the existing survival callback | Add `@IOTelService` to constructor |
-| 3 | `src/extension/tools/node/abstractReplaceStringTool.tsx` | Same as above for replace_string tool | Add `@IOTelService` to constructor |
+| # | File | Events to Emit | Approach |
+|---|------|----------------|----------|
+| 1 | `src/extension/conversation/vscode-node/userActions.ts` | #1-9 (edit feedback, hunk, copy, insert, followup, apply, vote) | Inject `@IOTelService` into `UserFeedbackService` constructor |
+| 2 | `src/extension/conversation/vscode-node/userActions.ts` | #10-11 (inline.done, inline.trackEditSurvival) | Same service, inline chat path |
+| 3 | `src/extension/tools/node/applyPatchTool.tsx` | #12 (apply_patch survival) | Inject `@IOTelService` into tool constructor |
+| 4 | `src/extension/tools/node/abstractReplaceStringTool.tsx` | #13 (replace_string survival) | Inject `@IOTelService` into tool constructor |
+| 5 | `src/extension/prompts/node/codeMapper/codeMapperService.ts` | #14 (code mapper survival) | Pass `IOTelService` to survival callback |
+| 6 | `src/extension/inlineEdits/vscode-node/inlineCompletionProvider.ts` | #15 (NES survival + ARC) | Inject `@IOTelService` |
+| 7 | `src/extension/inlineEdits/node/nextEditProviderTelemetry.ts` | #16 (NES provideInlineEdit) | Inject `@IOTelService` |
+| 8 | `src/extension/intents/node/editCodeIntent.ts` | #17 (panel.edit.codeblocks) | Already has access via toolCallingLoop |
+| 9 | `src/extension/intents/node/agentIntent.ts` | #19-20 (summarization) | Already has `IOTelService` nearby |
+| 10 | `src/extension/chatSessions/vscode-node/copilotCloudSessionsProvider.ts` | #25, #28 (cloud session invoke, PR ready) | Inject `@IOTelService` |
+| 11 | `src/extension/chatSessions/copilotcli/node/copilotcliSession.ts` | PR count, commit count | Inject `@IOTelService` |
 
 ### Phase 3: Documentation
 
-- Update `docs/monitoring/agent_monitoring.md` with new events/metrics table
+- Update `docs/monitoring/agent_monitoring.md` with all new events/metrics tables
 
 ---
 
 ## Threading Approach
 
-`IOTelService` will be injected directly into each tool/service class via DI constructor (Option A — minimal, self-contained per file). The alternative (adding `otelService` to `EditSurvivalResult`) is cleaner long-term but more invasive and deferred to a follow-up.
+`IOTelService` will be injected directly into each service/tool class via DI constructor. Services that already have it nearby (toolCallingLoop, agentIntent) can pass it through. For survival callbacks that receive `EditSurvivalResult`, we use the approach of injecting `IOTelService` into the class that sets up the callback and capturing it in the closure.
+
+A follow-up could add `otelService` to `EditSurvivalResult` itself for a cleaner long-term pattern.
+
+## Scope: All Agentic Surfaces
+
+This plan covers **all** agentic surfaces, not just foreground agent mode:
+
+- **Panel Chat Agent mode** — user actions (accept/reject/copy/insert/vote), edit survival
+- **Inline Chat (Ctrl+I)** — inline.done accept/reject, inline edit survival
+- **NES Inline Edits** — survival rate, ARC (committed characters), shown/accepted/rejected
+- **Agent Edit Tools** — apply_patch, replace_string, code_mapper survival tracking
+- **Background Agent (Copilot CLI)** — PR creation count, commit count (augment existing span bridge)
+- **Cloud Sessions (CCA/Remote)** — session invocation, PR ready events
+- **Agent Internals** — codeblock stats, summarization outcomes
+
+### What's NOT in scope
+- Ghost text completions (`ghostText.shown/accepted/rejected`) — not agentic, tracked separately by completions-core
+- Internal debugging events (`toolCalling.invalidToolMessages`, `readFileTrajectory`) — low value for GH dashboards
+- Claude Code agent hooks — already have full OTel coverage via `withHookOTelSpan()`
 
 ---
 
