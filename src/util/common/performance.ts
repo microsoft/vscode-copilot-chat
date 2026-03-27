@@ -27,7 +27,20 @@ function _getNativePolyfill(): IMonacoPerformanceMarks {
 	};
 }
 
-const perf: IMonacoPerformanceMarks = (globalThis as { MonacoPerformanceMarks?: IMonacoPerformanceMarks }).MonacoPerformanceMarks ?? _getNativePolyfill();
+const perf: IMonacoPerformanceMarks = _getPerf();
+
+function _getPerf(): IMonacoPerformanceMarks {
+	const host = (globalThis as { MonacoPerformanceMarks?: Partial<IMonacoPerformanceMarks> }).MonacoPerformanceMarks;
+	if (!host) {
+		return _getNativePolyfill();
+	}
+	const polyfill = _getNativePolyfill();
+	return {
+		mark: host.mark?.bind(host) ?? polyfill.mark,
+		getMarks: host.getMarks?.bind(host) ?? polyfill.getMarks,
+		clearMarks: host.clearMarks?.bind(host) ?? polyfill.clearMarks,
+	};
+}
 
 const chatExtPrefix = 'code/chat/ext/';
 
