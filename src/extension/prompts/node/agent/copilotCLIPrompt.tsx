@@ -6,7 +6,6 @@
 import { BasePromptElementProps, PromptElement, PromptSizing, UserMessage } from '@vscode/prompt-tsx';
 import { ChatCompletionContentPartKind, ChatRole } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
 import type { ChatRequestEditedFileEvent } from 'vscode';
-import { sessionResourceToId } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
@@ -16,7 +15,7 @@ import { Schemas } from '../../../../util/vs/base/common/network';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatReferenceBinaryData, ChatRequest, FileType } from '../../../../vscodeTypes';
-import { ChatVariablesCollection, isPromptFile, isSessionReference, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isPromptFile, isSessionReference, PromptVariable, sessionReferenceAttachmentAttrs } from '../../../prompt/common/chatVariablesCollection';
 import { renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { SummarizedDocumentLineNumberStyle } from '../inline/summarizedDocument/implementation';
@@ -134,13 +133,8 @@ export async function generateUserPrompt(request: ChatRequest, prompt: string | 
 async function renderResourceVariables(chatVariables: ChatVariablesCollection, fileSystemService: IFileSystemService, promptPathRepresentationService: IPromptPathRepresentationService): Promise<PromptElement[]> {
 	const elements: PromptElement[] = [];
 	await Promise.all(Array.from(chatVariables).map(async variable => {
-		if (isSessionReference(variable) && URI.isUri(variable.reference.value)) {
-			const attrs: Record<string, string> = {};
-			if (variable.uniqueName) {
-				attrs.id = `${variable.uniqueName} (${sessionResourceToId(variable.reference.value)})`;
-			}
-			attrs.filePath = variable.value.toString();
-			elements.push(<Tag name='attachment' attrs={attrs} />);
+		if (isSessionReference(variable)) {
+			elements.push(<Tag name='attachment' attrs={sessionReferenceAttachmentAttrs(variable)} />);
 			return;
 		}
 		if (variable.value instanceof ChatReferenceBinaryData) {

@@ -30,7 +30,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { DiagnosticSeverity } from '../../../../util/vs/workbench/api/common/extHostTypes/diagnostic';
 import { ChatReferenceBinaryData, ChatReferenceDiagnostic, LanguageModelToolResult2, Range, Uri } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
-import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile, isPromptFile, isSessionReference, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile, isPromptFile, isSessionReference, PromptVariable, sessionReferenceAttachmentAttrs } from '../../../prompt/common/chatVariablesCollection';
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { ToolName } from '../../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../../tools/common/toolSchemaNormalizer';
@@ -48,7 +48,6 @@ import { PanelChatBasePrompt } from './panelChatBasePrompt';
 import { PromptFile } from './promptFile';
 import { sendInvokedToolTelemetry, toolCallErrorToResult, ToolResult, ToolResultMetadata } from './toolCalling';
 import { IFileTreeData, workspaceVisualFileTree } from './workspace/visualFileTree';
-import { sessionResourceToId } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 
 export interface ChatVariablesProps extends BasePromptElementProps, EmbeddedInsideUserMessage {
 	readonly chatVariables: ChatVariablesCollection;
@@ -242,14 +241,8 @@ export async function renderChatVariables(chatVariables: ChatVariablesCollection
 			continue;
 		}
 
-		if (isSessionReference(variable) && URI.isUri(variableValue)) {
-			const uri = variableValue;
-			const attrs: Record<string, string> = {};
-			if (variableName) {
-				attrs.id = `${variableName} (${sessionResourceToId(uri)})`;
-			}
-			attrs.filePath = uri.toString();
-			elements.push(<Tag name='attachment' attrs={attrs} />);
+		if (isSessionReference(variable)) {
+			elements.push(<Tag name='attachment' attrs={sessionReferenceAttachmentAttrs(variable)} />);
 			continue;
 		}
 

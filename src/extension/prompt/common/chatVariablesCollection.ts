@@ -151,6 +151,19 @@ export function isSessionReference(variable: PromptVariable): variable is Prompt
 }
 
 /**
+ * Build the attributes for rendering a session reference as an `<attachment>` tag.
+ * Callers can pass the result to `<Tag name='attachment' attrs={...} />`.
+ */
+export function sessionReferenceAttachmentAttrs(variable: PromptVariable & { value: vscode.Uri }): Record<string, string> {
+	const attrs: Record<string, string> = {};
+	if (variable.uniqueName) {
+		attrs.id = `${variable.uniqueName} (${sessionResourceToId(variable.value)})`;
+	}
+	attrs.filePath = variable.value.toString();
+	return attrs;
+}
+
+/**
  * Extract debug-target session IDs from chat prompt references.
  * Returns `undefined` when no session references are present.
  */
