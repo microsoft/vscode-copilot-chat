@@ -11,6 +11,7 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { IChatPromptFileService } from '../../common/chatPromptFileService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CopilotCLICustomizationProvider } from '../copilotCLICustomizationProvider';
 
 class FakeChatSessionCustomizationType {
@@ -53,21 +54,33 @@ class MockChatPromptFileService extends mock<IChatPromptFileService>() {
 	}
 }
 
+class MockWorkspaceService extends mock<IWorkspaceService>() {
+	private _folders: URI[] = [];
+	setFolders(folders: URI[]) { this._folders = folders; }
+	override getWorkspaceFolders(): URI[] { return this._folders; }
+}
+
 class TestLogService extends mock<ILogService>() {
 	override trace() { }
 }
 
+const WORKSPACE = URI.file('/workspace');
+
 describe('CopilotCLICustomizationProvider', () => {
 	let disposables: DisposableStore;
 	let mockPromptFileService: MockChatPromptFileService;
+	let mockWorkspaceService: MockWorkspaceService;
 	let provider: CopilotCLICustomizationProvider;
 
 	beforeEach(() => {
 		(vscode as Record<string, unknown>).ChatSessionCustomizationType = FakeChatSessionCustomizationType;
 		disposables = new DisposableStore();
 		mockPromptFileService = disposables.add(new MockChatPromptFileService());
+		mockWorkspaceService = new MockWorkspaceService();
+		mockWorkspaceService.setFolders([WORKSPACE]);
 		provider = disposables.add(new CopilotCLICustomizationProvider(
 			mockPromptFileService,
+			mockWorkspaceService,
 			new TestLogService(),
 		));
 	});
@@ -90,8 +103,8 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(unsupported![1]).toBe(FakeChatSessionCustomizationType.Prompt);
 		});
 
-		it('scopes to .github and .copilot workspace subpaths', () => {
-			expect(CopilotCLICustomizationProvider.metadata.workspaceSubpaths).toEqual(['.github', '.copilot']);
+		it('does not expose workspaceSubpaths', () => {
+			expect('workspaceSubpaths' in CopilotCLICustomizationProvider.metadata).toBe(false);
 		});
 	});
 
@@ -101,18 +114,29 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(items).toEqual([]);
 		});
 
-		it('returns agents with Agent type', () => {
-			const uri = URI.file('/workspace/.github/my-agent.agent.md');
-			mockPromptFileService.setCustomAgents([{ uri }]);
+		it('returns all agents regardless of path', () => {
+			mockPromptFileService.setCustomAgents([
+				{ uri: URI.file('/workspace/.github/my-agent.agent.md') },
+				{ uri: URI.file('/workspace/root-agent.agent.md') },
+				{ uri: URI.file('/other/path/agent.agent.md') },
+			]);
+
+			const items = provider.provideChatSessionCustomizations(undefined!);
+			expect(items).toHaveLength(3);
+			expect(items.every(i => i.type === FakeChatSessionCustomizationType.Agent)).toBe(true);
+		});
+
+		it('returns instructions under .github/ paths', () => {
+			const uri = URI.file('/workspace/.github/copilot-instructions.md');
+			mockPromptFileService.setInstructions([{ uri }]);
 
 			const items = provider.provideChatSessionCustomizations(undefined!);
 			expect(items).toHaveLength(1);
 			expect(items[0].uri).toBe(uri);
-			expect(items[0].type).toBe(FakeChatSessionCustomizationType.Agent);
-			expect(items[0].name).toBe('my-agent');
+			expect(items[0].type).toBe(FakeChatSessionCustomizationType.Instructions);
 		});
 
-		it('returns instructions with Instructions type', () => {
+		it('returns instructions under .copilot/ paths', () => {
 			const uri = URI.file('/workspace/.copilot/setup.instructions.md');
 			mockPromptFileService.setInstructions([{ uri }]);
 
@@ -120,10 +144,19 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(items).toHaveLength(1);
 			expect(items[0].uri).toBe(uri);
 			expect(items[0].type).toBe(FakeChatSessionCustomizationType.Instructions);
-			expect(items[0].name).toBe('setup');
 		});
 
-		it('returns skills with Skill type and derives name from parent dir', () => {
+		it('filters out instructions not under .github/ or .copilot/', () => {
+			mockPromptFileService.setInstructions([
+				{ uri: URI.file('/workspace/.claude/some.instructions.md') },
+				{ uri: URI.file('/workspace/root.instructions.md') },
+			]);
+
+			const items = provider.provideChatSessionCustomizations(undefined!);
+			expect(items).toHaveLength(0);
+		});
+
+		it('returns skills under .github/skills/', () => {
 			const uri = URI.file('/workspace/.github/skills/lint-check/SKILL.md');
 			mockPromptFileService.setSkills([{ uri }]);
 
@@ -134,25 +167,31 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(items[0].name).toBe('lint-check');
 		});
 
-		it('returns all types combined', () => {
-			mockPromptFileService.setCustomAgents([{ uri: URI.file('/a.agent.md') }]);
-			mockPromptFileService.setInstructions([{ uri: URI.file('/b.instructions.md') }]);
-			mockPromptFileService.setSkills([{ uri: URI.file('/skills/c/SKILL.md') }]);
+		it('returns skills under .copilot/skills/', () => {
+			const uri = URI.file('/workspace/.copilot/skills/my-skill/SKILL.md');
+			mockPromptFileService.setSkills([{ uri }]);
 
 			const items = provider.provideChatSessionCustomizations(undefined!);
-			expect(items).toHaveLength(3);
+			expect(items).toHaveLength(1);
+			expect(items[0].name).toBe('my-skill');
 		});
 
-		it('handles multiple items of the same type', () => {
-			mockPromptFileService.setCustomAgents([
-				{ uri: URI.file('/a.agent.md') },
-				{ uri: URI.file('/b.agent.md') },
+		it('filters out skills not under .github/ or .copilot/', () => {
+			mockPromptFileService.setSkills([
+				{ uri: URI.file('/workspace/.claude/skills/claude-skill/SKILL.md') },
 			]);
 
 			const items = provider.provideChatSessionCustomizations(undefined!);
-			expect(items).toHaveLength(2);
-			expect(items[0].name).toBe('a');
-			expect(items[1].name).toBe('b');
+			expect(items).toHaveLength(0);
+		});
+
+		it('returns all matching types combined', () => {
+			mockPromptFileService.setCustomAgents([{ uri: URI.file('/workspace/a.agent.md') }]);
+			mockPromptFileService.setInstructions([{ uri: URI.file('/workspace/.github/b.instructions.md') }]);
+			mockPromptFileService.setSkills([{ uri: URI.file('/workspace/.github/skills/c/SKILL.md') }]);
+
+			const items = provider.provideChatSessionCustomizations(undefined!);
+			expect(items).toHaveLength(3);
 		});
 	});
 
