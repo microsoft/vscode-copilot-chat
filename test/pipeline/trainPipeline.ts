@@ -32,7 +32,7 @@ function formatElapsed(startTime: number): string {
 	return `${elapsed}s`;
 }
 
-export async function runInputPipeline(opts: SimulationOptions): Promise<void> {
+export async function runInputPipeline(opts: SimulationOptions, log = console.log.bind(console)): Promise<void> {
 	const nesDatagenOpts = opts.nesDatagen!;
 	const inputPath = nesDatagenOpts.input;
 	if (!opts.configFile) {
@@ -43,18 +43,18 @@ export async function runInputPipeline(opts: SimulationOptions): Promise<void> {
 	const concurrency = opts.parallelism;
 	const rowOffset = nesDatagenOpts.rowOffset;
 
-	console.log(`\n=== Pipeline ===`);
-	console.log(`  Input: ${inputPath}`);
-	console.log(`  Concurrency: ${concurrency}`);
+	log(`\n=== Pipeline ===`);
+	log(`  Input: ${inputPath}`);
+	log(`  Concurrency: ${concurrency}`);
 
 	// Step 1: Parse input
 	const { rows, errors } = await loadAndParseInput(inputPath, verbose);
-	console.log(`  [1/5] Input parsed: ${rows.length} rows, ${errors.length} errors`);
+	log(`  [1/5] Input parsed: ${rows.length} rows, ${errors.length} errors`);
 	logErrors(errors, verbose);
 
 	// Step 2: Replay recordings
 	const { processed, errors: replayErrors } = processAllRows(rows);
-	console.log(`  [2/5] Recordings replayed: ${processed.length} ok, ${replayErrors.length} errors`);
+	log(`  [2/5] Recordings replayed: ${processed.length} ok, ${replayErrors.length} errors`);
 	logErrors(replayErrors.map(e => ({
 		error: `[sample ${e.rowIndex + rowOffset}, ${rows[e.rowIndex]?.activeDocumentLanguageId ?? '?'}] ${e.error}`,
 	})), verbose);
@@ -77,10 +77,10 @@ export async function runInputPipeline(opts: SimulationOptions): Promise<void> {
 		const modelConfig = configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfiguration);
 		const responseFormat = ResponseFormat.fromPromptingStrategy(modelConfig?.promptingStrategy);
 
-		console.log(`  Local model configuration: ${JSON.stringify(modelConfig)}`);
+		log(`  Local model configuration: ${JSON.stringify(modelConfig)}`);
 
-		const prompts: { index: number; prompt: IGeneratedPrompt }[] = [];
-		const promptErrors: { index: number; error: string }[] = [];
+		const prompts: { originalRowIndex: number; prompt: IGeneratedPrompt }[] = [];
+		const promptErrors: { originalRowIndex: number; error: string }[] = [];
 		let promptsCompleted = 0;
 		const promptStartTime = Date.now();
 
@@ -90,9 +90,9 @@ export async function runInputPipeline(opts: SimulationOptions): Promise<void> {
 				const globalIdx = p.originalRowIndex + rowOffset;
 				const result = await generatePromptFromRecording(testAccessor, p.recordingInfo);
 				if ('error' in result) {
-					promptErrors.push({ index: p.originalRowIndex, error: `[sample ${globalIdx}, ${p.row.activeDocumentLanguageId}, ${p.activeFilePath}] ${result.error}` });
+					promptErrors.push({ originalRowIndex: p.originalRowIndex, error: `[sample ${globalIdx}, ${p.row.activeDocumentLanguageId}, ${p.activeFilePath}] ${result.error}` });
 				} else {
-					prompts.push({ index: p.originalRowIndex, prompt: result });
+					prompts.push({ originalRowIndex: p.originalRowIndex, prompt: result });
 				}
 				promptsCompleted++;
 				if (verbose && (promptsCompleted % 50 === 0 || promptsCompleted === processed.length)) {
@@ -101,20 +101,20 @@ export async function runInputPipeline(opts: SimulationOptions): Promise<void> {
 			})
 		));
 
-		console.log(`  [3/5] Prompts generated: ${prompts.length} ok, ${promptErrors.length} errors (${formatElapsed(promptStartTime)})`);
+		log(`  [3/5] Prompts generated: ${prompts.length} ok, ${promptErrors.length} errors (${formatElapsed(promptStartTime)})`);
 		logErrors(promptErrors, verbose);
 
 		// Step 4: Generate responses
 		const processedByOriginalIndex = new Map(processed.map(p => [p.originalRowIndex, p]));
 		const responseInputs: IResponseGenerationInput[] = [];
 
-		for (const { index, prompt } of prompts) {
-			const p = processedByOriginalIndex.get(index);
+		for (const { originalRowIndex, prompt } of prompts) {
+			const p = processedByOriginalIndex.get(originalRowIndex);
 			if (!p) {
 				continue;
 			}
 			responseInputs.push({
-				index,
+				index: originalRowIndex,
 				oracleEdits: p.nextUserEdit?.edit,
 				docContent: p.activeDocument.value.get().value,
 				filePath: p.activeFilePath,
@@ -123,7 +123,7 @@ export async function runInputPipeline(opts: SimulationOptions): Promise<void> {
 		}
 
 		const { responses, errors: responseErrors } = generateAllResponses(responseFormat, responseInputs);
-		console.log(`  [4/5] Responses generated: ${responses.length} ok, ${responseErrors.length} errors`);
+		log(`  [4/5] Responses generated: ${responses.length} ok, ${responseErrors.length} errors`);
 		logErrors(responseErrors.map(e => {
 			const p = processedByOriginalIndex.get(e.index);
 			return { error: `[sample ${e.index + rowOffset}, ${p?.row.activeDocumentLanguageId ?? '?'}] ${e.error}` };
@@ -134,7 +134,7 @@ export async function runInputPipeline(opts: SimulationOptions): Promise<void> {
 		const outputPath = resolveOutputPath(inputPath, nesDatagenOpts.output);
 		const samples: ISample[] = [];
 
-		for (const { index, prompt } of prompts) {
+		for (const { originalRowIndex: index, prompt } of prompts) {
 			const response = responseByIndex.get(index);
 			if (!response) {
 				continue;
@@ -151,22 +151,22 @@ export async function runInputPipeline(opts: SimulationOptions): Promise<void> {
 		}
 
 		const writeResult = await writeSamples(outputPath, samples);
-		console.log(`  [5/5] Output written: ${writeResult.written} samples → ${writeResult.outputPath}`);
+		log(`  [5/5] Output written: ${writeResult.written} samples → ${writeResult.outputPath}`);
 		if (writeResult.skipped > 0) {
-			console.log(`    Structural validation dropped ${writeResult.skipped} samples`);
+			log(`    Structural validation dropped ${writeResult.skipped} samples`);
 			if (verbose) {
 				const grouped = new Map<string, number>();
 				for (const s of writeResult.skipReasons) {
 					grouped.set(s.reason, (grouped.get(s.reason) ?? 0) + 1);
 				}
 				for (const [reason, count] of grouped) {
-					console.log(`    ${reason} (×${count})`);
+					log(`    ${reason} (×${count})`);
 				}
 			}
 		}
 
 		// Summary
-		console.log(`\n  Pipeline: Input(${rows.length}) → Replay(${processed.length}) → Prompt(${prompts.length}) → Response(${responses.length}) → Output(${writeResult.written})`);
+		log(`\n  Pipeline: Input(${rows.length}) → Replay(${processed.length}) → Prompt(${prompts.length}) → Response(${responses.length}) → Output(${writeResult.written})`);
 	} finally {
 		for (const p of processed) {
 			p.replayer.dispose();

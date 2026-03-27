@@ -9,6 +9,13 @@ import { CacheMode } from './simulationContext';
 /** Number of runs that are stored in baseline.json */
 export const BASELINE_RUN_COUNT = 10;
 
+export type NesDatagen = {
+	readonly input: string;
+	readonly output: string | undefined;
+	readonly rowOffset: number;
+	readonly workerMode: boolean;
+}
+
 export class SimulationOptions {
 	public static fromProcessArgs(): SimulationOptions {
 		return new SimulationOptions(process.argv);
@@ -67,12 +74,7 @@ export class SimulationOptions {
 	public readonly nesUrl: string | undefined;
 	public readonly nesApiKey: string | undefined;
 
-	public readonly nesDatagen: {
-		readonly input: string;
-		readonly output: string | undefined;
-		readonly rowOffset: number;
-		readonly workerMode: boolean;
-	} | undefined;
+	public readonly nesDatagen: NesDatagen | undefined;
 
 	public readonly subcommand: 'nes-datagen' | undefined;
 
