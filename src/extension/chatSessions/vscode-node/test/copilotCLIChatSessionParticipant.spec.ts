@@ -172,7 +172,6 @@ class FakeChatSessionWorktreeCheckpointService extends mock<IChatSessionWorktree
 	}
 	override handleRequest = vi.fn(async () => { });
 	override handleRequestCompleted = vi.fn(async () => { });
-	override getWorktreeCheckpointSupport = vi.fn(async () => false);
 }
 
 
