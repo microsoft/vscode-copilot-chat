@@ -5639,6 +5639,7 @@
 			"chat/input/editing/sessionChangeToolbar": [
 				{
 					"command": "github.copilot.sessions.discardChanges",
+					"when": "chatSessionType == copilotcli && isSessionsWindow",
 					"group": "navigation@1"
 				}
 			]
