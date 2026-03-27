@@ -3125,11 +3125,6 @@
 						"default": false,
 						"markdownDescription": "%github.copilot.config.claudeAgent.allowDangerouslySkipPermissions%"
 					},
-					"github.copilot.chat.claudeAgent.includeCoAuthoredBy": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.claudeAgent.includeCoAuthoredBy%"
-					},
 					"github.copilot.chat.reviewAgent.enabled": {
 						"type": "boolean",
 						"default": true,
