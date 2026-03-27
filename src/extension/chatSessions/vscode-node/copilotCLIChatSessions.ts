@@ -379,6 +379,9 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			metadata = {
 				autoCommit: worktreeProperties.autoCommit !== false,
 				baseCommit: worktreeProperties?.baseCommit,
+				baseBranchName: worktreeProperties.version === 2
+					? worktreeProperties.baseBranchName
+					: undefined,
 				baseBranchProtected: worktreeProperties.version === 2
 					? worktreeProperties.baseBranchProtected === true
 					: undefined,
