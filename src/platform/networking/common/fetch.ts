@@ -297,7 +297,18 @@ export interface OpenAiResponsesFunctionTool extends OpenAiFunctionDef {
 	type: 'function';
 }
 
-export function isOpenAiFunctionTool(tool: OpenAiResponsesFunctionTool | OpenAiFunctionTool | AnthropicMessagesTool): tool is OpenAiFunctionTool {
+/** OpenAI Responses API tool_search tool declaration. See https://developers.openai.com/api/docs/guides/tools-tool-search */
+export interface OpenAiToolSearchTool {
+	type: 'tool_search';
+	/** 'server' for hosted search, 'client' for client-executed. Defaults to 'server' if omitted. */
+	execution?: 'server' | 'client';
+	/** Description for client-executed tool search. */
+	description?: string;
+	/** Parameters schema for client-executed tool search. */
+	parameters?: Record<string, unknown>;
+}
+
+export function isOpenAiFunctionTool(tool: OpenAiResponsesFunctionTool | OpenAiFunctionTool | AnthropicMessagesTool | OpenAiToolSearchTool): tool is OpenAiFunctionTool {
 	return (tool as OpenAiFunctionTool).function !== undefined;
 }
 

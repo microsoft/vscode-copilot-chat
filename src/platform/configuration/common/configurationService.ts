@@ -879,6 +879,10 @@ export namespace ConfigKey {
 	export const ResponsesApiContextManagementEnabled = defineSetting<boolean>('chat.responsesApiContextManagement.enabled', ConfigType.ExperimentBased, false);
 	/** Enable client-side prompt_cache_key (conversationId:modelFamily) sent to Responses API */
 	export const ResponsesApiPromptCacheKeyEnabled = defineSetting<boolean>('chat.responsesApi.promptCacheKey.enabled', ConfigType.ExperimentBased, false);
+	/** Enable tool search for Responses API (deferred tool loading). Uses hosted search by default. */
+	export const ResponsesApiToolSearchEnabled = defineSetting<boolean>('chat.responsesApi.toolSearchTool.enabled', ConfigType.Simple, false);
+	/** Tool search mode for Responses API. 'server' uses hosted (server-side) search, 'client' uses local embeddings-based search. */
+	export const ResponsesApiToolSearchMode = defineSetting<'server' | 'client'>('chat.responsesApi.toolSearchTool.mode', ConfigType.ExperimentBased, 'server');
 	/** Enable updated prompt for 5.3Codex model */
 	export const Updated53CodexPromptEnabled = defineSetting<boolean>('chat.updated53CodexPrompt.enabled', ConfigType.ExperimentBased, true);
 	/** Enable concise prompt experiment for GPT-5.4 model */

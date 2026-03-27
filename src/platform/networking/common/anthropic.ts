@@ -7,6 +7,11 @@ import { ConfigKey, IConfigurationService } from '../../configuration/common/con
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { IChatEndpoint } from './networking';
 
+// Re-export shared tool search constants and helpers for backwards compatibility.
+// New code should import directly from './toolSearch'.
+export { CUSTOM_TOOL_SEARCH_NAME, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, nonDeferredToolNames, isAnthropicToolSearchEnabled, isAnthropicCustomToolSearchEnabled } from './toolSearch';
+export { ANTHROPIC_TOOL_SEARCH_SUPPORTED_MODELS as TOOL_SEARCH_SUPPORTED_MODELS } from './toolSearch';
+
 /**
  * Types for Anthropic Messages API
  * Based on https://platform.claude.com/docs/en/api/messages
@@ -61,27 +66,6 @@ export interface ToolSearchToolResult {
 export interface ToolSearchUsage {
 	tool_search_requests: number;
 }
-
-/**
- * Tools that should not use deferred loading when tool search is enabled.
- * These are frequently used tools that benefit from being immediately available.
- *
- * TODO: @bhavyaus Replace these hardcoded strings with constants from ToolName enum
- */
-
-export const TOOL_SEARCH_TOOL_NAME = 'tool_search_tool_regex';
-export const TOOL_SEARCH_TOOL_TYPE = 'tool_search_tool_regex_20251119';
-
-/** Name for the custom client-side embeddings-based tool search tool. Must not use copilot_/vscode_ prefix — those are reserved for static package.json declarations and will be rejected by vscode.lm.registerToolDefinition. */
-export const CUSTOM_TOOL_SEARCH_NAME = 'tool_search';
-
-/** Model ID prefixes that support tool search tools. Used by isAnthropicToolSearchEnabled() and the tool registration's model selector. */
-export const TOOL_SEARCH_SUPPORTED_MODELS = [
-	'claude-sonnet-4.5',
-	'claude-sonnet-4.6',
-	'claude-opus-4.5',
-	'claude-opus-4.6',
-] as const;
 
 /**
  * Context management types for Anthropic Messages API
@@ -203,35 +187,6 @@ export function modelSupportsMemory(modelId: string): boolean {
 		normalized.startsWith('claude-opus-4-5') ||
 		normalized.startsWith('claude-opus-4-1') ||
 		normalized.startsWith('claude-opus-4');
-}
-
-export function isAnthropicToolSearchEnabled(
-	endpoint: IChatEndpoint | string,
-	configurationService: IConfigurationService
-): boolean {
-
-	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
-	if (!TOOL_SEARCH_SUPPORTED_MODELS.some(prefix => effectiveModelId.toLowerCase().startsWith(prefix))) {
-		return false;
-	}
-
-	return configurationService.getConfig(ConfigKey.AnthropicToolSearchEnabled);
-}
-
-/**
- * Returns true when custom client-side embeddings-based tool search should be used
- * instead of the server-side regex tool search.
- */
-export function isAnthropicCustomToolSearchEnabled(
-	endpoint: IChatEndpoint | string,
-	configurationService: IConfigurationService,
-	experimentationService: IExperimentationService,
-): boolean {
-	if (!isAnthropicToolSearchEnabled(endpoint, configurationService)) {
-		return false;
-	}
-
-	return configurationService.getExperimentBasedConfig(ConfigKey.AnthropicToolSearchMode, experimentationService) === 'client';
 }
 
 export function isAnthropicContextEditingEnabled(

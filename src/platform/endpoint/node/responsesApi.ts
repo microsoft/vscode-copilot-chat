@@ -14,11 +14,13 @@ import { SSEParser } from '../../../util/vs/base/common/sseParser';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatLocation } from '../../chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../networking/common/fetch';
+import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool, OpenAiToolSearchTool } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, modelsWithoutResponsesContextManagement, openAIContextManagementCompactionType, OpenAIContextManagementResponse, rawMessageToCAPI, TokenLogProb } from '../../networking/common/openai';
+import { isResponsesApiCustomToolSearchEnabled, isResponsesApiToolSearchEnabled, nonDeferredToolNames } from '../../networking/common/toolSearch';
 import { sendEngineMessagesTelemetry } from '../../networking/node/chatStream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -35,16 +37,45 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	const verbosity = getVerbosityForModelSync(endpoint);
 	// compaction supported for all the models but works well for codex models and any future models after 5.3
 
+	// Tool search: split tools into non-deferred (always loaded) and deferred (defer_loading: true)
+	const toolSearchEnabled = isResponsesApiToolSearchEnabled(endpoint, configService);
+	const customToolSearchEnabled = isResponsesApiCustomToolSearchEnabled(endpoint, configService, expService);
+	const isAllowedConversationAgent = options.location === ChatLocation.Agent || options.location === ChatLocation.MessagesProxy;
+	const isSubagent = options.telemetryProperties?.subType?.startsWith('subagent') ?? false;
+	const shouldDeferTools = toolSearchEnabled && isAllowedConversationAgent && !isSubagent;
+
+	type ResponsesFunctionTool = OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool & { defer_loading?: boolean };
+	const functionTools: ResponsesFunctionTool[] = [];
+	if (options.requestOptions?.tools) {
+		for (const tool of options.requestOptions.tools) {
+			if (!tool.function.name || tool.function.name.length === 0) {
+				continue;
+			}
+			const isDeferred = shouldDeferTools && !nonDeferredToolNames.has(tool.function.name);
+			functionTools.push({
+				...tool.function,
+				type: 'function',
+				strict: false,
+				parameters: (tool.function.parameters || {}) as Record<string, unknown>,
+				...(isDeferred ? { defer_loading: true } : {}),
+			});
+		}
+	}
+
+	// Build final tools array. In server mode, append the hosted tool_search tool.
+	// In client mode, the tool_search tool is already registered as a VS Code tool.
+	const finalTools: Array<ResponsesFunctionTool | OpenAiToolSearchTool> = [];
+	if (shouldDeferTools && !customToolSearchEnabled) {
+		// Hosted (server-side) tool search
+		finalTools.push({ type: 'tool_search' });
+	}
+	finalTools.push(...functionTools);
+
 	const body: IEndpointBody = {
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
 		stream: true,
-		tools: options.requestOptions?.tools?.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
-			...tool.function,
-			type: 'function',
-			strict: false,
-			parameters: (tool.function.parameters || {}) as Record<string, unknown>,
-		})),
+		tools: finalTools.length > 0 ? finalTools : undefined,
 		// Only a subset of completion post options are supported, and some
 		// are renamed. Handle them manually:
 		max_output_tokens: options.postOptions.max_tokens,
@@ -98,6 +129,27 @@ type ResponseOutputMessageWithPhase = OpenAI.Responses.ResponseOutputMessage & {
 
 interface ResponseOutputItemWithPhase {
 	phase?: string;
+}
+
+// ── Responses API tool search types ──────────────────────────────────
+// These match the shapes from https://developers.openai.com/api/docs/guides/tools-tool-search
+
+interface ResponsesToolSearchCall {
+	type: 'tool_search_call';
+	id: string;
+	execution: 'server' | 'client';
+	call_id: string | null;
+	status: string;
+	arguments?: Record<string, unknown>;
+}
+
+interface ResponsesToolSearchOutput {
+	type: 'tool_search_output';
+	id: string;
+	execution: 'server' | 'client';
+	call_id: string | null;
+	status: string;
+	tools?: unknown[];
 }
 
 function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMessage[], ignoreStatefulMarker: boolean): { input: OpenAI.Responses.ResponseInputItem[]; previous_response_id?: string } {
@@ -509,6 +561,18 @@ export class OpenAIResponsesProcessor {
 						text: '',
 						beginToolCalls: [{ name: chunk.item.name, id: chunk.item.call_id }]
 					});
+				} else if (chunk.item.type.toString() === 'tool_search_call') {
+					// Tool search call — server mode has execution:'server' and null call_id,
+					// client mode has execution:'client' and a real call_id.
+					const tsItem = chunk.item as unknown as ResponsesToolSearchCall;
+					if (tsItem.execution === 'server') {
+						// Server-hosted tool search: just log it
+						onProgress({
+							text: '',
+							serverToolCalls: [{ isServer: true, name: 'tool_search', id: tsItem.id ?? '' }]
+						});
+					}
+					// Client-mode tool_search_call is handled in response.output_item.done
 				}
 				return;
 			case 'response.function_call_arguments.delta': {
@@ -565,6 +629,30 @@ export class OpenAIResponsesProcessor {
 					onProgress({
 						text: '',
 						phase: (chunk.item as ResponseOutputItemWithPhase).phase
+					});
+				} else if (chunk.item.type.toString() === 'tool_search_call') {
+					// Client-executed tool search completed — log the search call with arguments
+					const tsCall = chunk.item as unknown as ResponsesToolSearchCall;
+					onProgress({
+						text: '',
+						serverToolCalls: [{
+							isServer: true,
+							name: 'tool_search',
+							id: tsCall.id ?? '',
+							args: tsCall.arguments,
+						}]
+					});
+				} else if (chunk.item.type.toString() === 'tool_search_output') {
+					// Tool search output — the model loaded deferred tools
+					const tsOutput = chunk.item as unknown as ResponsesToolSearchOutput;
+					onProgress({
+						text: '',
+						serverToolCalls: [{
+							isServer: true,
+							name: 'tool_search_output',
+							id: tsOutput.id ?? '',
+							result: { tools: tsOutput.tools },
+						}]
 					});
 				}
 				return;
