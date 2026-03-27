@@ -9,8 +9,7 @@ import { IChatEndpoint } from './networking';
 
 // Re-export shared tool search constants and helpers for backwards compatibility.
 // New code should import directly from './toolSearch'.
-export { CUSTOM_TOOL_SEARCH_NAME, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, nonDeferredToolNames, isAnthropicToolSearchEnabled, isAnthropicCustomToolSearchEnabled } from './toolSearch';
-export { ANTHROPIC_TOOL_SEARCH_SUPPORTED_MODELS as TOOL_SEARCH_SUPPORTED_MODELS } from './toolSearch';
+export { CUSTOM_TOOL_SEARCH_NAME, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ANTHROPIC_TOOL_SEARCH_SUPPORTED_MODELS as TOOL_SEARCH_SUPPORTED_MODELS, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE } from './toolSearch';
 
 /**
  * Types for Anthropic Messages API
@@ -66,27 +65,6 @@ export interface ToolSearchToolResult {
 export interface ToolSearchUsage {
 	tool_search_requests: number;
 }
-
-/**
- * Tools that should not use deferred loading when tool search is enabled.
- * These are frequently used tools that benefit from being immediately available.
- *
- * TODO: @bhavyaus Replace these hardcoded strings with constants from ToolName enum
- */
-
-export const TOOL_SEARCH_TOOL_NAME = 'tool_search_tool_regex';
-export const TOOL_SEARCH_TOOL_TYPE = 'tool_search_tool_regex_20251119';
-
-/** Name for the custom client-side embeddings-based tool search tool. Must not use copilot_/vscode_ prefix — those are reserved for static package.json declarations and will be rejected by vscode.lm.registerToolDefinition. */
-export const CUSTOM_TOOL_SEARCH_NAME = 'tool_search';
-
-/** Model ID prefixes that support tool search tools. Used by isAnthropicToolSearchEnabled() and the tool registration's model selector. */
-export const TOOL_SEARCH_SUPPORTED_MODELS = [
-	'claude-sonnet-4.5',
-	'claude-sonnet-4.6',
-	'claude-opus-4.5',
-	'claude-opus-4.6',
-] as const;
 
 /**
  * Context management types for Anthropic Messages API
