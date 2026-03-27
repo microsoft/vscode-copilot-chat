@@ -230,7 +230,7 @@ function getSlashCommandForTelemetry(request: vscode.ChatRequest, customInstruct
 		}
 
 		const extensionSkillInfo = customInstructionsService.getExtensionSkillInfo(ref.value);
-		if (extensionSkillInfo && extensionSkillInfo.skillName === command) {
+		if (extensionSkillInfo?.extensionId === EXTENSION_ID && extensionSkillInfo.skillName === command) {
 			return command;
 		}
 
