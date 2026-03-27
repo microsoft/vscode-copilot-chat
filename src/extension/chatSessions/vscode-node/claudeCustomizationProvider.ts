@@ -3,6 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+// TODO(joshspicer): Work in progress — depends on the proposed chatSessionCustomizationProvider
+// API which is off by default in VS Code.
+
 import * as vscode from 'vscode';
 import { INativeEnvService } from '../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
