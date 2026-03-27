@@ -26,7 +26,7 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditedFileEventKind, Position, Range } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
-import { ChatVariablesCollection, isCustomizationsIndex } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, extractDebugTargetSessionIds, isCustomizationsIndex } from '../../../prompt/common/chatVariablesCollection';
 import { getGlobalContextCacheKey, GlobalContextMessageMetadata, RenderedUserMessageMetadata, Turn } from '../../../prompt/common/conversation';
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
@@ -117,7 +117,8 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		const isAutopilot = this.props.promptContext.request?.permissionLevel === 'autopilot';
 		const sessionResource = this.props.promptContext.request?.sessionResource;
 		const sessionId = sessionResource ? sessionResourceToId(sessionResource) : undefined;
-		const templateVariablesContext = this.promptVariablesService.buildTemplateVariablesContext(sessionId);
+		const debugTargetSessionIds = extractDebugTargetSessionIds([...this.props.promptContext.chatVariables].map(v => v.reference));
+		const templateVariablesContext = this.promptVariablesService.buildTemplateVariablesContext(sessionId, debugTargetSessionIds);
 		const baseInstructions = <>
 			{!omitBaseAgentInstructions && baseAgentInstructions}
 			{await this.getAgentCustomInstructions()}
@@ -125,7 +126,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				When you have fully completed the task, call the task_complete tool to signal that you are done.<br />
 				IMPORTANT: Before calling task_complete, you MUST provide a brief text summary of what was accomplished in your message. The task is not complete until both the summary and the task_complete call are present.
 			</SystemMessage>}
-			{templateVariablesContext && <SystemMessage>{templateVariablesContext}</SystemMessage>}
+			{templateVariablesContext.length > 0 && <SystemMessage>{templateVariablesContext}</SystemMessage>}
 			<UserMessage>
 				{await this.getOrCreateGlobalAgentContext(this.props.endpoint)}
 			</UserMessage>

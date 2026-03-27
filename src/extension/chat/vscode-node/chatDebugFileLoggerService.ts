@@ -345,6 +345,18 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	}
 
 	getSessionDir(sessionId: string): URI | undefined {
+		// If active, use the stored sessionDir (already points to parent dir for children)
+		const active = this._activeSessions.get(sessionId);
+		if (active) {
+			return active.sessionDir;
+		}
+		// If known as a child, resolve to the parent's directory
+		const childInfo = this._childSessionMap.get(sessionId);
+		if (childInfo) {
+			const dir = this._getDebugLogsDir();
+			return dir ? URI.joinPath(dir, childInfo.parentSessionId) : undefined;
+		}
+		// Unknown session — construct the default path (assuming it's a parent)
 		const dir = this._getDebugLogsDir();
 		return dir ? URI.joinPath(dir, sessionId) : undefined;
 	}

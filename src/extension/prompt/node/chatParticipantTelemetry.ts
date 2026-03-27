@@ -235,7 +235,7 @@ function getSlashCommandForTelemetry(request: vscode.ChatRequest, customInstruct
 		}
 
 		const extensionPromptFileInfo = customInstructionsService.getExtensionPromptFileInfo(ref.value);
-		if (extensionPromptFileInfo?.extensionId === EXTENSION_ID && extensionPromptFileInfo.uri.path.toLowerCase().endsWith(`/${command}.prompt.md`)) {
+		if (extensionPromptFileInfo?.extensionId === EXTENSION_ID && extensionPromptFileInfo.uri.path.toLowerCase().endsWith(`/${command.toLowerCase()}.prompt.md`)) {
 			return command;
 		}
 	}
