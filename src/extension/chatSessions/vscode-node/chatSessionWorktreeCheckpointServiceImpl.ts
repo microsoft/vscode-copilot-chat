@@ -40,7 +40,7 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 	}
 
 	async handleRequest(sessionId: string): Promise<void> {
-		if (!this._getSessionCheckpointSupport(sessionId)) {
+		if (!this._getSessionCheckpointSupport()) {
 			this.logService.trace('[ChatSessionWorktreeCheckpointService][handleRequest] Session does not support checkpoints, skipping baseline checkpoint creation');
 			return;
 		}
@@ -85,7 +85,7 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 	}
 
 	async handleRequestCompleted(sessionId: string, requestId: string): Promise<void> {
-		if (!this._getSessionCheckpointSupport(sessionId)) {
+		if (!this._getSessionCheckpointSupport()) {
 			this.logService.trace('[ChatSessionWorktreeCheckpointService][handleRequestCompleted] Session does not support checkpoints, skipping post-turn checkpoint');
 			return;
 		}
@@ -159,7 +159,7 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 		}
 	}
 
-	private _getSessionCheckpointSupport(sessionId: string): boolean {
+	private _getSessionCheckpointSupport(): boolean {
 		return this.agentSessionsWorkspace.isAgentSessionsWorkspace;
 	}
 
