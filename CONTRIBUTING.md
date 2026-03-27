@@ -270,7 +270,7 @@ Again, try to make your services and contributions available in the `vscode` lay
 The main interesting files related to agent mode are:
 
 - [`agentPrompt.tsx`](src/extension/prompts/node/agent/agentPrompt.tsx): The main entrypoint for rendering the agent prompt
-- [`agentInstructions.tsx`](src/extension/prompts/node/agent/agentInstructions.tsx): The agent mode system prompt
+- [`defaultAgentInstructions.tsx`](src/extension/prompts/node/agent/defaultAgentInstructions.tsx): The agent mode system prompt
 - [`toolCallingLoop.ts`](src/extension/intents/node/toolCallingLoop.ts): Running the agentic loop
 - [`chatAgents.ts`](src/extension/conversation/vscode-node/chatParticipants.ts): Registers agent mode and other participants, and the handlers for requests coming from VS Code.
 
