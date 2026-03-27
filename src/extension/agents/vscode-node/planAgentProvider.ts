@@ -226,9 +226,12 @@ Rules:
 		toolsToAdd.push('vscode/askQuestions');
 
 		// Merge additional tools (deduplicated)
-		const tools = toolsToAdd.length > 0
-			? [...new Set([...BASE_PLAN_AGENT_CONFIG.tools, ...toolsToAdd])]
-			: [...BASE_PLAN_AGENT_CONFIG.tools];
+		const registeredToolIds = new Set(vscode.lm.tools.map(t => t.id));
+		const allTools = [...new Set([...BASE_PLAN_AGENT_CONFIG.tools, ...toolsToAdd])];
+
+		const tools = allTools.filter(toolId => {
+			return toolId.startsWith('vscode/') || toolId === 'agent' || registeredToolIds.has(toolId);
+		});
 
 		// Start with base config
 		return {
