@@ -253,13 +253,13 @@ export class ClaudeLanguageModelServer extends Disposable {
 		if (requestedModel) {
 			// Handle Claude model name mapping
 			// e.g. claude-sonnet-4-20250514 -> claude-sonnet-4.20250514
-			let mappedModel = requestedModel;
+			let mappedModel = requestedModel.replace(/\./g, '-');
 			if (requestedModel.startsWith('claude-')) {
 				const parts = requestedModel.split('-');
 				if (parts.length >= 4) {
 					// claude-sonnet-4-20250514 -> ['claude', 'sonnet', '4', '20250514']
 					const [claude, model, major, minor] = parts;
-					mappedModel = `${claude}-${model}-${major}.${minor}`;
+					mappedModel = `${claude}-${model}-${major}.${minor.replace(/\./g, '-')}`;
 				}
 			}
 
