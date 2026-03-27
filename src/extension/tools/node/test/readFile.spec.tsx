@@ -7,7 +7,6 @@ import { afterAll, beforeAll, expect, suite, test } from 'vitest';
 import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
-import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { MockCustomInstructionsService } from '../../../../platform/test/common/testCustomInstructionsService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
