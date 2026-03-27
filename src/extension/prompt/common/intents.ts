@@ -31,6 +31,7 @@ export interface IToolCallRound {
 	toolInputRetry: number;
 	toolCalls: IToolCall[];
 	thinking?: ThinkingData;
+	responseOutputMessageId?: string;
 	statefulMarker?: string;
 	/** Compaction data from the Responses API, round-tripped in outgoing requests */
 	compaction?: OpenAIContextManagementResponse;

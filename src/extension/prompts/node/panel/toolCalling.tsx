@@ -117,7 +117,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 		// Don't include this when rendering and triggering summarization
 		const statefulMarker = round.statefulMarker && <StatefulMarkerContainer statefulMarker={{ modelId: this.promptEndpoint.model, marker: round.statefulMarker }} />;
 		const thinking = (!this.props.isHistorical) && round.thinking && <ThinkingDataContainer thinking={round.thinking} />;
-		const phase = (round.phase && round.phaseModelId === this.promptEndpoint.model) ? <PhaseDataContainer phase={round.phase} /> : undefined;
+		const phase = (round.phase && round.phaseModelId === this.promptEndpoint.model) ? <PhaseDataContainer phase={round.phase} responseOutputMessageId={round.responseOutputMessageId} /> : undefined;
 		const compaction = round.compaction && <CompactionDataContainer compaction={round.compaction} />;
 		children.push(
 			<AssistantMessage toolCalls={assistantToolCalls}>

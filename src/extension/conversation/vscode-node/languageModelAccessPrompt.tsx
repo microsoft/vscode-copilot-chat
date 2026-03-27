@@ -8,6 +8,7 @@ import { AssistantMessage, PromptElement, PromptElementProps, SystemMessage, Too
 import * as vscode from 'vscode';
 import { LanguageModelTextPart } from 'vscode';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
+import { decodePhaseData, PhaseDataContainer } from '../../../platform/endpoint/common/phaseDataContainer';
 import { decodeStatefulMarker, StatefulMarkerContainer } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { ThinkingDataContainer } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { SafetyRules } from '../../prompts/node/base/safetyRules';
@@ -35,6 +36,8 @@ export class LanguageModelAccessPrompt extends PromptElement<Props> {
 					.map(part => part.value).join(''));
 
 			} else if (message.role === vscode.LanguageModelChatMessageRole.Assistant) {
+				const phaseDataPart = message.content.find(part => part instanceof vscode.LanguageModelDataPart && part.mimeType === CustomDataPartMimeTypes.PhaseData) as vscode.LanguageModelDataPart | undefined;
+				const phaseData = phaseDataPart && decodePhaseData(phaseDataPart.data);
 				const statefulMarkerPart = message.content.find(part => part instanceof vscode.LanguageModelDataPart && part.mimeType === CustomDataPartMimeTypes.StatefulMarker) as vscode.LanguageModelDataPart | undefined;
 				const statefulMarker = statefulMarkerPart && decodeStatefulMarker(statefulMarkerPart.data);
 				const filteredContent = message.content.filter(part => !(part instanceof vscode.LanguageModelDataPart));
@@ -45,7 +48,8 @@ export class LanguageModelAccessPrompt extends PromptElement<Props> {
 
 				const statefulMarkerElement = statefulMarker && <StatefulMarkerContainer statefulMarker={statefulMarker} />;
 				const thinkingElement = thinking && thinking.id && <ThinkingDataContainer thinking={{ id: thinking.id, text: thinking.value, metadata: thinking.metadata }} />;
-				chatMessages.push(<AssistantMessage name={message.name} toolCalls={toolCalls.map(tc => ({ id: tc.callId, type: 'function', function: { name: tc.name, arguments: JSON.stringify(tc.input) } }))}>{statefulMarkerElement}{content?.value}{thinkingElement}</AssistantMessage>);
+				const phaseElement = phaseData && <PhaseDataContainer phase={phaseData.phase} responseOutputMessageId={phaseData.responseOutputMessageId} />;
+				chatMessages.push(<AssistantMessage name={message.name} toolCalls={toolCalls.map(tc => ({ id: tc.callId, type: 'function', function: { name: tc.name, arguments: JSON.stringify(tc.input) } }))}>{statefulMarkerElement}{thinkingElement}{phaseElement}{content?.value}</AssistantMessage>);
 			} else if (message.role === vscode.LanguageModelChatMessageRole.User) {
 				for (const part of message.content) {
 					if (part instanceof vscode.LanguageModelToolResultPart2 || part instanceof vscode.LanguageModelToolResultPart) {

@@ -1198,6 +1198,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
 		let thinkingItem: ThinkingDataItem | undefined;
+		let responseOutputMessageId: string | undefined;
 		const rawEffort = this.options.request.modelConfiguration?.reasoningEffort;
 		const reasoningEffort = typeof rawEffort === 'string' ? rawEffort : undefined;
 		const shouldDisableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(effectiveBuildPromptResult.messages);
@@ -1226,6 +1227,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				}
 				if (delta.statefulMarker) {
 					statefulMarker = delta.statefulMarker;
+				}
+				if (delta.responseOutputMessageId) {
+					responseOutputMessageId = delta.responseOutputMessageId;
 				}
 				if (delta.thinking) {
 					thinkingItem = ThinkingDataItem.createOrUpdate(thinkingItem, delta.thinking);
@@ -1321,6 +1325,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					response: fetchResult.value,
 					toolCalls,
 					toolInputRetry,
+					responseOutputMessageId,
 					statefulMarker,
 					thinking: thinkingItem,
 					phase,

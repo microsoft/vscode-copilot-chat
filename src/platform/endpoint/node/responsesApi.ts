@@ -25,7 +25,7 @@ import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { getVerbosityForModelSync } from '../common/chatModelCapabilities';
 import { rawPartAsCompactionData } from '../common/compactionDataContainer';
-import { rawPartAsPhaseData } from '../common/phaseDataContainer';
+import { IPhaseData, rawPartAsPhaseData } from '../common/phaseDataContainer';
 import { getStatefulMarkerAndIndex } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
 
@@ -120,18 +120,31 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 				if (message.content.length) {
 					input.push(...extractCompactionData(message.content));
 					input.push(...extractThinkingData(message.content));
-					const asstContent = message.content.map(rawContentToResponsesOutputContent).filter(isDefined);
-					if (asstContent.length) {
-						const assistantMessage: ResponseOutputMessageWithPhase = {
-							role: 'assistant',
-							content: asstContent,
-							// I don't think this needs to be round-tripped.
-							id: 'msg_123',
-							status: 'completed',
-							type: 'message',
-							phase: extractPhaseData(message.content),
-						};
-						input.push(assistantMessage);
+					const phaseData = extractPhaseData(message.content);
+					const phase = phaseData?.phase;
+					if (phase) {
+						const asstContent = message.content.map(rawContentToResponsesOutputContent).filter(isDefined);
+						if (asstContent.length) {
+							const assistantMessage: ResponseOutputMessageWithPhase = {
+								role: 'assistant',
+								content: asstContent,
+								id: phaseData?.responseOutputMessageId ?? generateUuid(),
+								status: 'completed',
+								type: 'message',
+								phase,
+							};
+							input.push(assistantMessage);
+						}
+					} else {
+						const asstContent = message.content.map(rawContentToResponsesAssistantInputContent).filter(isDefined);
+						if (asstContent.length) {
+							const assistantMessage: OpenAI.Responses.EasyInputMessage = {
+								role: 'assistant',
+								content: asstContent,
+								type: 'message',
+							};
+							input.push(assistantMessage);
+						}
 					}
 				}
 				if (message.toolCalls) {
@@ -210,6 +223,24 @@ function rawContentToResponsesOutputContent(part: Raw.ChatCompletionContentPart)
 	}
 }
 
+function rawContentToResponsesAssistantInputContent(part: Raw.ChatCompletionContentPart): OpenAI.Responses.ResponseInputContent | undefined {
+	switch (part.type) {
+		case Raw.ChatCompletionContentPartKind.Text:
+			if (part.text.trim()) {
+				return { type: 'input_text', text: part.text };
+			}
+			return undefined;
+		case Raw.ChatCompletionContentPartKind.Image:
+			return { type: 'input_image', detail: part.imageUrl.detail || 'auto', image_url: part.imageUrl.url };
+		case Raw.ChatCompletionContentPartKind.Opaque: {
+			const maybeCast = part.value as OpenAI.Responses.ResponseInputContent;
+			if (maybeCast.type === 'input_text' || maybeCast.type === 'input_image' || maybeCast.type === 'input_file') {
+				return maybeCast;
+			}
+		}
+	}
+}
+
 function extractThinkingData(content: Raw.ChatCompletionContentPart[]): OpenAI.Responses.ResponseReasoningItem[] {
 	return coalesce(content.map(part => {
 		if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
@@ -226,12 +257,12 @@ function extractThinkingData(content: Raw.ChatCompletionContentPart[]): OpenAI.R
 	}));
 }
 
-function extractPhaseData(content: Raw.ChatCompletionContentPart[]): string | undefined {
+function extractPhaseData(content: Raw.ChatCompletionContentPart[]): IPhaseData | undefined {
 	for (const part of content) {
 		if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
-			const phase = rawPartAsPhaseData(part);
-			if (phase) {
-				return phase;
+			const phaseData = rawPartAsPhaseData(part);
+			if (phaseData) {
+				return phaseData;
 			}
 		}
 	}
@@ -562,9 +593,11 @@ export class OpenAIResponsesProcessor {
 						} : undefined
 					});
 				} else if (chunk.item.type === 'message') {
+					const phase = (chunk.item as ResponseOutputItemWithPhase).phase;
 					onProgress({
 						text: '',
-						phase: (chunk.item as ResponseOutputItemWithPhase).phase
+						responseOutputMessageId: phase ? chunk.item.id : undefined,
+						phase,
 					});
 				}
 				return;

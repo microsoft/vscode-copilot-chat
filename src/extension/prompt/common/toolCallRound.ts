@@ -18,6 +18,7 @@ export class ToolCallRound implements IToolCallRound {
 	public summary: string | undefined;
 	public phase?: string;
 	public phaseModelId?: string;
+	public responseOutputMessageId?: string;
 
 	/**
 	 * Creates a ToolCallRound from an existing IToolCallRound object.
@@ -29,6 +30,7 @@ export class ToolCallRound implements IToolCallRound {
 			params.toolCalls,
 			params.toolInputRetry,
 			params.id,
+			params.responseOutputMessageId,
 			params.statefulMarker,
 			params.thinking,
 			params.timestamp,
@@ -54,11 +56,14 @@ export class ToolCallRound implements IToolCallRound {
 		public readonly toolCalls: IToolCall[] = [],
 		public readonly toolInputRetry: number = 0,
 		public readonly id: string = ToolCallRound.generateID(),
+		responseOutputMessageId?: string,
 		public readonly statefulMarker?: string,
 		public readonly thinking?: ThinkingData,
 		public readonly timestamp: number = Date.now(),
 		public readonly compaction?: OpenAIContextManagementResponse,
-	) { }
+	) {
+		this.responseOutputMessageId = responseOutputMessageId;
+	}
 
 	private static generateID(): string {
 		return generateUuid();

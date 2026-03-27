@@ -6,13 +6,16 @@
 import { Raw } from '@vscode/prompt-tsx';
 import type { OpenAI } from 'openai';
 import { describe, expect, it } from 'vitest';
+import { TokenizerType } from '../../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ILogService } from '../../../log/common/logService';
+import { IChatEndpoint, ICreateEndpointBodyOptions } from '../../../networking/common/networking';
 import { TelemetryData } from '../../../telemetry/common/telemetryData';
 import { SpyingTelemetryService } from '../../../telemetry/node/spyingTelemetryService';
 import { createFakeStreamResponse } from '../../../test/node/fetcher';
 import { createPlatformServices } from '../../../test/node/services';
-import { processResponseFromChatEndpoint, responseApiInputToRawMessagesForLogging } from '../responsesApi';
+import { CustomDataPartMimeTypes } from '../../common/endpointTypes';
+import { createResponsesRequestBody, processResponseFromChatEndpoint, responseApiInputToRawMessagesForLogging } from '../responsesApi';
 
 describe('responseApiInputToRawMessagesForLogging', () => {
 
@@ -211,6 +214,95 @@ describe('responseApiInputToRawMessagesForLogging', () => {
 		expect(result).toHaveLength(1);
 		expect(result[0].role).toBe(Raw.ChatRole.Assistant);
 		expect((result[0] as Raw.AssistantChatMessage).toolCalls).toHaveLength(2);
+	});
+});
+
+describe('createResponsesRequestBody', () => {
+	const createAssistantMessage = (parts: Raw.ChatCompletionContentPart[]): Raw.ChatMessage => ({
+		role: Raw.ChatRole.Assistant,
+		content: parts,
+	});
+
+	const createRequestOptions = (messages: Raw.ChatMessage[]): ICreateEndpointBodyOptions => ({
+		debugName: 'test',
+		messages,
+		requestId: 'request-1',
+		postOptions: {},
+		finishedCb: undefined,
+		location: undefined as never,
+	});
+
+	const createTestEndpoint = (): IChatEndpoint => {
+		const endpoint: IChatEndpoint = {
+			urlOrRequestMetadata: 'https://example.test',
+			name: 'test-endpoint',
+			version: '1',
+			family: 'gpt-5',
+			tokenizer: TokenizerType.O200K,
+			modelMaxPromptTokens: 128000,
+			maxOutputTokens: 4096,
+			model: 'gpt-5-mini',
+			modelProvider: 'openai',
+			supportsToolCalls: true,
+			supportsVision: true,
+			supportsPrediction: true,
+			showInModelPicker: true,
+			isFallback: false,
+			acquireTokenizer() {
+				throw new Error('Not implemented for test');
+			},
+			async processResponseFromChatEndpoint() {
+				throw new Error('Not implemented for test');
+			},
+			async makeChatRequest() {
+				throw new Error('Not implemented for test');
+			},
+			async makeChatRequest2() {
+				throw new Error('Not implemented for test');
+			},
+			createRequestBody() {
+				throw new Error('Not implemented for test');
+			},
+			cloneWithTokenOverride() {
+				return endpoint;
+			},
+		};
+		return endpoint;
+	};
+
+	it('only sends response output ids for phased assistant messages', () => {
+		const services = createPlatformServices();
+		const accessor = services.createTestingAccessor();
+		const endpoint = createTestEndpoint();
+
+		const nonPhaseAssistant = createAssistantMessage([
+			{ type: Raw.ChatCompletionContentPartKind.Text, text: 'plain assistant reply' },
+		]);
+		const phaseAssistant = createAssistantMessage([
+			{ type: Raw.ChatCompletionContentPartKind.Text, text: 'phase assistant reply' },
+			{ type: Raw.ChatCompletionContentPartKind.Opaque, value: { type: CustomDataPartMimeTypes.PhaseData, phase: 'tool_calling', responseOutputMessageId: 'msg_phase' } },
+		]);
+
+		const body = createResponsesRequestBody(accessor, createRequestOptions([nonPhaseAssistant, phaseAssistant]), endpoint.model, endpoint);
+		const input = body.input as OpenAI.Responses.ResponseInputItem[];
+
+		expect(input).toHaveLength(2);
+		expect(input[0]).toEqual({
+			role: 'assistant',
+			content: [{ type: 'input_text', text: 'plain assistant reply' }],
+			type: 'message',
+		});
+		expect(input[1]).toEqual({
+			role: 'assistant',
+			content: [{ type: 'output_text', text: 'phase assistant reply', annotations: [] }],
+			id: 'msg_phase',
+			status: 'completed',
+			type: 'message',
+			phase: 'tool_calling',
+		});
+
+		accessor.dispose();
+		services.dispose();
 	});
 });
 
