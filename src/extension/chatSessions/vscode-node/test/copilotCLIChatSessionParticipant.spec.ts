@@ -222,6 +222,8 @@ class FakeCloudProvider extends mock<CopilotCloudSessionsProvider>() {
 
 function createChatContext(sessionId: string, isUntitled: boolean): vscode.ChatContext {
 	return {
+		history: [],
+		yieldRequested: false,
 		chatSessionContext: {
 			chatSessionItem: { resource: vscode.Uri.from({ scheme: 'copilotcli', path: `/${sessionId}` }), label: 'temp' } as vscode.ChatSessionItem,
 			isUntitled
