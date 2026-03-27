@@ -74,7 +74,7 @@ export interface IChatWebSocketMessageParseErrorTelemetryProperties extends ICha
 	totalReceivedCharacters: number;
 }
 
-export type ChatWebSocketRequestOutcome = 'completed' | 'server_error' | 'canceled' | 'superseded' | 'connection_closed' | 'connection_disposed';
+export type ChatWebSocketRequestOutcome = 'completed' | 'response_failed' | 'response_incomplete' | 'response_cancelled' | 'upstream_error' | 'canceled' | 'superseded' | 'connection_closed' | 'connection_disposed' | 'error_response';
 
 export interface IChatWebSocketRequestOutcomeTelemetryProperties extends IChatWebSocketBaseTelemetryProperties {
 	requestOutcome: ChatWebSocketRequestOutcome;
@@ -370,8 +370,8 @@ export class ChatWebSocketTelemetrySender {
 				"requestDurationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "How long the request took before terminal outcome in milliseconds", "isMeasurement": true },
 				"closeCode": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "WebSocket close code when outcome is connection_closed", "isMeasurement": true },
 				"closeReason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "WebSocket close reason when outcome is connection_closed" },
-				"serverErrorMessage": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Error message from server error event when outcome is server_error" },
-				"serverErrorCode": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Error code from server error event when outcome is server_error" }
+				"serverErrorMessage": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Error message from server error event when outcome is error_response" },
+				"serverErrorCode": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Error code from server error event when outcome is error_response" }
 			}
 		*/
 		telemetryService.sendTelemetryEvent('websocket.requestOutcome', { github: true, microsoft: true }, {
