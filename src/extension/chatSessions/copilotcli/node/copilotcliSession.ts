@@ -7,7 +7,6 @@ import type { Attachment, SendOptions, Session, SessionOptions } from '@github/c
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import type { ChatParticipantToolToken } from 'vscode';
-import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { CopilotChatAttr, GenAiAttr, GenAiOperationName, IOTelService, ISpanHandle, SpanKind, SpanStatusCode, truncateForOTel } from '../../../../platform/otel/common/index';
@@ -159,19 +158,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@IUserQuestionHandler private readonly _userQuestionHandler: IUserQuestionHandler,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IOTelService private readonly _otelService: IOTelService,
-		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService,
 		@IChatPromptFileService private readonly _chatPromptFileService: IChatPromptFileService,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
-		this._debugFileLogger.startSession(this.sessionId).catch(err => {
-			this.logService.error('[CopilotCLISession] Failed to start debug log session', err);
-		});
-		this.add(toDisposable(() => {
-			this._debugFileLogger.endSession(this.sessionId).catch(err => {
-				this.logService.error('[CopilotCLISession] Failed to end debug log session', err);
-			});
-		}));
 	}
 
 	attachStream(stream: vscode.ChatResponseStream): IDisposable {

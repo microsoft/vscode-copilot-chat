@@ -7,7 +7,7 @@ import type { internal, LocalSessionMetadata, Session, SessionContext, SessionEv
 import * as l10n from '@vscode/l10n';
 import { createReadStream } from 'node:fs';
 import * as fs from 'node:fs/promises';
-import { EOL } from 'node:os';
+import { devNull, EOL } from 'node:os';
 import { createInterface } from 'node:readline';
 import type { ChatRequest, ChatSessionItem } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -47,6 +47,7 @@ import { CopilotCliBridgeSpanProcessor } from './copilotCliBridgeSpanProcessor';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { ICopilotCLISkills } from './copilotCLISkills';
 import { ICopilotCLIMCPHandler, McpServerMappings } from './mcpHandler';
+import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 
 const COPILOT_CLI_WORKSPACE_JSON_FILE_KEY = 'github.copilot.cli.workspaceSessionFile';
 
@@ -145,6 +146,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@IChatSessionWorkspaceFolderService private readonly workspaceFolderService: IChatSessionWorkspaceFolderService,
 		@IChatSessionWorktreeService private readonly worktreeManager: IChatSessionWorktreeService,
 		@IOTelService private readonly _otelService: IOTelService,
+		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService,
 	) {
 		super();
 		this.monitorSessionFiles();
@@ -177,7 +179,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					// Use file exporter to /dev/null so the SDK creates OtelSessionTracker
 					// (for debug panel) but writes spans nowhere.
 					process.env['COPILOT_OTEL_EXPORTER_TYPE'] = 'file';
-					process.env['COPILOT_OTEL_FILE_EXPORTER_PATH'] = process.platform === 'win32' ? 'NUL' : '/dev/null';
+					process.env['COPILOT_OTEL_FILE_EXPORTER_PATH'] = devNull;
 				}
 				return new internal.LocalSessionManager({ telemetryService: new internal.NoopTelemetryService(), flushDebounceMs: undefined, settings: undefined, version: undefined });
 			}
@@ -844,6 +846,14 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	private createCopilotSession(sdkSession: Session, options: CopilotCLISessionOptions, sessionManager: internal.LocalSessionManager, readonly = false, nowait = false): RefCountedSession {
 		const session = this.instantiationService.createInstance(CopilotCLISession, options, sdkSession);
+		this._debugFileLogger.startSession(session.sessionId).catch(err => {
+			this.logService.error('[CopilotCLISession] Failed to start debug log session', err);
+		});
+		session.add(toDisposable(() => {
+			this._debugFileLogger.endSession(session.sessionId).catch(err => {
+				this.logService.error('[CopilotCLISession] Failed to end debug log session', err);
+			});
+		}));
 		// Wire the bridge processor so the session can register traceId → sessionId mappings
 		session.setBridgeProcessor(this._bridgeProcessor);
 		// Wire SDK trace context updater so the session can propagate traceparent to SDK spans
