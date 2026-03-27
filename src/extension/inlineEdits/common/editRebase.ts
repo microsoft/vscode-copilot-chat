@@ -16,11 +16,10 @@ const TROUBLESHOOT_EDIT_CONSISTENCY = false;
 
 export interface NesRebaseConfigs {
 	/**
-	 * When enabled, if the user's typed text can be aligned as a subsequence of the
-	 * suggestion's insert text, the rebase absorbs it instead of failing.
-	 * For example, "()" aligns with "(n: number): number" because "(" and ")"
-	 * appear in that order; "(n: )" aligns similarly. Text like "abc" that cannot
-	 * be matched as a subsequence is not absorbed.
+	 * When enabled, if the user's typed text is an editor auto-close pair
+	 * (e.g. `()`, `[]`, `{}`, `<>`, `""`, `''`, ` `` `) and both characters
+	 * appear in order in the suggestion's insert text, the rebase absorbs
+	 * the typed pair instead of failing.
 	 */
 	readonly absorbSubsequenceTyping?: boolean;
 }
@@ -252,6 +251,13 @@ function isSubsequenceOf(typed: string, suggestion: string): boolean {
 	return true;
 }
 
+const autoClosePairs = new Set(['()', '[]', '{}', '<>', '""', `''`, '``']);
+
+/** Returns true if `text` is an editor auto-close pair such as `()`, `[]`, `{}`, etc. */
+function isAutoClosePair(text: string): boolean {
+	return autoClosePairs.has(text);
+}
+
 function agreementIndexOf<T extends IEditData<T>>(content: string, ourE: AnnotatedStringReplacement<T>, baseE: StringReplacement, previousBaseE: StringReplacement | undefined, ourNewTextOffset: number, resolution: 'strict' | 'lenient', nesConfigs: NesRebaseConfigs) {
 	const originalBaseNewText = baseE.newText;
 	const minStart = previousBaseE ? previousBaseE.replaceRange.endExclusive : ourE.replaceRange.start;
@@ -272,7 +278,7 @@ function agreementIndexOf<T extends IEditData<T>>(content: string, ourE: Annotat
 	// User typed text not found in suggestion (or rejected by strict limits) — absorb if it aligns as a subsequence.
 	// Guard: only attempt for short typed text to avoid expensive matching on long pastes
 	// and to stay consistent with the existing strict safeguards.
-	if (nesConfigs.absorbSubsequenceTyping && originalBaseNewText.length <= maxImperfectAgreementLength && isSubsequenceOf(originalBaseNewText, ourE.newText.substring(ourNewTextOffset))) {
+	if (nesConfigs.absorbSubsequenceTyping && isAutoClosePair(originalBaseNewText) && isSubsequenceOf(originalBaseNewText, ourE.newText.substring(ourNewTextOffset))) {
 		return ourNewTextOffset;
 	}
 	return -1;
