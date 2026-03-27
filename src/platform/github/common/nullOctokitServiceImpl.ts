@@ -14,10 +14,6 @@ export class NullBaseOctoKitService extends BaseOctoKitService {
 		return { avatar_url: '', login: 'NullUser', name: 'Null User' };
 	}
 
-	override async getTeamMembershipWithToken(teamId: number, token: string, username: string): Promise<any | undefined> {
-		return undefined;
-	}
-
 	override async _makeGHAPIRequest(routeSlug: string, method: 'GET' | 'POST', token: string, body?: { [key: string]: any }, options?: { silent404?: boolean }, callSite?: string) {
 		return undefined;
 	}
