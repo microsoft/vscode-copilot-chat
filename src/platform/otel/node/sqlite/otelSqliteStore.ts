@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { mkdirSync } from 'fs';
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { dirname } from 'path';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { CopilotChatAttr, GenAiAttr } from '../../common/genAiAttributes';
@@ -119,6 +119,14 @@ export class OTelSqliteStore {
 	private _db: DatabaseSync | null = null;
 	private readonly _dbPath: string;
 
+	// Cached prepared statements (created once per DB connection in _ensureDb)
+	private _insertSpanStmt: StatementSync | null = null;
+	private _insertAttrStmt: StatementSync | null = null;
+	private _insertEventStmt: StatementSync | null = null;
+	private _beginTx: StatementSync | null = null;
+	private _commitTx: StatementSync | null = null;
+	private _rollbackTx: StatementSync | null = null;
+
 	constructor(dbPath: string) {
 		this._dbPath = dbPath;
 	}
@@ -131,38 +139,12 @@ export class OTelSqliteStore {
 	 * Insert a completed span and its attributes/events into the database.
 	 */
 	insertSpan(span: ICompletedSpanData): void {
-		const db = this._ensureDb();
-
-		const insertSpanStmt = db.prepare(`
-			INSERT OR REPLACE INTO spans (
-				span_id, trace_id, parent_span_id, name,
-				start_time_ms, end_time_ms, status_code, status_message,
-				operation_name, provider_name, agent_name, conversation_id,
-				request_model, response_model,
-				input_tokens, output_tokens, cached_tokens, reasoning_tokens,
-				tool_name, tool_call_id, tool_type,
-				chat_session_id, turn_index, ttft_ms
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`);
-
-		const insertAttrStmt = db.prepare(`
-			INSERT OR REPLACE INTO span_attributes (span_id, key, value)
-			VALUES (?, ?, ?)
-		`);
-
-		const insertEventStmt = db.prepare(`
-			INSERT INTO span_events (span_id, name, timestamp_ms, attributes)
-			VALUES (?, ?, ?, ?)
-		`);
-
-		const beginTx = db.prepare('BEGIN');
-		const commitTx = db.prepare('COMMIT');
-		const rollbackTx = db.prepare('ROLLBACK');
+		this._ensureDb();
 
 		try {
-			beginTx.run();
+			this._beginTx!.run();
 
-			insertSpanStmt.run(
+			this._insertSpanStmt!.run(
 				span.spanId, span.traceId, span.parentSpanId ?? null, span.name,
 				span.startTime, span.endTime, span.status.code, span.status.message ?? null,
 				this._attr(span, DENORMALIZED_ATTRS.operation_name),
@@ -185,17 +167,17 @@ export class OTelSqliteStore {
 
 			for (const [key, value] of Object.entries(span.attributes)) {
 				const serialized = Array.isArray(value) ? JSON.stringify(value) : String(value);
-				insertAttrStmt.run(span.spanId, key, serialized);
+				this._insertAttrStmt!.run(span.spanId, key, serialized);
 			}
 
 			for (const event of span.events) {
 				const eventAttrs = event.attributes ? JSON.stringify(event.attributes) : null;
-				insertEventStmt.run(span.spanId, event.name, event.timestamp, eventAttrs);
+				this._insertEventStmt!.run(span.spanId, event.name, event.timestamp, eventAttrs);
 			}
 
-			commitTx.run();
+			this._commitTx!.run();
 		} catch (err) {
-			try { rollbackTx.run(); } catch { /* ignore */ }
+			try { this._rollbackTx!.run(); } catch { /* ignore */ }
 			throw err;
 		}
 	}
@@ -285,6 +267,12 @@ export class OTelSqliteStore {
 		if (this._db) {
 			this._db.close();
 			this._db = null;
+			this._insertSpanStmt = null;
+			this._insertAttrStmt = null;
+			this._insertEventStmt = null;
+			this._beginTx = null;
+			this._commitTx = null;
+			this._rollbackTx = null;
 		}
 	}
 
@@ -310,6 +298,7 @@ export class OTelSqliteStore {
 			db.exec('PRAGMA foreign_keys = ON');
 			this._db = db;
 			this._ensureSchema();
+			this._prepareStatements(db);
 
 			// Auto-cleanup on startup: remove spans older than 7 days,
 			// then cap to the most recent DEFAULT_MAX_SESSIONS sessions by conversation_id.
@@ -320,6 +309,29 @@ export class OTelSqliteStore {
 			throw err;
 		}
 		return this._db;
+	}
+
+	private _prepareStatements(db: DatabaseSync): void {
+		this._insertSpanStmt = db.prepare(`
+			INSERT OR REPLACE INTO spans (
+				span_id, trace_id, parent_span_id, name,
+				start_time_ms, end_time_ms, status_code, status_message,
+				operation_name, provider_name, agent_name, conversation_id,
+				request_model, response_model,
+				input_tokens, output_tokens, cached_tokens, reasoning_tokens,
+				tool_name, tool_call_id, tool_type,
+				chat_session_id, turn_index, ttft_ms
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`);
+		this._insertAttrStmt = db.prepare(
+			'INSERT OR REPLACE INTO span_attributes (span_id, key, value) VALUES (?, ?, ?)'
+		);
+		this._insertEventStmt = db.prepare(
+			'INSERT INTO span_events (span_id, name, timestamp_ms, attributes) VALUES (?, ?, ?, ?)'
+		);
+		this._beginTx = db.prepare('BEGIN');
+		this._commitTx = db.prepare('COMMIT');
+		this._rollbackTx = db.prepare('ROLLBACK');
 	}
 
 	private _ensureSchema(): void {
