@@ -12,6 +12,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IAgentSessionsWorkspace } from '../common/agentSessionsWorkspace';
 import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeCheckpointService } from '../common/chatSessionWorktreeCheckpointService';
@@ -27,6 +28,7 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 	declare _serviceBrand: undefined;
 
 	constructor(
+		@IAgentSessionsWorkspace private readonly agentSessionsWorkspace: IAgentSessionsWorkspace,
 		@IChatSessionMetadataStore private readonly metadataStore: IChatSessionMetadataStore,
 		@IChatSessionWorkspaceFolderService private readonly workspaceFolderService: IChatSessionWorkspaceFolderService,
 		@IChatSessionWorktreeService private readonly worktreeService: IChatSessionWorktreeService,
@@ -38,8 +40,7 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 	}
 
 	async handleRequest(sessionId: string): Promise<void> {
-		const checkpointSupport = await this.getWorktreeCheckpointSupport(sessionId);
-		if (!checkpointSupport) {
+		if (!this._getSessionCheckpointSupport()) {
 			this.logService.trace('[ChatSessionWorktreeCheckpointService][handleRequest] Session does not support checkpoints, skipping baseline checkpoint creation');
 			return;
 		}
@@ -49,12 +50,6 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 
 		if (!repository) {
 			this.logService.warn(`[ChatSessionWorktreeCheckpointService][handleRequest] No repository found for session ${sessionId}, skipping baseline checkpoint creation`);
-			return;
-		}
-
-		const latestCheckpointRef = await this._getLatestCheckpointRef(sessionId);
-		if (latestCheckpointRef) {
-			this.logService.trace(`[ChatSessionWorktreeCheckpointService][handleRequest] Found existing checkpoint ref ${latestCheckpointRef} for session ${sessionId}, skipping baseline checkpoint creation`);
 			return;
 		}
 
@@ -80,8 +75,7 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 	}
 
 	async handleRequestCompleted(sessionId: string, requestId: string): Promise<void> {
-		const checkpointSupport = await this.getWorktreeCheckpointSupport(sessionId);
-		if (!checkpointSupport) {
+		if (!this._getSessionCheckpointSupport()) {
 			this.logService.trace('[ChatSessionWorktreeCheckpointService][handleRequestCompleted] Session does not support checkpoints, skipping post-turn checkpoint');
 			return;
 		}
@@ -121,14 +115,6 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 		await this.metadataStore.updateRequestDetails(sessionId, [{ vscodeRequestId: requestId, checkpointRef }]);
 	}
 
-	async getWorktreeCheckpointSupport(sessionId: string): Promise<boolean> {
-		// Checkpoint support:
-		// - isolation mode is workspace
-		// - isolation mode is worktree (version 2) and auto-commit is disabled
-		const worktreeProperties = await this.worktreeService.getWorktreeProperties(sessionId);
-		return worktreeProperties === undefined || (worktreeProperties.version === 2 && worktreeProperties.autoCommit === false);
-	}
-
 	private async _getSessionRepository(sessionId: string): Promise<Uri | undefined> {
 		const worktreeProperties = await this.worktreeService.getWorktreeProperties(sessionId);
 		if (worktreeProperties) {
@@ -161,6 +147,10 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 			this.logService.error(`[ChatSessionWorktreeCheckpointService][_getLatestCheckpointRef] Failed to get latest checkpoint ref for session ${sessionId}: `, error);
 			return undefined;
 		}
+	}
+
+	private _getSessionCheckpointSupport(): boolean {
+		return this.agentSessionsWorkspace.isAgentSessionsWorkspace;
 	}
 
 	private async _createCheckpoint(sessionId: string, repositoryUri: Uri, turnNumber: number, parentCheckpointRef?: string): Promise<string | undefined> {

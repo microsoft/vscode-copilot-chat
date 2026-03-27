@@ -53,7 +53,7 @@ function containsMicrosoftOrg(orgList: string[]): boolean {
  * @param orgList The list of organizations the user is a member of
  * Whether or not it contains a VS Code org
  */
-function containsVSCodeOrg(orgList: string[]): boolean {
+export function containsVSCodeOrg(orgList: string[]): boolean {
 	const VSCODE_ORGANIZATIONS = ['551cca60ce19654d894e786220822482'];
 	// Check if the user is part of a VS Code organization.
 	for (const org of orgList) {

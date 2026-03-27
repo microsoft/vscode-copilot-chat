@@ -10,6 +10,8 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { CancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle';
+import { QuotaSnapshots } from '../../chat/common/chatQuotaService';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService, collectSingleLineErrorMessage } from '../../log/common/logService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -104,14 +106,54 @@ export interface IChatWebSocketConnection extends IDisposable {
 }
 
 export interface IChatWebSocketRequestHandle {
-	/** Fires for each JSON event received from the server. */
+	/** Fires for each OpenAI stream event received from the server. */
 	readonly onEvent: Event<OpenAI.Responses.ResponseStreamEvent>;
-	/** Fires when an error occurs. */
+	/** Fires when a CAPI WebSocket error is received (nested error shape). */
+	readonly onCAPIError: Event<CAPIWebSocketErrorEvent>;
+	/** Fires when a transport-level error occurs (connection lost, etc.). */
 	readonly onError: Event<Error>;
-	/** Fires when the request completes (response.completed received). */
-	readonly onComplete: Event<void>;
+	/**
+	 * Resolves with the first event received from the server, or rejects
+	 * if the connection errors/closes before any event arrives.
+	 * Consumers can inspect the event type to decide the response kind
+	 * (success stream vs. CAPI error) before processing remaining events.
+	 */
+	readonly firstEvent: Promise<OpenAI.Responses.ResponseStreamEvent | CAPIWebSocketErrorEvent>;
 	/** Resolves when the request has finished (completed or errored). */
 	readonly done: Promise<void>;
+}
+
+/**
+ * CAPI WebSocket error shape. Unlike the OpenAI SDK's flat `ResponseErrorEvent`
+ * (`{ type: "error", code, message }`), CAPI wraps the error details in a
+ * nested `error` object: `{ type: "error", error: { code, message } }`.
+ *
+ * Non-recoverable errors (rate limits, quota, upstream failures) also include
+ * `copilot_quota_snapshots` with per-model quota state.
+ */
+export interface CAPIWebSocketErrorEvent {
+	readonly type: 'error';
+	readonly error: {
+		readonly code: string;
+		readonly message: string;
+	};
+	readonly copilot_quota_snapshots?: QuotaSnapshots;
+}
+
+export function isCAPIWebSocketError(event: OpenAI.Responses.ResponseStreamEvent | CAPIWebSocketErrorEvent): event is CAPIWebSocketErrorEvent {
+	return event.type === 'error' && 'error' in event && typeof (event as CAPIWebSocketErrorEvent).error?.code === 'string';
+}
+
+const streamTerminatingOutcomes: Readonly<Record<string, ChatWebSocketRequestOutcome>> = {
+	'response.completed': 'completed',
+	'response.failed': 'response_failed',
+	'response.incomplete': 'response_incomplete',
+	'response.cancelled': 'response_cancelled',
+	'error': 'upstream_error',
+};
+
+export function getStreamTerminatingOutcome(event: OpenAI.Responses.ResponseStreamEvent | CAPIWebSocketErrorEvent): ChatWebSocketRequestOutcome | undefined {
+	return streamTerminatingOutcomes[event.type];
 }
 
 export class ChatWebSocketManager extends Disposable implements IChatWebSocketManager {
@@ -123,6 +165,7 @@ export class ChatWebSocketManager extends Disposable implements IChatWebSocketMa
 		@ILogService private readonly _logService: ILogService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super();
 	}
@@ -142,7 +185,7 @@ export class ChatWebSocketManager extends Disposable implements IChatWebSocketMa
 			this._connections.delete(conversationId);
 		}
 
-		const connection = new ChatWebSocketConnection(this._capiClientService, this._logService, this._telemetryService, conversationId, turnId, headers);
+		const connection = new ChatWebSocketConnection(this._capiClientService, this._logService, this._telemetryService, this._configurationService, conversationId, turnId, headers);
 		this._logService.debug(`[ChatWebSocketManager] Creating new connection for conversation ${conversationId} turn ${turnId}`);
 		this._connections.set(conversationId, { turnId, connection });
 
@@ -239,6 +282,7 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 		private readonly _capiClientService: ICAPIClientService,
 		private readonly _logService: ILogService,
 		private readonly _telemetryService: ITelemetryService,
+		private readonly _configurationService: IConfigurationService,
 		private readonly _conversationId: string,
 		private readonly _turnId: string,
 		private readonly _headers: Record<string, string>,
@@ -379,7 +423,7 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 			this._totalReceivedCharacters += receivedMessageCharacters;
 			const connectionDurationMs = Date.now() - (this._connectedTime ?? Date.now());
 
-			let parsed: OpenAI.Responses.ResponseStreamEvent;
+			let parsed: OpenAI.Responses.ResponseStreamEvent | CAPIWebSocketErrorEvent;
 			try {
 				parsed = JSON.parse(event.data);
 			} catch (error) {
@@ -401,7 +445,7 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 				return;
 			}
 
-			if (parsed.type === 'response.completed') {
+			if (!isCAPIWebSocketError(parsed) && parsed.type === 'response.completed') {
 				this._statefulMarker = parsed.response.id;
 			}
 
@@ -478,7 +522,7 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 		const requestStartReceivedMessageCount = this._totalReceivedMessageCount;
 		const requestStartSentCharacters = this._totalSentCharacters;
 		const requestStartReceivedCharacters = this._totalReceivedCharacters;
-		const request = new ChatWebSocketActiveRequest();
+		const request = new ChatWebSocketActiveRequest(this._configurationService, this._logService);
 		request.onDidSettle(({ outcome, closeCode, closeReason, serverErrorMessage, serverErrorCode }) => {
 			const connectionDurationMs = Date.now() - (this._connectedTime ?? Date.now());
 			const requestDurationMs = Date.now() - requestStartTime;
@@ -520,7 +564,7 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 				this._activeRequest = undefined;
 			}
 		});
-		request.done.finally(() => cancelDisposable.dispose());
+		request.done.finally(() => cancelDisposable.dispose()).catch(() => { });
 
 		const { stream: _, ...rest } = body;
 		const message = {
@@ -573,11 +617,16 @@ class ChatWebSocketActiveRequest implements IChatWebSocketRequestHandle {
 	private readonly _onEvent = new Emitter<OpenAI.Responses.ResponseStreamEvent>();
 	readonly onEvent = this._onEvent.event;
 
+	private readonly _onCAPIError = new Emitter<CAPIWebSocketErrorEvent>();
+	readonly onCAPIError = this._onCAPIError.event;
+
 	private readonly _onError = new Emitter<Error>();
 	readonly onError = this._onError.event;
 
-	private readonly _onComplete = new Emitter<void>();
-	readonly onComplete = this._onComplete.event;
+	private _resolveFirstEvent!: (event: OpenAI.Responses.ResponseStreamEvent | CAPIWebSocketErrorEvent) => void;
+	private _rejectFirstEvent!: (err: Error) => void;
+	private _firstEventSettled = false;
+	readonly firstEvent: Promise<OpenAI.Responses.ResponseStreamEvent | CAPIWebSocketErrorEvent>;
 
 	private _resolve!: () => void;
 	private _reject!: (err: Error) => void;
@@ -586,10 +635,17 @@ class ChatWebSocketActiveRequest implements IChatWebSocketRequestHandle {
 
 	readonly done: Promise<void>;
 
-	constructor() {
+	constructor(
+		private readonly _configurationService: IConfigurationService,
+		private readonly _logService: ILogService,
+	) {
 		this.done = new Promise<void>((resolve, reject) => {
 			this._resolve = resolve;
 			this._reject = reject;
+		});
+		this.firstEvent = new Promise<OpenAI.Responses.ResponseStreamEvent | CAPIWebSocketErrorEvent>((resolve, reject) => {
+			this._resolveFirstEvent = resolve;
+			this._rejectFirstEvent = reject;
 		});
 	}
 
@@ -597,25 +653,38 @@ class ChatWebSocketActiveRequest implements IChatWebSocketRequestHandle {
 		this._onDidSettle = callback;
 	}
 
-	handleEvent(event: OpenAI.Responses.ResponseStreamEvent): void {
+	handleEvent(event: OpenAI.Responses.ResponseStreamEvent | CAPIWebSocketErrorEvent): void {
 		if (this._settled) {
 			return;
 		}
 
-		if (event.type === 'error') {
-			const serverErrorMessage = event.message || (event as { error?: { message?: string } }).error?.message || 'Server error';
-			const serverErrorCode = event.code || (event as { error?: { code?: string } }).error?.code || undefined;
-			const errorMessage = serverErrorCode ? `${serverErrorMessage} (${serverErrorCode})` : serverErrorMessage;
-			const error = new Error(errorMessage);
-			this._finalizeError('server_error', error, undefined, undefined, serverErrorMessage, serverErrorCode);
+		// E.g.: "github.copilot.chat.advanced.debug.simulateWebSocketResponse": "{\"type\":\"error\",\"error\":{\"code\":\"user_global_rate_limited:enterprise\",\"message\":\"Rate limit exceeded\"}}"
+		// E.g.: "github.copilot.chat.advanced.debug.simulateWebSocketResponse": "{\"type\":\"error\",\"error\":{\"code\":\"service_unavailable\",\"message\":\"service temporarily unavailable, please retry\"}}"
+		const simulateResponse = this._configurationService.getConfig(ConfigKey.TeamInternal.DebugSimulateWebSocketResponse);
+		if (simulateResponse) {
+			try {
+				event = JSON.parse(simulateResponse);
+				this._logService.info(`[ChatWebSocketManager] Simulating WebSocket response event: ${simulateResponse}`);
+			} catch (e) {
+				this._logService.error(`[ChatWebSocketManager] Failed to parse simulated WebSocket response: ${collectSingleLineErrorMessage(e)}`);
+			}
+		}
+
+		if (!this._firstEventSettled) {
+			this._firstEventSettled = true;
+			this._resolveFirstEvent(event);
+		}
+
+		if (isCAPIWebSocketError(event)) {
+			this._finalizeCAPIError(event);
 			return;
 		}
 
 		this._onEvent.fire(event);
 
-		if (event.type === 'response.completed') {
-			this._onComplete.fire();
-			this._finalizeSuccess('completed');
+		const outcome = getStreamTerminatingOutcome(event);
+		if (outcome) {
+			this._finalizeSuccess(outcome);
 		}
 	}
 
@@ -657,7 +726,20 @@ class ChatWebSocketActiveRequest implements IChatWebSocketRequestHandle {
 		this._dispose();
 	}
 
+	private _finalizeCAPIError(event: CAPIWebSocketErrorEvent): void {
+		const { code, message } = event.error;
+		this._onCAPIError.fire(event);
+		this._settled = true;
+		this._onDidSettle?.({ outcome: 'error_response', serverErrorMessage: message, serverErrorCode: code });
+		this._reject(new Error(`${message} (${code})`));
+		this._dispose();
+	}
+
 	private _finalizeError(outcome: ChatWebSocketRequestOutcome, error: Error, closeCode?: number, closeReason?: string, serverErrorMessage?: string, serverErrorCode?: string): void {
+		if (!this._firstEventSettled) {
+			this._firstEventSettled = true;
+			this._rejectFirstEvent(error);
+		}
 		this._onError.fire(error);
 		this._settled = true;
 		this._onDidSettle?.({ outcome, closeCode, closeReason, serverErrorMessage, serverErrorCode });
@@ -667,7 +749,7 @@ class ChatWebSocketActiveRequest implements IChatWebSocketRequestHandle {
 
 	private _dispose(): void {
 		this._onEvent.dispose();
+		this._onCAPIError.dispose();
 		this._onError.dispose();
-		this._onComplete.dispose();
 	}
 }
