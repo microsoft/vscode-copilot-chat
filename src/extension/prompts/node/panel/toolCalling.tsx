@@ -32,7 +32,7 @@ import { URI, UriComponents } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { LanguageModelDataPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelTextPart2, LanguageModelToolMCPSource, LanguageModelToolResult } from '../../../../vscodeTypes';
-import { isImageDataPart } from '../../../conversation/common/languageModelChatMessageHelpers';
+import { detectImageMimeType, isImageDataPart } from '../../../conversation/common/languageModelChatMessageHelpers';
 import { IResultMetadata } from '../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCall, IToolCallRound } from '../../../prompt/common/intents';
 import { toJsonSchema } from '../../../tools/common/toJsonSchema';
@@ -456,7 +456,7 @@ enum ToolInvocationOutcome {
 export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToken?: string, urlOrRequestMetadata?: string | RequestMetadata, logService?: ILogService, imageService?: IImageService) {
 	if (isImageDataPart(part)) {
 		let imageData: Uint8Array = part.data;
-		let mimeType = part.mimeType;
+		let mimeType = detectImageMimeType(part.data) ?? part.mimeType;
 
 		if (imageService) {
 			try {
@@ -473,7 +473,7 @@ export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToke
 		const isChatRequest = typeof urlOrRequestMetadata !== 'string' && (urlOrRequestMetadata?.type === RequestType.ChatCompletions || urlOrRequestMetadata?.type === RequestType.ChatMessages);
 		if (githubToken && isChatRequest && imageService) {
 			try {
-				const uri = await imageService.uploadChatImageAttachment(imageData, 'tool-result-image', mimeType ?? 'image/png', githubToken);
+			const uri = await imageService.uploadChatImageAttachment(imageData, 'tool-result-image', mimeType ?? 'image/png', githubToken);
 				if (uri) {
 					imageSource = uri.toString();
 				}
@@ -638,6 +638,12 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 	 */
 	private imageSizeBudgetLeft = (5 * 1024 * 1024) / 2; // 5MB
 
+	/**
+	 * Track total image count to stay within model limits (e.g. Gemini's max_prompt_images).
+	 * Reserve some budget for user-attached images by using half the model's limit.
+	 */
+	private imageCountBudgetLeft: number;
+
 	constructor(
 		props: T,
 		@IPromptEndpoint protected readonly endpoint: IPromptEndpoint,
@@ -649,6 +655,9 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 	) {
 		super(props);
 		this.linkedResources = this.props.content.filter((c): c is LanguageModelDataPart => c instanceof LanguageModelDataPart && c.mimeType === McpLinkedResourceToolResult.mimeType);
+		this.imageCountBudgetLeft = endpoint?.maxPromptImages !== undefined
+			? Math.max(1, Math.floor(endpoint.maxPromptImages / 2))
+			: Infinity;
 	}
 
 	async render(): Promise<PromptPiece | undefined> {
@@ -696,13 +705,19 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 			return '[Image content is not available because vision is not supported by the current model or is disabled by your organization.]';
 		}
 
+		// Check image count budget first
+		if (this.imageCountBudgetLeft <= 0) {
+			return '';
+		}
+		this.imageCountBudgetLeft--;
+
 		const githubToken = (await this.authService.getGitHubSession('any', { silent: true }))?.accessToken;
 		const uploadsEnabled = this.configurationService && this.experimentationService
 			? this.configurationService.getExperimentBasedConfig(ConfigKey.EnableChatImageUpload, this.experimentationService)
 			: false;
 
 		// Anthropic (from CAPI) currently does not support image uploads from tool calls.
-		const uploadToken = uploadsEnabled && modelCanUseMcpResultImageURL(this.endpoint) ? githubToken : undefined;
+		const uploadToken = uploadsEnabled && this.endpoint && modelCanUseMcpResultImageURL(this.endpoint) ? githubToken : undefined;
 
 		if (!uploadToken) {
 			if (this.imageSizeBudgetLeft < 0) {
@@ -715,7 +730,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 			}
 		}
 
-		return Promise.resolve(imageDataPartToTSX(part, uploadToken, this.endpoint.urlOrRequestMetadata, this.logService, this.imageService));
+		return Promise.resolve(imageDataPartToTSX(part, uploadToken, this.endpoint?.urlOrRequestMetadata, this.logService, this.imageService));
 	}
 
 	protected onTSX(part: JSONTree.PromptElementJSON) {
