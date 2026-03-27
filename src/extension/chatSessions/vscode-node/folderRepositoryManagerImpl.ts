@@ -447,7 +447,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 			return undefined;
 		}
 
-		// If the currentt branch is not the same as the requested branch, we cannot reliably determine the uncommitted changes, so skip the confirmation.
+		// If the current branch is not the same as the requested branch, we cannot reliably determine the uncommitted changes, so skip the confirmation.
 		if (branch && repository.headBranchName !== branch) {
 			return undefined;
 		}
