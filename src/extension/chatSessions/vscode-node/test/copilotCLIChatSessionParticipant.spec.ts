@@ -52,6 +52,7 @@ import { MockCliSdkSession, MockCliSdkSessionManager, MockSkillLocations, NullCo
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../copilotcli/node/userInputHelpers';
 import { CustomSessionTitleService } from '../../copilotcli/vscode-node/customSessionTitleServiceImpl';
 import { MockChatPromptFileService } from '../../copilotcli/vscode-node/test/testHelpers';
+import { ChatSessionRepositoryTracker } from '../chatSessionRepositoryTracker';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant } from '../copilotCLIChatSessionsContribution';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
 import { CopilotCLIFolderRepositoryManager } from '../folderRepositoryManagerImpl';
@@ -267,6 +268,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let itemProvider: CopilotCLIChatSessionItemProvider;
 	let cloudProvider: FakeCloudProvider;
 	let summarizer: ChatSummarizerProvider;
+	let repositoryTracker: ChatSessionRepositoryTracker;
 	let worktree: FakeChatSessionWorktreeService;
 	let worktreeCheckpointService: FakeChatSessionWorktreeCheckpointService;
 	let workspaceFolderService: FakeChatSessionWorkspaceFolderService;
@@ -321,6 +323,11 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		cloudProvider = new FakeCloudProvider();
 		summarizer = new class extends mock<ChatSummarizerProvider>() {
 			override provideChatSummary(_context: vscode.ChatContext) { return Promise.resolve('summary text'); }
+		}();
+		repositoryTracker = new class extends mock<ChatSessionRepositoryTracker>() {
+			override async trackFolderChanges() {
+				return;
+			}
 		}();
 		worktree = new FakeChatSessionWorktreeService();
 		worktreeCheckpointService = new FakeChatSessionWorktreeCheckpointService();
@@ -401,6 +408,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			promptResolver,
 			itemProvider,
 			cloudProvider,
+			repositoryTracker,
 			git,
 			models as unknown as ICopilotCLIModels,
 			new NullCopilotCLIAgents(),
@@ -744,6 +752,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			promptResolver,
 			itemProvider,
 			cloudProvider,
+			repositoryTracker,
 			git,
 			models as unknown as ICopilotCLIModels,
 			new NullCopilotCLIAgents(),
@@ -1888,6 +1897,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				promptResolver,
 				itemProvider,
 				cloudProvider,
+				repositoryTracker,
 				git,
 				models as unknown as ICopilotCLIModels,
 				agents,
@@ -2020,6 +2030,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				promptResolver,
 				itemProvider,
 				cloudProvider,
+				repositoryTracker,
 				git,
 				models as unknown as ICopilotCLIModels,
 				new NullCopilotCLIAgents(),
