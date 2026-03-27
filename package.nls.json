@@ -432,6 +432,7 @@
 	"github.copilot.command.deleteAgentSession": "Delete...",
 	"github.copilot.command.cli.sessions.resumeInTerminal": "Resume in Terminal",
 	"github.copilot.command.cli.sessions.rename": "Rename...",
+	"github.copilot.command.cli.sessions.setTitle": "Set Title",
 	"github.copilot.command.cli.compact.description": "Free up context by compacting the conversation history.",
 	"github.copilot.command.claude.sessions.rename": "Rename...",
 	"github.copilot.command.cli.sessions.openRepository": "Open Repository",

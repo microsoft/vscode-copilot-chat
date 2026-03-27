@@ -2192,6 +2192,11 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.cli.sessions.setTitle",
+				"title": "%github.copilot.command.cli.sessions.setTitle%",
+				"category": "Copilot CLI"
+			},
+			{
 				"command": "github.copilot.claude.sessions.rename",
 				"title": "%github.copilot.command.claude.sessions.rename%",
 				"icon": "$(edit)",
