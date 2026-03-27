@@ -2581,7 +2581,7 @@ async function detectPullRequestFromGitHubAPI(
 		repoInfo.id.org,
 		repoInfo.id.repo,
 		branchName,
-		{ createIfNone: false },
+		{},
 	);
 
 	if (pr?.url) {

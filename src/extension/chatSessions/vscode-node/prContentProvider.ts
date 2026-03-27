@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { IOctoKitService, PullRequestFile } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -114,7 +115,7 @@ export class PRContentProvider extends Disposable implements vscode.TextDocument
 				params.repo,
 				params.commitSha,
 				params.fileName,
-				{ createIfNone: true }
+				{ createIfNone: { detail: l10n.t('Sign in to GitHub to access Copilot cloud sessions.') } }
 			);
 
 			return content;

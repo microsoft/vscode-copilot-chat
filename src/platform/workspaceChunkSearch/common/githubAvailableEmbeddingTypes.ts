@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { RequestType } from '@vscode/copilot-api';
+import * as l10n from '@vscode/l10n';
 import { Result } from '../../../util/common/result';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { CallTracker } from '../../../util/common/telemetryCorrelationId';
@@ -99,7 +100,9 @@ export class GithubAvailableEmbeddingTypesService implements IGithubAvailableEmb
 				return initialResult;
 			}
 
-			const permissiveSession = await this._authService.getGitHubSession('permissive', { silent, createIfNone: !silent ? true : undefined });
+			const permissiveSession = silent
+				? await this._authService.getGitHubSession('permissive', { silent })
+				: await this._authService.getGitHubSession('permissive', { createIfNone: { detail: l10n.t('Sign in to GitHub with additional permissions to use workspace embeddings.') } });
 			if (!permissiveSession) {
 				return initialResult;
 			}

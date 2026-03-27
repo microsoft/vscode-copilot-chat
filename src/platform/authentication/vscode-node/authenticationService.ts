@@ -3,12 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { authentication, AuthenticationGetSessionOptions, AuthenticationGetSessionPresentationOptions, AuthenticationSession } from 'vscode';
+import { authentication, AuthenticationGetSessionOptions, AuthenticationSession } from 'vscode';
 import { TaskSingler } from '../../../util/common/taskSingler';
 import { AuthProviderId, IConfigurationService } from '../../configuration/common/configurationService';
 import { IDomainService } from '../../endpoint/common/domainService';
 import { ILogService } from '../../log/common/logService';
-import { authProviderId, BaseAuthenticationService } from '../common/authentication';
+import { authProviderId, BaseAuthenticationService, StrictAuthenticationPresentationOptions } from '../common/authentication';
 import { ICopilotTokenManager } from '../common/copilotTokenManager';
 import { ICopilotTokenStore } from '../common/copilotTokenStore';
 import { getAlignedSession, getAnyAuthSession } from './session';
@@ -40,8 +40,8 @@ export class AuthenticationService extends BaseAuthenticationService {
 		void this._handleAuthChangeEvent();
 	}
 
-	override async getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { createIfNone: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
-	override async getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { forceNewSession: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+	override async getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { createIfNone: StrictAuthenticationPresentationOptions }): Promise<AuthenticationSession>;
+	override async getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { forceNewSession: StrictAuthenticationPresentationOptions }): Promise<AuthenticationSession>;
 	override async getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
 		if (kind === 'permissive') {
 			const func = () => getAlignedSession(this._configurationService, options);

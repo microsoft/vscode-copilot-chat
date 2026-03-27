@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService, INativeEnvService } from '../../../platform/env/common/envService';
@@ -311,7 +312,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 						ctx.pullRequestDetails.repository.owner.login,
 						ctx.pullRequestDetails.repository.name,
 						ctx.pullRequestDetails.number,
-						{ createIfNone: true });
+						{ createIfNone: { detail: l10n.t('Sign in to GitHub to access Copilot cloud sessions.') } });
 					if (!success) {
 						this.logService.error(`${CLOSE_SESSION_PR_CMD}: Failed to close PR #${ctx.pullRequestDetails.number}`);
 					}

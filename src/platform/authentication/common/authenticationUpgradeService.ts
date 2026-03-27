@@ -137,7 +137,7 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 			case `${this._permissionRequestGrant}: "${this._permissionRequest}"`:
 				this.logService.trace('User granted permission');
 				try {
-					await this._authenticationService.getGitHubSession('permissive', { createIfNone: true });
+					await this._authenticationService.getGitHubSession('permissive', { createIfNone: { detail: l10n.t('Sign in to GitHub with additional permissions for enhanced features.') } });
 					this._onDidGrantAuthUpgrade.fire();
 				} catch (e) {
 					// User cancelled so show the badge

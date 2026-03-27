@@ -18,11 +18,11 @@ import { addPullRequestCommentGraphQLRequest, AssignableActor, closePullRequest,
  */
 export interface AuthOptions {
 	/**
-	 * If true, prompts the user to sign in if no authentication token is available.
-	 * If false or undefined, fails silently without prompting.
-	 * @default false
+	 * If provided, prompts the user to sign in if no authentication token is available,
+	 * displaying the given detail message to explain why authentication is needed.
+	 * If undefined, fails silently without prompting.
 	 */
-	readonly createIfNone?: boolean;
+	readonly createIfNone?: { readonly detail: string };
 }
 
 export type IGetRepositoryInfoResponseData = Endpoints['GET /repos/{owner}/{repo}']['response']['data'];

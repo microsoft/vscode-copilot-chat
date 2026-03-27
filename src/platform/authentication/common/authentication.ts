@@ -4,6 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 import type { AuthenticationGetSessionOptions, AuthenticationGetSessionPresentationOptions, AuthenticationSession } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
+
+/**
+ * A stricter version of {@link AuthenticationGetSessionPresentationOptions} that requires
+ * a `detail` message explaining why authentication is needed. This forces callers to provide
+ * meaningful context to the user instead of passing a bare `true` or `{}`.
+ */
+export type StrictAuthenticationPresentationOptions = AuthenticationGetSessionPresentationOptions & { detail: string };
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { derived } from '../../../util/vs/base/common/observableInternal';
@@ -85,7 +92,7 @@ export interface IAuthenticationService {
 	 * @throws MinimalModeError - If kind is 'permissive' and the authentication service is in minimal mode.
 	 * @throws Error - If no session is acquired (user cancels).
 	 */
-	getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { createIfNone: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+	getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { createIfNone: StrictAuthenticationPresentationOptions }): Promise<AuthenticationSession>;
 
 	/**
 	 * Gets a GitHub session capable of calling GitHub APIs.
@@ -97,7 +104,7 @@ export interface IAuthenticationService {
 	 * @throws MinimalModeError - If kind is 'permissive' and the authentication service is in minimal mode.
 	 * @throws Error - If no session is acquired (user cancels).
 	 */
-	getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { forceNewSession: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+	getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { forceNewSession: StrictAuthenticationPresentationOptions }): Promise<AuthenticationSession>;
 
 	/**
 	 * Gets a GitHub session capable of calling GitHub APIs.
@@ -109,7 +116,7 @@ export interface IAuthenticationService {
 	 * @returns Promise<undefined> - If no session is available or kind is 'permissive' and the authentication service is in minimal mode.
 	 * @see {@link isMinimalMode} for more information about minimal mode.
 	 */
-	getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined>;
+	getGitHubSession(kind: 'permissive' | 'any', options: Omit<AuthenticationGetSessionOptions, 'createIfNone' | 'forceNewSession'>): Promise<AuthenticationSession | undefined>;
 
 	/**
 	 * Checks if there is currently a Copilot token available in the cache. Does not make any network requests.
@@ -215,9 +222,9 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 
 	//#region GitHub Session
 
-	abstract getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { createIfNone: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
-	abstract getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { forceNewSession: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
-	abstract getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined>;
+	abstract getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { createIfNone: StrictAuthenticationPresentationOptions }): Promise<AuthenticationSession>;
+	abstract getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { forceNewSession: StrictAuthenticationPresentationOptions }): Promise<AuthenticationSession>;
+	abstract getGitHubSession(kind: 'permissive' | 'any', options: Omit<AuthenticationGetSessionOptions, 'createIfNone' | 'forceNewSession'>): Promise<AuthenticationSession | undefined>;
 
 	//#endregion
 

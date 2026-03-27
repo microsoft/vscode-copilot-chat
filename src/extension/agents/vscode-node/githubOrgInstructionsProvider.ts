@@ -54,7 +54,7 @@ export class GitHubOrgInstructionsProvider extends Disposable implements vscode.
 
 	private async pollInstructions(orgId: string): Promise<void> {
 		try {
-			const instructions = await this.octoKitService.getOrgCustomInstructions(orgId, { createIfNone: false });
+			const instructions = await this.octoKitService.getOrgCustomInstructions(orgId, {});
 			if (!instructions) {
 				await this.githubOrgChatResourcesService.clearCache(PromptsType.instructions, orgId);
 				this.logService.trace(`[GitHubOrgInstructionsProvider] No custom instructions found for org ${orgId}`);
