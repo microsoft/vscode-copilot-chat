@@ -20,7 +20,7 @@ Base conclusions on evidence from logs. Do not guess.
 
 ## Data Source
 
-- Current session log directory: `{{VSCODE_CURRENT_SESSION_LOG}}`
+- Target session log directory/directories for analysis: `{{VSCODE_TARGET_SESSION_LOG}}`
 
 Use direct debug log files written by Copilot Chat:
 

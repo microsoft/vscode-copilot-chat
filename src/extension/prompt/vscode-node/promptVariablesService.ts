@@ -38,7 +38,7 @@ export class PromptVariablesServiceImpl implements IPromptVariablesService {
 				const userPromptsFolderUri = vscode.Uri.joinPath(userFolderUri, 'prompts');
 				return userPromptsFolderUri.fsPath;
 			}],
-			['VSCODE_CURRENT_SESSION_LOG', sessionId => {
+			['VSCODE_TARGET_SESSION_LOG', sessionId => {
 				const token = getCurrentCapturingToken();
 				const sessionIds = token?.debugTargetSessionIds;
 				if (sessionIds && sessionIds.length > 0) {

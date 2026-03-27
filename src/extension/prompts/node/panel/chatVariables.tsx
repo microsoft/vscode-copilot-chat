@@ -30,7 +30,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { DiagnosticSeverity } from '../../../../util/vs/workbench/api/common/extHostTypes/diagnostic';
 import { ChatReferenceBinaryData, ChatReferenceDiagnostic, LanguageModelToolResult2, Range, Uri } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
-import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile, isPromptFile, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile, isPromptFile, isSessionReference, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { ToolName } from '../../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../../tools/common/toolSchemaNormalizer';
@@ -48,6 +48,7 @@ import { PanelChatBasePrompt } from './panelChatBasePrompt';
 import { PromptFile } from './promptFile';
 import { sendInvokedToolTelemetry, toolCallErrorToResult, ToolResult, ToolResultMetadata } from './toolCalling';
 import { IFileTreeData, workspaceVisualFileTree } from './workspace/visualFileTree';
+import { sessionResourceToId } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 
 export interface ChatVariablesProps extends BasePromptElementProps, EmbeddedInsideUserMessage {
 	readonly chatVariables: ChatVariablesCollection;
@@ -238,6 +239,17 @@ export async function renderChatVariables(chatVariables: ChatVariablesCollection
 	for (const variable of chatVariables) {
 		const { uniqueName: variableName, value: variableValue, reference } = variable;
 		if (isInstructionFile(variable) || isCustomizationsIndex(variable) || isPromptFile(variable)) { // instructions and index are handled in the `CustomInstructions` element, prompt file as part of the UserQuery
+			continue;
+		}
+
+		if (isSessionReference(variable)) {
+			const uri = variableValue as URI;
+			const attrs: Record<string, string> = {};
+			if (variableName) {
+				attrs.id = `${variableName} (${sessionResourceToId(uri)})`;
+			}
+			attrs.filePath = uri.toString();
+			elements.push(<Tag name='attachment' attrs={attrs} />);
 			continue;
 		}
 
