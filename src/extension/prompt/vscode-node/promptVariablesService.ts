@@ -97,7 +97,7 @@ export class PromptVariablesServiceImpl implements IPromptVariablesService {
 		return [
 			'The following template variables are available for this session:',
 			...lines,
-			'When a skill or instruction references {{VARIABLE_NAME}}, substitute the corresponding value above.',
+			'When a skill or instruction references {{VSCODE_VARIABLE_NAME}}, substitute the corresponding value above.',
 		].join('\n');
 	}
 
