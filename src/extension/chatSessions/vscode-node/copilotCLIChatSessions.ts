@@ -2317,12 +2317,11 @@ export function registerCLIChatCommands(
 		}
 
 		const confirmAction = l10n.t('Discard Changes');
-		const cancelAction = l10n.t('Cancel');
 		const message = resources.length === 1
 			? l10n.t('Are you sure you want to discard the changes in \'{0}\'? This action cannot be undone.', basename(resources[0]))
 			: l10n.t('Are you sure you want to discard the changes in these {0} files? This action cannot be undone.', resources.length);
 
-		const choice = await vscode.window.showWarningMessage(message, { modal: true }, confirmAction, cancelAction);
+		const choice = await vscode.window.showWarningMessage(message, { modal: true }, confirmAction);
 		if (choice !== confirmAction) {
 			return;
 		}
