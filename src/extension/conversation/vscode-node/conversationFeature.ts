@@ -17,6 +17,7 @@ import { IGitCommitMessageService } from '../../../platform/git/common/gitCommit
 import { ILogService } from '../../../platform/log/common/logService';
 import { ISettingsEditorSearchService } from '../../../platform/settingsEditor/common/settingsEditorSearchService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { ChatExtGlobalPerfMark, markChatExtGlobal } from '../../../util/common/performance';
 import { isUri } from '../../../util/common/types';
 import { DeferredPromise } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -94,6 +95,7 @@ export class ConversationFeature implements IExtensionContribution {
 			this.activated = true;
 			activationBlockerDeferred.complete();
 		} else {
+			markChatExtGlobal(ChatExtGlobalPerfMark.WillWaitForCopilotToken);
 			this.logService.info(`ConversationFeature: Waiting for copilot token to activate conversation feature`);
 		}
 
@@ -101,6 +103,7 @@ export class ConversationFeature implements IExtensionContribution {
 			const hasSession = !!authenticationService.copilotToken;
 			this.logService.info(`ConversationFeature: onDidAuthenticationChange has token: ${hasSession}`);
 			if (hasSession) {
+				markChatExtGlobal(ChatExtGlobalPerfMark.DidWaitForCopilotToken);
 				this.activated = true;
 			} else {
 				this.activated = false;

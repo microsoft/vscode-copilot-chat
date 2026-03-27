@@ -16,7 +16,6 @@ import { ISearchService } from '../../../platform/search/common/searchService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { IRerankerService } from '../../../platform/workspaceChunkSearch/common/rerankerService';
-import { KeywordItem, ResolvedWorkspaceChunkQuery } from '../../../platform/workspaceChunkSearch/common/workspaceChunkSearch';
 import { IWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { raceCancellation } from '../../../util/vs/base/common/async';
@@ -84,15 +83,6 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 	private async getEndpoint() {
 		this._endpoint = this._endpoint ?? await this._endpointProvider.getChatEndpoint('copilot-fast');
 		return this._endpoint;
-	}
-
-	private getKeywordsForContent(text: string): readonly KeywordItem[] {
-		// extract all identifiers in the selected text
-		const identifiers = new Set<string>();
-		for (const match of text.matchAll(/(-?\d*\.\d\w*)|([^\`\~\!\@\#\%\^\&\*\(\)\-\=\+\[\{\]\}\\\|\;\:\'\"\,\.\<\>\/\?\s]+)/g)) {
-			identifiers.add(match[0]);
-		}
-		return Array.from(identifiers.values(), k => ({ keyword: k, variations: [] }));
 	}
 
 	private resetFeedbackContext() {
@@ -166,12 +156,7 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 					maxResults: MAX_CHUNKS_RESULTS,
 				},
 				{
-					rawQuery: query,
-					resolveQueryAndKeywords: async (): Promise<ResolvedWorkspaceChunkQuery> => ({
-						rephrasedQuery: query,
-						keywords: this.getKeywordsForContent(query),
-					}),
-					resolveQuery: async () => query,
+					queryText: query,
 				},
 				{
 					globPatterns: {
@@ -280,12 +265,7 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 							maxResults: MAX_CHUNKS_RESULTS,
 						},
 						{
-							rawQuery: query,
-							resolveQueryAndKeywords: async (): Promise<ResolvedWorkspaceChunkQuery> => ({
-								rephrasedQuery: query,
-								keywords: this.getKeywordsForContent(query),
-							}),
-							resolveQuery: async () => query,
+							queryText: query,
 						},
 						{
 							globPatterns: {

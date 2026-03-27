@@ -101,7 +101,7 @@ export class SimulationCodeSearchChunkSearchService extends Disposable implement
 				githubRepoId: repo,
 				indexedCommit: undefined,
 				localRepoRoot: undefined,
-			}, await query.resolveQuery(token), sizing.maxResults ?? 128, options, telemetryInfo, token);
+			}, query.queryText, sizing.maxResults ?? 128, options, telemetryInfo, token);
 			return {
 				chunks: results.chunks,
 			};

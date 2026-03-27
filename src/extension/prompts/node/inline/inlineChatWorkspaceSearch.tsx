@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { BasePromptElementProps, PromptElement, PromptSizing } from '@vscode/prompt-tsx';
-import { KeywordItem, ResolvedWorkspaceChunkQuery } from '../../../../platform/workspaceChunkSearch/common/workspaceChunkSearch';
 import { TelemetryCorrelationId } from '../../../../util/common/telemetryCorrelationId';
 import { Diagnostic } from '../../../../vscodeTypes';
 import { IDocumentContext } from '../../../prompt/node/documentContext';
@@ -57,12 +56,7 @@ export class InlineChatWorkspaceSearch extends PromptElement<InlineChatWorkspace
 		return {
 			telemetryInfo: new TelemetryCorrelationId('InlineChatWorkspaceSearch::getChunkSearchPropsForSelection'),
 			query: {
-				rawQuery: query,
-				resolveQueryAndKeywords: async (): Promise<ResolvedWorkspaceChunkQuery> => ({
-					rephrasedQuery: query,
-					keywords: getKeywordsForContent(selectedText),
-				}),
-				resolveQuery: async () => query,
+				queryText: query
 			},
 			// do not return matches in the current file
 			globPatterns: { exclude: [document.uri.fsPath] }, // TODO: use relativePattern once supported
@@ -77,25 +71,11 @@ export class InlineChatWorkspaceSearch extends PromptElement<InlineChatWorkspace
 		return {
 			telemetryInfo: new TelemetryCorrelationId('InlineChatWorkspaceSearch::getChunkSearchPropsForDiagnostics'),
 			query: {
-				rawQuery: query,
-				resolveQueryAndKeywords: async (): Promise<ResolvedWorkspaceChunkQuery> => ({
-					rephrasedQuery: query,
-					keywords: getKeywordsForContent(messages),
-				}),
-				resolveQuery: async () => query,
+				queryText: query
 			},
 			// do not return matches in the current file
 			globPatterns: { exclude: [document.uri.fsPath] },
 			maxResults: 3,
 		};
 	}
-}
-
-function getKeywordsForContent(text: string): readonly KeywordItem[] {
-	// extract all identifiers in the selected text
-	const identifiers = new Set<string>();
-	for (const match of text.matchAll(/(-?\d*\.\d\w*)|([^\`\~\!\@\#\%\^\&\*\(\)\-\=\+\[\{\]\}\\\|\;\:\'\"\,\.\<\>\/\?\s]+)/g)) {
-		identifiers.add(match[0]);
-	}
-	return Array.from(identifiers.values(), k => ({ keyword: k, variations: [] }));
 }
