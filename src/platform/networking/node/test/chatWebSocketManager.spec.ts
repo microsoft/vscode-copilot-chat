@@ -168,6 +168,7 @@ describe('ChatWebSocketManager', () => {
 			);
 
 			const capiError = JSON.stringify({ type: 'error', error: { code: 'rate_limited', message: 'Too many requests' } });
+			const donePromise = handle.done.catch(() => { });
 			ws.simulateMessage(capiError);
 
 			const first = await handle.firstEvent;
@@ -175,6 +176,7 @@ describe('ChatWebSocketManager', () => {
 			expect((first as CAPIWebSocketErrorEvent).error.code).toBe('rate_limited');
 
 			await expect(handle.done).rejects.toThrow('Too many requests');
+			await donePromise;
 		});
 
 		it('rejects when connection closes before any event', async () => {
@@ -207,6 +209,7 @@ describe('ChatWebSocketManager', () => {
 			handle.onCAPIError(e => capiErrors.push(e));
 
 			const capiError = JSON.stringify({ type: 'error', error: { code: 'quota_exceeded', message: 'Monthly quota exceeded' } });
+			handle.done.catch(() => { });
 			ws.simulateMessage(capiError);
 
 			expect(capiErrors).toHaveLength(1);
@@ -229,6 +232,7 @@ describe('ChatWebSocketManager', () => {
 			handle.onEvent(e => events.push(e));
 
 			const capiError = JSON.stringify({ type: 'error', error: { code: 'rate_limited', message: 'Rate limited' } });
+			handle.done.catch(() => { });
 			ws.simulateMessage(capiError);
 
 			expect(events).toHaveLength(0);
@@ -259,6 +263,7 @@ describe('ChatWebSocketManager', () => {
 					}
 				}
 			});
+			handle.done.catch(() => { });
 			ws.simulateMessage(capiError);
 
 			expect(capiErrors[0].copilot_quota_snapshots).toBeDefined();
@@ -296,10 +301,12 @@ describe('ChatWebSocketManager', () => {
 			);
 
 			const capiError = JSON.stringify({ type: 'error', error: { code: 'rate_limited', message: 'Rate limited' } });
+			const donePromise = handle.done.catch(() => { });
 			ws.simulateMessage(capiError);
 
 			expect(connection.statefulMarker).toBeUndefined();
 			await expect(handle.done).rejects.toThrow();
+			await donePromise;
 		});
 	});
 
