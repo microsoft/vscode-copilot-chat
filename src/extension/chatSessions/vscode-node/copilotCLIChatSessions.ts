@@ -418,10 +418,14 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				}
 			}
 
+			const firstCheckpointRef = lastCheckpointRef
+				? `${lastCheckpointRef.slice(0, lastCheckpointRef.lastIndexOf('/'))}/0`
+				: undefined;
+
 			metadata = {
 				isolationMode: IsolationMode.Workspace,
 				workingDirectoryPath: workingDirectory?.fsPath,
-				firstCheckpointRef: sessionRequestDetails[0]?.checkpointRef,
+				firstCheckpointRef,
 				lastCheckpointRef
 			} satisfies { readonly [key: string]: unknown };
 		}
