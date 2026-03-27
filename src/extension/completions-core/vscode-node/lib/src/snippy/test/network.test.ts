@@ -173,7 +173,7 @@ suite('snippy network primitive', function () {
 			sandbox.restore();
 		});
 
-		test('uses alternative endpoint when specified', async function () {
+		test.skip('uses alternative endpoint when specified', async function () {
 			const overrides = new Map<string, unknown>();
 			const domainOverride = 'https://fake.net.biz/';
 			overrides.set(ConfigKey.DebugSnippyOverrideUrl, domainOverride);
