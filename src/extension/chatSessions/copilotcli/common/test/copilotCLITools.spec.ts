@@ -625,9 +625,7 @@ describe('CopilotCLITools', () => {
 				}
 			};
 			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall, parentToolCallId: string | undefined];
-			expect(completed.toolSpecificData).toBeDefined();
-			const mcpData = completed.toolSpecificData as any;
-			expect(mcpData.output).toHaveLength(0);
+			expect(completed.toolSpecificData).toBeUndefined();
 		});
 
 		it('handles MCP tool with undefined result.contents', () => {
@@ -649,9 +647,7 @@ describe('CopilotCLITools', () => {
 				}
 			};
 			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall, parentToolCallId: string | undefined];
-			expect(completed.toolSpecificData).toBeDefined();
-			const mcpData = completed.toolSpecificData as any;
-			expect(mcpData.output).toHaveLength(0);
+			expect(completed.toolSpecificData).toBeUndefined();
 		});
 	});
 
