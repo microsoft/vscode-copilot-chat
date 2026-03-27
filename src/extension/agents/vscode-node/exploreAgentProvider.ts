@@ -139,8 +139,13 @@ Remember: Your goal is searching efficiently through MAXIMUM PARALLELISM to repo
 		const extModel = this._configurationService.getConfig(ConfigKey.ExploreAgentModel);
 		const model: string | readonly string[] = coreDefaultModel || extModel || EXPLORE_AGENT_FALLBACK_MODELS;
 
+		const registeredToolIds = new Set(vscode.lm.tools.map(t => t.id));
+		const tools = BASE_EXPLORE_AGENT_CONFIG.tools.filter(toolId => {
+			return toolId.startsWith('vscode/') || registeredToolIds.has(toolId);
+		});
+		
 		return {
-			...BASE_EXPLORE_AGENT_CONFIG,
+			...BASE_EXPLORE_AGENT_CONFIG, tools,
 			body: ExploreAgentProvider.buildAgentBody(),
 			model,
 		};
