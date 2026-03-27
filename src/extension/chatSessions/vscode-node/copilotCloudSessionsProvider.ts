@@ -1522,7 +1522,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 
 		stream.progress(vscode.l10n.t('Fetching pull request details'));
-		const pullRequest = await this.findPR(number, { retries: 5, repository: selectedRepository });
+		const pullRequest = await this.findPR(number, { retries: 7, repository: selectedRepository });
 		if (!pullRequest) {
 			throw new Error(`Failed to find pull request #${number} after delegation.`);
 		}
