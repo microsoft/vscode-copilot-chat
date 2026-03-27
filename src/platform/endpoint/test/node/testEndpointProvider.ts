@@ -197,7 +197,7 @@ export class TestEndpointProvider implements IEndpointProvider {
 		if (requestOrFamilyOrModel === 'copilot-base') {
 			return await this.getChatEndpointInfo(this.gpt4ModelToRunAgainst ?? CHAT_MODEL.GPT41, await this._modelLabChatModelMetadata, await this._prodChatModelMetadata);
 		} else {
-			return await this.getChatEndpointInfo(this.gpt4oMiniModelToRunAgainst ?? CopilotFastChatEndpoint.fallbackFamily, await this._modelLabChatModelMetadata, await this._prodChatModelMetadata);
+			return await this.getChatEndpointInfo(this.gpt4oMiniModelToRunAgainst ?? CHAT_MODEL.GPT4OMINI, await this._modelLabChatModelMetadata, await this._prodChatModelMetadata);
 		}
 	}
 	async getEmbeddingsEndpoint(family?: EmbeddingsEndpointFamily): Promise<IEmbeddingsEndpoint> {
