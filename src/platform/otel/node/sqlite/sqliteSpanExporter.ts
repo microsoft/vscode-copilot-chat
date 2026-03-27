@@ -11,10 +11,9 @@ import type { OTelSqliteStore } from './otelSqliteStore';
 /**
  * OTel SpanExporter that writes completed spans into the SQLite store.
  *
- * This is the proper OTel-native way to persist spans, replacing the
- * antipattern of subscribing to onDidCompleteSpan from the contribution layer.
- * The BatchSpanProcessor calls export() in batches, and each ReadableSpan
- * is converted to the store's insertSpan() format.
+ * Registered as a BatchSpanProcessor exporter so spans flow through the
+ * standard OTel pipeline. Each ReadableSpan is converted to ICompletedSpanData
+ * and inserted into the store.
  */
 export class SqliteSpanExporter implements SpanExporter {
 	constructor(private readonly _store: OTelSqliteStore) { }
