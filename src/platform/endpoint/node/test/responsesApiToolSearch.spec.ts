@@ -4,16 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
-import { describe, expect, it, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatLocation } from '../../../chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../../configuration/test/common/inMemoryConfigurationService';
-import { IResponseDelta, OpenAiToolSearchTool } from '../../../networking/common/fetch';
+import { IResponseDelta } from '../../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions } from '../../../networking/common/networking';
-import { nonDeferredToolNames } from '../../../networking/common/toolSearch';
-import { createPlatformServices } from '../../../test/node/services';
+import { IToolDeferralService } from '../../../networking/common/toolDeferralService';
 import { TelemetryData } from '../../../telemetry/common/telemetryData';
+import { createPlatformServices } from '../../../test/node/services';
 import { createResponsesRequestBody, OpenAIResponsesProcessor } from '../responsesApi';
 
 function createMockEndpoint(model: string): IChatEndpoint {
@@ -58,16 +58,21 @@ function createMockOptions(overrides: Partial<ICreateEndpointBodyOptions> = {}):
 	} as ICreateEndpointBodyOptions;
 }
 
-describe('createResponsesRequestBody tool search', () => {
+describe('createResponsesRequestBody tools', () => {
 	let services: ReturnType<typeof createPlatformServices>;
 	let accessor: ReturnType<ReturnType<typeof createPlatformServices>['createTestingAccessor']>;
 
 	beforeEach(() => {
 		services = createPlatformServices();
+		const coreNonDeferred = new Set(['read_file', 'list_dir', 'grep_search', 'semantic_search', 'file_search',
+			'replace_string_in_file', 'create_file', 'run_in_terminal', 'get_terminal_output',
+			'get_errors', 'manage_todo_list', 'runSubagent', 'search_subagent', 'execution_subagent',
+			'runTests', 'tool_search', 'view_image', 'fetch_webpage']);
+		services.define(IToolDeferralService, { _serviceBrand: undefined, isNonDeferredTool: (name: string) => coreNonDeferred.has(name) });
 		accessor = services.createTestingAccessor();
 	});
 
-	it('does not add tool_search or defer_loading when tool search is disabled', () => {
+	it('passes tools through without defer_loading when tool search disabled', () => {
 		const endpoint = createMockEndpoint('gpt-5.4-preview');
 		const configService = accessor.get(IConfigurationService) as InMemoryConfigurationService;
 		configService.setConfig(ConfigKey.ResponsesApiToolSearchEnabled, false);
@@ -78,13 +83,11 @@ describe('createResponsesRequestBody tool search', () => {
 
 		const tools = body.tools as any[];
 		expect(tools).toBeDefined();
-		// No tool_search tool should be present
 		expect(tools.find(t => t.type === 'tool_search')).toBeUndefined();
-		// No tool should have defer_loading
 		expect(tools.every(t => !t.defer_loading)).toBe(true);
 	});
 
-	it('adds hosted tool_search and marks deferred tools in server mode', () => {
+	it('adds client tool_search and defer_loading when enabled', () => {
 		const endpoint = createMockEndpoint('gpt-5.4-preview');
 		const configService = accessor.get(IConfigurationService) as InMemoryConfigurationService;
 		configService.setConfig(ConfigKey.ResponsesApiToolSearchEnabled, true);
@@ -96,49 +99,18 @@ describe('createResponsesRequestBody tool search', () => {
 		const tools = body.tools as any[];
 		expect(tools).toBeDefined();
 
-		// Should have tool_search tool
+		// Should have client-executed tool_search
 		const toolSearchTool = tools.find(t => t.type === 'tool_search');
 		expect(toolSearchTool).toBeDefined();
+		expect(toolSearchTool.execution).toBe('client');
 
-		// Non-deferred tools (read_file, grep_search) should NOT have defer_loading
-		const readFile = tools.find(t => t.name === 'read_file');
-		expect(readFile).toBeDefined();
-		expect(readFile.defer_loading).toBeUndefined();
-
-		const grepSearch = tools.find(t => t.name === 'grep_search');
-		expect(grepSearch).toBeDefined();
-		expect(grepSearch.defer_loading).toBeUndefined();
+		// Non-deferred tools should NOT have defer_loading
+		expect(tools.find(t => t.name === 'read_file')?.defer_loading).toBeUndefined();
+		expect(tools.find(t => t.name === 'grep_search')?.defer_loading).toBeUndefined();
 
 		// Deferred tools should have defer_loading: true
-		const mcpTool = tools.find(t => t.name === 'some_mcp_tool');
-		expect(mcpTool).toBeDefined();
-		expect(mcpTool.defer_loading).toBe(true);
-
-		const anotherTool = tools.find(t => t.name === 'another_deferred_tool');
-		expect(anotherTool).toBeDefined();
-		expect(anotherTool.defer_loading).toBe(true);
-	});
-
-	it('does not add tool_search tool in client mode', () => {
-		const endpoint = createMockEndpoint('gpt-5.4-preview');
-		const configService = accessor.get(IConfigurationService) as InMemoryConfigurationService;
-		configService.setConfig(ConfigKey.ResponsesApiToolSearchEnabled, true);
-		configService.setConfig(ConfigKey.ResponsesApiToolSearchMode, 'client');
-
-		const body = accessor.get(IInstantiationService).invokeFunction(
-			createResponsesRequestBody, createMockOptions(), endpoint.model, endpoint
-		);
-
-		const tools = body.tools as any[];
-		expect(tools).toBeDefined();
-
-		// No hosted tool_search tool in client mode
-		expect(tools.find(t => t.type === 'tool_search')).toBeUndefined();
-
-		// But deferred tools should still be marked
-		const mcpTool = tools.find(t => t.name === 'some_mcp_tool');
-		expect(mcpTool).toBeDefined();
-		expect(mcpTool.defer_loading).toBe(true);
+		expect(tools.find(t => t.name === 'some_mcp_tool')?.defer_loading).toBe(true);
+		expect(tools.find(t => t.name === 'another_deferred_tool')?.defer_loading).toBe(true);
 	});
 
 	it('does not defer tools for unsupported models', () => {
@@ -151,7 +123,6 @@ describe('createResponsesRequestBody tool search', () => {
 		);
 
 		const tools = body.tools as any[];
-		expect(tools).toBeDefined();
 		expect(tools.find(t => t.type === 'tool_search')).toBeUndefined();
 		expect(tools.every(t => !t.defer_loading)).toBe(true);
 	});
@@ -167,65 +138,8 @@ describe('createResponsesRequestBody tool search', () => {
 		);
 
 		const tools = body.tools as any[];
-		expect(tools).toBeDefined();
 		expect(tools.find(t => t.type === 'tool_search')).toBeUndefined();
 		expect(tools.every(t => !t.defer_loading)).toBe(true);
-	});
-
-	it('does not defer tools for subagent requests', () => {
-		const endpoint = createMockEndpoint('gpt-5.4-preview');
-		const configService = accessor.get(IConfigurationService) as InMemoryConfigurationService;
-		configService.setConfig(ConfigKey.ResponsesApiToolSearchEnabled, true);
-
-		const options = createMockOptions({
-			telemetryProperties: { subType: 'subagent_search' }
-		});
-		const body = accessor.get(IInstantiationService).invokeFunction(
-			createResponsesRequestBody, options, endpoint.model, endpoint
-		);
-
-		const tools = body.tools as any[];
-		expect(tools).toBeDefined();
-		expect(tools.find(t => t.type === 'tool_search')).toBeUndefined();
-		expect(tools.every(t => !t.defer_loading)).toBe(true);
-	});
-
-	it('tool_search is the first tool in the array', () => {
-		const endpoint = createMockEndpoint('gpt-5.4-preview');
-		const configService = accessor.get(IConfigurationService) as InMemoryConfigurationService;
-		configService.setConfig(ConfigKey.ResponsesApiToolSearchEnabled, true);
-
-		const body = accessor.get(IInstantiationService).invokeFunction(
-			createResponsesRequestBody, createMockOptions(), endpoint.model, endpoint
-		);
-
-		const tools = body.tools as any[];
-		expect(tools[0]).toEqual({ type: 'tool_search' } as OpenAiToolSearchTool);
-	});
-
-	it('all nonDeferredToolNames are not deferred when tool search is enabled', () => {
-		const endpoint = createMockEndpoint('gpt-5.4-preview');
-		const configService = accessor.get(IConfigurationService) as InMemoryConfigurationService;
-		configService.setConfig(ConfigKey.ResponsesApiToolSearchEnabled, true);
-
-		// Create tools with all non-deferred names
-		const tools = [...nonDeferredToolNames].map(name => ({
-			type: 'function' as const,
-			function: { name, description: `Tool ${name}`, parameters: { type: 'object', properties: {} } }
-		}));
-		const options = createMockOptions({ requestOptions: { tools } });
-
-		const body = accessor.get(IInstantiationService).invokeFunction(
-			createResponsesRequestBody, options, endpoint.model, endpoint
-		);
-
-		const resultTools = body.tools as any[];
-		for (const tool of resultTools) {
-			if (tool.type === 'tool_search') {
-				continue;
-			}
-			expect(tool.defer_loading, `Tool ${tool.name} should not be deferred`).toBeUndefined();
-		}
 	});
 });
 
@@ -273,9 +187,21 @@ describe('OpenAIResponsesProcessor tool search events', () => {
 		});
 	});
 
-	it('handles tool_search_call done with arguments', () => {
+	it('handles client tool_search_call as copilotToolCall', () => {
 		const processor = createProcessor();
 		const deltas = collectDeltas(processor, [
+			{
+				type: 'response.output_item.added',
+				output_index: 0,
+				item: {
+					type: 'tool_search_call' as any,
+					id: 'ts_002',
+					execution: 'client',
+					call_id: 'call_abc',
+					status: 'in_progress',
+					arguments: {},
+				} as any,
+			},
 			{
 				type: 'response.output_item.done',
 				output_index: 0,
@@ -285,18 +211,22 @@ describe('OpenAIResponsesProcessor tool search events', () => {
 					execution: 'client',
 					call_id: 'call_abc',
 					status: 'completed',
-					arguments: { goal: 'Find shipping tools' },
+					arguments: { query: 'Find shipping tools' },
 				} as any,
 			}
 		]);
 
-		expect(deltas).toHaveLength(1);
-		expect(deltas[0].serverToolCalls).toBeDefined();
-		expect(deltas[0].serverToolCalls![0]).toMatchObject({
-			isServer: true,
+		// First delta: beginToolCalls for tool_search
+		expect(deltas[0].beginToolCalls).toBeDefined();
+		expect(deltas[0].beginToolCalls![0].name).toBe('tool_search');
+		expect(deltas[0].beginToolCalls![0].id).toBe('call_abc');
+
+		// Second delta: completed copilotToolCall
+		expect(deltas[1].copilotToolCalls).toBeDefined();
+		expect(deltas[1].copilotToolCalls![0]).toMatchObject({
+			id: 'call_abc',
 			name: 'tool_search',
-			id: 'ts_002',
-			args: { goal: 'Find shipping tools' },
+			arguments: '{"query":"Find shipping tools"}',
 		});
 	});
 

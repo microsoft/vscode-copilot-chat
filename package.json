@@ -3296,6 +3296,15 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.responsesApi.toolSearchTool.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.responsesApi.toolSearchTool.enabled%",
+						"tags": [
+							"preview",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.conversationTranscriptLookup.enabled": {
 						"type": "boolean",
 						"default": false,

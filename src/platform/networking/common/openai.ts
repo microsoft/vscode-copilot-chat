@@ -302,3 +302,26 @@ export interface TokenLogProb {
 export interface ChoiceLogProbsContent extends TokenLogProb {
 	top_logprobs: TokenLogProb[];
 }
+
+// ── Responses API tool search ─────────────────────────────────────────
+
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
+import { IChatEndpoint } from './networking';
+
+/** Model ID prefixes that support Responses API tool search. Per OpenAI docs: "Only gpt-5.4 and later models support tool_search." */
+export const OPENAI_TOOL_SEARCH_SUPPORTED_MODELS = [
+	'gpt-5.4',
+] as const;
+
+export function isResponsesApiToolSearchEnabled(
+	endpoint: IChatEndpoint | string,
+	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService,
+): boolean {
+	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
+	if (!OPENAI_TOOL_SEARCH_SUPPORTED_MODELS.some(prefix => effectiveModelId.toLowerCase().startsWith(prefix))) {
+		return false;
+	}
+	return configurationService.getExperimentBasedConfig(ConfigKey.ResponsesApiToolSearchEnabled, experimentationService);
+}
