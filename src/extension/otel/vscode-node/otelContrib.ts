@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import os from 'os';
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IOTelService } from '../../../platform/otel/common/otelService';
@@ -54,7 +55,7 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 			} else {
 				// Interactive: show save dialog with default filename
 				const result = await vscode.window.showSaveDialog({
-					defaultUri: vscode.Uri.file('agent-traces.db'),
+					defaultUri: vscode.Uri.file(os.homedir() + '/agent-traces.db'),
 					filters: { 'SQLite Database': ['db'] },
 					title: 'Export Agent Traces DB',
 				});
