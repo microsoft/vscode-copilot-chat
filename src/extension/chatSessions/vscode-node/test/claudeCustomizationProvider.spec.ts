@@ -124,18 +124,22 @@ describe('ClaudeCustomizationProvider', () => {
 			expect(unsupported![1]).toBe(FakeChatSessionCustomizationType.Prompt);
 		});
 
-		it('scopes to .claude workspace subpath', () => {
-			expect(ClaudeCustomizationProvider.metadata.workspaceSubpaths).toEqual(['.claude']);
+		it('does not expose workspaceSubpaths', () => {
+			expect('workspaceSubpaths' in ClaudeCustomizationProvider.metadata).toBe(false);
 		});
 	});
 
 	describe('provideChatSessionCustomizations', () => {
+		beforeEach(() => {
+			mockWorkspaceService.setFolders([URI.file('/workspace')]);
+		});
+
 		it('returns empty array when no files exist', async () => {
 			const items = await provider.provideChatSessionCustomizations(undefined!);
 			expect(items).toEqual([]);
 		});
 
-		it('returns instructions with Instructions type', async () => {
+		it('returns instructions under .claude/ paths', async () => {
 			const uri = URI.file('/workspace/.claude/setup.instructions.md');
 			mockPromptFileService.setInstructions([{ uri }]);
 
@@ -146,7 +150,18 @@ describe('ClaudeCustomizationProvider', () => {
 			expect(items[0].name).toBe('setup');
 		});
 
-		it('returns skills with Skill type and derives name from parent dir', async () => {
+		it('filters out instructions not under .claude/', async () => {
+			mockPromptFileService.setInstructions([
+				{ uri: URI.file('/workspace/.github/copilot-instructions.md') },
+				{ uri: URI.file('/workspace/root.instructions.md') },
+			]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const instructionItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Instructions);
+			expect(instructionItems).toHaveLength(0);
+		});
+
+		it('returns skills under .claude/skills/', async () => {
 			const uri = URI.file('/workspace/.claude/skills/my-skill/SKILL.md');
 			mockPromptFileService.setSkills([{ uri }]);
 
@@ -157,9 +172,30 @@ describe('ClaudeCustomizationProvider', () => {
 			expect(items[0].name).toBe('my-skill');
 		});
 
+		it('filters out skills not under .claude/', async () => {
+			mockPromptFileService.setSkills([
+				{ uri: URI.file('/workspace/.github/skills/copilot-skill/SKILL.md') },
+				{ uri: URI.file('/workspace/.copilot/skills/other/SKILL.md') },
+			]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const skillItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Skill);
+			expect(skillItems).toHaveLength(0);
+		});
+
+		it('includes items from user home .claude/ directory', async () => {
+			const uri = URI.file('/home/user/.claude/global.instructions.md');
+			mockPromptFileService.setInstructions([{ uri }]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const instructionItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Instructions);
+			expect(instructionItems).toHaveLength(1);
+			expect(instructionItems[0].uri).toBe(uri);
+		});
+
 		it('returns instructions and skills combined', async () => {
-			mockPromptFileService.setInstructions([{ uri: URI.file('/b.instructions.md') }]);
-			mockPromptFileService.setSkills([{ uri: URI.file('/skills/c/SKILL.md') }]);
+			mockPromptFileService.setInstructions([{ uri: URI.file('/workspace/.claude/b.instructions.md') }]);
+			mockPromptFileService.setSkills([{ uri: URI.file('/workspace/.claude/skills/c/SKILL.md') }]);
 
 			const items = await provider.provideChatSessionCustomizations(undefined!);
 			expect(items).toHaveLength(2);

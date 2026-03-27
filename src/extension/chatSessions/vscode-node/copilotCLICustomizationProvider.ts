@@ -6,10 +6,15 @@
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { AGENT_FILE_EXTENSION, INSTRUCTION_FILE_EXTENSION, SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { basename } from '../../../util/vs/base/common/resources';
+import { URI } from '../../../util/vs/base/common/uri';
 import { IChatPromptFileService } from '../common/chatPromptFileService';
+
+/** Workspace-relative path prefixes that are relevant to Copilot CLI. */
+const CLI_SUBPATHS = ['.github/', '.copilot/'];
 
 export class CopilotCLICustomizationProvider extends Disposable implements vscode.ChatSessionCustomizationProvider {
 
@@ -21,12 +26,12 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 			label: 'Copilot CLI',
 			iconId: 'worktree',
 			unsupportedTypes: [vscode.ChatSessionCustomizationType.Hook, vscode.ChatSessionCustomizationType.Prompt],
-			workspaceSubpaths: ['.github', '.copilot'],
 		};
 	}
 
 	constructor(
 		@IChatPromptFileService private readonly chatPromptFileService: IChatPromptFileService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@ILogService private readonly logService: ILogService,
 	) {
 		super();
@@ -39,6 +44,7 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 	provideChatSessionCustomizations(_token: vscode.CancellationToken): vscode.ChatSessionCustomizationItem[] {
 		const items: vscode.ChatSessionCustomizationItem[] = [];
 
+		// Agents (.agent.md) are Copilot-specific — include all of them
 		for (const agent of this.chatPromptFileService.customAgents) {
 			items.push({
 				uri: agent.uri,
@@ -48,23 +54,41 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 		}
 
 		for (const instruction of this.chatPromptFileService.instructions) {
-			items.push({
-				uri: instruction.uri,
-				type: vscode.ChatSessionCustomizationType.Instructions,
-				name: deriveNameFromUri(instruction.uri, INSTRUCTION_FILE_EXTENSION),
-			});
+			if (this.isCLIPath(instruction.uri)) {
+				items.push({
+					uri: instruction.uri,
+					type: vscode.ChatSessionCustomizationType.Instructions,
+					name: deriveNameFromUri(instruction.uri, INSTRUCTION_FILE_EXTENSION),
+				});
+			}
 		}
 
 		for (const skill of this.chatPromptFileService.skills) {
-			items.push({
-				uri: skill.uri,
-				type: vscode.ChatSessionCustomizationType.Skill,
-				name: deriveNameFromUri(skill.uri, SKILL_FILENAME),
-			});
+			if (this.isCLIPath(skill.uri)) {
+				items.push({
+					uri: skill.uri,
+					type: vscode.ChatSessionCustomizationType.Skill,
+					name: deriveNameFromUri(skill.uri, SKILL_FILENAME),
+				});
+			}
 		}
 
 		this.logService.trace(`[CopilotCLICustomizationProvider] Provided ${items.length} customization items`);
 		return items;
+	}
+
+	private isCLIPath(uri: URI): boolean {
+		const folders = this.workspaceService.getWorkspaceFolders();
+		for (const folder of folders) {
+			const folderPath = folder.path.endsWith('/') ? folder.path : folder.path + '/';
+			if (uri.path.startsWith(folderPath)) {
+				const relative = uri.path.slice(folderPath.length);
+				if (CLI_SUBPATHS.some(prefix => relative.startsWith(prefix))) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 }
 

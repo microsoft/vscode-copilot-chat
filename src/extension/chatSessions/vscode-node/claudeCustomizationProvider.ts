@@ -49,7 +49,6 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 			label: 'Claude',
 			iconId: 'claude',
 			unsupportedTypes: [vscode.ChatSessionCustomizationType.Agent, vscode.ChatSessionCustomizationType.Prompt],
-			workspaceSubpaths: ['.claude'],
 		};
 	}
 
@@ -71,19 +70,23 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 		const items: vscode.ChatSessionCustomizationItem[] = [];
 
 		for (const instruction of this.chatPromptFileService.instructions) {
-			items.push({
-				uri: instruction.uri,
-				type: vscode.ChatSessionCustomizationType.Instructions,
-				name: deriveNameFromUri(instruction.uri, INSTRUCTION_FILE_EXTENSION),
-			});
+			if (this.isClaudePath(instruction.uri)) {
+				items.push({
+					uri: instruction.uri,
+					type: vscode.ChatSessionCustomizationType.Instructions,
+					name: deriveNameFromUri(instruction.uri, INSTRUCTION_FILE_EXTENSION),
+				});
+			}
 		}
 
 		for (const skill of this.chatPromptFileService.skills) {
-			items.push({
-				uri: skill.uri,
-				type: vscode.ChatSessionCustomizationType.Skill,
-				name: deriveNameFromUri(skill.uri, SKILL_FILENAME),
-			});
+			if (this.isClaudePath(skill.uri)) {
+				items.push({
+					uri: skill.uri,
+					type: vscode.ChatSessionCustomizationType.Skill,
+					name: deriveNameFromUri(skill.uri, SKILL_FILENAME),
+				});
+			}
 		}
 
 		// Discover hooks from .claude/settings.json files
@@ -142,6 +145,31 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 
 		paths.push(URI.joinPath(this.envService.userHome, '.claude', 'settings.json'));
 		return paths;
+	}
+
+	private isClaudePath(uri: URI): boolean {
+		const folders = this.workspaceService.getWorkspaceFolders();
+		for (const folder of folders) {
+			const folderPath = folder.path.endsWith('/') ? folder.path : folder.path + '/';
+			if (uri.path.startsWith(folderPath)) {
+				const relative = uri.path.slice(folderPath.length);
+				if (relative.startsWith('.claude/')) {
+					return true;
+				}
+			}
+		}
+
+		// Also check user home .claude/ directory
+		const homePath = this.envService.userHome.path;
+		const homePrefix = homePath.endsWith('/') ? homePath : homePath + '/';
+		if (uri.path.startsWith(homePrefix)) {
+			const relative = uri.path.slice(homePrefix.length);
+			if (relative.startsWith('.claude/')) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 }
 
