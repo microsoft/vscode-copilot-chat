@@ -19,7 +19,7 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 	private skillFiles = new Set<string>();
 	private externalFiles = new Set<string>();
 	private externalFolders = new Set<string>();
-	private extensionSkillInfos = new Map<string, { skillName: string; skillFolderUri: URI }>();
+	private extensionSkillInfos = new Map<string, { skillName: string; skillFolderUri: URI; extensionId: string }>();
 
 	parseInstructionIndexFile(promptFileIndexText: string): IInstructionIndexFile {
 		return {
@@ -57,9 +57,9 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 	/**
 	 * Set the URIs that should be recognized as extension skill files with their info.
 	 */
-	setExtensionSkillInfos(infos: { uri: URI; skillName: string; skillFolderUri: URI }[]): void {
+	setExtensionSkillInfos(infos: { uri: URI; skillName: string; skillFolderUri: URI; extensionId: string }[]): void {
 		this.extensionSkillInfos.clear();
-		infos.forEach(info => this.extensionSkillInfos.set(info.uri.toString(), { skillName: info.skillName, skillFolderUri: info.skillFolderUri }));
+		infos.forEach(info => this.extensionSkillInfos.set(info.uri.toString(), { skillName: info.skillName, skillFolderUri: info.skillFolderUri, extensionId: info.extensionId }));
 	}
 
 	isSkillFile(uri: URI): boolean {
@@ -122,7 +122,7 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 		return Promise.resolve();
 	}
 
-	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {
+	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI; extensionId: string } | undefined {
 		return this.extensionSkillInfos.get(uri.toString());
 	}
 

@@ -78,7 +78,7 @@ export interface ICustomInstructionsService {
 	 */
 	refreshExtensionPromptFiles(): Promise<void>;
 	/** Gets skill info for extension-contributed skill files */
-	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined;
+	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI; extensionId?: string } | undefined;
 }
 
 export interface IInstructionIndexFile {
