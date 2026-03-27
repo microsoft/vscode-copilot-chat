@@ -5147,6 +5147,10 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.cli.sessions.setTitle",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.cli.sessions.openRepository",
 					"when": "false"
 				},
