@@ -23,6 +23,20 @@ import { IExperimentationService } from '../../telemetry/common/nullExperimentat
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 
+/**
+ * Build the `input_schema` for an Anthropic tool from an arbitrary JSON Schema
+ * object. Ensures `type: 'object'` and `properties` default, preserves extra
+ * keys like `$defs` and `additionalProperties`, and strips `$schema` which the
+ * Anthropic API rejects.
+ */
+export function buildToolInputSchema(schema: Record<string, unknown> | undefined): Record<string, unknown> & { type: 'object' } {
+	if (!schema) {
+		return { type: 'object', properties: {} };
+	}
+	const { $schema: _, ...rest } = schema;
+	return { type: 'object', properties: {}, ...rest };
+}
+
 /** IP Code Citation annotation from Messages API copilot_annotations */
 interface AnthropicIPCodeCitation {
 	id: number;
@@ -108,11 +122,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 			const anthropicTool: AnthropicMessagesTool = {
 				name: tool.function.name,
 				description: tool.function.description || '',
-				input_schema: {
-					type: 'object',
-					properties: (tool.function.parameters as { properties?: Record<string, unknown> })?.properties ?? {},
-					required: (tool.function.parameters as { required?: string[] })?.required ?? [],
-				},
+				input_schema: buildToolInputSchema(tool.function.parameters as Record<string, unknown> | undefined),
 				...(isDeferred ? { defer_loading: true } : {}),
 			};
 			(isDeferred ? deferredTools : nonDeferredTools).push(anthropicTool);

@@ -7,7 +7,7 @@ import type { ContentBlockParam, DocumentBlockParam, ImageBlockParam, MessagePar
 import { Raw } from '@vscode/prompt-tsx';
 import { expect, suite, test } from 'vitest';
 import { AnthropicMessagesTool, CUSTOM_TOOL_SEARCH_NAME } from '../../../networking/common/anthropic';
-import { addToolsAndSystemCacheControl, rawMessagesToMessagesAPI } from '../../node/messagesApi';
+import { addToolsAndSystemCacheControl, buildToolInputSchema, rawMessagesToMessagesAPI } from '../../node/messagesApi';
 
 function assertContentArray(content: MessageParam['content']): ContentBlockParam[] {
 	expect(Array.isArray(content)).toBe(true);
@@ -575,5 +575,61 @@ suite('addToolsAndSystemCacheControl', function () {
 		addToolsAndSystemCacheControl(tools, messagesResult);
 
 		expect(system[0].cache_control).toEqual({ type: 'ephemeral' });
+	});
+});
+
+suite('buildToolInputSchema', function () {
+
+	test('returns default schema when input is undefined', function () {
+		const result = buildToolInputSchema(undefined);
+		expect(result).toEqual({ type: 'object', properties: {} });
+	});
+
+	test('strips $schema from the input', function () {
+		const result = buildToolInputSchema({
+			$schema: 'https://json-schema.org/draft/2020-12/schema',
+			type: 'object',
+			properties: { query: { type: 'string' } },
+			required: ['query'],
+		});
+		expect(result).toEqual({
+			type: 'object',
+			properties: { query: { type: 'string' } },
+			required: ['query'],
+		});
+		expect(result).not.toHaveProperty('$schema');
+	});
+
+	test('preserves $defs and additionalProperties', function () {
+		const defs = { Foo: { type: 'object', properties: { x: { type: 'number' } } } };
+		const result = buildToolInputSchema({
+			type: 'object',
+			properties: { foo: { $ref: '#/$defs/Foo' } },
+			$defs: defs,
+			additionalProperties: false,
+		});
+		expect(result.$defs).toEqual(defs);
+		expect(result.additionalProperties).toBe(false);
+	});
+
+	test('defaults properties to empty object when not provided', function () {
+		const result = buildToolInputSchema({ type: 'object' });
+		expect(result.properties).toEqual({});
+	});
+
+	test('overrides default properties when provided in schema', function () {
+		const props = { name: { type: 'string' } };
+		const result = buildToolInputSchema({ type: 'object', properties: props });
+		expect(result.properties).toEqual(props);
+	});
+
+	test('passes through a plain schema without $schema unchanged', function () {
+		const schema = {
+			type: 'object',
+			properties: { id: { type: 'number' } },
+			required: ['id'],
+		};
+		const result = buildToolInputSchema(schema);
+		expect(result).toEqual(schema);
 	});
 });

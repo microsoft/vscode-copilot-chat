@@ -9,6 +9,7 @@ import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessa
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
+import { buildToolInputSchema } from '../../../platform/endpoint/node/messagesApi';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicMemoryToolEnabled, isAnthropicToolSearchEnabled, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
 import { IToolDeferralService } from '../../../platform/networking/common/toolDeferralService';
@@ -189,12 +190,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				tools.push({
 					name: tool.name,
 					description: tool.description,
-					input_schema: {
-						type: 'object',
-						properties: (tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {},
-						required: (tool.inputSchema as { required?: string[] }).required ?? [],
-						$schema: (tool.inputSchema as { $schema?: unknown }).$schema
-					},
+					input_schema: buildToolInputSchema(tool.inputSchema as Record<string, unknown>),
 					...(shouldDefer ? { defer_loading: shouldDefer } : {})
 				});
 			}
