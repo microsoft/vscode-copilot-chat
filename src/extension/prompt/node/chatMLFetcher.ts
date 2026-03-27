@@ -1077,6 +1077,13 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							sendCompletionOutputTelemetry(this._telemetryService, this._logService, completion, extendedBaseTelemetryData);
 							emitter.emitOne(completion);
 						}
+
+						if (event.type === 'response.completed') {
+							const snapshots = (event as any).copilot_quota_snapshots;
+							if (snapshots && typeof snapshots === 'object') {
+								this._chatQuotaService.processQuotaSnapshots(snapshots);
+							}
+						}
 					});
 
 					handle.onCAPIError(event => {

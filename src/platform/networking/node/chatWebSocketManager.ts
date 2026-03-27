@@ -10,6 +10,7 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { CancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle';
+import { QuotaSnapshots } from '../../chat/common/chatQuotaService';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService, collectSingleLineErrorMessage } from '../../log/common/logService';
@@ -136,21 +137,7 @@ export interface CAPIWebSocketErrorEvent {
 		readonly code: string;
 		readonly message: string;
 	};
-	/** Per-quota-ID snapshots. Keys are quota IDs like "premium-chat-requests". */
-	readonly copilot_quota_snapshots?: Record<string, CAPIQuotaSnapshot>;
-}
-
-export interface CAPIQuotaSnapshot {
-	/** String representation of the entitlement count, "-1" for unlimited. */
-	readonly entitlement: string;
-	/** Percentage of quota remaining (0–100), rounded up to 1 decimal. */
-	readonly percent_remaining: number;
-	/** Whether overage (usage beyond entitlement) is permitted. */
-	readonly overage_permitted: boolean;
-	/** Number of overage units consumed, rounded up to 1 decimal. */
-	readonly overage_count: number;
-	/** ISO 8601 date when the quota resets, if applicable. */
-	readonly reset_date?: string;
+	readonly copilot_quota_snapshots?: QuotaSnapshots;
 }
 
 export function isCAPIWebSocketError(event: OpenAI.Responses.ResponseStreamEvent | CAPIWebSocketErrorEvent): event is CAPIWebSocketErrorEvent {
