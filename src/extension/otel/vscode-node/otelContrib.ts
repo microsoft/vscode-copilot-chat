@@ -80,6 +80,11 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 				dest = result;
 			}
 
+			// Flush BatchSpanProcessors so all buffered spans are written to SQLite
+			// before we checkpoint + copy. Without this, the root invoke_agent span
+			// (which ends last) may still be in the processor's buffer.
+			await this._otelService.flush();
+
 			// Checkpoint WAL so all data is flushed into the main .db file before copying.
 			// Without this, the copy would be empty because data lives in the -wal file.
 			this._sqliteStore.checkpoint();
