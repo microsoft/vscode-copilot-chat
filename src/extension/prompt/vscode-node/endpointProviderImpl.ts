@@ -44,28 +44,21 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 			false,
 		);
 
-		// When models refresh, also clear the copilot-fast endpoint cache
+		// When new models come in from CAPI we want to clear our local caches and let the endpoints be recreated since there may be new info
 		this._register(this._modelFetcher.onDidModelsRefresh(() => {
 			this._chatEndpoints.clear();
 			this._embeddingEndpoints.clear();
-			this._copilotFastEndpoint = undefined;
 			this._onDidModelsRefresh.fire();
 		}));
 	}
 
-	private _copilotFastEndpoint: IChatEndpoint | undefined;
-
-	private async _getOrCreateCopilotFastEndpoint(): Promise<IChatEndpoint> {
-		if (!this._copilotFastEndpoint) {
-			let modelMetadata: IChatModelInformation;
-			try {
-				modelMetadata = await this._modelFetcher.getChatModelFromFamily(CopilotFastChatEndpoint.primaryFamily as ChatEndpointFamily);
-			} catch {
-				modelMetadata = await this._modelFetcher.getChatModelFromFamily(CopilotFastChatEndpoint.fallbackFamily as ChatEndpointFamily);
-			}
-			this._copilotFastEndpoint = this._instantiationService.createInstance(CopilotFastChatEndpoint, modelMetadata);
+	private async getOrCreateCopilotFastEndpoint(): Promise<IChatEndpoint> {
+		let endpoint = this._chatEndpoints.get('copilot-fast');
+		if (!endpoint) {
+			endpoint = await CopilotFastChatEndpoint.create(this._modelFetcher, this._instantiationService);
+			this._chatEndpoints.set('copilot-fast', endpoint);
 		}
-		return this._copilotFastEndpoint;
+		return endpoint;
 	}
 
 	private getOrCreateChatEndpointInstance(modelMetadata: IChatModelInformation): IChatEndpoint {
@@ -83,7 +76,7 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 
 		if (typeof requestOrFamilyOrModel === 'string') {
 			if (requestOrFamilyOrModel === 'copilot-fast') {
-				return this._getOrCreateCopilotFastEndpoint();
+				return this.getOrCreateCopilotFastEndpoint();
 			}
 			const modelMetadata = await this._modelFetcher.getChatModelFromFamily(requestOrFamilyOrModel);
 			return this.getOrCreateChatEndpointInstance(modelMetadata!);

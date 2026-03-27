@@ -11,7 +11,7 @@ import { IConfigurationService } from '../../configuration/common/configurationS
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
-import { IMakeChatRequestOptions } from '../../networking/common/networking';
+import { IChatEndpoint, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { RawMessageConversionCallback } from '../../networking/common/openai';
 import { IChatWebSocketManager } from '../../networking/node/chatWebSocketManager';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
@@ -19,7 +19,8 @@ import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
-import { IChatModelInformation } from '../common/endpointProvider';
+import { ChatEndpointFamily, IChatModelInformation } from '../common/endpointProvider';
+import { IModelMetadataFetcher } from './modelMetadataFetcher';
 import { ChatEndpoint } from './chatEndpoint';
 
 export class CopilotChatEndpoint extends ChatEndpoint {
@@ -74,6 +75,16 @@ export class CopilotChatEndpoint extends ChatEndpoint {
 export class CopilotFastChatEndpoint extends CopilotChatEndpoint {
 	static readonly primaryFamily = 'gpt-5.4-nano';
 	static readonly fallbackFamily = 'gpt-4o-mini';
+
+	static async create(modelFetcher: IModelMetadataFetcher, instantiationService: IInstantiationService): Promise<IChatEndpoint> {
+		let modelMetadata: IChatModelInformation;
+		try {
+			modelMetadata = await modelFetcher.getChatModelFromFamily(CopilotFastChatEndpoint.primaryFamily as ChatEndpointFamily);
+		} catch {
+			modelMetadata = await modelFetcher.getChatModelFromFamily(CopilotFastChatEndpoint.fallbackFamily as ChatEndpointFamily);
+		}
+		return instantiationService.createInstance(CopilotFastChatEndpoint, modelMetadata);
+	}
 
 	protected override async _makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken) {
 		return super._makeChatRequest2(
