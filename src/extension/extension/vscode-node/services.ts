@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import os from 'os';
 import path from 'path';
 import { ExtensionContext, ExtensionMode, env, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
@@ -262,7 +263,9 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IToolResultContentRenderer, new SyncDescriptor(ToolResultContentRenderer));
 
 	// OTel SQLite store — created lazily, DB file only appears when dbSpanExporter.enabled is true
-	const otelDbPath = path.join(extensionContext.globalStorageUri.fsPath, 'agent-traces.db');
+	const otelDbPath = extensionContext.globalStorageUri
+		? path.join(extensionContext.globalStorageUri.fsPath, 'agent-traces.db')
+		: path.join(os.tmpdir(), 'copilot-agent-traces.db');
 	const otelSqliteStore = new OTelSqliteStore(otelDbPath);
 	builder.define(IOTelSqliteStore, otelSqliteStore);
 
