@@ -53,16 +53,6 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 			return;
 		}
 
-		// Get the number of requests for the session. If there are no requests,
-		// this is the first request and we should create a baseline checkpoint.
-		// If there are existing requests, it means a baseline checkpoint was
-		// already created.
-		const requestDetails = await this.metadataStore.getRequestDetails(sessionId);
-		if (requestDetails.length > 0) {
-			this.logService.trace(`[ChatSessionWorktreeCheckpointService][handleRequest] Found existing requests for session ${sessionId}, skipping baseline checkpoint creation`);
-			return;
-		}
-
 		// Initialize checkpoint state and capture baseline checkpoint
 		const checkpointRef = await this._createCheckpoint(sessionId, repository.rootUri, 0);
 		if (!checkpointRef) {

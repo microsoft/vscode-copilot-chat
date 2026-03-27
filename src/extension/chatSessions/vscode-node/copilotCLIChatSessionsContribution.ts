@@ -1310,10 +1310,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				return {};
 			}
 
-			// Create baseline checkpoint for the session. This will only be created for sessions
-			// that have auto-commit disabled. We will also create the baseline checkpoint before
-			// handling the first request of the session.
-			await this.copilotCLIWorktreeCheckpointService.handleRequest(session.object.sessionId);
+			if (context.history.length === 0) {
+				// Create baseline checkpoint when handling the first request
+				await this.copilotCLIWorktreeCheckpointService.handleRequest(session.object.sessionId);
+			}
 
 			sdkSessionId = session.object.sessionId;
 			const modeInstructions = this.createModeInstructions(request);
