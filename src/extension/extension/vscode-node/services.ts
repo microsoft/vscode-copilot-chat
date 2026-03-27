@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as os from 'os';
+import * as path from 'path';
 import { ExtensionContext, ExtensionMode, env, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ICopilotTokenManager } from '../../../platform/authentication/common/copilotTokenManager';
@@ -55,6 +57,7 @@ import { FetcherService } from '../../../platform/networking/vscode-node/fetcher
 import { resolveOTelConfig } from '../../../platform/otel/common/otelConfig';
 import { IOTelService } from '../../../platform/otel/common/otelService';
 import { InMemoryOTelService } from '../../../platform/otel/node/inMemoryOTelService';
+import { IOTelSqliteStore, OTelSqliteStore } from '../../../platform/otel/node/sqlite/otelSqliteStore';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { ParserServiceImpl } from '../../../platform/parser/node/parserServiceImpl';
 import { IProxyModelsService } from '../../../platform/proxyModels/common/proxyModelsService';
@@ -81,8 +84,6 @@ import { IWorkspaceMutationManager } from '../../../platform/testing/common/work
 import { ISetupTestsDetector, SetupTestsDetector } from '../../../platform/testing/node/setupTestDetector';
 import { ITestDepsResolver, TestDepsResolver } from '../../../platform/testing/node/testDepsResolver';
 import { ITokenizerProvider, TokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
-import { ITrajectoryLogger } from '../../../platform/trajectory/common/trajectoryLogger';
-import { TrajectoryLogger } from '../../../platform/trajectory/node/trajectoryLogger';
 import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
 import { IRerankerService, RerankerService } from '../../../platform/workspaceChunkSearch/common/rerankerService';
 import { IWorkspaceChunkSearchService, WorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
@@ -136,6 +137,8 @@ import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inli
 import { WorkspaceMutationManager } from '../../testing/node/setupTestsFileManager';
 import { AgentMemoryService, IAgentMemoryService } from '../../tools/common/agentMemoryService';
 import { IMemoryCleanupService, MemoryCleanupService } from '../../tools/common/memoryCleanupService';
+import { IToolDeferralService } from '../../../platform/networking/common/toolDeferralService';
+import { ToolDeferralService } from '../../tools/common/toolDeferralService';
 import { IToolsService } from '../../tools/common/toolsService';
 import { ToolsService } from '../../tools/vscode-node/toolsService';
 import { LanguageContextServiceImpl } from '../../typescriptContext/vscode-node/languageContextService';
@@ -162,6 +165,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IDiffService, new DiffServiceImpl());
 	builder.define(ITokenizerProvider, new SyncDescriptor(TokenizerProvider, [true]));
 	builder.define(IToolsService, new SyncDescriptor(ToolsService));
+	builder.define(IToolDeferralService, new ToolDeferralService());
 	builder.define(IAgentMemoryService, new SyncDescriptor(AgentMemoryService));
 	builder.define(IMemoryCleanupService, new SyncDescriptor(MemoryCleanupService));
 	builder.define(IChatDiskSessionResources, new SyncDescriptor(ChatDiskSessionResources));
@@ -259,8 +263,14 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ICopilotInlineCompletionItemProviderService, new SyncDescriptor(CopilotInlineCompletionItemProviderService));
 	builder.define(ISimilarFilesContextService, new SyncDescriptor(SimilarFilesContextService));
 	builder.define(IGitHubOrgChatResourcesService, new SyncDescriptor(GitHubOrgChatResourcesService));
-	builder.define(ITrajectoryLogger, new SyncDescriptor(TrajectoryLogger));
 	builder.define(IToolResultContentRenderer, new SyncDescriptor(ToolResultContentRenderer));
+
+	// OTel SQLite store — created lazily, DB file only appears when dbSpanExporter.enabled is true
+	const otelDbPath = extensionContext.globalStorageUri
+		? path.join(extensionContext.globalStorageUri.fsPath, 'agent-traces.db')
+		: path.join(os.tmpdir(), 'copilot-agent-traces.db');
+	const otelSqliteStore = new OTelSqliteStore(otelDbPath);
+	builder.define(IOTelSqliteStore, otelSqliteStore);
 
 	// OTel service — resolve config from env + settings, create appropriate impl
 	const otelSettings = workspace.getConfiguration('github.copilot.chat.otel');
@@ -271,6 +281,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 		settingOtlpEndpoint: otelSettings.get<string>('otlpEndpoint'),
 		settingCaptureContent: otelSettings.get<boolean>('captureContent'),
 		settingOutfile: otelSettings.get<string>('outfile') || undefined,
+		settingDbSpanExporter: otelSettings.get<boolean>('dbSpanExporter.enabled'),
 		extensionVersion: extensionContext.extension.packageJSON.version ?? '0.0.0',
 		sessionId: env.sessionId,
 	});
@@ -284,7 +295,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 			else if (level === 'warn') { console.warn(msg); }
 			else { console.info(msg); }
 		};
-		builder.define(IOTelService, new NodeOTelService(otelConfig, logFn));
+		builder.define(IOTelService, new NodeOTelService(otelConfig, logFn, otelConfig.dbSpanExporter ? otelSqliteStore : undefined));
 	} else {
 		builder.define(IOTelService, new InMemoryOTelService(otelConfig));
 	}

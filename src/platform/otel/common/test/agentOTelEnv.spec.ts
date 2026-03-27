@@ -10,10 +10,12 @@ import type { OTelConfig } from '../otelConfig';
 function makeConfig(overrides: Partial<OTelConfig> = {}): OTelConfig {
 	return {
 		enabled: true,
+		enabledExplicitly: true,
 		exporterType: 'otlp-http',
 		otlpEndpoint: 'http://localhost:4318',
 		otlpProtocol: 'http',
 		captureContent: false,
+		dbSpanExporter: false,
 		logLevel: 'info',
 		httpInstrumentation: false,
 		serviceName: 'copilot-chat',
