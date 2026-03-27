@@ -70,6 +70,10 @@ export class MockGitService implements IGitService {
 		return Promise.resolve();
 	}
 
+	restore(_uri: URI, _paths: string[], _options?: { staged?: boolean; ref?: string }): Promise<void> {
+		return Promise.resolve();
+	}
+
 	log(_uri: URI, _options?: LogOptions): Promise<Commit[] | undefined> {
 		return Promise.resolve(undefined);
 	}

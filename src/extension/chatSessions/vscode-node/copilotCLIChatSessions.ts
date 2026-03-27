@@ -2266,15 +2266,22 @@ export function registerCLIChatCommands(
 
 		const sessionId = SessionIdForCLI.parse(resource);
 		const worktreeProperties = await copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+		const workspaceFolder = await copilotCliWorkspaceSession.getSessionWorkspaceFolder(sessionId);
 
-		if (!worktreeProperties) {
+		if (!worktreeProperties && !workspaceFolder) {
 			return;
 		}
 
-		await copilotCLIWorktreeManagerService.setWorktreeProperties(sessionId, {
-			...worktreeProperties,
-			changes: undefined
-		});
+		if (worktreeProperties) {
+			// Worktree
+			await copilotCLIWorktreeManagerService.setWorktreeProperties(sessionId, {
+				...worktreeProperties,
+				changes: undefined
+			});
+		} else if (workspaceFolder) {
+			// Workspace
+			copilotCliWorkspaceSession.clearWorkspaceChanges(workspaceFolder);
+		}
 
 		await contentProvider.refreshSession({ reason: 'update', sessionId });
 	}));
@@ -2292,6 +2299,24 @@ export function registerCLIChatCommands(
 			resource,
 			prompt: builtinSlashSCommands.commit,
 		});
+	}));
+
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.sessions.discardChanges', async (sessionResource: vscode.Uri, ref: string, ...resources: vscode.Uri[]) => {
+		if (!isUri(sessionResource) || resources.some(r => !isUri(r))) {
+			return;
+		}
+
+		const sessionId = SessionIdForCLI.parse(sessionResource);
+		const worktreeProperties = await copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+		const workspaceFolder = await copilotCliWorkspaceSession.getSessionWorkspaceFolder(sessionId);
+
+		const repositoryUri = worktreeProperties ? Uri.file(worktreeProperties.worktreePath) : workspaceFolder;
+		const repository = repositoryUri ? await gitService.getRepository(repositoryUri) : undefined;
+		if (!repository) {
+			return;
+		}
+
+		await gitService.restore(repository.rootUri, resources.map(r => r.fsPath), { ref });
 	}));
 
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {

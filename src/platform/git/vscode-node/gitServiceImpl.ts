@@ -228,6 +228,12 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		await repository?.add(paths);
 	}
 
+	async restore(uri: URI, paths: string[], options?: { staged?: boolean; ref?: string }): Promise<void> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		await repository?.restore(paths, options);
+	}
+
 	async log(uri: vscode.Uri, options?: LogOptions): Promise<Commit[] | undefined> {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		if (!gitAPI) {

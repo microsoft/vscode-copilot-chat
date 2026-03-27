@@ -786,6 +786,10 @@ export class TestingGitService implements IGitService {
 		return;
 	}
 
+	async restore(_uri: URI, _paths: string[], _options?: { staged?: boolean; ref?: string }): Promise<void> {
+		return;
+	}
+
 	async createWorktree(uri: URI, options?: { path?: string; commitish?: string; branch?: string }): Promise<string | undefined> {
 		return undefined;
 	}

@@ -2834,6 +2834,13 @@
 				"category": "GitHub Copilot"
 			},
 			{
+				"command": "github.copilot.sessions.discardChanges",
+				"title": "%github.copilot.command.sessions.discardChanges%",
+				"enablement": "!chatSessionRequestInProgress",
+				"icon": "$(discard)",
+				"category": "GitHub Copilot"
+			},
+			{
 				"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
 				"title": "%github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR%",
 				"enablement": "!chatSessionRequestInProgress",
@@ -5247,6 +5254,10 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.sessions.discardChanges",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.sessions.refreshChanges",
 					"when": "false"
 				}
@@ -5623,6 +5634,12 @@
 					"command": "github.copilot.sessions.refreshChanges",
 					"when": "chatSessionType == copilotcli && isSessionsWindow",
 					"group": "9_refresh@1"
+				}
+			],
+			"chat/input/editing/sessionChangeToolbar": [
+				{
+					"command": "github.copilot.sessions.discardChanges",
+					"group": "navigation@1"
 				}
 			]
 		},
