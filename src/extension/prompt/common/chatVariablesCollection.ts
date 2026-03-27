@@ -199,3 +199,37 @@ export function getPromptFileSlashCommandId(variable: PromptVariable): PromptFil
 	}
 	return { name, id };
 }
+
+export interface ParsedSlashCommand {
+	/** The matched prompt file slash command ID. */
+	readonly promptFile: PromptFileSlashCommandId;
+	/** The matched PromptVariable (the prompt file reference). */
+	readonly variable: PromptVariable;
+	/** The raw slash command string parsed from the query (without the leading `/`). */
+	readonly command: string;
+	/** Any trailing arguments after the slash command. */
+	readonly args: string;
+}
+
+/**
+ * Parses a query for a `/command` pattern and matches it against prompt file references.
+ * Returns the matched prompt file and parsed arguments, or `undefined` if no match.
+ */
+export function parseSlashCommand(query: string, chatVariables: ChatVariablesCollection): ParsedSlashCommand | undefined {
+	const slashCommandMatch = query.match(/^\s*\/(?<command>\S+)(?:\s+(?<args>.*))?$/s);
+	const slashCommand = slashCommandMatch?.groups?.command;
+	if (!slashCommand) {
+		return undefined;
+	}
+	const args = slashCommandMatch?.groups?.args?.trim() ?? '';
+	for (const variable of chatVariables) {
+		if (!isPromptFile(variable)) {
+			continue;
+		}
+		const promptFile = getPromptFileSlashCommandId(variable);
+		if (promptFile.id === slashCommand) {
+			return { promptFile, variable, command: slashCommand, args };
+		}
+	}
+	return undefined;
+}
