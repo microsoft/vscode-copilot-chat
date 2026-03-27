@@ -28,7 +28,6 @@ export interface WorkspaceChunkQueryWithEmbeddings extends WorkspaceChunkQuery {
 export enum WorkspaceChunkSearchStrategyId {
 	Embeddings = 'ada',// Do not change value as it's used for telemetry
 	CodeSearch = 'codesearch',
-	Tfidf = 'tfidf',
 }
 
 /**

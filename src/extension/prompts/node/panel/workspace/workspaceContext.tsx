@@ -5,7 +5,7 @@
 import { BasePromptElementProps, PromptElement, PromptPiece, PromptSizing, TextChunk } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { FileChunk } from '../../../../../platform/chunking/common/chunk';
-import { logExecTime, MeasureExecTime } from '../../../../../platform/log/common/logExecTime';
+import { logExecTime } from '../../../../../platform/log/common/logExecTime';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../../../platform/prompts/common/promptPathRepresentationService';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry';
@@ -22,9 +22,7 @@ import { URI } from '../../../../../util/vs/base/common/uri';
 import { Range } from '../../../../../util/vs/editor/common/core/range';
 import { Location, Range as VSCodeRange } from '../../../../../vscodeTypes';
 import { PromptReference } from '../../../../prompt/common/conversation';
-import { IBuildPromptContext } from '../../../../prompt/common/intents';
 import { IPromptEndpoint } from '../../base/promptRenderer';
-import { DirectoryStructure, WorkspaceStructure } from './workspaceStructure';
 
 /**
  * Maximum number of chunks that we can provide to the model.
@@ -211,12 +209,8 @@ export class WorkspaceChunkList extends PromptElement<WorkspaceChunkListProps> {
 export interface WorkspaceContextProps extends BasePromptElementProps {
 	readonly telemetryInfo: TelemetryCorrelationId;
 
-	promptContext: IBuildPromptContext;
+	readonly query: string;
 	scopedDirectories?: URI[];
-	include?: {
-		workspaceStructure?: boolean;
-		workspaceChunks?: boolean;
-	};
 	absolutePaths?: boolean;
 	lines1Indexed?: boolean;
 
@@ -228,68 +222,29 @@ export interface WorkspaceContextProps extends BasePromptElementProps {
 	maxResults?: number;
 }
 
-export type WorkspaceContextState = WorkspaceChunkQuery | undefined;
 
-export class WorkspaceContext extends PromptElement<WorkspaceContextProps, WorkspaceContextState> {
+export class WorkspaceContext extends PromptElement<WorkspaceContextProps, undefined> {
 
-	constructor(
-		props: WorkspaceContextProps,
-		@ITelemetryService private readonly telemetryService: ITelemetryService,
-	) {
-		super(props);
-	}
-
-	@MeasureExecTime(function (execTime, status) {
-		/* __GDPR__
-			"workspaceContext.perf.prepare" : {
-				"owner": "mjbvz",
-				"comment": "Understanding how effective ADA re-ranking is",
-				"status": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the call succeeded or failed" },
-				"execTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Time in milliseconds that the call took" }
-			}
-		*/
-		this.telemetryService.sendMSFTTelemetryEvent('workspaceContext.perf.prepare', { status }, { execTime });
-	})
-	override async prepare(sizing: PromptSizing, progress: vscode.Progress<vscode.ChatResponsePart> | undefined, token: vscode.CancellationToken): Promise<WorkspaceContextState> {
-		const props = this.props;
-		const message = props.promptContext.query;
-		if (!message) {
+	override render(state: undefined, sizing: PromptSizing): PromptPiece<any, any> | undefined {
+		const query = this.props.query;
+		if (!query) {
 			return;
 		}
 
-		return {
-			queryText: message,
-		} satisfies WorkspaceChunkQuery;
-	}
-
-	override render(state: WorkspaceContextState, sizing: PromptSizing): PromptPiece<any, any> | undefined {
-		if (!state) {
-			return;
-		}
-
-		const include = this.props.include ?? {
-			workspaceStructure: true,
-			workspaceChunks: true,
-		};
-
-		const { scopedDirectories } = this.props;
 		const includePatterns = this.props.scopedDirectories ? this.props.scopedDirectories.map(dir => `**${dir.path}/**`) : undefined;
 
 		return <>
-			{include.workspaceStructure && (scopedDirectories ?
-				scopedDirectories.map(dir => <DirectoryStructure flexGrow={1} maxSize={500 / scopedDirectories.length} directory={dir} {...this.props} />) :
-				<WorkspaceStructure flexGrow={1} maxSize={500} {...this.props} />)}
-			{include.workspaceChunks && <WorkspaceChunks
+			<WorkspaceChunks
 				priority={this.props.priority}
 				telemetryInfo={this.props.telemetryInfo}
-				query={state}
+				query={{ queryText: query }}
 				globPatterns={{ include: includePatterns }}
 				referencesOut={this.props.referencesOut}
 				isToolCall={this.props.isToolCall}
 				absolutePaths={this.props.absolutePaths}
 				lines1Indexed={this.props.lines1Indexed}
 				maxResults={this.props.maxResults}
-			/>}
+			/>
 		</>;
 	}
 }
