@@ -7,6 +7,8 @@ export type OTelExporterType = 'otlp-grpc' | 'otlp-http' | 'console' | 'file';
 
 export interface OTelConfig {
 	readonly enabled: boolean;
+	/** True when OTel was enabled via setting/env var, not just implied by dbSpanExporter. */
+	readonly enabledExplicitly: boolean;
 	readonly exporterType: OTelExporterType;
 	readonly otlpEndpoint: string;
 	readonly otlpProtocol: 'grpc' | 'http';
@@ -98,6 +100,11 @@ export function resolveOTelConfig(input: OTelConfigInput): OTelConfig {
 		?? (!!env['OTEL_EXPORTER_OTLP_ENDPOINT']))
 		|| dbSpanExporter;
 
+	// OTel was explicitly enabled if the user/env turned it on, not just dbSpanExporter
+	const enabledExplicitly = (envBool(env['COPILOT_OTEL_ENABLED'])
+		?? input.settingEnabled
+		?? (!!env['OTEL_EXPORTER_OTLP_ENDPOINT'])) === true;
+
 	if (!enabled) {
 		return createDisabledConfig(input);
 	}
@@ -149,6 +156,7 @@ export function resolveOTelConfig(input: OTelConfigInput): OTelConfig {
 
 	return Object.freeze({
 		enabled: true,
+		enabledExplicitly,
 		exporterType,
 		otlpEndpoint,
 		otlpProtocol: protocol,
@@ -167,6 +175,7 @@ export function resolveOTelConfig(input: OTelConfigInput): OTelConfig {
 function createDisabledConfig(input: OTelConfigInput): OTelConfig {
 	return Object.freeze({
 		enabled: false,
+		enabledExplicitly: false,
 		exporterType: 'otlp-http' as const,
 		otlpEndpoint: '',
 		otlpProtocol: 'http' as const,

@@ -196,12 +196,12 @@ export class NodeOTelService implements IOTelService {
 
 		// When OTel is enabled only for dbSpanExporter (no OTLP endpoint/file/console configured),
 		// use a noop exporter as the primary span exporter so the pipeline still runs.
+		// If the user also explicitly enabled OTel (via setting or env var), honour their
+		// exporter config and don't switch to noop.
 		const dbOnlyMode = config.dbSpanExporter
+			&& !config.enabledExplicitly
 			&& !config.fileExporterPath
-			&& config.exporterType !== 'console'
-			&& !process.env['OTEL_EXPORTER_OTLP_ENDPOINT']
-			&& !process.env['COPILOT_OTEL_ENDPOINT']
-			&& !process.env['COPILOT_OTEL_ENABLED'];
+			&& config.exporterType !== 'console';
 
 		if (config.exporterType === 'file' && config.fileExporterPath) {
 			const { FileSpanExporter, FileLogExporter, FileMetricExporter } = await import('./fileExporters');
