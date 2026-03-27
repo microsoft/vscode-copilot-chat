@@ -8,6 +8,7 @@ import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { getTextPart, roleToString } from '../../../platform/chat/common/globalStringUtils';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { isAutoModel } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
@@ -18,7 +19,7 @@ import { isNotebookCellOrNotebookChatInput } from '../../../util/common/notebook
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { isBYOKModel } from '../../byok/node/openAIEndpoint';
-import { Intent, agentsToCommands } from '../../common/constants';
+import { EXTENSION_ID, Intent, agentsToCommands } from '../../common/constants';
 import { DiagnosticsTelemetryData, findDiagnosticsTelemetry } from '../../inlineChat/node/diagnosticsTelemetry';
 import { InteractionOutcome } from '../../inlineChat/node/promptCraftingTypes';
 import { AgentIntent } from '../../intents/node/agentIntent';
@@ -211,7 +212,7 @@ const builtinSlashCommands = new Set(
 	Object.values(agentsToCommands).flatMap(commands => commands ? Object.keys(commands) : [])
 );
 
-function getSlashCommandForTelemetry(request: vscode.ChatRequest): string {
+function getSlashCommandForTelemetry(request: vscode.ChatRequest, customInstructionsService: ICustomInstructionsService): string {
 	const command = request.command;
 	if (!command) {
 		return '';
@@ -224,7 +225,17 @@ function getSlashCommandForTelemetry(request: vscode.ChatRequest): string {
 
 	// Built-in skills (extension-provided) are safe to send as plain text
 	for (const ref of request.references) {
-		if (URI.isUri(ref.value) && ref.value.path.includes('/assets/prompts/skills/')) {
+		if (!URI.isUri(ref.value)) {
+			continue;
+		}
+
+		const extensionSkillInfo = customInstructionsService.getExtensionSkillInfo(ref.value);
+		if (extensionSkillInfo && extensionSkillInfo.skillName === command) {
+			return command;
+		}
+
+		const extensionPromptFileInfo = customInstructionsService.getExtensionPromptFileInfo(ref.value);
+		if (extensionPromptFileInfo?.extensionId === EXTENSION_ID && extensionPromptFileInfo.uri.path.toLowerCase().endsWith(`/${command}.prompt.md`)) {
 			return command;
 		}
 	}
@@ -597,6 +608,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		repoInfoTelemetry: RepoInfoTelemetry,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@ICustomInstructionsService private readonly _customInstructionsService: ICustomInstructionsService,
 	) {
 		super(ChatLocation.Panel,
 			sessionId,
@@ -734,7 +746,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			mode: this._getModeNameForTelemetry(),
 			parentRequestId: this._request.parentRequestId,
 			vscodeRequestId: this._request.id,
-			slashCommand: getSlashCommandForTelemetry(this._request)
+			slashCommand: getSlashCommandForTelemetry(this._request, this._customInstructionsService)
 		} satisfies RequestPanelTelemetryProperties, {
 			turn: this._conversation.turns.length,
 			round: roundIndex,
