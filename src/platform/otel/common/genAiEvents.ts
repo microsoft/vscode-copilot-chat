@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ATTR_EVENT_NAME, EVENT_GEN_AI_CLIENT_INFERENCE_OPERATION_DETAILS } from '@opentelemetry/semantic-conventions/incubating';
+import * as OTelSemConv from '@opentelemetry/semantic-conventions/incubating';
 import { GenAiAttr, GenAiOperationName, StdAttr } from './genAiAttributes';
 import { truncateForOTel } from './messageFormatters';
 import type { IOTelService } from './otelService';
@@ -31,7 +31,7 @@ export function emitInferenceDetailsEvent(
 	error?: { type: string; message: string },
 ): void {
 	const attributes: Record<string, unknown> = {
-		[ATTR_EVENT_NAME]: EVENT_GEN_AI_CLIENT_INFERENCE_OPERATION_DETAILS,
+		[OTelSemConv.ATTR_EVENT_NAME]: OTelSemConv.EVENT_GEN_AI_CLIENT_INFERENCE_OPERATION_DETAILS,
 		[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
 		[GenAiAttr.REQUEST_MODEL]: request.model,
 	};
