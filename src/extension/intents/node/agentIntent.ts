@@ -23,6 +23,8 @@ import { INotebookService } from '../../../platform/notebook/common/notebookServ
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITasksService } from '../../../platform/tasks/common/tasksService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITestProvider } from '../../../platform/testing/common/testProvider';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -360,8 +362,9 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		@ILogService private readonly logService: ILogService,
 		@IExperimentationService private readonly expService: IExperimentationService,
 		@IAutomodeService private readonly automodeService: IAutomodeService,
+		@IOTelService private readonly otelService: IOTelService,
 	) {
-		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService);
+		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, otelService);
 	}
 
 	public override getAvailableTools(): Promise<vscode.LanguageModelToolInformation[]> {
@@ -502,6 +505,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 					}
 				*/
 				this.telemetryService.sendMSFTTelemetryEvent('triggerSummarizeFailed', { errorKind, model: renderProps.endpoint.model });
+				GenAiMetrics.incrementAgentSummarizationCount(this.otelService, 'failed');
 
 				// Track failed foreground compaction
 				const turn = promptContext.conversation?.getLatestTurn();
@@ -856,6 +860,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		}, {
 			contextRatio,
 		});
+		GenAiMetrics.incrementAgentSummarizationCount(this.otelService, outcome);
 	}
 
 	override processResponse = undefined;

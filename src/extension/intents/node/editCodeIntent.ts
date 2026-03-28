@@ -18,6 +18,8 @@ import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { isLocation } from '../../../util/common/types';
@@ -266,6 +268,7 @@ class EditIntentRequestHandler {
 				editStepCount: this.conversation.turns.length,
 				sessionDuration: Date.now() - turn.startTime,
 			});
+			GenAiMetrics.incrementAgentEditResponseCount(this.otelService, Boolean(result.errorDetails) ? 'error' : 'success');
 		}
 
 		await this.editLogService.markCompleted(turn.id, result.errorDetails ? 'error' : 'success');
@@ -329,6 +332,7 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 		@ICommandService protected readonly commandService: ICommandService,
 		@ITelemetryService protected readonly telemetryService: ITelemetryService,
 		@INotebookService private readonly notebookService: INotebookService,
+		@IOTelService protected readonly otelService: IOTelService,
 	) { }
 
 	getAvailableTools(): vscode.LanguageModelToolInformation[] | Promise<vscode.LanguageModelToolInformation[]> | undefined {
