@@ -209,6 +209,7 @@ class EditIntentRequestHandler {
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ITelemetryService protected readonly telemetryService: ITelemetryService,
 		@IEditLogService private readonly editLogService: IEditLogService,
+		@IOTelService private readonly otelService: IOTelService,
 	) { }
 
 	async getResult(): Promise<vscode.ChatResult> {

@@ -562,7 +562,7 @@ function reportInlineEditSurvivalEvent(res: EditSurvivalResult, sharedProps: Tel
 		didBranchChange: res.didBranchChange ? 1 : 0,
 	});
 
-	emitEditSurvivalEvent(otelService, 'inline_chat', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, sharedProps?.requestId ?? '');
+	emitEditSurvivalEvent(otelService, 'inline_chat', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, String(sharedProps?.requestId ?? ''));
 	GenAiMetrics.recordEditSurvivalFourGram(otelService, 'inline_chat', res.fourGram, res.timeDelayMs);
 	GenAiMetrics.recordEditSurvivalNoRevert(otelService, 'inline_chat', res.noRevert, res.timeDelayMs);
 }

@@ -31,6 +31,7 @@ import { AgentPrompt } from '../../prompts/node/agent/agentPrompt';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { IToolsService } from '../../tools/common/toolsService';
 import { getAgentMaxRequests } from '../common/agentConfig';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { AgentIntentInvocation } from './agentIntent';
 
 
@@ -126,8 +127,9 @@ export class AskAgentIntentInvocation extends AgentIntentInvocation {
 		@ILogService logService: ILogService,
 		@IExperimentationService expService: IExperimentationService,
 		@IAutomodeService automodeService: IAutomodeService,
+		@IOTelService otelService: IOTelService,
 	) {
-		super(intent, location, endpoint, request, { processCodeblocks: true }, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService, expService, automodeService);
+		super(intent, location, endpoint, request, { processCodeblocks: true }, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService, expService, automodeService, otelService);
 	}
 
 	public override async getAvailableTools(): Promise<vscode.LanguageModelToolInformation[]> {

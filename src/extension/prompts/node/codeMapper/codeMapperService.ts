@@ -12,9 +12,11 @@ import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession } from '../..
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { inferAlternativeNotebookContentFormat } from '../../../../platform/notebook/common/alternativeContent';
 import { IAlternativeNotebookContentEditGenerator, NotebookEditGenrationSource } from '../../../../platform/notebook/common/alternativeContentEditGenerator';
-import { INotebookService } from '../../../../platform/notebook/common/notebookService'; import { emitEditSurvivalEvent } from '../../../platform/otel/common/genAiEvents';
-import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
-import { IOTelService } from '../../../platform/otel/common/otelService'; import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
+import { INotebookService } from '../../../../platform/notebook/common/notebookService';
+import { emitEditSurvivalEvent } from '../../../../platform/otel/common/genAiEvents';
+import { GenAiMetrics } from '../../../../platform/otel/common/genAiMetrics';
+import { IOTelService } from '../../../../platform/otel/common/otelService';
+import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { findNotebook } from '../../../../util/common/notebooks';
 import { createServiceIdentifier } from '../../../../util/common/services';

@@ -362,7 +362,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		@ILogService private readonly logService: ILogService,
 		@IExperimentationService private readonly expService: IExperimentationService,
 		@IAutomodeService private readonly automodeService: IAutomodeService,
-		@IOTelService private readonly otelService: IOTelService,
+		@IOTelService override readonly otelService: IOTelService,
 	) {
 		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, otelService);
 	}
