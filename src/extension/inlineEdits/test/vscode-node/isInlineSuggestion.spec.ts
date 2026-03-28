@@ -37,8 +37,9 @@ suite('toInlineSuggestion', () => {
 
 		const result = toInlineSuggestion(cursorPosition, document, replaceRange, replaceText);
 		assert.isDefined(result);
-		assert.deepStrictEqual(result!.range, replaceRange);
-		assert.strictEqual(result!.newText, replaceText);
+		// Common prefix "This is lin" (11 chars) is trimmed so range starts at cursor
+		assert.deepStrictEqual(result!.range, new Range(1, 11, 1, 13));
+		assert.strictEqual(result!.newText, 'e 2,');
 	});
 
 	test('same line at completion', () => {
@@ -48,8 +49,9 @@ suite('toInlineSuggestion', () => {
 
 		const result = toInlineSuggestion(cursorPosition, document, replaceRange, replaceText);
 		assert.isDefined(result);
-		assert.deepStrictEqual(result!.range, replaceRange);
-		assert.strictEqual(result!.newText, replaceText);
+		// Common prefix "This is line" (12 chars) is trimmed so range starts at cursor
+		assert.deepStrictEqual(result!.range, new Range(1, 12, 1, 13));
+		assert.strictEqual(result!.newText, ' 2,');
 	});
 
 	test('same line after completion', () => {
@@ -429,9 +431,11 @@ function createDocumentSymbol(
 
 		// "clog" IS a subword of "console.log" (c...o...l...og)
 		// But text before cursor: replaced[0..1]="c", new[0..1]="c" → match
+		// Common prefix "c" (1 char) is trimmed so range starts at cursor
 		const result = toInlineSuggestion(cursorPosition, document, replaceRange, replaceText);
 		assert.isDefined(result);
-		assert.strictEqual(result!.newText, 'console.log');
+		assert.deepStrictEqual(result!.range, new Range(0, 1, 0, 4));
+		assert.strictEqual(result!.newText, 'onsole.log');
 	});
 
 	// --- Prefix-stripping: multi-line range reduction ---
@@ -546,5 +550,31 @@ function createDocumentSymbol(
 		assert.isDefined(result);
 		assert.deepStrictEqual(result!.range, new Range(1, 0, 1, 0));
 		assert.strictEqual(result!.newText, '');
+	});
+
+	// --- Common suffix elimination ---
+
+	test('should eliminate common suffix between replaced text and newText', () => {
+		// JSDoc comment: cursor is at end of "\t * ", edit replaces "\t * " with
+		// "\t * The order of the subsequent edit in the sequence of edits for the same document"
+		// The common prefix "\t * " (text before cursor) should be stripped from the result
+		// so the inline suggestion range starts at the cursor position.
+		const document = createMockDocument([
+			'\t/**',
+			'\t * ',
+			'\t */',
+			'\tprivate _subsequentEditOrder: number | undefined;',
+		]);
+		const cursorPosition = new Position(1, 4); // at end of "\t * "
+		const replaceRange = new Range(1, 0, 1, 4); // covers "\t * "
+		const replaceText = '\t * The order of the subsequent edit in the sequence of edits for the same document';
+
+		const result = toInlineSuggestion(cursorPosition, document, replaceRange, replaceText);
+		assert.isDefined(result);
+		// The common prefix "\t * " appears in both the replaced text and the newText,
+		// and the cursor sits right at the end of it. The range and newText should be
+		// trimmed so the suggestion starts at the cursor.
+		assert.deepStrictEqual(result!.range, new Range(1, 4, 1, 4));
+		assert.strictEqual(result!.newText, 'The order of the subsequent edit in the sequence of edits for the same document');
 	});
 });
