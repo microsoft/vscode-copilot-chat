@@ -5588,7 +5588,7 @@
 				},
 				{
 					"command": "github.copilot.cli.sessions.openWorktreeInNewWindow",
-					"when": "chatSessionType == copilotcli",
+					"when": "chatSessionType == copilotcli && !isSessionsWindow",
 					"group": "2_open@1"
 				},
 				{
