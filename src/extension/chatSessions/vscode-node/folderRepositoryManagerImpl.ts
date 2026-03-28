@@ -442,7 +442,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		branch: string | undefined,
 		token: vscode.CancellationToken
 	): Promise<{ repository: vscode.Uri; modifiedFiles: Array<{ uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number }> } | undefined> {
-		const repository = await this.gitService.getRepository(folderPath, false);
+		const repository = await this.gitService.getRepository(folderPath);
 		if (!repository) {
 			return undefined;
 		}
