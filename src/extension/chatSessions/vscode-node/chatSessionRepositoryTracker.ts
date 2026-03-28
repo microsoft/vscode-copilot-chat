@@ -31,6 +31,7 @@ export class ChatSessionRepositoryTracker extends Disposable {
 		if (vscode.workspace.isAgentSessionsWorkspace) {
 			this.logService.trace('[ChatSessionRepositoryTracker][constructor] Initializing workspace folder event handler');
 			this._register(vscode.workspace.onDidChangeWorkspaceFolders(e => this.onDidChangeWorkspaceFolders(e)));
+			this.onDidChangeWorkspaceFolders({ added: vscode.workspace.workspaceFolders ?? [], removed: [] });
 		}
 	}
 
