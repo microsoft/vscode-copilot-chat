@@ -92,6 +92,7 @@ import { IInstantiationServiceBuilder } from '../../../util/common/services';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IToolResultContentRenderer } from '../../agentDebug/common/toolResultRenderer';
 import { ToolResultContentRenderer } from '../../agentDebug/vscode-node/toolResultContentRenderer';
+import { IExecutionMetricsService, ExecutionMetricsService } from '../../agentExecutionMetrics/node/executionMetricsService';
 import { GitHubOrgChatResourcesService, IGitHubOrgChatResourcesService } from '../../agents/vscode-node/githubOrgChatResourcesService';
 import { ChatDebugFileLoggerService } from '../../chat/vscode-node/chatDebugFileLoggerService';
 import { ChatHookService } from '../../chat/vscode-node/chatHookService';
@@ -264,6 +265,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ISimilarFilesContextService, new SyncDescriptor(SimilarFilesContextService));
 	builder.define(IGitHubOrgChatResourcesService, new SyncDescriptor(GitHubOrgChatResourcesService));
 	builder.define(IToolResultContentRenderer, new SyncDescriptor(ToolResultContentRenderer));
+	builder.define(IExecutionMetricsService, new SyncDescriptor(ExecutionMetricsService));
 
 	// OTel SQLite store — created lazily, DB file only appears when dbSpanExporter.enabled is true
 	const otelDbPath = extensionContext.globalStorageUri
