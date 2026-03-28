@@ -19,4 +19,8 @@
 
 - #15-16 span attrs not feasible: `editCodeIntent.ts` doesn't hold the OTel span handle — it's encapsulated in `toolCallingLoop.ts`. Using counter for #15 instead. #16 (prompt render) deferred — not worth threading span for minor perf attr.
 - #23/26/CLI sessions: Deferred — these files are large and complex, need more careful injection to avoid regressions. Will tackle in follow-up PR.
-- agentIntent.ts #17-18: Need to check how the span handle flows to where summarization events fire.
+- agentIntent.ts #17-18: Used counters rather than span events since `AgentIntentInvocation` doesn't hold the span handle directly. The span is created inside `toolCallingLoop.ts` which is encapsulated.
+- Had to thread `@IOTelService` through 5 intent class constructors (`EditCodeIntentInvocation` → `AgentIntentInvocation` → `EditCode2IntentInvocation` / `AskAgentIntentInvocation` / `NotebookEditorIntentInvocation`) + `EditIntentRequestHandler`.
+- codeMapperService.ts import paths needed 4 `../` not 3 (it's nested one level deeper than tools).
+- tsfmt formatting and `TelemetryTrustedValue` type coercion were minor fixups.
+- **All builds pass** — zero TypeScript errors after fixes.
