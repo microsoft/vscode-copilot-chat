@@ -130,53 +130,59 @@ We have **four agentic surfaces**, each with different OTel coverage levels:
 | After agent span ends | **Event** — standalone log record | `otel.emitLogRecord()` | edit accepted/rejected, survival rate |
 | Aggregate/dashboard | **Metric** — counter or histogram | `otel.incrementCounter()` / `otel.recordMetric()` | accept count, lines of code |
 
+### Signal Type Principles
+
+1. **Counter** — add when easy; PMs use dashboards, not traces
+2. **Event (log record)** — only when attributes enable meaningful "why" drill-down; skip if no useful attrs
+3. **Span attribute** — add when data is available during span lifetime
+4. **Span event** — milestones within a span; add counter too if PMs need the number
+
 ### Complete Signal Map
 
-| # | Source MSFT Event | OTel Pillar | Signal Type | OTel Signal Name | Key Attributes | Timing |
-|---|------------------|-------------|-------------|-----------------|----------------|--------|
+| # | Source MSFT Event | Counter? | Event? | Span attr? | OTel Signal Names | Rationale |
+|---|------------------|----------|--------|------------|-------------------|-----------|
 | **Edit Quality (Accept Rate)** | | | | | | |
-| 1 | `panel.edit.feedback` | Event + Metric | Log record + Counter | `copilot_chat.edit.feedback` / `copilot_chat.edit.accept.count` | `outcome`, `language_id`, `participant`, `edit_surface` | Post-span |
-| 2 | `edit.hunk.action` | Event + Metric | Log record + Counter × 2 | `copilot_chat.edit.hunk.action` / `copilot_chat.edit.hunk.count` / `copilot_chat.lines_of_code.count` | `outcome`, `language_id`, `lines_added`, `lines_removed` | Post-span |
-| 10 | `inline.done` | Event + Metric | Log record + Counter | `copilot_chat.inline.done` / `copilot_chat.edit.accept.count` | `accepted`, `language_id`, `edit_count`, `edit_line_count` | Post-span (no parent span) |
+| 1 | `panel.edit.feedback` | ✅ `edit.accept.count` | ✅ `edit.feedback` | — | Counter{`outcome`, `edit_surface`} + Event{`outcome`, `language_id`, `participant`, `request_id`} | Counter for accept rate dashboard; event has `request_id` + `participant` for drill-down into which agent/model |
+| 2 | `edit.hunk.action` | ✅ `edit.hunk.count` + `lines_of_code.count` | ✅ `edit.hunk.action` | — | Counter{`outcome`} + Counter{`type`: added/removed, `language_id`} + Event{`lines_added`, `lines_removed`, `language_id`} | Counter for hunk-level accept rate + lines of code dashboard; event has per-hunk line deltas for anomaly drill-down |
+| 10 | `inline.done` | ✅ `edit.accept.count` | ✅ `inline.done` | — | Counter{`outcome`, `edit_surface: inline_chat`} + Event{`accepted`, `language_id`, `edit_count`, `edit_line_count`} | Counter feeds same accept rate as #1; event has `edit_count`/`edit_line_count` useful for understanding inline edit sizes |
 | **Edit Quality (Survival)** | | | | | | |
-| 11 | `inline.trackEditSurvival` | Event + Metric | Log record + Histogram | `copilot_chat.edit.survival` / `copilot_chat.edit.survival_rate` | `edit_source: 'inline_chat'`, `survival_rate_four_gram`, `time_delay_ms` | 5s–15min post-span |
-| 12 | `applyPatch.trackEditSurvival` | Event + Metric | Log record + Histogram | `copilot_chat.edit.survival` / `copilot_chat.edit.survival_rate` | `edit_source: 'apply_patch'`, same attrs | 5s–15min post-span |
-| 13 | `codeMapper.trackEditSurvival` (replace_string) | Event + Metric | Log record + Histogram | `copilot_chat.edit.survival` / `copilot_chat.edit.survival_rate` | `edit_source: 'replace_string'`, same attrs | 5s–15min post-span |
-| 14 | `codeMapper.trackEditSurvival` (code_mapper) | Event + Metric | Log record + Histogram | `copilot_chat.edit.survival` / `copilot_chat.edit.survival_rate` | `edit_source: 'code_mapper'`, same attrs | 5s–15min post-span |
+| 11 | `inline.trackEditSurvival` | ✅ `edit.survival_rate` (histogram) | ✅ `edit.survival` | — | Histogram{`edit_source`, `time_delay_ms`} + Event{`survival_rate_four_gram`, `survival_rate_no_revert`, `request_id`, `did_branch_change`} | Histogram for survival distribution; event has `request_id` + `did_branch_change` to filter invalid data points |
+| 12 | `applyPatch.trackEditSurvival` | ✅ same histogram | ✅ same event | — | `edit_source: 'apply_patch'` | Same pattern |
+| 13 | `codeMapper.trackEditSurvival` (replace_string) | ✅ same histogram | ✅ same event | — | `edit_source: 'replace_string'` | Same pattern |
+| 14 | `codeMapper.trackEditSurvival` (code_mapper) | ✅ same histogram | ✅ same event | — | `edit_source: 'code_mapper'` | Same pattern |
 | **User Engagement** | | | | | | |
-| 3 | `panel.action.copy` | Event + Metric | Log record + Counter | `copilot_chat.user.action` / `copilot_chat.user.action.count` | `action: 'copy'`, `character_count`, `line_count` | Post-span |
-| 4 | `panel.action.insert` | Event + Metric | Log record + Counter | `copilot_chat.user.action` / `copilot_chat.user.action.count` | `action: 'insert'`, `character_count` | Post-span |
-| 5 | `panel.action.followup` | Event + Metric | Log record + Counter | `copilot_chat.user.action` / `copilot_chat.user.action.count` | `action: 'followup'` | Post-span |
-| 6 | `conversation.acceptedCopy/Insert` | — | Skip (duplicate of #3/#4 with extra attrs) | — | — | — |
-| 7 | `conversation.appliedCodeblock` | Event + Metric | Log record + Counter | `copilot_chat.user.action` / `copilot_chat.user.action.count` | `action: 'apply'`, `total_lines`, `is_agent` | Post-span |
-| 8–9 | `panel.action.vote` / `conversation.messageRating` | Event + Metric | Log record + Counter | `copilot_chat.user.feedback` / `copilot_chat.user.feedback.count` | `rating`, `participant`, `conversation_id` | Post-span |
+| 3 | `panel.action.copy` | ✅ `user.action.count` | ❌ | — | Counter{`action: 'copy'`} | Counter only — attrs are just `character_count`/`line_count`, no meaningful "why" drill-down |
+| 4 | `panel.action.insert` | ✅ `user.action.count` | ❌ | — | Counter{`action: 'insert'`} | Counter only — same reasoning, `character_count` alone doesn't answer "why" |
+| 5 | `panel.action.followup` | ✅ `user.action.count` | ❌ | — | Counter{`action: 'followup'`} | Counter only — event would just have `language_id`, no useful drill-down |
+| 6 | `conversation.acceptedCopy/Insert` | — | — | — | Skip (duplicate of #3/#4) | — |
+| 7 | `conversation.appliedCodeblock` | ✅ `user.action.count` | ❌ | — | Counter{`action: 'apply'`} | Counter only — `total_lines` and `is_agent` are interesting but not worth a separate event |
+| 8–9 | `panel.action.vote` / `messageRating` | ✅ `user.feedback.count` | ✅ `user.feedback` | — | Counter{`rating`} + Event{`rating`, `participant`, `conversation_id`, `request_id`} | Counter for satisfaction dashboard; event has `conversation_id` + `request_id` to identify which responses get negative feedback — very useful for quality investigations |
 | **Agent Internals** | | | | | | |
-| 15 | `panel.edit.codeblocks` | **Trace** | **Span attributes** on `invoke_agent` | — (attrs on existing span) | `codeblock_count`, `edit_step_count`, `working_set_count`, `session_duration_ms` | During span |
-| 16 | `editCodeIntent.promptRender` | **Trace** | **Span attributes** on `invoke_agent` | — | `prompt_render_duration_ms`, `is_agent_mode` | During span |
-| 17 | `triggerSummarizeFailed` | **Trace** | **Span event** via `addEvent()` | `summarization_failed` | `error_kind`, `model` | During span |
-| 18 | `backgroundSummarizationApplied` | **Trace** | **Span event** via `addEvent()` | `summarization_applied` | `trigger`, `outcome`, `context_ratio`, `model` | During span |
-| 19–20 | `readFileTrajectory` / `toolCalling.invalidToolMessages` | — | Skip (internal debugging, low dashboard value) | — | — | — |
+| 15 | `panel.edit.codeblocks` | ✅ `agent.edit_response.count` | ❌ | ✅ | Counter{`outcome`} + Span attrs: `codeblock_count`, `edit_step_count`, `working_set_count` | Counter for success/error rate dashboard (easy); span attrs for per-invocation correlation with duration/tokens; no event needed — attrs are numeric aggregates, not "why" data |
+| 16 | `editCodeIntent.promptRender` | ❌ | ❌ | ✅ | Span attrs: `prompt_render_duration_ms`, `is_agent_mode` | Span attr only — this is a duration that correlates with the span; no counter (prompt render count = span count, redundant) |
+| 17 | `triggerSummarizeFailed` | ✅ `agent.summarization.count` | ❌ | ✅ span event | Counter{`outcome: 'failed'`} + Span event{`error_kind`, `model`} | Counter for "how often does summarization fail" dashboard; span event for trace-level correlation; no standalone event — attrs (`error_kind`, `model`) are useful but only in span context |
+| 18 | `backgroundSummarizationApplied` | ✅ `agent.summarization.count` | ❌ | ✅ span event | Counter{`outcome: 'applied'`} + Span event{`trigger`, `context_ratio`, `model`} | Same counter shared with #17; span event for trace drill-down |
+| 19–20 | `readFileTrajectory` / `invalidToolMessages` | — | — | — | Skip (internal debugging) | — |
 | **Background Agent (CLI)** | | | | | | |
-| 21 | `copilotcli.terminal.open` | — | Skip (already has env config bridge) | — | — | — |
-| 22 | `copilotcli.chat.invoke` | — | Skip (already has span bridge) | — | — | — |
-| — | CLI PR creation | Metric | Counter | `copilot_chat.pull_request.count` | — | On tool success |
-| — | CLI git commit | Metric | Counter | `copilot_chat.commit.count` | — | On tool success |
+| 21–22 | `terminal.open` / `chat.invoke` | — | — | — | Skip (already has OTel bridge) | — |
+| — | CLI PR creation | ✅ `pull_request.count` | ❌ | — | Counter only — rare event, simple aggregate | No useful attrs beyond the count itself |
+| — | CLI git commit | ✅ `commit.count` | ❌ | — | Counter only — same reasoning | — |
 | **Cloud Sessions** | | | | | | |
-| 23 | `copilotcloud.chat.invoke` | Event | Log record | `copilot_chat.cloud.session.invoke` | `partner_agent`, `model`, `request_id` | On invocation |
-| 24–25 | `confirmationCancelled` / `followupComment` | — | Skip (low dashboard value) | — | — | — |
-| 26 | `remoteAgentJobPullRequestReady` | Event | Log record | `copilot_chat.cloud.pr_ready` | `request_id` | On notification |
-| 27–28 | `remoteAgentJobInvoke` / `truncation` | — | Skip (operational, low dashboard value) | — | — | — |
+| 23 | `copilotcloud.chat.invoke` | ✅ `cloud.session.count` | ✅ `cloud.session.invoke` | — | Counter{`partner_agent`} + Event{`partner_agent`, `model`, `request_id`} | Counter for "how many cloud sessions by agent type" dashboard; event has `model` + `request_id` for per-session drill-down |
+| 24–25 | `confirmationCancelled` / `followupComment` | — | — | — | Skip (low dashboard value) | — |
+| 26 | `remoteAgentJobPullRequestReady` | ✅ `cloud.pr_ready.count` | ❌ | — | Counter only — only attr is `request_id`, not useful for drill-down | — |
+| 27–28 | `remoteAgentJobInvoke` / `truncation` | — | — | — | Skip (low dashboard value) | — |
 
 ### Summary by Pillar
 
 | Pillar | Count | Details |
 |--------|-------|---------|
-| **Metrics** (counters) | 6 | `edit.accept.count`, `edit.hunk.count`, `lines_of_code.count`, `user.action.count`, `user.feedback.count`, `pull_request.count`, `commit.count` |
+| **Metrics** (counters) | 11 | `edit.accept.count`, `edit.hunk.count`, `lines_of_code.count`, `user.action.count`, `user.feedback.count`, `agent.edit_response.count`, `agent.summarization.count`, `pull_request.count`, `commit.count`, `cloud.session.count`, `cloud.pr_ready.count` |
 | **Metrics** (histograms) | 1 | `edit.survival_rate` |
-| **Events** (log records) | 7 | `edit.feedback`, `edit.hunk.action`, `inline.done`, `edit.survival`, `user.action`, `user.feedback`, `cloud.session.invoke`, `cloud.pr_ready` |
+| **Events** (log records) | 6 | `edit.feedback`, `edit.hunk.action`, `inline.done`, `edit.survival`, `user.feedback`, `cloud.session.invoke` |
 | **Trace** (span attributes) | 2 | `codeblock_count`+`edit_step_count`+`working_set_count` on `invoke_agent`; `prompt_render_duration_ms` on `invoke_agent` |
 | **Trace** (span events) | 2 | `summarization_failed`, `summarization_applied` on `invoke_agent` |
-| **Skipped** | 8 | #6 (duplicate), #19-20 (debug), #21-22 (already bridged), #24-25, #27-28 (low value) |
+| **Skipped** | 9 | #6 (duplicate), #19-20 (debug), #21-22 (already bridged), #24-25, #27-28 (low value) |
 
 ---
 
@@ -184,24 +190,27 @@ We have **four agentic surfaces**, each with different OTel coverage levels:
 
 ### Phase 1: Platform OTel helpers
 
-Add event emitters to `src/platform/otel/common/genAiEvents.ts`:
-- `emitEditFeedbackEvent()` — for #1 panel.edit.feedback
-- `emitEditHunkActionEvent()` — for #2 edit.hunk.action
-- `emitEditSurvivalEvent()` — for #11-14 all survival tracking
-- `emitUserActionEvent()` — for #3-5, #7 copy/insert/apply/followup
-- `emitUserFeedbackEvent()` — for #8-9 vote/rating
-- `emitInlineDoneEvent()` — for #10 inline.done
-- `emitCloudSessionInvokeEvent()` — for #23 cloud session invoke
+Add event emitters to `src/platform/otel/common/genAiEvents.ts` (only for items with ✅ Event):
+- `emitEditFeedbackEvent()` — #1
+- `emitEditHunkActionEvent()` — #2
+- `emitInlineDoneEvent()` — #10
+- `emitEditSurvivalEvent()` — #11-14
+- `emitUserFeedbackEvent()` — #8-9
+- `emitCloudSessionInvokeEvent()` — #23
 
-Add metrics to `src/platform/otel/common/genAiMetrics.ts`:
-- `incrementEditAcceptCount()`
-- `incrementEditHunkCount()`
-- `incrementLinesOfCode()`
-- `recordEditSurvivalRate()`
-- `incrementUserActionCount()`
-- `incrementUserFeedbackCount()`
-- `incrementPullRequestCount()`
-- `incrementCommitCount()`
+Add metrics to `src/platform/otel/common/genAiMetrics.ts` (all ✅ Counter/Histogram items):
+- `incrementEditAcceptCount()` — #1, #10
+- `incrementEditHunkCount()` — #2
+- `incrementLinesOfCode()` — #2 (on accept)
+- `recordEditSurvivalRate()` — #11-14
+- `incrementUserActionCount()` — #3-5, #7
+- `incrementUserFeedbackCount()` — #8-9
+- `incrementAgentEditResponseCount()` — #15
+- `incrementAgentSummarizationCount()` — #17-18
+- `incrementPullRequestCount()` — CLI
+- `incrementCommitCount()` — CLI
+- `incrementCloudSessionCount()` — #23
+- `incrementCloudPrReadyCount()` — #26
 
 ### Phase 2: Wire into call sites
 
