@@ -74,7 +74,7 @@ export class SearchPanelPrompt extends PromptElement<ISearchPanelPromptProps> {
 [
 	{
 		"file": "/src/encoders/base64.ts",
-		"query": "/src/encoders/base64.ts:private async decodeFunction()"
+		"query": "private async decodeFunction()"
 	}
 ]
 \`\`\`
