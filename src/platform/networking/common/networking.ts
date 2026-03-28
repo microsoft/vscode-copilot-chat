@@ -80,6 +80,7 @@ export interface IEndpointBody {
 	top_logprobs?: number;
 	intent?: boolean;
 	intent_threshold?: number;
+  	reasoning_effort?: string;
 	state?: 'enabled';
 	snippy?: { enabled: boolean };
 	stream_options?: { include_usage?: boolean };
