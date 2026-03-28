@@ -5,7 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
-import { CUSTOM_TOOL_SEARCH_NAME, TOOL_SEARCH_SUPPORTED_MODELS } from '../../../platform/networking/common/anthropic';
+import { ANTHROPIC_TOOL_SEARCH_SUPPORTED_MODELS, CUSTOM_TOOL_SEARCH_NAME } from '../../../platform/networking/common/anthropic';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { ICopilotModelSpecificTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
@@ -70,7 +70,10 @@ ToolRegistry.registerModelSpecificTool(
 			},
 			required: ['query'],
 		},
-		models: TOOL_SEARCH_SUPPORTED_MODELS.map(prefix => ({ id: prefix })),
+		models: [
+			...ANTHROPIC_TOOL_SEARCH_SUPPORTED_MODELS.map(prefix => ({ id: prefix })),
+			{ family: 'gpt-5.4' },
+		],
 	},
 	ToolSearchTool,
 );

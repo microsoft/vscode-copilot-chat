@@ -14,11 +14,14 @@ import { SSEParser } from '../../../util/vs/base/common/sseParser';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatLocation } from '../../chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../networking/common/fetch';
+import { CUSTOM_TOOL_SEARCH_NAME } from '../../networking/common/anthropic';
+import { FinishedCallback, IResponseDelta, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OpenAiToolSearchTool } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
-import { ChatCompletion, FinishedCompletionReason, modelsWithoutResponsesContextManagement, openAIContextManagementCompactionType, OpenAIContextManagementResponse, rawMessageToCAPI, TokenLogProb } from '../../networking/common/openai';
+import { ChatCompletion, FinishedCompletionReason, isResponsesApiToolSearchEnabled, modelsWithoutResponsesContextManagement, openAIContextManagementCompactionType, OpenAIContextManagementResponse, rawMessageToCAPI, TokenLogProb } from '../../networking/common/openai';
+import { IToolDeferralService } from '../../networking/common/toolDeferralService';
 import { sendEngineMessagesTelemetry } from '../../networking/node/chatStream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -35,16 +38,67 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	const verbosity = getVerbosityForModelSync(endpoint);
 	// compaction supported for all the models but works well for codex models and any future models after 5.3
 
+	// Tool search: when enabled, split tools into non-deferred (always loaded) and deferred (defer_loading: true).
+	// Uses OpenAI's client-executed tool search protocol: we add { type: 'tool_search', execution: 'client' }
+	// and mark deferred tools with defer_loading. The model emits tool_search_call which we handle via
+	// our ToolSearchTool embeddings search, then round-trip as tool_search_output in the next request.
+	const toolSearchEnabled = isResponsesApiToolSearchEnabled(endpoint, configService, expService);
+	const isAllowedConversationAgent = options.location === ChatLocation.Agent || options.location === ChatLocation.MessagesProxy;
+	const isSubagent = options.telemetryProperties?.subType?.startsWith('subagent') ?? false;
+	const shouldDeferTools = toolSearchEnabled && isAllowedConversationAgent && !isSubagent;
+	const toolDeferralService = shouldDeferTools ? accessor.get(IToolDeferralService) : undefined;
+
+	type ResponsesFunctionTool = OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool & { defer_loading?: boolean };
+	const functionTools: ResponsesFunctionTool[] = [];
+	if (options.requestOptions?.tools) {
+		for (const tool of options.requestOptions.tools) {
+			if (!tool.function.name || tool.function.name.length === 0) {
+				continue;
+			}
+			const isDeferred = shouldDeferTools && !toolDeferralService!.isNonDeferredTool(tool.function.name);
+			functionTools.push({
+				...tool.function,
+				type: 'function',
+				strict: false,
+				parameters: (tool.function.parameters || {}) as Record<string, unknown>,
+				...(isDeferred ? { defer_loading: true } : {}),
+			});
+		}
+	}
+
+	// Build final tools array
+	const finalTools: Array<ResponsesFunctionTool | OpenAiToolSearchTool | ClientToolSearchTool> = [...functionTools];
+	const hasDeferredTools = functionTools.some(t => t.defer_loading);
+	if (hasDeferredTools) {
+		// Client-executed tool search: the model emits tool_search_call, our ToolSearchTool
+		// handles the embeddings search, and we return tool_search_output with full definitions.
+		finalTools.unshift({
+			type: 'tool_search',
+			execution: 'client',
+			description: 'Search for relevant tools by describing what you need. Returns tool definitions for tools matching your query.',
+			parameters: {
+				type: 'object',
+				properties: {
+					query: {
+						type: 'string',
+						description: 'Natural language description of what tool capability you are looking for.',
+					},
+				},
+				required: ['query'],
+			},
+		} as ClientToolSearchTool);
+	}
+
+	// Build tools map for rawMessagesToResponseAPI to convert tool_search round-trips
+	const toolsMap = shouldDeferTools && options.requestOptions?.tools
+		? new Map(options.requestOptions.tools.map(t => [t.function.name, t]))
+		: undefined;
+
 	const body: IEndpointBody = {
 		model,
-		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
+		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker, toolsMap),
 		stream: true,
-		tools: options.requestOptions?.tools?.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
-			...tool.function,
-			type: 'function',
-			strict: false,
-			parameters: (tool.function.parameters || {}) as Record<string, unknown>,
-		})),
+		tools: finalTools.length > 0 ? finalTools : undefined,
 		// Only a subset of completion post options are supported, and some
 		// are renamed. Handle them manually:
 		max_output_tokens: options.postOptions.max_tokens,
@@ -100,7 +154,35 @@ interface ResponseOutputItemWithPhase {
 	phase?: string;
 }
 
-function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMessage[], ignoreStatefulMarker: boolean): { input: OpenAI.Responses.ResponseInputItem[]; previous_response_id?: string } {
+// ── Responses API tool search types ──────────────────────────────────\n// These match the shapes from https://developers.openai.com/api/docs/guides/tools-tool-search
+
+/** Client-executed tool_search tool definition for the Responses API */
+interface ClientToolSearchTool {
+	type: 'tool_search';
+	execution: 'client';
+	description: string;
+	parameters: Record<string, unknown>;
+}
+
+interface ResponsesToolSearchCall {
+	type: 'tool_search_call';
+	id: string;
+	execution: 'server' | 'client';
+	call_id: string | null;
+	status: string;
+	arguments?: Record<string, unknown>;
+}
+
+interface ResponsesToolSearchOutput {
+	type: 'tool_search_output';
+	id: string;
+	execution: 'server' | 'client';
+	call_id: string | null;
+	status: string;
+	tools?: unknown[];
+}
+
+function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMessage[], ignoreStatefulMarker: boolean, toolsMap?: Map<string, OpenAiFunctionTool>): { input: OpenAI.Responses.ResponseInputItem[]; previous_response_id?: string } {
 	const latestCompactionMessageIndex = getLatestCompactionMessageIndex(messages);
 	if (latestCompactionMessageIndex !== undefined) {
 		messages = messages.slice(latestCompactionMessageIndex);
@@ -112,6 +194,9 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 		previousResponseId = statefulMarkerAndIndex.statefulMarker;
 		messages = messages.slice(statefulMarkerAndIndex.index + 1);
 	}
+
+	// Track which call_ids are tool_search_calls (from client-executed tool search)
+	const toolSearchCallIds = new Set<string>();
 
 	const input: OpenAI.Responses.ResponseInputItem[] = [];
 	for (const message of messages) {
@@ -136,28 +221,60 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 				}
 				if (message.toolCalls) {
 					for (const toolCall of message.toolCalls) {
-						input.push({ type: 'function_call', name: toolCall.function.name, arguments: toolCall.function.arguments, call_id: toolCall.id });
+						if (toolsMap && toolCall.function.name === CUSTOM_TOOL_SEARCH_NAME) {
+							// Client-executed tool search: emit as tool_search_call instead of function_call
+							toolSearchCallIds.add(toolCall.id);
+							let parsedArgs: Record<string, unknown> = {};
+							try { parsedArgs = JSON.parse(toolCall.function.arguments || '{}'); } catch { }
+							input.push({
+								type: 'tool_search_call',
+								execution: 'client',
+								call_id: toolCall.id,
+								status: 'completed',
+								arguments: parsedArgs,
+								// eslint-disable-next-line @typescript-eslint/no-explicit-any
+							} as any);
+						} else {
+							input.push({ type: 'function_call', name: toolCall.function.name, arguments: toolCall.function.arguments, call_id: toolCall.id });
+						}
 					}
 				}
 				break;
 			case Raw.ChatRole.Tool:
 				if (message.toolCallId) {
-					const asText = message.content
-						.filter(c => c.type === Raw.ChatCompletionContentPartKind.Text)
-						.map(c => c.text)
-						.join('');
-					const asImages = message.content
-						.filter(c => c.type === Raw.ChatCompletionContentPartKind.Image)
-						.map((c): OpenAI.Responses.ResponseInputImage => ({
-							type: 'input_image',
-							detail: c.imageUrl.detail || 'auto',
-							image_url: c.imageUrl.url,
-						}));
+					if (toolsMap && toolSearchCallIds.has(message.toolCallId)) {
+						// Client-executed tool search result: convert tool names to tool_search_output with full definitions
+						const resultText = message.content
+							.filter(c => c.type === Raw.ChatCompletionContentPartKind.Text)
+							.map(c => c.text)
+							.join('');
+						const loadedTools = buildToolSearchOutputTools(resultText, toolsMap);
+						input.push({
+							type: 'tool_search_output',
+							execution: 'client',
+							call_id: message.toolCallId,
+							status: 'completed',
+							tools: loadedTools,
+							// eslint-disable-next-line @typescript-eslint/no-explicit-any
+						} as any);
+					} else {
+						const asText = message.content
+							.filter(c => c.type === Raw.ChatCompletionContentPartKind.Text)
+							.map(c => c.text)
+							.join('');
+						const asImages = message.content
+							.filter(c => c.type === Raw.ChatCompletionContentPartKind.Image)
+							.map((c): OpenAI.Responses.ResponseInputImage => ({
+								type: 'input_image',
+								detail: c.imageUrl.detail || 'auto',
+								image_url: c.imageUrl.url,
+							}));
 
-					// todod@connor4312: hack while responses API only supports text output from tools
-					input.push({ type: 'function_call_output', call_id: message.toolCallId, output: asText });
-					if (asImages.length) {
-						input.push({ role: 'user', content: [{ type: 'input_text', text: 'Image associated with the above tool call:' }, ...asImages] });
+						// todod@connor4312: hack while responses API only supports text output from tools
+						input.push({ type: 'function_call_output', call_id: message.toolCallId, output: asText });
+						if (asImages.length) {
+							input.push({ role: 'user', content: [{ type: 'input_text', text: 'Image associated with the above tool call:' }, ...asImages] });
+						}
 					}
 				}
 				break;
@@ -171,6 +288,29 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 	}
 
 	return { input, previous_response_id: previousResponseId };
+}
+
+/**
+ * Converts a JSON array of tool names (from ToolSearchTool) into full tool definitions
+ * for the tool_search_output. Falls back to an empty array on parse failure.
+ */
+function buildToolSearchOutputTools(resultText: string, toolsMap: Map<string, OpenAiFunctionTool>): unknown[] {
+	let toolNames: unknown;
+	try { toolNames = JSON.parse(resultText); } catch { return []; }
+	if (!Array.isArray(toolNames)) { return []; }
+
+	return toolNames
+		.filter((name): name is string => typeof name === 'string' && toolsMap.has(name))
+		.map(name => {
+			const tool = toolsMap.get(name)!;
+			return {
+				type: 'function',
+				name: tool.function.name,
+				description: tool.function.description || '',
+				defer_loading: true,
+				parameters: tool.function.parameters || { type: 'object', properties: {} },
+			};
+		});
 }
 
 function getLatestCompactionMessageIndex(messages: readonly Raw.ChatMessage[]): number | undefined {
@@ -509,6 +649,23 @@ export class OpenAIResponsesProcessor {
 						text: '',
 						beginToolCalls: [{ name: chunk.item.name, id: chunk.item.call_id }]
 					});
+				} else if (chunk.item.type.toString() === 'tool_search_call') {
+					const tsItem = chunk.item as unknown as ResponsesToolSearchCall;
+					if (tsItem.execution === 'client' && tsItem.call_id) {
+						// Client-executed tool search: treat as a regular tool call so our ToolSearchTool handles it.
+						// Use CUSTOM_TOOL_SEARCH_NAME ('tool_search') as the name so VS Code invokes ToolSearchTool.
+						this.toolCallInfo.set(chunk.output_index, { name: CUSTOM_TOOL_SEARCH_NAME, callId: tsItem.call_id, arguments: '' });
+						onProgress({
+							text: '',
+							beginToolCalls: [{ name: CUSTOM_TOOL_SEARCH_NAME, id: tsItem.call_id }]
+						});
+					} else {
+						// Server-hosted tool search: just log it
+						onProgress({
+							text: '',
+							serverToolCalls: [{ isServer: true, name: 'tool_search', id: tsItem.id ?? '' }]
+						});
+					}
 				}
 				return;
 			case 'response.function_call_arguments.delta': {
@@ -565,6 +722,44 @@ export class OpenAIResponsesProcessor {
 					onProgress({
 						text: '',
 						phase: (chunk.item as ResponseOutputItemWithPhase).phase
+					});
+				} else if (chunk.item.type.toString() === 'tool_search_call') {
+					const tsCall = chunk.item as unknown as ResponsesToolSearchCall;
+					if (tsCall.execution === 'client' && tsCall.call_id) {
+						// Client-executed tool search completed: emit as a completed copilotToolCall
+						// so VS Code invokes ToolSearchTool and returns results.
+						this.toolCallInfo.delete(chunk.output_index);
+						onProgress({
+							text: '',
+							copilotToolCalls: [{
+								id: tsCall.call_id,
+								name: CUSTOM_TOOL_SEARCH_NAME,
+								arguments: JSON.stringify(tsCall.arguments ?? {}),
+							}],
+						});
+					} else {
+						// Server-mode: just log it
+						onProgress({
+							text: '',
+							serverToolCalls: [{
+								isServer: true,
+								name: 'tool_search',
+								id: tsCall.id ?? '',
+								args: tsCall.arguments,
+							}]
+						});
+					}
+				} else if (chunk.item.type.toString() === 'tool_search_output') {
+					// Tool search output — the model loaded deferred tools
+					const tsOutput = chunk.item as unknown as ResponsesToolSearchOutput;
+					onProgress({
+						text: '',
+						serverToolCalls: [{
+							isServer: true,
+							name: 'tool_search_output',
+							id: tsOutput.id ?? '',
+							result: { tools: tsOutput.tools },
+						}]
 					});
 				}
 				return;
