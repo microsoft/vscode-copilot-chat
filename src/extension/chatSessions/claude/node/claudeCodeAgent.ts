@@ -448,6 +448,10 @@ export class ClaudeCodeSession extends Disposable {
 					USE_BUILTIN_RIPGREP: '0',
 					PATH: `${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin${pathSep}${process.env.PATH}`
 				},
+				attribution: {
+					commit: '',
+					pr: '',
+				},
 			},
 			canUseTool: async (name, input) => {
 				if (!this._currentRequest) {
