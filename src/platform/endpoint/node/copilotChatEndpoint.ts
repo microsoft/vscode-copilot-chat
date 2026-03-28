@@ -67,10 +67,10 @@ export class CopilotChatEndpoint extends ChatEndpoint {
  * Endpoint for the `copilot-fast` internal family. Prefers {@link primaryFamily} but falls back to
  * {@link fallbackFamily} when the primary model is not available to the user.
  *
- * When the primary model uses the Responses API, reasoning effort is forced to `'none'` so that
- * background tasks (title generation, rename suggestions, etc.) are fast and cheap. When the same
- * model is selected explicitly in the model picker it uses a regular {@link CopilotChatEndpoint}
- * and respects the user's chosen reasoning effort.
+ * When the selected model (primary or fallback) uses the Responses API, reasoning effort is forced
+ * to `'none'` so that background tasks (title generation, rename suggestions, etc.) are fast and
+ * cheap. When the same model is selected explicitly in the model picker it uses a regular
+ * {@link CopilotChatEndpoint} and respects the user's chosen reasoning effort.
  */
 export class CopilotFastChatEndpoint extends CopilotChatEndpoint {
 	static readonly primaryFamily = 'gpt-5.4-nano';
