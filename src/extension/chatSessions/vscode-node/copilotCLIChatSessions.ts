@@ -160,11 +160,6 @@ function isIsolationOptionFeatureEnabled(configurationService: IConfigurationSer
 
 
 export class CopilotCLIChatSessionContentProvider extends Disposable implements vscode.ChatSessionContentProvider, ICopilotCLIChatSessionItemProvider {
-	private readonly _onDidChangeChatSessionOptions = this._register(new Emitter<vscode.ChatSessionOptionChangeEvent>());
-	readonly onDidChangeChatSessionOptions = this._onDidChangeChatSessionOptions.event;
-	private readonly _onDidChangeChatSessionProviderOptions = this._register(new Emitter<void>());
-	readonly onDidChangeChatSessionProviderOptions = this._onDidChangeChatSessionProviderOptions.event;
-
 	private _currentSessionId: string | undefined;
 	private _selectedRepoForBranches: { repoUri: URI; headBranchName: string | undefined } | undefined;
 	private _displayedOptionIds = new Set<string>();
@@ -179,7 +174,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	 */
 	private _lastUsedFolderIdInUntitledWorkspace: string | undefined;
 	constructor(
-		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
 		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
 		@IChatSessionMetadataStore private readonly chatSessionMetadataStore: IChatSessionMetadataStore,
 		@IChatSessionWorktreeService private readonly copilotCLIWorktreeManagerService: IChatSessionWorktreeService,
@@ -268,23 +262,14 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			controller.items.add(item);
 		}));
 
-		const originalRepos = this.getRepositoryOptionItems().length;
-		this._register(this.gitService.onDidFinishInitialization(() => {
-			if (originalRepos !== this.getRepositoryOptionItems().length) {
-				this._onDidChangeChatSessionProviderOptions.fire();
-			}
-		}));
-		this._register(this.gitService.onDidOpenRepository(() => {
-			if (originalRepos !== this.getRepositoryOptionItems().length) {
-				this._onDidChangeChatSessionProviderOptions.fire();
-			}
-		}));
-		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => {
-			this._onDidChangeChatSessionProviderOptions.fire();
-		}));
-		this._register(this.copilotCLIAgents.onDidChangeAgents(() => {
-			this._onDidChangeChatSessionProviderOptions.fire();
-		}));
+		controller.getChatSessionInputState = async (sessionResource, _context, token) => {
+			const groups = await this.buildInputStateGroups(sessionResource, token);
+			const inputState = controller.createChatSessionInputState([...groups]);
+			inputState.onDidChange(() => {
+				void this.handleInputStateChange(sessionResource, inputState);
+			});
+			return inputState;
+		};
 	}
 
 	public async refreshSession(refreshOptions: { reason: 'update'; sessionId: string } | { reason: 'delete'; sessionId: string }): Promise<void> {
@@ -479,31 +464,15 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		}
 	}
 
-	public notifySessionOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<{ optionId: string; value: string | vscode.ChatSessionProviderOptionItem }>): void {
-		this._onDidChangeChatSessionOptions.fire({ resource, updates });
+	public notifySessionOptionsChange(_resource: vscode.Uri, _updates: ReadonlyArray<{ optionId: string; value: string | vscode.ChatSessionProviderOptionItem }>): void {
+		// no-op: deprecated event removed, input state is now managed via getChatSessionInputState
 	}
 
 	public notifyProviderOptionsChange(): void {
-		this._onDidChangeChatSessionProviderOptions.fire();
+		// no-op: deprecated event removed, input state is now managed via getChatSessionInputState
 	}
 
-	private async getDefaultUntitledSessionRepositoryOption(copilotcliSessionId: string | undefined, token: vscode.CancellationToken) {
-		const repositories = this.isUntitledWorkspace() ? folderMRUToChatProviderOptions(await this.folderRepositoryManager.getFolderMRU()) : this.getRepositoryOptionItems();
-		// Use FolderRepositoryManager to get folder/repository info (no trust check needed for UI population)
-		const folderInfo = copilotcliSessionId ? await this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token) : undefined;
-		const uri = folderInfo?.repository ?? folderInfo?.folder;
-		if (uri) {
-			return uri;
-		} else if (repositories.length) {
-			// No folder selected yet for this untitled session - use MRU or first available
-			const lastUsedFolderId = this._lastUsedFolderIdInUntitledWorkspace;
-			const firstRepo = (lastUsedFolderId && repositories.find(repo => repo.id === lastUsedFolderId)?.id) ?? repositories[0].id;
-			return Uri.file(firstRepo);
-		}
-		return undefined;
-	}
-
-	async provideChatSessionContent(resource: Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
+	async provideChatSessionContent(resource: Uri, token: vscode.CancellationToken, _context?: { readonly inputState: vscode.ChatSessionInputState; readonly sessionOptions: ReadonlyArray<{ optionId: string; value: string | vscode.ChatSessionProviderOptionItem }> }): Promise<vscode.ChatSession> {
 		const copilotcliSessionId = SessionIdForCLI.parse(resource);
 		if (copilotcliSessionId.startsWith('untitled:') || copilotcliSessionId.startsWith('untitled-')) {
 			return {
@@ -540,69 +509,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			this.getSessionHistory(copilotcliSessionId, folderRepo, token),
 			this.customSessionTitleService.getCustomSessionTitle(copilotcliSessionId),
 		]);
-		const repositories = this.isUntitledWorkspace() ? folderMRUToChatProviderOptions(await this.folderRepositoryManager.getFolderMRU()) : this.getRepositoryOptionItems();
-
-		const options: Record<string, string | vscode.ChatSessionProviderOptionItem> = {};
-
-		const folderInfo = await this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token);
-		const folderOrRepoId = folderInfo.repository?.fsPath ?? folderInfo.folder?.fsPath;
-		const existingItem = folderOrRepoId ? repositories.find(repo => repo.id === folderOrRepoId) : undefined;
-		if (existingItem) {
-			options[REPOSITORY_OPTION_ID] = {
-				...existingItem,
-				locked: true
-			};
-		} else if (folderInfo.repository) {
-			options[REPOSITORY_OPTION_ID] = {
-				...toRepositoryOptionItem(folderInfo.repository),
-				locked: true
-			};
-		} else if (folderInfo.folder) {
-			const folderName = this.workspaceService.getWorkspaceFolderName(folderInfo.folder) || basename(folderInfo.folder);
-			options[REPOSITORY_OPTION_ID] = {
-				...toWorkspaceFolderOptionItem(folderInfo.folder, folderName),
-				locked: true
-			};
-		} else {
-			// Existing session with no folder info - show unknown
-			let folderName = l10n.t('Unknown');
-			if (this.workspaceService.getWorkspaceFolders().length === 1) {
-				folderName = this.workspaceService.getWorkspaceFolderName(this.workspaceService.getWorkspaceFolders()[0]) || folderName;
-			}
-			options[REPOSITORY_OPTION_ID] = {
-				id: '',
-				name: folderName,
-				icon: new vscode.ThemeIcon('folder'),
-				locked: true
-			};
-		}
-		const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(copilotcliSessionId);
-		if (worktreeProperties?.repositoryPath) {
-			const branchName = worktreeProperties.branchName;
-			const repoUri = vscode.Uri.file(worktreeProperties.repositoryPath);
-			this._selectedRepoForBranches = { repoUri, headBranchName: branchName };
-
-			options[BRANCH_OPTION_ID] = {
-				id: branchName,
-				name: branchName,
-				icon: new vscode.ThemeIcon('git-branch'),
-				locked: true
-			};
-		}
-		if (isIsolationOptionFeatureEnabled(this.configurationService)) {
-			const isWorktree = !!worktreeProperties;
-			options[ISOLATION_OPTION_ID] = {
-				id: isWorktree ? IsolationMode.Worktree : IsolationMode.Workspace,
-				name: isWorktree ? l10n.t('Worktree') : l10n.t('Workspace'),
-				icon: new vscode.ThemeIcon(isWorktree ? 'worktree' : 'folder'),
-				locked: true
-			};
-		}
-
-		// Ensure the branch option group is shown when we have a branch value but it's not displayed.
-		if (options[BRANCH_OPTION_ID] && !this._displayedOptionIds.has(BRANCH_OPTION_ID)) {
-			this.notifyProviderOptionsChange();
-		}
 
 		return {
 			title,
@@ -638,17 +544,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		} finally {
 			disposables.dispose();
 		}
-	}
-
-	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
-		const [optionGroups, newSessionOptions] = await Promise.all([
-			this.provideChatSessionProviderOptionGroups(),
-			this.generateNewSessionOptions()
-		]);
-		return {
-			optionGroups,
-			newSessionOptions,
-		};
 	}
 
 	async provideChatSessionProviderOptionGroups(): Promise<vscode.ChatSessionProviderOptions['optionGroups']> {
@@ -715,6 +610,106 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			this._displayedOptionIds.add(group.id);
 		});
 		return optionGroups;
+	}
+
+	/**
+	 * Builds option groups with `selected` values for the getChatSessionInputState handler.
+	 * For new/blank sessions (sessionResource undefined): applies default selections.
+	 * For existing sessions: applies locked session-specific selections.
+	 */
+	private async buildInputStateGroups(sessionResource: vscode.Uri | undefined, token: vscode.CancellationToken): Promise<vscode.ChatSessionProviderOptionGroup[]> {
+		if (sessionResource) {
+			// Existing session: build groups with locked selections
+			return this.buildExistingSessionInputStateGroups(sessionResource, token);
+		}
+		// New/blank session: build groups with default selections
+		const groups = await this.provideChatSessionProviderOptionGroups() ?? [];
+		const newSessionDefaults = await this.generateNewSessionOptions();
+		return this.applyDefaultSelectionsToGroups(groups, newSessionDefaults);
+	}
+
+	private applyDefaultSelectionsToGroups(
+		groups: readonly vscode.ChatSessionProviderOptionGroup[],
+		newSessionDefaults: vscode.ChatSessionProviderOptions['newSessionOptions']
+	): vscode.ChatSessionProviderOptionGroup[] {
+		if (!newSessionDefaults) {
+			return [...groups];
+		}
+		return groups.map(group => {
+			const defaultValue = newSessionDefaults[group.id];
+			if (!defaultValue) {
+				return group;
+			}
+			if (typeof defaultValue === 'string') {
+				const selectedItem = group.items.find(item => item.id === defaultValue);
+				return selectedItem ? { ...group, selected: selectedItem } : group;
+			}
+			// defaultValue is a ChatSessionProviderOptionItem
+			const matchingItem = group.items.find(item => item.id === defaultValue.id);
+			return { ...group, selected: matchingItem ?? defaultValue };
+		});
+	}
+
+	private async buildExistingSessionInputStateGroups(resource: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.ChatSessionProviderOptionGroup[]> {
+		const copilotcliSessionId = SessionIdForCLI.parse(resource);
+		this._currentSessionId = copilotcliSessionId;
+
+		const groups = await this.provideChatSessionProviderOptionGroups() ?? [];
+
+		const folderInfo = await this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token);
+		const repositories = this.isUntitledWorkspace() ? folderMRUToChatProviderOptions(await this.folderRepositoryManager.getFolderMRU()) : this.getRepositoryOptionItems();
+		const folderOrRepoId = folderInfo.repository?.fsPath ?? folderInfo.folder?.fsPath;
+		const existingItem = folderOrRepoId ? repositories.find(repo => repo.id === folderOrRepoId) : undefined;
+
+		let repoSelected: vscode.ChatSessionProviderOptionItem;
+		if (existingItem) {
+			repoSelected = { ...existingItem, locked: true };
+		} else if (folderInfo.repository) {
+			repoSelected = { ...toRepositoryOptionItem(folderInfo.repository), locked: true };
+		} else if (folderInfo.folder) {
+			const folderName = this.workspaceService.getWorkspaceFolderName(folderInfo.folder) || basename(folderInfo.folder);
+			repoSelected = { ...toWorkspaceFolderOptionItem(folderInfo.folder, folderName), locked: true };
+		} else {
+			let folderName = l10n.t('Unknown');
+			if (this.workspaceService.getWorkspaceFolders().length === 1) {
+				folderName = this.workspaceService.getWorkspaceFolderName(this.workspaceService.getWorkspaceFolders()[0]) || folderName;
+			}
+			repoSelected = { id: '', name: folderName, icon: new vscode.ThemeIcon('folder'), locked: true };
+		}
+
+		const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(copilotcliSessionId);
+
+		let branchSelected: vscode.ChatSessionProviderOptionItem | undefined;
+		if (worktreeProperties?.repositoryPath) {
+			const branchName = worktreeProperties.branchName;
+			const repoUri = vscode.Uri.file(worktreeProperties.repositoryPath);
+			this._selectedRepoForBranches = { repoUri, headBranchName: branchName };
+			branchSelected = { id: branchName, name: branchName, icon: new vscode.ThemeIcon('git-branch'), locked: true };
+		}
+
+		let isolationSelected: vscode.ChatSessionProviderOptionItem | undefined;
+		if (isIsolationOptionFeatureEnabled(this.configurationService)) {
+			const isWorktree = !!worktreeProperties;
+			isolationSelected = {
+				id: isWorktree ? IsolationMode.Worktree : IsolationMode.Workspace,
+				name: isWorktree ? l10n.t('Worktree') : l10n.t('Workspace'),
+				icon: new vscode.ThemeIcon(isWorktree ? 'worktree' : 'folder'),
+				locked: true
+			};
+		}
+
+		return groups.map(group => {
+			if (group.id === REPOSITORY_OPTION_ID) {
+				return { ...group, selected: repoSelected };
+			}
+			if (group.id === BRANCH_OPTION_ID && branchSelected) {
+				return { ...group, selected: branchSelected };
+			}
+			if (group.id === ISOLATION_OPTION_ID && isolationSelected) {
+				return { ...group, selected: isolationSelected };
+			}
+			return group;
+		});
 	}
 
 	private async generateNewSessionOptions(): Promise<vscode.ChatSessionProviderOptions['newSessionOptions']> {
@@ -923,120 +918,69 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		}
 	}
 
-	// Handle option changes for a session (store current state in a map)
-	async provideHandleOptionsChange(resource: Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, token: vscode.CancellationToken): Promise<void> {
-		const sessionId = SessionIdForCLI.parse(resource);
-		this._currentSessionId = sessionId;
-		const wasBranchOptionShow = !!this._selectedRepoForBranches;
-		let triggerProviderOptionsChange = false;
-		for (const update of updates) {
-			if (update.optionId === REPOSITORY_OPTION_ID && typeof update.value === 'string' && this.sessionService.isNewSessionId(sessionId)) {
-				const folder = vscode.Uri.file(update.value);
-				if (isEqual(folder, this._selectedRepoForBranches?.repoUri)) {
-					continue;
+	/**
+	 * Handles user-driven input state changes (via the ChatSessionInputState.onDidChange event).
+	 * Reacts to option selection changes: updates internal tracking state and rebuilds groups if needed.
+	 */
+	private async handleInputStateChange(sessionResource: vscode.Uri | undefined, inputState: vscode.ChatSessionInputState): Promise<void> {
+		const sessionId = sessionResource ? SessionIdForCLI.parse(sessionResource) : undefined;
+		if (!sessionId) {
+			return;
+		}
+		const groups = inputState.groups;
+		let needsGroupRebuild = false;
+
+		for (const group of groups) {
+			const selectedId = group.selected?.id;
+
+			if (group.id === REPOSITORY_OPTION_ID && selectedId && this.sessionService.isNewSessionId(sessionId)) {
+				const folder = vscode.Uri.file(selectedId);
+				if (!isEqual(folder, this._selectedRepoForBranches?.repoUri)) {
+					_sessionBranch.delete(sessionId);
+
+					if (await checkPathExists(folder, this.fileSystem)) {
+						this.trackLastUsedFolderInWelcomeView(folder);
+						this.folderRepositoryManager.setNewSessionFolder(sessionId, folder);
+
+						const repoInfo = await this.folderRepositoryManager.getRepositoryInfo(folder, CancellationToken.None);
+						this._selectedRepoForBranches = repoInfo.repository
+							? { repoUri: repoInfo.repository, headBranchName: repoInfo.headBranchName }
+							: undefined;
+						needsGroupRebuild = true;
+					} else {
+						await this.folderRepositoryManager.deleteMRUEntry(folder);
+						const message = l10n.t('The path \'{0}\' does not exist on this computer.', folder.fsPath);
+						vscode.window.showErrorMessage(l10n.t('Path does not exist'), { modal: true, detail: message });
+						this._selectedRepoForBranches = undefined;
+						needsGroupRebuild = true;
+					}
 				}
+			} else if (group.id === BRANCH_OPTION_ID && selectedId) {
+				if (selectedId !== _sessionBranch.get(sessionId)) {
+					_sessionBranch.set(sessionId, selectedId);
+				}
+			} else if (group.id === ISOLATION_OPTION_ID && selectedId) {
+				if (selectedId !== _sessionIsolation.get(sessionId)) {
+					_sessionIsolation.set(sessionId, selectedId as IsolationMode);
+					void this.context.globalState.update(LAST_USED_ISOLATION_OPTION_KEY, selectedId);
 
-				_sessionBranch.delete(sessionId);
-
-				if (this.sessionService.isNewSessionId(sessionId) && (await checkPathExists(folder, this.fileSystem))) {
-					this.trackLastUsedFolderInWelcomeView(folder);
-					this.folderRepositoryManager.setNewSessionFolder(sessionId, folder);
-
-					// Check if the selected folder is a git repo to show/hide branch dropdown
-					const repoInfo = await this.folderRepositoryManager.getRepositoryInfo(folder, token);
-					this._selectedRepoForBranches = repoInfo.repository
-						? { repoUri: repoInfo.repository, headBranchName: repoInfo.headBranchName }
-						: undefined;
-
-					// When switching to a new repository, we need to update the branch selection for the session. Push an
-					// update to the session to select the first branch in the new repo and then we will fire an event so
-					// that the branches from the new repository are loaded in the dropdown.
-					if (this._selectedRepoForBranches && updates.length === 1) {
-						const sessionChanges: { optionId: string; value: string | vscode.ChatSessionProviderOptionItem }[] = [];
-
+					if (selectedId === IsolationMode.Worktree) {
 						const branchItems = await this.getBranchOptionItems();
 						if (branchItems.length > 0) {
-							const branchItem = branchItems[0];
-							_sessionBranch.set(sessionId, branchItem.id);
-
-							sessionChanges.push({
-								optionId: BRANCH_OPTION_ID,
-								value: {
-									id: branchItem.id,
-									name: branchItem.name,
-									icon: new vscode.ThemeIcon('git-branch')
-								}
-							});
+							const branch = _sessionBranch.get(sessionId) ?? branchItems[0].id;
+							_sessionBranch.set(sessionId, branch);
 						}
-
-						if (sessionChanges.length > 0) {
-							this.notifySessionOptionsChange(resource, sessionChanges);
-						}
-
-						// Update all options
-						triggerProviderOptionsChange = true;
+					} else {
+						_sessionBranch.delete(sessionId);
 					}
-				} else {
-					await this.folderRepositoryManager.deleteMRUEntry(folder);
-					const message = l10n.t('The path \'{0}\' does not exist on this computer.', folder.fsPath);
-					vscode.window.showErrorMessage(l10n.t('Path does not exist'), { modal: true, detail: message });
-					const defaultRepo = await this.getDefaultUntitledSessionRepositoryOption(sessionId, token);
-					if (defaultRepo && !isEqual(folder, defaultRepo)) {
-						if (this.sessionService.isNewSessionId(sessionId)) {
-							this.trackLastUsedFolderInWelcomeView(defaultRepo);
-							this.folderRepositoryManager.setNewSessionFolder(sessionId, defaultRepo);
-						}
-						const changes: { optionId: string; value: string }[] = [];
-						changes.push({ optionId: REPOSITORY_OPTION_ID, value: defaultRepo.fsPath });
-						this.notifySessionOptionsChange(resource, changes);
-					}
-					triggerProviderOptionsChange = true;
-					this._selectedRepoForBranches = undefined;
-				}
-			} else if (update.optionId === BRANCH_OPTION_ID) {
-				if (typeof update.value === 'string' && update.value === _sessionBranch.get(sessionId)) {
-					continue;
-				}
-				_sessionBranch.set(sessionId, update.value);
-			} else if (update.optionId === ISOLATION_OPTION_ID) {
-				if (typeof update.value === 'string' && update.value === _sessionIsolation.get(sessionId)) {
-					continue;
-				}
-				_sessionIsolation.set(sessionId, update.value as IsolationMode);
-				if (typeof update.value === 'string') {
-					void this.context.globalState.update(LAST_USED_ISOLATION_OPTION_KEY, update.value);
-				}
-				triggerProviderOptionsChange = true;
-
-				// When switching to worktree, push a default branch selection to the session
-				// so the branch picker renders. When switching to workspace, remove it.
-				const sessionChanges: { optionId: string; value: string | vscode.ChatSessionProviderOptionItem }[] = [];
-				if (update.value === IsolationMode.Worktree && isBranchOptionFeatureEnabled(this.configurationService)) {
-					const branchItems = await this.getBranchOptionItems();
-					if (branchItems.length > 0) {
-						const branch = _sessionBranch.get(sessionId) ?? branchItems[0].id;
-						_sessionBranch.set(sessionId, branch);
-						const branchItem = branchItems.find(b => b.id === branch) ?? branchItems[0];
-						sessionChanges.push({
-							optionId: BRANCH_OPTION_ID,
-							value: {
-								id: branchItem.id,
-								name: branchItem.name,
-								icon: new vscode.ThemeIcon('git-branch')
-							}
-						});
-					}
-				} else if (update.value === 'workspace') {
-					_sessionBranch.delete(sessionId);
-				}
-				if (sessionChanges.length > 0) {
-					this.notifySessionOptionsChange(resource, sessionChanges);
+					needsGroupRebuild = true;
 				}
 			}
 		}
-		const isBranchOptionShow = !!this._selectedRepoForBranches;
-		if (wasBranchOptionShow !== isBranchOptionShow || triggerProviderOptionsChange) {
-			this.notifyProviderOptionsChange();
+
+		if (needsGroupRebuild) {
+			const newGroups = await this.buildInputStateGroups(sessionResource, CancellationToken.None);
+			inputState.groups = [...newGroups];
 		}
 	}
 
