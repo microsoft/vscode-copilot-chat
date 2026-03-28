@@ -15,6 +15,7 @@ import { GithubRepoId, IGitService } from '../../../platform/git/common/gitServi
 import { derivePullRequestState, PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
 import { AuthOptions, CCAEnabledResult, IGithubRepositoryService, IOctoKitService, JobInfo, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { emitCloudSessionInvokeEvent } from '../../../platform/otel/common/genAiEvents';
 import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
 import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -1966,6 +1967,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			model: modelId ?? 'unknown'
 		});
 		GenAiMetrics.incrementCloudSessionCount(this._otelService, partnerAgent?.name ?? 'unknown');
+		emitCloudSessionInvokeEvent(this._otelService, partnerAgent?.name ?? 'unknown', modelId ?? 'unknown', request.id);
 
 		// Follow up
 		if (context.chatSessionContext && !context.chatSessionContext.isUntitled && request.sessionResource.scheme === CopilotCloudSessionsProvider.TYPE) {
