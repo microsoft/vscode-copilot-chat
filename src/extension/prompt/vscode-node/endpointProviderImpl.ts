@@ -15,6 +15,7 @@ import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/e
 import { ExtensionContributedChatEndpoint } from '../../../platform/endpoint/vscode-node/extChatEndpoint';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint, IEmbeddingsEndpoint } from '../../../platform/networking/common/networking';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -37,6 +38,7 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 		@IConfigurationService protected readonly _configService: IConfigurationService,
 		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
 		@IAuthenticationService protected readonly _authService: IAuthenticationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 	) {
 		super();
 
@@ -55,7 +57,7 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 	private async getOrCreateCopilotFastEndpoint(): Promise<IChatEndpoint> {
 		let endpoint = this._chatEndpoints.get('copilot-fast');
 		if (!endpoint) {
-			endpoint = await CopilotFastChatEndpoint.create(this._modelFetcher, this._instantiationService);
+			endpoint = await CopilotFastChatEndpoint.create(this._modelFetcher, this._instantiationService, this._configService, this._experimentationService);
 			this._chatEndpoints.set('copilot-fast', endpoint);
 		}
 		return endpoint;
