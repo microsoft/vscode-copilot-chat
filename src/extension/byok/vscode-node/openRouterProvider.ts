@@ -61,7 +61,11 @@ export class OpenRouterLMProvider extends AbstractOpenAICompatibleLMProvider {
 			toolCalling: openRouterModelData.supported_parameters?.includes('tools') ?? false,
 			vision: openRouterModelData.architecture?.input_modalities?.includes('image') ?? false,
 			maxInputTokens: openRouterModelData.top_provider.context_length - 16000,
-			maxOutputTokens: 16000
+			maxOutputTokens: 16000,
+			requestHeaders: {
+				'HTTP-Referer': 'https://code.visualstudio.com/',
+				'X-OpenRouter-Title': 'vscode'
+			}
 		};
 	}
 
