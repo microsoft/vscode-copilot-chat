@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { GenAiAttr, StdAttr } from './genAiAttributes';
+import { CopilotChatAttr, type EditOutcome, type EditSource, GenAiAttr, StdAttr } from './genAiAttributes';
 import type { IOTelService } from './otelService';
 
 /**
@@ -95,5 +95,38 @@ export class GenAiMetrics {
 
 	static incrementSessionCount(otel: IOTelService): void {
 		otel.incrementCounter('copilot_chat.session.count');
+	}
+
+	// ── Edit Acceptance & Survival Metrics ──
+
+	static recordEditAcceptance(otel: IOTelService, source: EditSource, outcome: EditOutcome, languageId?: string): void {
+		otel.incrementCounter('copilot_chat.edit.acceptance.count', 1, {
+			[CopilotChatAttr.EDIT_SOURCE]: source,
+			[CopilotChatAttr.EDIT_OUTCOME]: outcome,
+			...(languageId ? { [CopilotChatAttr.LANGUAGE_ID]: languageId } : {}),
+		});
+	}
+
+	static recordEditSurvivalFourGram(otel: IOTelService, source: EditSource, score: number, timeDelayMs: number): void {
+		otel.recordMetric('copilot_chat.edit.survival.four_gram', score, {
+			[CopilotChatAttr.EDIT_SOURCE]: source,
+			[CopilotChatAttr.TIME_DELAY_MS]: timeDelayMs,
+		});
+	}
+
+	static recordEditSurvivalNoRevert(otel: IOTelService, source: EditSource, score: number, timeDelayMs: number): void {
+		otel.recordMetric('copilot_chat.edit.survival.no_revert', score, {
+			[CopilotChatAttr.EDIT_SOURCE]: source,
+			[CopilotChatAttr.TIME_DELAY_MS]: timeDelayMs,
+		});
+	}
+
+	static recordChatEditOutcome(otel: IOTelService, source: EditSource, outcome: EditOutcome, languageId?: string, hasRemainingEdits?: boolean): void {
+		otel.incrementCounter('copilot_chat.chat_edit.outcome.count', 1, {
+			[CopilotChatAttr.EDIT_SOURCE]: source,
+			[CopilotChatAttr.EDIT_OUTCOME]: outcome,
+			...(languageId ? { [CopilotChatAttr.LANGUAGE_ID]: languageId } : {}),
+			...(hasRemainingEdits !== undefined ? { [CopilotChatAttr.HAS_REMAINING_EDITS]: hasRemainingEdits } : {}),
+		});
 	}
 }

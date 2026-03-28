@@ -129,7 +129,20 @@ export const CopilotChatAttr = {
 	DEBUG_LOG_LABEL: 'copilot_chat.debug_log_label',
 	/** Markdown content for standalone content events */
 	MARKDOWN_CONTENT: 'copilot_chat.markdown_content',
+	/** Edit source: inline_chat, chat_editing, chat_editing_hunk */
+	EDIT_SOURCE: 'copilot_chat.edit.source',
+	/** Edit outcome: accepted, rejected, saved, unknown */
+	EDIT_OUTCOME: 'copilot_chat.edit.outcome',
+	/** Language identifier of the document */
+	LANGUAGE_ID: 'copilot_chat.language_id',
+	/** Time delay in milliseconds between acceptance and measurement */
+	TIME_DELAY_MS: 'copilot_chat.time_delay_ms',
+	/** Whether additional unactioned edits remain */
+	HAS_REMAINING_EDITS: 'copilot_chat.has_remaining_edits',
 } as const;
+
+export type EditSource = 'inline_chat' | 'chat_editing' | 'chat_editing_hunk';
+export type EditOutcome = 'accepted' | 'rejected' | 'saved' | 'unknown';
 
 /**
  * Standard OTel attributes used alongside GenAI attributes.

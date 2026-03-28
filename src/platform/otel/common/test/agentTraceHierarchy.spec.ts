@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it } from 'vitest';
-import { GenAiAttr, GenAiOperationName, GenAiProviderName } from '../genAiAttributes';
+import { CopilotChatAttr, GenAiAttr, GenAiOperationName, GenAiProviderName } from '../genAiAttributes';
 import { emitAgentTurnEvent, emitSessionStartEvent } from '../genAiEvents';
 import { GenAiMetrics } from '../genAiMetrics';
 import { SpanKind, SpanStatusCode } from '../otelService';
@@ -222,5 +222,52 @@ describe('Agent Trace Hierarchy', () => {
 		expect(otel.metrics[1].value).toBe(1500);
 		expect(otel.metrics[2].name).toBe('gen_ai.client.token.usage');
 		expect(otel.metrics[2].value).toBe(250);
+	});
+
+	it('records edit acceptance and survival metrics', () => {
+		const otel = new CapturingOTelService();
+
+		GenAiMetrics.recordEditAcceptance(otel, 'inline_chat', 'accepted', 'typescript');
+		GenAiMetrics.recordEditAcceptance(otel, 'chat_editing_hunk', 'rejected', 'python');
+		GenAiMetrics.recordEditSurvivalFourGram(otel, 'inline_chat', 0.85, 30000);
+		GenAiMetrics.recordEditSurvivalNoRevert(otel, 'inline_chat', 0.92, 30000);
+		GenAiMetrics.recordChatEditOutcome(otel, 'chat_editing', 'accepted', 'typescript', false);
+
+		// Acceptance counters
+		expect(otel.counters).toHaveLength(3);
+		expect(otel.counters[0].name).toBe('copilot_chat.edit.acceptance.count');
+		expect(otel.counters[0].attributes?.[CopilotChatAttr.EDIT_SOURCE]).toBe('inline_chat');
+		expect(otel.counters[0].attributes?.[CopilotChatAttr.EDIT_OUTCOME]).toBe('accepted');
+		expect(otel.counters[0].attributes?.[CopilotChatAttr.LANGUAGE_ID]).toBe('typescript');
+
+		expect(otel.counters[1].name).toBe('copilot_chat.edit.acceptance.count');
+		expect(otel.counters[1].attributes?.[CopilotChatAttr.EDIT_OUTCOME]).toBe('rejected');
+
+		// Chat edit outcome counter
+		expect(otel.counters[2].name).toBe('copilot_chat.chat_edit.outcome.count');
+		expect(otel.counters[2].attributes?.[CopilotChatAttr.EDIT_SOURCE]).toBe('chat_editing');
+		expect(otel.counters[2].attributes?.[CopilotChatAttr.EDIT_OUTCOME]).toBe('accepted');
+		expect(otel.counters[2].attributes?.[CopilotChatAttr.HAS_REMAINING_EDITS]).toBe(false);
+
+		// Survival histograms
+		expect(otel.metrics).toHaveLength(2);
+		expect(otel.metrics[0].name).toBe('copilot_chat.edit.survival.four_gram');
+		expect(otel.metrics[0].value).toBe(0.85);
+		expect(otel.metrics[0].attributes?.[CopilotChatAttr.EDIT_SOURCE]).toBe('inline_chat');
+		expect(otel.metrics[0].attributes?.[CopilotChatAttr.TIME_DELAY_MS]).toBe(30000);
+
+		expect(otel.metrics[1].name).toBe('copilot_chat.edit.survival.no_revert');
+		expect(otel.metrics[1].value).toBe(0.92);
+	});
+
+	it('omits optional attributes when undefined', () => {
+		const otel = new CapturingOTelService();
+
+		GenAiMetrics.recordEditAcceptance(otel, 'inline_chat', 'accepted', undefined);
+		GenAiMetrics.recordChatEditOutcome(otel, 'chat_editing', 'rejected', undefined, undefined);
+
+		expect(otel.counters[0].attributes?.[CopilotChatAttr.LANGUAGE_ID]).toBeUndefined();
+		expect(otel.counters[1].attributes?.[CopilotChatAttr.LANGUAGE_ID]).toBeUndefined();
+		expect(otel.counters[1].attributes?.[CopilotChatAttr.HAS_REMAINING_EDITS]).toBeUndefined();
 	});
 });

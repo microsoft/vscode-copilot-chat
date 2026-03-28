@@ -10,6 +10,9 @@ import { EditSurvivalResult } from '../../../platform/editSurvivalTracking/commo
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IMultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
+import type { EditOutcome } from '../../../platform/otel/common/genAiAttributes';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { ISurveyService } from '../../../platform/survey/common/surveyService';
 import { ITelemetryService, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../platform/telemetry/common/telemetry';
 import { isNotebookCellOrNotebookChatInput } from '../../../util/common/notebooks';
@@ -44,7 +47,8 @@ export class UserFeedbackService implements IUserFeedbackService {
 		@ISurveyService private readonly surveyService: ISurveyService,
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
 		@IMultiFileEditInternalTelemetryService private readonly multiFileEditTelemetryService: IMultiFileEditInternalTelemetryService,
-		@INotebookService private readonly notebookService: INotebookService
+		@INotebookService private readonly notebookService: INotebookService,
+		@IOTelService private readonly otelService: IOTelService
 	) { }
 
 	handleUserAction(e: vscode.ChatUserActionEvent, agentId: string): void {
@@ -200,6 +204,8 @@ export class UserFeedbackService implements IUserFeedbackService {
 						isNotebookCell: e.action.uri.scheme === Schemas.vscodeNotebookCell ? 1 : 0
 					});
 
+					GenAiMetrics.recordChatEditOutcome(this.otelService, 'chat_editing', outcomes.get(e.action.outcome) ?? 'unknown', document?.languageId, e.action.hasRemainingEdits);
+
 					if (result.metadata?.responseId
 						&& (e.action.outcome === vscode.ChatEditingSessionActionOutcome.Accepted
 							|| e.action.outcome === vscode.ChatEditingSessionActionOutcome.Rejected)
@@ -234,6 +240,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 						measurements,
 						'edit.hunk.action'
 					);
+					GenAiMetrics.recordEditAcceptance(this.otelService, 'chat_editing_hunk', outcome, document?.languageId);
 				}
 				break;
 			}
@@ -438,7 +445,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 		};
 
 		if (kind === InteractiveEditorResponseFeedbackKind.Accepted && response.editSurvivalTracker) {
-			response.editSurvivalTracker.startReporter(res => reportInlineEditSurvivalEvent(res, sharedProps, sharedMeasures));
+			response.editSurvivalTracker.startReporter(res => reportInlineEditSurvivalEvent(res, sharedProps, sharedMeasures, this.otelService));
 		}
 		(response as any).editSurvivalTracker = undefined; // TODO@jrieken
 
@@ -467,6 +474,10 @@ export class UserFeedbackService implements IUserFeedbackService {
 		this.telemetryService.sendMSFTTelemetryEvent('inline.done', sharedProps, {
 			...sharedMeasures, accepted
 		});
+		this.telemetryService.sendGHTelemetryEvent('inline.done', sharedProps, {
+			...sharedMeasures, accepted
+		});
+		GenAiMetrics.recordEditAcceptance(this.otelService, 'inline_chat', accepted ? 'accepted' : 'rejected', languageId);
 
 		this.telemetryService.sendInternalMSFTTelemetryEvent('interactiveSessionDone', {
 			language: languageId,
@@ -501,7 +512,14 @@ export class UserFeedbackService implements IUserFeedbackService {
 	}
 }
 
-function reportInlineEditSurvivalEvent(res: EditSurvivalResult, sharedProps: TelemetryEventProperties | undefined, sharedMeasures: TelemetryEventMeasurements | undefined) {
+function reportInlineEditSurvivalEvent(res: EditSurvivalResult, sharedProps: TelemetryEventProperties | undefined, sharedMeasures: TelemetryEventMeasurements | undefined, otelService: IOTelService) {
+	const survivalMeasures = {
+		...sharedMeasures,
+		survivalRateFourGram: res.fourGram,
+		survivalRateNoRevert: res.noRevert,
+		timeDelayMs: res.timeDelayMs,
+		didBranchChange: res.didBranchChange ? 1 : 0,
+	};
 	/* __GDPR__
 		"inline.trackEditSurvival" : {
 			"owner": "hediet",
@@ -526,16 +544,13 @@ function reportInlineEditSurvivalEvent(res: EditSurvivalResult, sharedProps: Tel
 			"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the document is a notebook" }
 		}
 	*/
-	res.telemetryService.sendMSFTTelemetryEvent('inline.trackEditSurvival', sharedProps, {
-		...sharedMeasures,
-		survivalRateFourGram: res.fourGram,
-		survivalRateNoRevert: res.noRevert,
-		timeDelayMs: res.timeDelayMs,
-		didBranchChange: res.didBranchChange ? 1 : 0,
-	});
+	res.telemetryService.sendMSFTTelemetryEvent('inline.trackEditSurvival', sharedProps, survivalMeasures);
+	res.telemetryService.sendGHTelemetryEvent('inline.trackEditSurvival', sharedProps, survivalMeasures);
+	GenAiMetrics.recordEditSurvivalFourGram(otelService, 'inline_chat', res.fourGram, res.timeDelayMs);
+	GenAiMetrics.recordEditSurvivalNoRevert(otelService, 'inline_chat', res.noRevert, res.timeDelayMs);
 }
 
-const outcomes = new Map([
+const outcomes = new Map<vscode.ChatEditingSessionActionOutcome, EditOutcome>([
 	[vscode.ChatEditingSessionActionOutcome.Accepted, 'accepted'],
 	[vscode.ChatEditingSessionActionOutcome.Rejected, 'rejected'],
 	[vscode.ChatEditingSessionActionOutcome.Saved, 'saved']
