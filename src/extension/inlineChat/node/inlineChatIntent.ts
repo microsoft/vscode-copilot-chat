@@ -18,6 +18,8 @@ import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Prediction } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr } from '../../../platform/otel/common/index';
+import { IOTelService, type ISpanHandle, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { getWasmLanguage } from '../../../platform/parser/node/treeSitterLanguages';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -306,126 +308,192 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILogService private readonly _logService: ILogService,
 		@IToolsService private readonly _toolsService: IToolsService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) { }
 
 	async executeEdit(endpoint: IChatEndpoint, conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext, chatTelemetry: ChatTelemetryBuilder): Promise<IInlineChatEditResult> {
-		assertType(request.location2 instanceof ChatRequestEditorData);
-		assertType(documentContext);
-
-		const isLargeFile = documentContext.document.lineCount > LARGE_FILE_LINE_THRESHOLD;
-		const availableTools = await this._getAvailableTools(request, isLargeFile);
-
-		const previousRounds: ICompletedToolCallRound[] = [];
-		let failedEditCount = 0;
-		const toolCallRounds: ToolCallRound[] = [];
-		let readOnlyRounds = 0;
-		let telemetry: InlineChatTelemetry;
-		let lastResponse: ChatResponse;
-		let lastInteractionOutcome: InteractionOutcome;
-
-		while (true) {
-
-			const renderer = PromptRenderer.create(this._instantiationService, endpoint, InlineChat2Prompt, {
-				request,
-				previousRounds,
-				hasFailedEdits: failedEditCount > 0,
-				snapshotAtRequest: documentContext.document,
-				data: request.location2,
-				exitToolName: INLINE_CHAT_EXIT_TOOL_NAME,
-				isLargeFile,
-				readToolName: isLargeFile ? ToolName.ReadFile : undefined,
-			});
-
-			const renderResult = await renderer.render(undefined, token, { trace: true });
-
-			const toolTokenCount = availableTools.length > 0 ? await endpoint.acquireTokenizer().countToolTokens(availableTools) : 0;
-			telemetry = chatTelemetry.makeRequest(this._intent, ChatLocation.Editor, conversation, renderResult.messages, renderResult.tokenCount, renderResult.references, endpoint, [], availableTools.length, toolTokenCount);
-
-			stream = ChatResponseStreamImpl.spy(stream, part => {
-				if (part instanceof ChatResponseTextEditPart) {
-					telemetry.markEmittedEdits(part.uri, part.edits);
-				}
-			});
-
-
-			const result = await this._makeRequestAndRunTools(endpoint, request, stream, renderResult.messages, availableTools, telemetry, token);
-
-			lastInteractionOutcome = new InteractionOutcome(telemetry.editCount > 0 ? 'inlineEdit' : 'none', []);
-			lastResponse = result.fetchResult;
-
-			// telemetry
+		const agentName = 'InlineChat2Intent';
+		return this._otelService.startActiveSpan(
+			`invoke_agent ${agentName}`,
 			{
-				const responseText = lastResponse.type === ChatFetchResponseType.Success ? lastResponse.value : '';
-				telemetry.sendTelemetry(
-					lastResponse.requestId, lastResponse.type, responseText,
-					lastInteractionOutcome,
-					result.toolCalls
-				);
+				kind: SpanKind.INTERNAL,
+				attributes: {
+					[GenAiAttr.OPERATION_NAME]: GenAiOperationName.INVOKE_AGENT,
+					[GenAiAttr.PROVIDER_NAME]: GenAiProviderName.GITHUB,
+					[GenAiAttr.AGENT_NAME]: agentName,
+					[GenAiAttr.CONVERSATION_ID]: conversation.sessionId,
+					[GenAiAttr.REQUEST_MODEL]: endpoint.model,
+				},
+			},
+			async (span) => {
+				const otelStartTime = Date.now();
+				GenAiMetrics.incrementSessionCount(this._otelService);
+				emitSessionStartEvent(this._otelService, conversation.sessionId, endpoint.model, agentName);
+				return this._executeEditInner(endpoint, conversation, request, stream, token, documentContext, chatTelemetry, span, agentName, otelStartTime);
+			},
+		);
+	}
 
-				toolCallRounds.push(ToolCallRound.create({
-					response: responseText,
-					toolCalls: result.toolCalls,
-					toolInputRetry: failedEditCount
-				}));
-			}
+	private async _executeEditInner(endpoint: IChatEndpoint, conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext, chatTelemetry: ChatTelemetryBuilder, span: ISpanHandle, agentName: string, otelStartTime: number): Promise<IInlineChatEditResult> {
+		let totalInputTokens = 0;
+		let totalOutputTokens = 0;
+		let turnIndex = 0;
 
-			if (result.toolCalls.length === 0) {
-				// BAILOUT: when no tools have been used
-				break;
-			}
+		try {
+			assertType(request.location2 instanceof ChatRequestEditorData);
+			assertType(documentContext);
 
-			// Build a completed round from all tool calls in their original order
-			const roundCalls: [IToolCall, vscode.ExtendedLanguageModelToolResult][] = [];
-			for (const toolCall of result.toolCalls) {
-				const toolResult = result.allCallResults.get(toolCall.id);
-				if (toolResult) {
-					roundCalls.push([toolCall, toolResult]);
+			const isLargeFile = documentContext.document.lineCount > LARGE_FILE_LINE_THRESHOLD;
+			const availableTools = await this._getAvailableTools(request, isLargeFile);
+
+			const previousRounds: ICompletedToolCallRound[] = [];
+			let failedEditCount = 0;
+			const toolCallRounds: ToolCallRound[] = [];
+			let readOnlyRounds = 0;
+			let telemetry: InlineChatTelemetry;
+			let lastResponse: ChatResponse;
+			let lastInteractionOutcome: InteractionOutcome;
+
+			while (true) {
+
+				const renderer = PromptRenderer.create(this._instantiationService, endpoint, InlineChat2Prompt, {
+					request,
+					previousRounds,
+					hasFailedEdits: failedEditCount > 0,
+					snapshotAtRequest: documentContext.document,
+					data: request.location2,
+					exitToolName: INLINE_CHAT_EXIT_TOOL_NAME,
+					isLargeFile,
+					readToolName: isLargeFile ? ToolName.ReadFile : undefined,
+				});
+
+				const renderResult = await renderer.render(undefined, token, { trace: true });
+
+				const toolTokenCount = availableTools.length > 0 ? await endpoint.acquireTokenizer().countToolTokens(availableTools) : 0;
+				telemetry = chatTelemetry.makeRequest(this._intent, ChatLocation.Editor, conversation, renderResult.messages, renderResult.tokenCount, renderResult.references, endpoint, [], availableTools.length, toolTokenCount);
+
+				stream = ChatResponseStreamImpl.spy(stream, part => {
+					if (part instanceof ChatResponseTextEditPart) {
+						telemetry.markEmittedEdits(part.uri, part.edits);
+					}
+				});
+
+
+				const result = await this._makeRequestAndRunTools(endpoint, request, stream, renderResult.messages, availableTools, telemetry, token);
+
+				// Token usage for this turn and accumulated totals for OTel
+				let turnInputTokens = 0;
+				let turnOutputTokens = 0;
+				if (result.fetchResult.type === ChatFetchResponseType.Success && result.fetchResult.usage) {
+					turnInputTokens = result.fetchResult.usage.prompt_tokens || 0;
+					turnOutputTokens = result.fetchResult.usage.completion_tokens || 0;
+					totalInputTokens += turnInputTokens;
+					totalOutputTokens += turnOutputTokens;
 				}
-			}
-			previousRounds.push({ calls: roundCalls });
+				emitAgentTurnEvent(this._otelService, turnIndex, turnInputTokens, turnOutputTokens, result.toolCalls.length);
+				turnIndex++;
 
-			// Check if this round was read-only (only read_file calls, no edit tool calls)
-			const hasEditToolCalls = result.toolCalls.some(tc => tc.name !== ToolName.ReadFile);
+				lastInteractionOutcome = new InteractionOutcome(telemetry.editCount > 0 ? 'inlineEdit' : 'none', []);
+				lastResponse = result.fetchResult;
 
-			if (!hasEditToolCalls) {
-				// Read-only round: the model used read_file to gather more context.
-				// Continue the loop so it can make edits with the new info.
-				readOnlyRounds++;
-				if (readOnlyRounds > 9) {
-					this._logService.warn('Aborting inline chat edit: too many read-only rounds');
+				// telemetry
+				{
+					const responseText = lastResponse.type === ChatFetchResponseType.Success ? lastResponse.value : '';
+					telemetry.sendTelemetry(
+						lastResponse.requestId, lastResponse.type, responseText,
+						lastInteractionOutcome,
+						result.toolCalls
+					);
+
+					toolCallRounds.push(ToolCallRound.create({
+						response: responseText,
+						toolCalls: result.toolCalls,
+						toolInputRetry: failedEditCount
+					}));
+				}
+
+				if (result.toolCalls.length === 0) {
+					// BAILOUT: when no tools have been used
 					break;
 				}
-				continue;
+
+				// Build a completed round from all tool calls in their original order
+				const roundCalls: [IToolCall, vscode.ExtendedLanguageModelToolResult][] = [];
+				for (const toolCall of result.toolCalls) {
+					const toolResult = result.allCallResults.get(toolCall.id);
+					if (toolResult) {
+						roundCalls.push([toolCall, toolResult]);
+					}
+				}
+				previousRounds.push({ calls: roundCalls });
+
+				// Check if this round was read-only (only read_file calls, no edit tool calls)
+				const hasEditToolCalls = result.toolCalls.some(tc => tc.name !== ToolName.ReadFile);
+
+				if (!hasEditToolCalls) {
+					// Read-only round: the model used read_file to gather more context.
+					// Continue the loop so it can make edits with the new info.
+					readOnlyRounds++;
+					if (readOnlyRounds > 9) {
+						this._logService.warn('Aborting inline chat edit: too many read-only rounds');
+						break;
+					}
+					continue;
+				}
+
+				if (result.failedEdits.length === 0 || token.isCancellationRequested) {
+					// DONE
+					break;
+				}
+
+				failedEditCount += result.failedEdits.length;
+				if (failedEditCount > 5) {
+					// TOO MANY FAILED ATTEMPTS
+					this._logService.error(`Aborting inline chat edit: too many failed edit attempts`);
+					break;
+				}
 			}
 
-			if (result.failedEdits.length === 0 || token.isCancellationRequested) {
-				// DONE
-				break;
+			telemetry.sendToolCallingTelemetry(toolCallRounds, availableTools, token.isCancellationRequested ? 'cancelled' : lastResponse.type);
+
+			const needsExitTool = lastResponse.type === ChatFetchResponseType.Success
+				&& (toolCallRounds.length === 0 || (toolCallRounds.length > 0 && toolCallRounds[toolCallRounds.length - 1].toolCalls.length === 0));
+
+			if (!needsExitTool && failedEditCount > 0 && telemetry.editCount === 0 && lastResponse.type === ChatFetchResponseType.Success) {
+				span.setAttributes({
+					[CopilotChatAttr.TURN_COUNT]: turnIndex,
+					[GenAiAttr.USAGE_INPUT_TOKENS]: totalInputTokens,
+					[GenAiAttr.USAGE_OUTPUT_TOKENS]: totalOutputTokens,
+				});
+				span.setStatus(SpanStatusCode.OK);
+				const durationSec = (Date.now() - otelStartTime) / 1000;
+				GenAiMetrics.recordAgentDuration(this._otelService, agentName, durationSec);
+				GenAiMetrics.recordAgentTurnCount(this._otelService, agentName, turnIndex);
+				return {
+					lastResponse,
+					telemetry,
+					needsExitTool: false,
+					errorMessage: l10n.t('Failed to edit the file. The requested change could not be applied.'),
+				};
 			}
 
-			failedEditCount += result.failedEdits.length;
-			if (failedEditCount > 5) {
-				// TOO MANY FAILED ATTEMPTS
-				this._logService.error(`Aborting inline chat edit: too many failed edit attempts`);
-				break;
-			}
+			span.setAttributes({
+				[CopilotChatAttr.TURN_COUNT]: turnIndex,
+				[GenAiAttr.USAGE_INPUT_TOKENS]: totalInputTokens,
+				[GenAiAttr.USAGE_OUTPUT_TOKENS]: totalOutputTokens,
+				...(lastResponse.type === ChatFetchResponseType.Success && lastResponse.resolvedModel
+					? { [GenAiAttr.RESPONSE_MODEL]: lastResponse.resolvedModel } : {}),
+			});
+			span.setStatus(SpanStatusCode.OK);
+			const durationSec = (Date.now() - otelStartTime) / 1000;
+			GenAiMetrics.recordAgentDuration(this._otelService, agentName, durationSec);
+			GenAiMetrics.recordAgentTurnCount(this._otelService, agentName, turnIndex);
+			return { lastResponse, telemetry, needsExitTool };
+		} catch (err) {
+			span.setStatus(SpanStatusCode.ERROR, err instanceof Error ? err.message : String(err));
+			span.setAttribute(StdAttr.ERROR_TYPE, err instanceof Error ? err.constructor.name : 'Error');
+			throw err;
 		}
-
-		telemetry.sendToolCallingTelemetry(toolCallRounds, availableTools, token.isCancellationRequested ? 'cancelled' : lastResponse.type);
-
-		const needsExitTool = lastResponse.type === ChatFetchResponseType.Success
-			&& (toolCallRounds.length === 0 || (toolCallRounds.length > 0 && toolCallRounds[toolCallRounds.length - 1].toolCalls.length === 0));
-
-		if (!needsExitTool && failedEditCount > 0 && telemetry.editCount === 0 && lastResponse.type === ChatFetchResponseType.Success) {
-			return {
-				lastResponse,
-				telemetry,
-				needsExitTool: false,
-				errorMessage: l10n.t('Failed to edit the file. The requested change could not be applied.'),
-			};
-		}
-
-		return { lastResponse, telemetry, needsExitTool };
 	}
 
 	private async _makeRequestAndRunTools(endpoint: IChatEndpoint, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, messages: Raw.ChatMessage[], inlineChatTools: vscode.LanguageModelToolInformation[], telemetry: InlineChatTelemetry, token: CancellationToken) {
@@ -608,85 +676,131 @@ class InlineChatEditHeuristicStrategy implements IInlineChatEditStrategy {
 	constructor(
 		private readonly _intent: InlineChatIntent,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) { }
 
 	async executeEdit(endpoint: IChatEndpoint, conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext, chatTelemetry: ChatTelemetryBuilder): Promise<IInlineChatEditResult> {
-
-		assertType(request.location2 instanceof ChatRequestEditorData);
-
-		const outcomeComputer = new InteractionOutcomeComputer(request.location2.document.uri);
-		const renderer = PromptRenderer.create(this._instantiationService, endpoint, InlineChatEditCodePrompt, {
-			ignoreCustomInstructions: true,
-			documentContext,
-			promptContext: {
-				query: request.prompt,
-				chatVariables: new ChatVariablesCollection([...request.references]),
-				history: conversation.turns.slice(0, -1),
-			}
-		});
-
-		const renderResult = await renderer.render(undefined, token, { trace: true });
-
-		const replyInterpreter = renderResult.metadata.get(ReplyInterpreterMetaData)?.replyInterpreter ?? new NoopReplyInterpreter();
-		const telemetryData = renderResult.metadata.getAll(TelemetryData);
-
-		const telemetry = chatTelemetry.makeRequest(this._intent, ChatLocation.Editor, conversation, renderResult.messages, renderResult.tokenCount, renderResult.references, endpoint, telemetryData, 0, 0);
-
-		stream = ChatResponseStreamImpl.spy(stream, part => {
-			if (part instanceof ChatResponseTextEditPart) {
-				telemetry.markEmittedEdits(part.uri, part.edits);
-			}
-		});
-
-		let prediction: Prediction | undefined;
-		const documentSplit = renderResult.metadata.get(SummarizedDocumentSplitMetadata)?.split;
-		if (documentSplit) {
-			prediction = {
-				type: 'content',
-				content: ''
-			};
-			prediction.content = `\`\`\`${documentContext.document.languageId}\n${documentSplit.codeSelected}\n\`\`\``;
-		}
-
-		const source = new AsyncIterableSource<IResponsePart>();
-		const responseProcessing = replyInterpreter.processResponse(new ResponseProcessorContext(conversation.sessionId, conversation.getLatestTurn(), renderResult.messages, outcomeComputer), source.asyncIterable, stream, token);
-
-		const fetchResult = await endpoint.makeChatRequest2({
-			debugName: 'InlineChat2Intent',
-			messages: renderResult.messages,
-			userInitiatedRequest: true,
-			location: ChatLocation.Editor,
-			telemetryProperties: {
-				messageId: telemetry.telemetryMessageId,
-				conversationId: telemetry.sessionId,
-				messageSource: this._intent.id
+		const agentName = 'InlineChat2Intent';
+		return this._otelService.startActiveSpan(
+			`invoke_agent ${agentName}`,
+			{
+				kind: SpanKind.INTERNAL,
+				attributes: {
+					[GenAiAttr.OPERATION_NAME]: GenAiOperationName.INVOKE_AGENT,
+					[GenAiAttr.PROVIDER_NAME]: GenAiProviderName.GITHUB,
+					[GenAiAttr.AGENT_NAME]: agentName,
+					[GenAiAttr.CONVERSATION_ID]: conversation.sessionId,
+					[GenAiAttr.REQUEST_MODEL]: endpoint.model,
+				},
 			},
-			requestOptions: {
-				stream: true,
-				prediction
+			async (span) => {
+				const otelStartTime = Date.now();
+				GenAiMetrics.incrementSessionCount(this._otelService);
+				emitSessionStartEvent(this._otelService, conversation.sessionId, endpoint.model, agentName);
+
+				try {
+					assertType(request.location2 instanceof ChatRequestEditorData);
+
+					const outcomeComputer = new InteractionOutcomeComputer(request.location2.document.uri);
+					const renderer = PromptRenderer.create(this._instantiationService, endpoint, InlineChatEditCodePrompt, {
+						ignoreCustomInstructions: true,
+						documentContext,
+						promptContext: {
+							query: request.prompt,
+							chatVariables: new ChatVariablesCollection([...request.references]),
+							history: conversation.turns.slice(0, -1),
+						}
+					});
+
+					const renderResult = await renderer.render(undefined, token, { trace: true });
+
+					const replyInterpreter = renderResult.metadata.get(ReplyInterpreterMetaData)?.replyInterpreter ?? new NoopReplyInterpreter();
+					const telemetryData = renderResult.metadata.getAll(TelemetryData);
+
+					const telemetry = chatTelemetry.makeRequest(this._intent, ChatLocation.Editor, conversation, renderResult.messages, renderResult.tokenCount, renderResult.references, endpoint, telemetryData, 0, 0);
+
+					stream = ChatResponseStreamImpl.spy(stream, part => {
+						if (part instanceof ChatResponseTextEditPart) {
+							telemetry.markEmittedEdits(part.uri, part.edits);
+						}
+					});
+
+					let prediction: Prediction | undefined;
+					const documentSplit = renderResult.metadata.get(SummarizedDocumentSplitMetadata)?.split;
+					if (documentSplit) {
+						prediction = {
+							type: 'content',
+							content: ''
+						};
+						prediction.content = `\`\`\`${documentContext.document.languageId}\n${documentSplit.codeSelected}\n\`\`\``;
+					}
+
+					const source = new AsyncIterableSource<IResponsePart>();
+					const responseProcessing = replyInterpreter.processResponse(new ResponseProcessorContext(conversation.sessionId, conversation.getLatestTurn(), renderResult.messages, outcomeComputer), source.asyncIterable, stream, token);
+
+					const fetchResult = await endpoint.makeChatRequest2({
+						debugName: 'InlineChat2Intent',
+						messages: renderResult.messages,
+						userInitiatedRequest: true,
+						location: ChatLocation.Editor,
+						telemetryProperties: {
+							messageId: telemetry.telemetryMessageId,
+							conversationId: telemetry.sessionId,
+							messageSource: this._intent.id
+						},
+						requestOptions: {
+							stream: true,
+							prediction
+						},
+						finishedCb: async (_text, _index, delta) => {
+							telemetry.markReceivedToken();
+							source.emitOne({ delta });
+							return undefined;
+						}
+					}, token);
+
+					source.resolve();
+
+					await responseProcessing;
+
+					const responseText = fetchResult.type === ChatFetchResponseType.Success ? fetchResult.value : '';
+					telemetry.sendTelemetry(
+						fetchResult.requestId, fetchResult.type, responseText,
+						new InteractionOutcome(telemetry.editCount > 0 ? 'inlineEdit' : 'none', []),
+						[]
+					);
+
+					// OTel: accumulate token usage and finalize span
+					let totalInputTokens = 0;
+					let totalOutputTokens = 0;
+					if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage) {
+						totalInputTokens = fetchResult.usage.prompt_tokens || 0;
+						totalOutputTokens = fetchResult.usage.completion_tokens || 0;
+					}
+					emitAgentTurnEvent(this._otelService, 0, totalInputTokens, totalOutputTokens, 0);
+					span.setAttributes({
+						[CopilotChatAttr.TURN_COUNT]: 1,
+						[GenAiAttr.USAGE_INPUT_TOKENS]: totalInputTokens,
+						[GenAiAttr.USAGE_OUTPUT_TOKENS]: totalOutputTokens,
+						...(fetchResult.type === ChatFetchResponseType.Success && fetchResult.resolvedModel
+							? { [GenAiAttr.RESPONSE_MODEL]: fetchResult.resolvedModel } : {}),
+					});
+					span.setStatus(SpanStatusCode.OK);
+					const durationSec = (Date.now() - otelStartTime) / 1000;
+					GenAiMetrics.recordAgentDuration(this._otelService, agentName, durationSec);
+					GenAiMetrics.recordAgentTurnCount(this._otelService, agentName, 1);
+
+					return {
+						needsExitTool: telemetry.editCount === 0 && fetchResult.type === ChatFetchResponseType.Success,
+						lastResponse: fetchResult,
+						telemetry,
+					};
+				} catch (err) {
+					span.setStatus(SpanStatusCode.ERROR, err instanceof Error ? err.message : String(err));
+					span.setAttribute(StdAttr.ERROR_TYPE, err instanceof Error ? err.constructor.name : 'Error');
+					throw err;
+				}
 			},
-			finishedCb: async (_text, _index, delta) => {
-				telemetry.markReceivedToken();
-				source.emitOne({ delta });
-				return undefined;
-			}
-		}, token);
-
-		source.resolve();
-
-		await responseProcessing;
-
-		const responseText = fetchResult.type === ChatFetchResponseType.Success ? fetchResult.value : '';
-		telemetry.sendTelemetry(
-			fetchResult.requestId, fetchResult.type, responseText,
-			new InteractionOutcome(telemetry.editCount > 0 ? 'inlineEdit' : 'none', []),
-			[]
 		);
-
-		return {
-			needsExitTool: telemetry.editCount === 0 && fetchResult.type === ChatFetchResponseType.Success,
-			lastResponse: fetchResult,
-			telemetry,
-		};
 	}
 }
