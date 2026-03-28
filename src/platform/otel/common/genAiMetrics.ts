@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as OTelSemConv from '@opentelemetry/semantic-conventions/incubating';
 import { CopilotChatAttr, type EditOutcome, type EditSource, GenAiAttr, StdAttr } from './genAiAttributes';
 import type { IOTelService } from './otelService';
 
@@ -27,7 +28,7 @@ export class GenAiMetrics {
 			errorType?: string;
 		},
 	): void {
-		otel.recordMetric('gen_ai.client.operation.duration', durationSec, {
+		otel.recordMetric(OTelSemConv.METRIC_GEN_AI_CLIENT_OPERATION_DURATION, durationSec, {
 			[GenAiAttr.OPERATION_NAME]: attrs.operationName,
 			[GenAiAttr.PROVIDER_NAME]: attrs.providerName,
 			[GenAiAttr.REQUEST_MODEL]: attrs.requestModel,
@@ -50,7 +51,7 @@ export class GenAiMetrics {
 			serverAddress?: string;
 		},
 	): void {
-		otel.recordMetric('gen_ai.client.token.usage', tokenCount, {
+		otel.recordMetric(OTelSemConv.METRIC_GEN_AI_CLIENT_TOKEN_USAGE, tokenCount, {
 			[GenAiAttr.OPERATION_NAME]: attrs.operationName,
 			[GenAiAttr.PROVIDER_NAME]: attrs.providerName,
 			[GenAiAttr.TOKEN_TYPE]: tokenType,

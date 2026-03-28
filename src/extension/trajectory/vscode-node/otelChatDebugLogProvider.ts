@@ -6,6 +6,7 @@
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { CopilotChatAttr, GenAiAttr, GenAiOperationName } from '../../../platform/otel/common/genAiAttributes';
 import { IOTelService, type ICompletedSpanData, type ISpanEventData } from '../../../platform/otel/common/otelService';
 import { decodeSessionId } from '../../../platform/otel/common/sessionUtils';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -41,24 +42,24 @@ function coreEventToSpan(event: vscode.ChatDebugEvent, traceId: string): IComple
 	};
 
 	if (event instanceof vscode.ChatDebugGenericEvent) {
-		attributes['gen_ai.operation.name'] = 'core_event';
-		attributes['copilot_chat.debug_name'] = event.name;
+		attributes[GenAiAttr.OPERATION_NAME] = 'core_event';
+		attributes[CopilotChatAttr.DEBUG_NAME] = event.name;
 		if (event.details) { attributes['copilot_chat.event_details'] = event.details; }
 		if (event.category) { attributes['copilot_chat.event_category'] = event.category; }
 		attributes['copilot_chat.log_level'] = event.level;
 	} else if (event instanceof vscode.ChatDebugToolCallEvent) {
-		attributes['gen_ai.operation.name'] = 'execute_tool';
-		attributes['gen_ai.tool.name'] = event.toolName;
-		if (event.input) { attributes['gen_ai.tool.call.arguments'] = event.input; }
-		if (event.output) { attributes['gen_ai.tool.call.result'] = event.output; }
+		attributes[GenAiAttr.OPERATION_NAME] = GenAiOperationName.EXECUTE_TOOL;
+		attributes[GenAiAttr.TOOL_NAME] = event.toolName;
+		if (event.input) { attributes[GenAiAttr.TOOL_CALL_ARGUMENTS] = event.input; }
+		if (event.output) { attributes[GenAiAttr.TOOL_CALL_RESULT] = event.output; }
 	} else if (event instanceof vscode.ChatDebugModelTurnEvent) {
-		attributes['gen_ai.operation.name'] = 'chat';
-		if (event.model) { attributes['gen_ai.request.model'] = event.model; }
-		if (event.inputTokens !== undefined) { attributes['gen_ai.usage.input_tokens'] = event.inputTokens; }
-		if (event.outputTokens !== undefined) { attributes['gen_ai.usage.output_tokens'] = event.outputTokens; }
+		attributes[GenAiAttr.OPERATION_NAME] = GenAiOperationName.CHAT;
+		if (event.model) { attributes[GenAiAttr.REQUEST_MODEL] = event.model; }
+		if (event.inputTokens !== undefined) { attributes[GenAiAttr.USAGE_INPUT_TOKENS] = event.inputTokens; }
+		if (event.outputTokens !== undefined) { attributes[GenAiAttr.USAGE_OUTPUT_TOKENS] = event.outputTokens; }
 	} else {
 		// Unknown event type — store as generic
-		attributes['gen_ai.operation.name'] = 'core_event';
+		attributes[GenAiAttr.OPERATION_NAME] = 'core_event';
 	}
 
 	// Preserve the event ID and parent for hierarchy
@@ -66,7 +67,7 @@ function coreEventToSpan(event: vscode.ChatDebugEvent, traceId: string): IComple
 	const parentEventId = 'parentEventId' in event ? (event as { parentEventId?: string }).parentEventId : undefined;
 
 	return {
-		name: attributes['copilot_chat.debug_name'] as string ?? 'core-event',
+		name: attributes[CopilotChatAttr.DEBUG_NAME] as string ?? 'core-event',
 		spanId: eventId ?? id,
 		traceId,
 		parentSpanId: parentEventId,
