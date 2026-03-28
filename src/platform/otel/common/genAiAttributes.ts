@@ -129,7 +129,7 @@ export const CopilotChatAttr = {
 	DEBUG_LOG_LABEL: 'copilot_chat.debug_log_label',
 	/** Markdown content for standalone content events */
 	MARKDOWN_CONTENT: 'copilot_chat.markdown_content',
-	/** Edit source: inline_chat, chat_editing, chat_editing_hunk */
+	/** Edit source: inline_chat, chat_editing, chat_editing_hunk, apply_patch, replace_string, code_mapper */
 	EDIT_SOURCE: 'copilot_chat.edit.source',
 	/** Edit outcome: accepted, rejected, saved, unknown */
 	EDIT_OUTCOME: 'copilot_chat.edit.outcome',
@@ -141,7 +141,7 @@ export const CopilotChatAttr = {
 	HAS_REMAINING_EDITS: 'copilot_chat.has_remaining_edits',
 } as const;
 
-export type EditSource = 'inline_chat' | 'chat_editing' | 'chat_editing_hunk';
+export type EditSource = 'inline_chat' | 'chat_editing' | 'chat_editing_hunk' | 'apply_patch' | 'replace_string' | 'code_mapper';
 export type EditOutcome = 'accepted' | 'rejected' | 'saved' | 'unknown';
 
 /**

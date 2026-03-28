@@ -10,6 +10,7 @@ import { EditSurvivalResult } from '../../../platform/editSurvivalTracking/commo
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IMultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import type { EditOutcome } from '../../../platform/otel/common/genAiAttributes';
 import { emitEditFeedbackEvent, emitEditHunkActionEvent, emitEditSurvivalEvent, emitInlineDoneEvent, emitUserFeedbackEvent } from '../../../platform/otel/common/genAiEvents';
 import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
 import { IOTelService } from '../../../platform/otel/common/otelService';
@@ -567,7 +568,7 @@ function reportInlineEditSurvivalEvent(res: EditSurvivalResult, sharedProps: Tel
 	GenAiMetrics.recordEditSurvivalNoRevert(otelService, 'inline_chat', res.noRevert, res.timeDelayMs);
 }
 
-const outcomes = new Map([
+const outcomes = new Map<vscode.ChatEditingSessionActionOutcome, EditOutcome>([
 	[vscode.ChatEditingSessionActionOutcome.Accepted, 'accepted'],
 	[vscode.ChatEditingSessionActionOutcome.Rejected, 'rejected'],
 	[vscode.ChatEditingSessionActionOutcome.Saved, 'saved']

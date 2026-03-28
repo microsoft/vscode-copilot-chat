@@ -361,7 +361,8 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 						});
 
 						emitEditSurvivalEvent(this._otelService, 'replace_string', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, this._promptContext?.requestId ?? '');
-						GenAiMetrics.recordEditSurvivalRate(this._otelService, 'replace_string', res.fourGram, res.timeDelayMs);
+						GenAiMetrics.recordEditSurvivalFourGram(this._otelService, 'replace_string', res.fourGram, res.timeDelayMs);
+						GenAiMetrics.recordEditSurvivalNoRevert(this._otelService, 'replace_string', res.noRevert, res.timeDelayMs);
 					});
 				});
 

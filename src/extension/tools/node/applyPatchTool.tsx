@@ -472,7 +472,8 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 						});
 
 						emitEditSurvivalEvent(this._otelService, 'apply_patch', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, this._promptContext?.requestId ?? '');
-						GenAiMetrics.recordEditSurvivalRate(this._otelService, 'apply_patch', res.fourGram, res.timeDelayMs);
+						GenAiMetrics.recordEditSurvivalFourGram(this._otelService, 'apply_patch', res.fourGram, res.timeDelayMs);
+						GenAiMetrics.recordEditSurvivalNoRevert(this._otelService, 'apply_patch', res.noRevert, res.timeDelayMs);
 					});
 				}
 			});

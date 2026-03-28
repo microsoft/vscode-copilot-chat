@@ -347,5 +347,6 @@ function reportEditSurvivalEvent(res: EditSurvivalResult, { requestId, speculati
 	});
 
 	emitEditSurvivalEvent(otelService, 'code_mapper', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, requestId ?? '');
-	GenAiMetrics.recordEditSurvivalRate(otelService, 'code_mapper', res.fourGram, res.timeDelayMs);
+	GenAiMetrics.recordEditSurvivalFourGram(otelService, 'code_mapper', res.fourGram, res.timeDelayMs);
+	GenAiMetrics.recordEditSurvivalNoRevert(otelService, 'code_mapper', res.noRevert, res.timeDelayMs);
 }
