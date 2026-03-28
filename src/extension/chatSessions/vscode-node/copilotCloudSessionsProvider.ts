@@ -16,6 +16,8 @@ import { derivePullRequestState, PullRequestSearchItem, SessionInfo } from '../.
 import { AuthOptions, CCAEnabledResult, IGithubRepositoryService, IOctoKitService, JobInfo, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { DeferredPromise, retry, RunOnceScheduler } from '../../../util/vs/base/common/async';
 import { Event } from '../../../util/vs/base/common/event';
@@ -307,6 +309,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		@IChatDelegationSummaryService private readonly _chatDelegationSummaryService: IChatDelegationSummaryService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@IDomainService private readonly _domainService: IDomainService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		super();
 		this.registerCommands();
@@ -1962,6 +1965,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			partnerAgent: partnerAgent?.name ?? 'unknown',
 			model: modelId ?? 'unknown'
 		});
+		GenAiMetrics.incrementCloudSessionCount(this._otelService, partnerAgent?.name ?? 'unknown');
 
 		// Follow up
 		if (context.chatSessionContext && !context.chatSessionContext.isUntitled && request.sessionResource.scheme === CopilotCloudSessionsProvider.TYPE) {
@@ -2480,6 +2484,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					}
 				*/
 				this.telemetry.sendMSFTTelemetryEvent('copilotcloud.chat.remoteAgentJobPullRequestReady');
+				GenAiMetrics.incrementCloudPrReadyCount(this._otelService);
 				this.logService.trace(`Job ${jobId} now has pull request #${jobInfo.pull_request.number}`);
 				this.refresh();
 				return jobInfo;
