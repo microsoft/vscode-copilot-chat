@@ -39,7 +39,7 @@ import { isGitHubRemoteRepository } from '../../../remoteRepositories/common/uti
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../workspace/common/workspaceService';
-import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId } from '../../common/workspaceChunkSearch';
+import { StrategySearchResult, StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions } from '../../common/workspaceChunkSearch';
 import { EmbeddingsChunkSearch } from '../embeddingsChunkSearch';
 
 import { WorkspaceChunkEmbeddingsIndex } from '../workspaceChunkEmbeddingsIndex';
@@ -87,9 +87,7 @@ interface AvailableFailureMetadata {
  * ChunkSearch strategy that first calls the Github code search API to get a context window of files that are similar to the query.
  * Then it uses the embeddings index to find the most similar chunks in the context window.
  */
-export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunkSearchStrategy {
-
-	readonly id = WorkspaceChunkSearchStrategyId.CodeSearch;
+export class CodeSearchChunkSearch extends Disposable {
 
 	/**
 	 * Maximum number of files that have changed from what code search has indexed.
@@ -680,7 +678,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		if (diffArray.length <= embeddingsMaxFiles) {
 			const batchInfo = new ComputeBatchInfo();
 			const result = await this._embeddingsChunkSearch.searchSubsetOfFiles(sizing, query, diffArray, subSearchOptions, { info: innerTelemetryInfo, batchInfo }, token);
-			return { ...result, strategyId: this._embeddingsChunkSearch.id, embeddingsComputeInfo: batchInfo };
+			return { ...result, strategyId: 'localEmbeddings', embeddingsComputeInfo: batchInfo };
 		} else {
 			// No way to search out-of-sync files; caller will use code search results alone and warn the user
 			this._logService.debug(`CodeSearchChunkSearch.searchLocalDiff: ${diffArray.length} out-of-sync files exceeds threshold (${embeddingsMaxFiles}), skipping local diff search`);

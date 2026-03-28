@@ -5,7 +5,6 @@
 
 import type * as vscode from 'vscode';
 import { GlobIncludeOptions } from '../../../util/common/glob';
-import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { FileChunkAndScore } from '../../chunking/common/chunk';
 import { Embedding } from '../../embeddings/common/embeddingsComputer';
@@ -20,14 +19,6 @@ export interface WorkspaceChunkQuery {
 
 export interface WorkspaceChunkQueryWithEmbeddings extends WorkspaceChunkQuery {
 	resolveQueryEmbeddings(token: CancellationToken): Promise<Embedding>;
-}
-
-/**
- * Internal ids used to identify strategies in telemetry.
- */
-export enum WorkspaceChunkSearchStrategyId {
-	Embeddings = 'ada',// Do not change value as it's used for telemetry
-	CodeSearch = 'codesearch',
 }
 
 /**
@@ -53,32 +44,3 @@ export type WorkspaceSearchAlert =
 	| vscode.ChatResponseWarningPart
 	| vscode.ChatResponseCommandButtonPart
 	| vscode.ChatResponseMarkdownPart;
-
-export interface IWorkspaceChunkSearchStrategy {
-	readonly id: WorkspaceChunkSearchStrategyId;
-
-	/**
-	 * Invoked before the search is performed.
-	 *
-	 * This can be used to prompt the user or perform other actions.
-	 *
-	 * Unlike time spent in `searchWorkspace`, this method will not count towards timeouts
-	 */
-	prepareSearchWorkspace?(
-		telemetryInfo: TelemetryCorrelationId,
-		token: CancellationToken,
-	): Promise<void>;
-
-	/**
-	 * Takes search queries and returns the chunks of text that are most semantically similar to any of the queries.
-	 *
-	 * @return Either the result (which may have zero chunks) or undefined if the search could not be performed.
-	 */
-	searchWorkspace(
-		sizing: StrategySearchSizing,
-		query: WorkspaceChunkQueryWithEmbeddings,
-		options: WorkspaceChunkSearchOptions,
-		telemetryInfo: TelemetryCorrelationId,
-		token: CancellationToken
-	): Promise<StrategySearchResult | undefined>;
-}

@@ -44,7 +44,7 @@ export interface ISearchFeedbackTelemetry {
 	llmSelectedCount?: number;
 	rawLlmRankingResultsCount?: number;
 	parseResult?: string;
-	strategy?: string;
+
 	llmBestInRerank?: number;
 	llmWorstInRerank?: number;
 }
@@ -170,7 +170,6 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 			);
 			SemanticSearchTextSearchProvider.feedBackTelemetry.chunkSearchDuration = Date.now() - chunkSearchDuration;
 			SemanticSearchTextSearchProvider.feedBackTelemetry.chunkCount = result.chunks.length;
-			SemanticSearchTextSearchProvider.feedBackTelemetry.strategy = result.strategy;
 			this.treeSitterAIKeywords(query, progress, result.chunks.map(chunk => chunk.chunk), token);
 
 			const chunkResults = result.chunks.map(c => c.chunk);
@@ -317,7 +316,6 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 			"llmSelectedCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of chunks selected by LLM from the initial retrieval." },
 			"rawLlmRankingResultsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of raw results returned by the LLM." },
 			"parseResult": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates the result of parsing the LLM response." },
-			"strategy": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates the strategy used for the search." },
 			"llmBestInRerank": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Best rank (lowest index) among LLM-selected chunks in the reranked results." },
 			"llmWorstInRerank": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Worst rank (highest index) among LLM-selected chunks in the reranked results." }
 			}
@@ -325,7 +323,6 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 		this._telemetryService.sendMSFTTelemetryEvent('copilot.search.request', {
 			rankResult: SemanticSearchTextSearchProvider.feedBackTelemetry.rankResult,
 			parseResult: SemanticSearchTextSearchProvider.feedBackTelemetry.parseResult,
-			strategy: SemanticSearchTextSearchProvider.feedBackTelemetry.strategy,
 		}, {
 			chunkCount: SemanticSearchTextSearchProvider.feedBackTelemetry.chunkCount,
 			rankResultsCount: SemanticSearchTextSearchProvider.feedBackTelemetry.rankResultsCount,
