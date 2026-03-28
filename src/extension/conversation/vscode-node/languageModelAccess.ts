@@ -15,7 +15,6 @@ import { IConfigurationService } from '../../../platform/configuration/common/co
 import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
-import { ModelAliasRegistry } from '../../../platform/endpoint/common/modelAliasRegistry';
 import { encodeStatefulMarker } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { AutoChatEndpoint } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
@@ -345,17 +344,6 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			};
 
 			models.push(model);
-
-			// Register aliases for this model
-			const aliases = ModelAliasRegistry.getAliases(model.id);
-			for (const alias of aliases) {
-				models.push({
-					...model,
-					id: alias,
-					family: alias,
-					isUserSelectable: false,
-				});
-			}
 		}
 
 		this._currentModels = models;
@@ -368,7 +356,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			const allEndpoints = await this._endpointProvider.getAllChatEndpoints();
 			return await this._automodeService.resolveAutoModeEndpoint(undefined, allEndpoints);
 		}
-		return this._chatEndpoints.find(e => e.model === ModelAliasRegistry.resolveAlias(model.id));
+		return this._chatEndpoints.find(e => e.model === model.id);
 	}
 
 	private async _provideLanguageModelChatResponse(
