@@ -217,14 +217,14 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 						},
 					});
 				} else if (typeof state.remoteIndexState.externalIngestState !== 'undefined') {
-					// External indexing is enabled but not yet built
+					// External indexing is enabled but not yet fully built
 					return this._writeStatusItem({
 						title: {
-							title: t('Index not yet built'),
+							title: t('Codebase index out of date'),
 							learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
 						},
 						details: {
-							message: `[${t`Build index`}](command:${buildRemoteIndexCommandId} "${t('Build Codebase Index')}")`,
+							message: `[${t`Update index`}](command:${buildRemoteIndexCommandId} "${t('Build Codebase Index')}")`,
 							busy: false,
 						}
 					});
