@@ -125,8 +125,4 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI; extensionId: string } | undefined {
 		return this.extensionSkillInfos.get(uri.toString());
 	}
-
-	getExtensionPromptFileInfo(_uri: URI): undefined {
-		return undefined;
-	}
 }
