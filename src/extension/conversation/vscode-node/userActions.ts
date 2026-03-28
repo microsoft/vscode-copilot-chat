@@ -212,6 +212,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 						const otelOutcome = outcomes.get(e.action.outcome) ?? 'unknown';
 						emitEditFeedbackEvent(this.otelService, otelOutcome, document?.languageId ?? '', agentId, result.metadata?.responseId ?? '', 'agent', e.action.hasRemainingEdits, this.notebookService.hasSupportedNotebooks(e.action.uri));
 						GenAiMetrics.recordEditAcceptance(this.otelService, 'chat_editing', otelOutcome, document?.languageId);
+						GenAiMetrics.recordChatEditOutcome(this.otelService, 'chat_editing', otelOutcome, document?.languageId, e.action.hasRemainingEdits);
 					}
 
 					if (result.metadata?.responseId
@@ -493,6 +494,9 @@ export class UserFeedbackService implements IUserFeedbackService {
 		this.telemetryService.sendMSFTTelemetryEvent('inline.done', sharedProps, {
 			...sharedMeasures, accepted
 		});
+		this.telemetryService.sendGHTelemetryEvent('inline.done', sharedProps, {
+			...sharedMeasures, accepted
+		});
 
 		emitInlineDoneEvent(this.otelService, accepted === 1, languageId, editCount, editLineCount, interactionOutcome.kind, isNotebookDocument === 1);
 		GenAiMetrics.recordEditAcceptance(this.otelService, 'inline_chat', accepted === 1 ? 'accepted' : 'rejected', languageId);
@@ -556,6 +560,13 @@ function reportInlineEditSurvivalEvent(res: EditSurvivalResult, sharedProps: Tel
 		}
 	*/
 	res.telemetryService.sendMSFTTelemetryEvent('inline.trackEditSurvival', sharedProps, {
+		...sharedMeasures,
+		survivalRateFourGram: res.fourGram,
+		survivalRateNoRevert: res.noRevert,
+		timeDelayMs: res.timeDelayMs,
+		didBranchChange: res.didBranchChange ? 1 : 0,
+	});
+	res.telemetryService.sendGHTelemetryEvent('inline.trackEditSurvival', sharedProps, {
 		...sharedMeasures,
 		survivalRateFourGram: res.fourGram,
 		survivalRateNoRevert: res.noRevert,

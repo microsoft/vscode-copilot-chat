@@ -230,26 +230,28 @@ These metrics track the activity and outcomes of agentic code changes across all
 
 | Metric | Type | Unit | Description |
 |---|---|---|---|
-| `copilot_chat.edit.accept.count` | Counter | edits | File-level and inline edit accept/reject decisions |
-| `copilot_chat.edit.hunk.count` | Counter | hunks | Hunk-level accept/reject decisions |
+| `copilot_chat.edit.acceptance.count` | Counter | edits | Edit accept/reject decisions (inline chat, chat editing, hunk-level) |
+| `copilot_chat.chat_edit.outcome.count` | Counter | edits | File-level chat editing session outcomes (accepted/rejected/saved) |
 | `copilot_chat.lines_of_code.count` | Counter | lines | Lines of code added/removed by accepted agent edits |
-| `copilot_chat.edit.survival_rate` | Histogram | ratio (0-1) | How much AI-edited code survives over time (4-gram similarity) |
+| `copilot_chat.edit.survival.four_gram` | Histogram | ratio (0-1) | 4-gram text similarity survival score |
+| `copilot_chat.edit.survival.no_revert` | Histogram | ratio (0-1) | No-revert survival score |
 | `copilot_chat.user.action.count` | Counter | actions | User engagement: copy, insert, apply, followup |
 | `copilot_chat.user.feedback.count` | Counter | votes | Thumbs up/down on chat responses |
 | `copilot_chat.agent.edit_response.count` | Counter | responses | Agent edit responses by success/error |
 | `copilot_chat.agent.summarization.count` | Counter | events | Context summarization outcomes (applied/failed) |
 | `copilot_chat.pull_request.count` | Counter | PRs | Pull requests created via CLI agent |
-| `copilot_chat.commit.count` | Counter | commits | Git commits created via agent |
 | `copilot_chat.cloud.session.count` | Counter | sessions | Cloud/remote agent sessions by partner |
 | `copilot_chat.cloud.pr_ready.count` | Counter | events | Remote agent job PR ready notifications |
 
-**`copilot_chat.edit.accept.count` attributes:** `outcome` (`accepted`/`rejected`), `edit_surface` (`agent`/`inline_chat`)
+**`copilot_chat.edit.acceptance.count` attributes:** `copilot_chat.edit.source` (`inline_chat`/`chat_editing`/`chat_editing_hunk`/`apply_patch`/`replace_string`/`code_mapper`), `copilot_chat.edit.outcome` (`accepted`/`rejected`), `copilot_chat.language_id` (optional)
 
-**`copilot_chat.edit.hunk.count` attributes:** `outcome` (`accepted`/`rejected`)
+**`copilot_chat.chat_edit.outcome.count` attributes:** `copilot_chat.edit.source`, `copilot_chat.edit.outcome` (`accepted`/`rejected`/`saved`), `copilot_chat.language_id` (optional), `copilot_chat.has_remaining_edits` (optional)
 
-**`copilot_chat.lines_of_code.count` attributes:** `type` (`added`/`removed`), `language_id`
+**`copilot_chat.lines_of_code.count` attributes:** `type` (`added`/`removed`), `copilot_chat.language_id` (optional)
 
-**`copilot_chat.edit.survival_rate` attributes:** `edit_source` (`apply_patch`/`replace_string`/`code_mapper`/`inline_chat`), `time_delay_ms`
+**`copilot_chat.edit.survival.four_gram` attributes:** `copilot_chat.edit.source`, `copilot_chat.time_delay_ms`
+
+**`copilot_chat.edit.survival.no_revert` attributes:** `copilot_chat.edit.source`, `copilot_chat.time_delay_ms`
 
 **`copilot_chat.user.action.count` attributes:** `action` (`copy`/`insert`/`apply`/`followup`)
 
@@ -564,7 +566,7 @@ In your trace viewer, filter by `service.name` to see traces from specific agent
 
 **Traces** — Visualize the full agent execution in Jaeger or Grafana Tempo. Each `invoke_agent` span contains child `chat` and `execute_tool` spans, making it easy to identify bottlenecks and debug failures. Subagent invocations appear as nested `invoke_agent` spans under `execute_tool runSubagent`.
 
-**Metrics** — Track token usage trends by model and provider, monitor tool success rates via `copilot_chat.tool.call.count`, and watch perceived latency with `copilot_chat.time_to_first_token`. Agent activity metrics (`copilot_chat.edit.accept.count`, `copilot_chat.edit.survival_rate`, `copilot_chat.lines_of_code.count`) power accept rate and commit survival dashboards. All metrics carry the same resource attributes (`service.name`, `service.version`, `session.id`) for consistent filtering.
+**Metrics** — Track token usage trends by model and provider, monitor tool success rates via `copilot_chat.tool.call.count`, and watch perceived latency with `copilot_chat.time_to_first_token`. Agent activity metrics (`copilot_chat.edit.acceptance.count`, `copilot_chat.edit.survival.four_gram`, `copilot_chat.lines_of_code.count`) power accept rate and commit survival dashboards. All metrics carry the same resource attributes (`service.name`, `service.version`, `session.id`) for consistent filtering.
 
 **Events** — `copilot_chat.session.start` tracks session creation. `copilot_chat.tool.call` events provide per-invocation timing and error details. `copilot_chat.edit.feedback` and `copilot_chat.edit.survival` events enable drill-down into which edits were accepted/rejected and how code survival varies by edit source. `copilot_chat.user.feedback` links thumbs-up/down votes to specific conversations for quality investigation. `gen_ai.client.inference.operation.details` gives the full LLM call record including token usage and, when content capture is enabled, the complete prompt/response messages. Use `gen_ai.conversation.id` to correlate all signals belonging to the same session.
 

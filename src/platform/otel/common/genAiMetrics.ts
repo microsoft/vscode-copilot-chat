@@ -135,10 +135,10 @@ export class GenAiMetrics {
 	}
 
 	/** Lines of code added/removed by accepted agent edits */
-	static incrementLinesOfCode(otel: IOTelService, type: 'added' | 'removed', languageId: string, count: number): void {
+	static incrementLinesOfCode(otel: IOTelService, type: 'added' | 'removed', languageId: string | undefined, count: number): void {
 		otel.incrementCounter('copilot_chat.lines_of_code.count', count, {
 			'type': type,
-			[CopilotChatAttr.LANGUAGE_ID]: languageId,
+			...(languageId ? { [CopilotChatAttr.LANGUAGE_ID]: languageId } : {}),
 		});
 	}
 
@@ -174,10 +174,6 @@ export class GenAiMetrics {
 
 	static incrementPullRequestCount(otel: IOTelService): void {
 		otel.incrementCounter('copilot_chat.pull_request.count');
-	}
-
-	static incrementCommitCount(otel: IOTelService): void {
-		otel.incrementCounter('copilot_chat.commit.count');
 	}
 
 	static incrementCloudSessionCount(otel: IOTelService, partnerAgent: string): void {
