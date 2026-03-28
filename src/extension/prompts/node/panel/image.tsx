@@ -89,6 +89,21 @@ export class Image extends PromptElement<ImageProps, unknown> {
 					</>
 				);
 			}
+
+			// Check if user is on business/enterprise SKU with editor preview features disabled
+			const copilotToken = this.authService.copilotToken;
+			if (copilotToken && !copilotToken.isIndividual && !copilotToken.isEditorPreviewFeaturesEnabled()) {
+				if (this.props.omitReferences) {
+					return;
+				}
+
+				const managedOptions = { status: { description: l10n.t("Vision capabilities is managed by your organization."), kind: ChatResponseReferencePartStatusKind.Omitted } };
+				return (
+					<>
+						<references value={[new PromptReference(this.props.variableName ? { variableName: this.props.variableName, value: fillerUri } : fillerUri, undefined, managedOptions)]} />
+					</>
+				);
+			}
 			const variable = await this.props.variableValue;
 			let imageSource = Buffer.from(variable).toString('base64');
 			let imageMimeType: string | undefined = undefined;
