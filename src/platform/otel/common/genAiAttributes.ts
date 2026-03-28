@@ -67,10 +67,8 @@ export const GenAiAttr = {
 	// Usage
 	USAGE_INPUT_TOKENS: OTelSemConv.ATTR_GEN_AI_USAGE_INPUT_TOKENS,
 	USAGE_OUTPUT_TOKENS: OTelSemConv.ATTR_GEN_AI_USAGE_OUTPUT_TOKENS,
-	/** Custom: not yet standardized in OTel GenAI conventions */
-	USAGE_CACHE_READ_INPUT_TOKENS: 'gen_ai.usage.cache_read.input_tokens',
-	/** Custom: not yet standardized in OTel GenAI conventions */
-	USAGE_CACHE_CREATION_INPUT_TOKENS: 'gen_ai.usage.cache_creation.input_tokens',
+	USAGE_CACHE_READ_INPUT_TOKENS: OTelSemConv.ATTR_GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS,
+	USAGE_CACHE_CREATION_INPUT_TOKENS: OTelSemConv.ATTR_GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS,
 	/** Custom: reasoning/thinking token count (not yet standardized in GenAI conventions) */
 	USAGE_REASONING_TOKENS: 'gen_ai.usage.reasoning_tokens',
 
@@ -84,8 +82,7 @@ export const GenAiAttr = {
 	// Agent
 	AGENT_NAME: OTelSemConv.ATTR_GEN_AI_AGENT_NAME,
 	AGENT_ID: OTelSemConv.ATTR_GEN_AI_AGENT_ID,
-	/** Custom: not yet standardized in OTel GenAI conventions */
-	AGENT_VERSION: 'gen_ai.agent.version',
+	AGENT_VERSION: OTelSemConv.ATTR_GEN_AI_AGENT_VERSION,
 	AGENT_DESCRIPTION: OTelSemConv.ATTR_GEN_AI_AGENT_DESCRIPTION,
 
 	// Tool

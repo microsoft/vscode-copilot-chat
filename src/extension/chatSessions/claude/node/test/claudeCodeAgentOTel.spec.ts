@@ -8,6 +8,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { randomUUID } from 'crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
+import { GenAiAttr, GenAiOperationName } from '../../../../../platform/otel/common/genAiAttributes';
 import { resolveOTelConfig } from '../../../../../platform/otel/common/index';
 import { ICompletedSpanData, IOTelService } from '../../../../../platform/otel/common/otelService';
 import { InMemoryOTelService } from '../../../../../platform/otel/node/inMemoryOTelService';
@@ -243,13 +244,13 @@ describe('Claude Session OTel Tool Spans', () => {
 		// Should have a user_message span + an execute_tool span
 		const toolSpan = spans.find(s => s.name === 'execute_tool Read');
 		expect(toolSpan).toBeDefined();
-		expect(toolSpan!.attributes['gen_ai.operation.name']).toBe('execute_tool');
-		expect(toolSpan!.attributes['gen_ai.tool.name']).toBe('Read');
-		expect(toolSpan!.attributes['gen_ai.tool.call.id']).toBe('tu-1');
+		expect(toolSpan!.attributes[GenAiAttr.OPERATION_NAME]).toBe(GenAiOperationName.EXECUTE_TOOL);
+		expect(toolSpan!.attributes[GenAiAttr.TOOL_NAME]).toBe('Read');
+		expect(toolSpan!.attributes[GenAiAttr.TOOL_CALL_ID]).toBe('tu-1');
 		expect(toolSpan!.attributes['copilot_chat.chat_session_id']).toBe(sessionId);
 		expect(toolSpan!.status.code).toBe(1); // SpanStatusCode.OK
-		expect(toolSpan!.attributes['gen_ai.tool.call.arguments']).toContain('file_path');
-		expect(toolSpan!.attributes['gen_ai.tool.call.result']).toContain('file contents here');
+		expect(toolSpan!.attributes[GenAiAttr.TOOL_CALL_ARGUMENTS]).toContain('file_path');
+		expect(toolSpan!.attributes[GenAiAttr.TOOL_CALL_RESULT]).toContain('file contents here');
 	});
 
 	it('emits an execute_tool span with ERROR status for a failed tool call', async () => {
@@ -287,7 +288,7 @@ describe('Claude Session OTel Tool Spans', () => {
 		expect(toolSpan).toBeDefined();
 		expect(toolSpan!.status.code).toBe(2); // SpanStatusCode.ERROR
 		expect(toolSpan!.status.message).toContain('Permission denied');
-		expect(toolSpan!.attributes['gen_ai.tool.call.result']).toContain('ERROR');
+		expect(toolSpan!.attributes[GenAiAttr.TOOL_CALL_RESULT]).toContain('ERROR');
 	});
 
 	it('correctly correlates multiple concurrent tool calls', async () => {
@@ -329,8 +330,8 @@ describe('Claude Session OTel Tool Spans', () => {
 		const globSpan = spans.find(s => s.name === 'execute_tool Glob');
 		expect(readSpan).toBeDefined();
 		expect(globSpan).toBeDefined();
-		expect(readSpan!.attributes['gen_ai.tool.call.result']).toContain('read result');
-		expect(globSpan!.attributes['gen_ai.tool.call.result']).toContain('glob result');
+		expect(readSpan!.attributes[GenAiAttr.TOOL_CALL_RESULT]).toContain('read result');
+		expect(globSpan!.attributes[GenAiAttr.TOOL_CALL_RESULT]).toContain('glob result');
 		expect(readSpan!.status.code).toBe(1); // OK
 		expect(globSpan!.status.code).toBe(1); // OK
 	});
@@ -399,7 +400,7 @@ describe('Claude Session OTel Tool Spans', () => {
 
 		const toolSpan = spans.find(s => s.name === 'execute_tool Bash');
 		expect(toolSpan).toBeDefined();
-		expect(toolSpan!.attributes['gen_ai.tool.call.arguments']).toContain('ls -la');
+		expect(toolSpan!.attributes[GenAiAttr.TOOL_CALL_ARGUMENTS]).toContain('ls -la');
 	});
 
 	it('emits execute_hook span for a successful hook invocation', async () => {
@@ -433,7 +434,7 @@ describe('Claude Session OTel Tool Spans', () => {
 
 		const hookSpan = spans.find(s => s.name === 'execute_hook SessionStart');
 		expect(hookSpan).toBeDefined();
-		expect(hookSpan!.attributes['gen_ai.operation.name']).toBe('execute_hook');
+		expect(hookSpan!.attributes[GenAiAttr.OPERATION_NAME]).toBe(GenAiOperationName.EXECUTE_HOOK);
 		expect(hookSpan!.attributes['copilot_chat.hook_type']).toBe('SessionStart');
 		expect(hookSpan!.attributes['copilot_chat.hook_command']).toBe('SessionStart');
 		expect(hookSpan!.attributes['copilot_chat.chat_session_id']).toBe(sessionId);

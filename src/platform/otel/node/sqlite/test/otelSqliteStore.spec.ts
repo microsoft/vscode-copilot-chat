@@ -3,9 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { OTelSqliteStore } from '../otelSqliteStore';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { GenAiAttr, GenAiOperationName } from '../../../common/genAiAttributes';
 import { SpanStatusCode, type ICompletedSpanData } from '../../../common/otelService';
+import { OTelSqliteStore } from '../otelSqliteStore';
 
 function makeSpan(overrides: Partial<ICompletedSpanData> & { spanId: string; traceId: string }): ICompletedSpanData {
 	return {
@@ -38,9 +39,9 @@ describe('OTelSqliteStore', () => {
 			traceId: 'trace-1',
 			name: 'invoke_agent copilot',
 			attributes: {
-				'gen_ai.operation.name': 'invoke_agent',
-				'gen_ai.agent.name': 'copilot',
-				'gen_ai.conversation.id': 'session-123',
+				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.INVOKE_AGENT,
+				[GenAiAttr.AGENT_NAME]: 'copilot',
+				[GenAiAttr.CONVERSATION_ID]: 'session-123',
 			},
 		}));
 
@@ -57,18 +58,18 @@ describe('OTelSqliteStore', () => {
 			spanId: 'span-1',
 			traceId: 'trace-1',
 			attributes: {
-				'gen_ai.operation.name': 'chat',
-				'gen_ai.response.model': 'gpt-4o',
-				'gen_ai.output.messages': '[{"role":"assistant","parts":[{"type":"text","content":"Hello"}]}]',
-				'gen_ai.usage.input_tokens': 100,
-				'gen_ai.usage.output_tokens': 50,
+				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
+				[GenAiAttr.RESPONSE_MODEL]: 'gpt-4o',
+				[GenAiAttr.OUTPUT_MESSAGES]: '[{"role":"assistant","parts":[{"type":"text","content":"Hello"}]}]',
+				[GenAiAttr.USAGE_INPUT_TOKENS]: 100,
+				[GenAiAttr.USAGE_OUTPUT_TOKENS]: 50,
 			},
 		}));
 
 		const attrs = store.getSpanAttributes('span-1');
 		expect(attrs.length).toBeGreaterThanOrEqual(5);
 
-		const outputMsg = store.getSpanAttribute('span-1', 'gen_ai.output.messages');
+		const outputMsg = store.getSpanAttribute('span-1', GenAiAttr.OUTPUT_MESSAGES);
 		expect(outputMsg).toContain('Hello');
 
 		const spans = store.getSpansByTraceId('trace-1');
@@ -100,7 +101,7 @@ describe('OTelSqliteStore', () => {
 			spanId: 'parent',
 			traceId: 'trace-1',
 			name: 'invoke_agent',
-			attributes: { 'gen_ai.operation.name': 'invoke_agent' },
+			attributes: { [GenAiAttr.OPERATION_NAME]: GenAiOperationName.INVOKE_AGENT },
 		}));
 		store.insertSpan(makeSpan({
 			spanId: 'child-chat',
@@ -108,7 +109,7 @@ describe('OTelSqliteStore', () => {
 			parentSpanId: 'parent',
 			name: 'chat gpt-4o',
 			startTime: 1700000001000,
-			attributes: { 'gen_ai.operation.name': 'chat', 'gen_ai.response.model': 'gpt-4o' },
+			attributes: { [GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT, [GenAiAttr.RESPONSE_MODEL]: 'gpt-4o' },
 		}));
 		store.insertSpan(makeSpan({
 			spanId: 'child-tool',
@@ -116,7 +117,7 @@ describe('OTelSqliteStore', () => {
 			parentSpanId: 'child-chat',
 			name: 'execute_tool read_file',
 			startTime: 1700000002000,
-			attributes: { 'gen_ai.operation.name': 'execute_tool', 'gen_ai.tool.name': 'read_file' },
+			attributes: { [GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_TOOL, [GenAiAttr.TOOL_NAME]: 'read_file' },
 		}));
 
 		const spans = store.getSpansByTraceId('trace-1');
@@ -133,12 +134,12 @@ describe('OTelSqliteStore', () => {
 		store.insertSpan(makeSpan({
 			spanId: 'span-1',
 			traceId: 'trace-1',
-			attributes: { 'gen_ai.conversation.id': 'conv-abc' },
+			attributes: { [GenAiAttr.CONVERSATION_ID]: 'conv-abc' },
 		}));
 		store.insertSpan(makeSpan({
 			spanId: 'span-2',
 			traceId: 'trace-2',
-			attributes: { 'gen_ai.conversation.id': 'conv-xyz' },
+			attributes: { [GenAiAttr.CONVERSATION_ID]: 'conv-xyz' },
 		}));
 
 		const result = store.getSpansByConversationId('conv-abc');
@@ -183,12 +184,12 @@ describe('OTelSqliteStore', () => {
 		store.insertSpan(makeSpan({
 			spanId: 'span-1',
 			traceId: 'trace-1',
-			attributes: { 'gen_ai.agent.name': 'original' },
+			attributes: { [GenAiAttr.AGENT_NAME]: 'original' },
 		}));
 		store.insertSpan(makeSpan({
 			spanId: 'span-1',
 			traceId: 'trace-1',
-			attributes: { 'gen_ai.agent.name': 'updated' },
+			attributes: { [GenAiAttr.AGENT_NAME]: 'updated' },
 		}));
 
 		const spans = store.getSpansByTraceId('trace-1');

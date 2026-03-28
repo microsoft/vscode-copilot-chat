@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { GenAiAttr, GenAiOperationName } from '../../../../../platform/otel/common/genAiAttributes';
 import { resolveOTelConfig } from '../../../../../platform/otel/common/otelConfig';
 import type { ICompletedSpanData, IOTelService } from '../../../../../platform/otel/common/otelService';
 import { Event } from '../../../../../util/vs/base/common/event';
@@ -225,7 +226,7 @@ describe('CopilotCliBridgeSpanProcessor', () => {
 		expect(otelService.injectedSpans).toHaveLength(1);
 		const span = otelService.injectedSpans[0];
 		expect(span.name).toBe('execute_hook sessionEnd');
-		expect(span.attributes['gen_ai.operation.name']).toBe('execute_hook');
+		expect(span.attributes[GenAiAttr.OPERATION_NAME]).toBe(GenAiOperationName.EXECUTE_HOOK);
 		expect(span.attributes['copilot_chat.hook_type']).toBe('sessionEnd');
 		expect(span.attributes['copilot_chat.hook_input']).toBe('{"reason":"complete"}');
 		expect(span.attributes['copilot_chat.hook_result_kind']).toBe('success');

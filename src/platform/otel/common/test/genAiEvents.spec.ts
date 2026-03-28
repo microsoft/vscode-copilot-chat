@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as OTelSemConv from '@opentelemetry/semantic-conventions/incubating';
 import { describe, expect, it, vi } from 'vitest';
 import { Event } from '../../../../util/vs/base/common/event';
 import { GenAiAttr, GenAiOperationName, StdAttr } from '../genAiAttributes';
@@ -47,7 +48,7 @@ describe('emitInferenceDetailsEvent', () => {
 		expect(otel.emitLogRecord).toHaveBeenCalledOnce();
 		const [body, attrs] = otel.emitLogRecord.mock.calls[0];
 		expect(body).toContain('gpt-4o');
-		expect(attrs['event.name']).toBe('gen_ai.client.inference.operation.details');
+		expect(attrs['event.name']).toBe(OTelSemConv.EVENT_GEN_AI_CLIENT_INFERENCE_OPERATION_DETAILS);
 		expect(attrs[GenAiAttr.OPERATION_NAME]).toBe(GenAiOperationName.CHAT);
 		expect(attrs[GenAiAttr.REQUEST_MODEL]).toBe('gpt-4o');
 		expect(attrs[GenAiAttr.RESPONSE_MODEL]).toBe('gpt-4o');

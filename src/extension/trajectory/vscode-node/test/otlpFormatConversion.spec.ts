@@ -30,7 +30,7 @@ function makeSpan(overrides: Partial<ICompletedSpanData> = {}): ICompletedSpanDa
 describe('OTLP Format Conversion', () => {
 	describe('completedSpanToOtlpSpan', () => {
 		it('converts basic span', () => {
-			const span = makeSpan({ name: 'chat gpt-4o', attributes: { 'gen_ai.request.model': 'gpt-4o' } });
+			const span = makeSpan({ name: 'chat gpt-4o', attributes: { [GenAiAttr.REQUEST_MODEL]: 'gpt-4o' } });
 			const otlp = completedSpanToOtlpSpan(span);
 
 			expect(otlp.name).toBe('chat gpt-4o');
@@ -39,7 +39,7 @@ describe('OTLP Format Conversion', () => {
 			expect(otlp.startTimeUnixNano).toBe(String(1709472000000 * 1_000_000));
 			expect(otlp.endTimeUnixNano).toBe(String(1709472001000 * 1_000_000));
 			expect(otlp.attributes).toEqual([
-				{ key: 'gen_ai.request.model', value: { stringValue: 'gpt-4o' } },
+				{ key: GenAiAttr.REQUEST_MODEL, value: { stringValue: 'gpt-4o' } },
 			]);
 		});
 

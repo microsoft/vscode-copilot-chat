@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as OTelSemConv from '@opentelemetry/semantic-conventions/incubating';
 import { describe, expect, it } from 'vitest';
 import { CopilotChatAttr, GenAiAttr, GenAiOperationName, GenAiProviderName } from '../genAiAttributes';
 import { emitAgentTurnEvent, emitSessionStartEvent } from '../genAiEvents';
@@ -216,11 +217,11 @@ describe('Agent Trace Hierarchy', () => {
 		});
 
 		expect(otel.metrics).toHaveLength(3);
-		expect(otel.metrics[0].name).toBe('gen_ai.client.operation.duration');
+		expect(otel.metrics[0].name).toBe(OTelSemConv.METRIC_GEN_AI_CLIENT_OPERATION_DURATION);
 		expect(otel.metrics[0].value).toBe(3.5);
-		expect(otel.metrics[1].name).toBe('gen_ai.client.token.usage');
+		expect(otel.metrics[1].name).toBe(OTelSemConv.METRIC_GEN_AI_CLIENT_TOKEN_USAGE);
 		expect(otel.metrics[1].value).toBe(1500);
-		expect(otel.metrics[2].name).toBe('gen_ai.client.token.usage');
+		expect(otel.metrics[2].name).toBe(OTelSemConv.METRIC_GEN_AI_CLIENT_TOKEN_USAGE);
 		expect(otel.metrics[2].value).toBe(250);
 	});
 

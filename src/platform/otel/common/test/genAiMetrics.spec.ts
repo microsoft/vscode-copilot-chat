@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as OTelSemConv from '@opentelemetry/semantic-conventions/incubating';
 import { describe, expect, it, vi } from 'vitest';
 import { Event } from '../../../../util/vs/base/common/event';
 import { GenAiAttr, GenAiOperationName, GenAiProviderName, GenAiTokenType, StdAttr } from '../genAiAttributes';
@@ -45,7 +46,7 @@ describe('GenAiMetrics', () => {
 			errorType: 'timeout',
 		});
 
-		expect(otel.recordMetric).toHaveBeenCalledWith('gen_ai.client.operation.duration', 1.5, {
+		expect(otel.recordMetric).toHaveBeenCalledWith(OTelSemConv.METRIC_GEN_AI_CLIENT_OPERATION_DURATION, 1.5, {
 			[GenAiAttr.OPERATION_NAME]: 'chat',
 			[GenAiAttr.PROVIDER_NAME]: 'openai',
 			[GenAiAttr.REQUEST_MODEL]: 'gpt-4o',
@@ -64,7 +65,7 @@ describe('GenAiMetrics', () => {
 			requestModel: 'gpt-4o',
 		});
 
-		expect(otel.recordMetric).toHaveBeenCalledWith('gen_ai.client.token.usage', 1000, {
+		expect(otel.recordMetric).toHaveBeenCalledWith(OTelSemConv.METRIC_GEN_AI_CLIENT_TOKEN_USAGE, 1000, {
 			[GenAiAttr.OPERATION_NAME]: 'chat',
 			[GenAiAttr.PROVIDER_NAME]: 'openai',
 			[GenAiAttr.TOKEN_TYPE]: GenAiTokenType.INPUT,

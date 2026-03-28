@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as OTelSemConv from '@opentelemetry/semantic-conventions/incubating';
 import { describe, expect, it } from 'vitest';
 import { GenAiAttr, GenAiOperationName } from '../genAiAttributes';
 import { emitInferenceDetailsEvent } from '../genAiEvents';
@@ -111,7 +112,7 @@ describe('BYOK Provider Span Emission', () => {
 
 		expect(otel.logRecords).toHaveLength(1);
 		const attrs = otel.logRecords[0].attributes!;
-		expect(attrs['event.name']).toBe('gen_ai.client.inference.operation.details');
+		expect(attrs['event.name']).toBe(OTelSemConv.EVENT_GEN_AI_CLIENT_INFERENCE_OPERATION_DETAILS);
 		expect(attrs[GenAiAttr.REQUEST_MODEL]).toBe('claude-sonnet-4-20250514');
 		expect(attrs[GenAiAttr.USAGE_INPUT_TOKENS]).toBe(2000);
 		expect(attrs[GenAiAttr.USAGE_OUTPUT_TOKENS]).toBe(500);

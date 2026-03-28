@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as OTelSemConv from '@opentelemetry/semantic-conventions/incubating';
 import { describe, expect, it } from 'vitest';
 import { CopilotChatAttr, GenAiAttr, GenAiOperationName, GenAiProviderName } from '../genAiAttributes';
 import { SpanKind, SpanStatusCode } from '../otelService';
@@ -84,14 +85,14 @@ describe('chatMLFetcher Span Lifecycle', () => {
 
 		// Simulate the finally block in _doFetch
 		const durationSec = 3.5;
-		otel.recordMetric('gen_ai.client.operation.duration', durationSec, {
+		otel.recordMetric(OTelSemConv.METRIC_GEN_AI_CLIENT_OPERATION_DURATION, durationSec, {
 			[GenAiAttr.OPERATION_NAME]: GenAiOperationName.CHAT,
 			[GenAiAttr.PROVIDER_NAME]: GenAiProviderName.GITHUB,
 			[GenAiAttr.REQUEST_MODEL]: 'gpt-4o',
 		});
 
 		expect(otel.metrics).toHaveLength(1);
-		expect(otel.metrics[0].name).toBe('gen_ai.client.operation.duration');
+		expect(otel.metrics[0].name).toBe(OTelSemConv.METRIC_GEN_AI_CLIENT_OPERATION_DURATION);
 		expect(otel.metrics[0].value).toBe(3.5);
 	});
 
