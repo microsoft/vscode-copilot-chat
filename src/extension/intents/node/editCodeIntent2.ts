@@ -15,6 +15,7 @@ import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogS
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { requestHasNotebookRefs } from '../../../platform/notebook/common/helpers';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -27,7 +28,6 @@ import { EditCodePrompt2 } from '../../prompts/node/panel/editCodePrompt2';
 import { NotebookInlinePrompt } from '../../prompts/node/panel/notebookInlinePrompt';
 import { ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
-import { IOTelService } from '../../../platform/otel/common/otelService';
 import { AgentIntentInvocation } from './agentIntent';
 import { EditCodeIntentOptions } from './editCodeIntent';
 

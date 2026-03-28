@@ -20,11 +20,11 @@ import { CUSTOM_TOOL_SEARCH_NAME, isAnthropicCustomToolSearchEnabled } from '../
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { modelsWithoutResponsesContextManagement } from '../../../platform/networking/common/openai';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITasksService } from '../../../platform/tasks/common/tasksService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
-import { IOTelService } from '../../../platform/otel/common/otelService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITestProvider } from '../../../platform/testing/common/testProvider';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';

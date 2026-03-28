@@ -13,6 +13,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -31,7 +32,6 @@ import { AgentPrompt } from '../../prompts/node/agent/agentPrompt';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { IToolsService } from '../../tools/common/toolsService';
 import { getAgentMaxRequests } from '../common/agentConfig';
-import { IOTelService } from '../../../platform/otel/common/otelService';
 import { AgentIntentInvocation } from './agentIntent';
 
 

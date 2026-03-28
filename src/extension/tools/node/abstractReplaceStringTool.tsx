@@ -13,12 +13,12 @@ import { IEndpointProvider } from '../../../platform/endpoint/common/endpointPro
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { emitEditSurvivalEvent } from '../../../platform/otel/common/genAiEvents';
-import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
-import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { IAlternativeNotebookContentEditGenerator, NotebookEditGenerationTelemtryOptions, NotebookEditGenrationSource } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { emitEditSurvivalEvent } from '../../../platform/otel/common/genAiEvents';
+import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITelemetryService, multiplexProperties } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';

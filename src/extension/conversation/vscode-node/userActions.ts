@@ -10,10 +10,10 @@ import { EditSurvivalResult } from '../../../platform/editSurvivalTracking/commo
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IMultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
-import { ISurveyService } from '../../../platform/survey/common/surveyService';
 import { emitEditFeedbackEvent, emitEditHunkActionEvent, emitEditSurvivalEvent, emitInlineDoneEvent, emitUserFeedbackEvent } from '../../../platform/otel/common/genAiEvents';
 import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
 import { IOTelService } from '../../../platform/otel/common/otelService';
+import { ISurveyService } from '../../../platform/survey/common/surveyService';
 import { ITelemetryService, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../platform/telemetry/common/telemetry';
 import { isNotebookCellOrNotebookChatInput } from '../../../util/common/notebooks';
 import { createServiceIdentifier } from '../../../util/common/services';

@@ -15,6 +15,7 @@ import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { getCellId } from '../../../platform/notebook/common/helpers';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -35,7 +36,6 @@ import { getToolName, ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
 import { getAgentMaxRequests } from '../common/agentConfig';
 import { EditCodeIntent, EditCodeIntentOptions } from './editCodeIntent';
-import { IOTelService } from '../../../platform/otel/common/otelService';
 import { EditCode2IntentInvocation } from './editCodeIntent2';
 
 const getTools = (instaService: IInstantiationService, request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> =>
