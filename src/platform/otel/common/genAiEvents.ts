@@ -115,7 +115,7 @@ export function emitAgentTurnEvent(
 	});
 }
 
-// ── Agentic Edit Quality Events ──
+// ── Agent Activity & Outcome Events ──
 
 export function emitEditFeedbackEvent(
 	otel: IOTelService,
