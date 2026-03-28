@@ -325,7 +325,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 				};
 			}
 
-			this._logService.trace(`WorkspaceChunkSearch.searchFileChunks: found ${searchResult.val.chunks.length} chunks'`);
+			this._logService.trace(`WorkspaceChunkSearch.searchFileChunks: found ${searchResult.val.chunks.length} chunks`);
 
 			const filteredChunks = await raceCancellationError(this.filterIgnoredChunks(searchResult.val.chunks), token);
 			if (this._simulationTestContext.isInSimulationTests) {
