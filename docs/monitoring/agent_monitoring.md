@@ -224,9 +224,9 @@ invoke_agent copilot                           [~15s]
 
 **`copilot_chat.time_to_first_token` attributes:** `gen_ai.request.model`
 
-#### Edit Quality Metrics
+#### Agent Activity & Outcome Metrics
 
-These metrics track the quality and adoption of agentic code changes across all surfaces (agent mode, inline chat, background CLI, cloud sessions).
+These metrics track the activity and outcomes of agentic code changes across all surfaces (agent mode, inline chat, background CLI, cloud sessions).
 
 | Metric | Type | Unit | Description |
 |---|---|---|---|
@@ -315,9 +315,9 @@ Emitted for each LLM round-trip within an agent invocation.
 | `gen_ai.usage.output_tokens` | Output tokens this turn |
 | `tool_call_count` | Number of tool calls this turn |
 
-#### Edit Quality Events
+#### Agent Activity & Outcome Events
 
-These events provide drill-down detail for the edit quality metrics above. They are emitted as OTel log records.
+These events provide drill-down detail for the agent activity metrics above. They are emitted as OTel log records.
 
 ##### `copilot_chat.edit.feedback`
 
