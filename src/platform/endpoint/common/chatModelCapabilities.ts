@@ -17,14 +17,16 @@ const HIDDEN_MODEL_A_HASHES = [
 
 const VSC_MODEL_HASHES_A = [
 	'6db59e9bfe6e2ce608c0ee0ade075c64e4d054f05305e3034481234703381bb5',
+	'd7b81f23b6ab47d41130359bc203a6c653bba461b3da0185406353ce2b3abfa7',
 ];
 
 const VSC_MODEL_HASHES_B = [
 	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95',
-	'7b667eee9b3517fb9aae7061617fd9cec524859fcd6a20a605bfb142a6b0f14e',
-	'1d28f8e6e5af58c60e9a52385314a3c7bc61f7226e1444e31fe60c58c30e8235',
-	'e7cfc1a7adaf9e419044e731b7a9e21940a5280a438b472db0c46752dd70eab3',
-	'3104045f9b69dbb7a3d76cc8a0aa89eb05e10677c4dd914655ea87f4be000f4e',
+	'1cdd4febbc7ee6b1abe0fbdd42217744c5912c79366db4befd91698b46c40a3c',
+];
+
+const VSC_MODEL_HASHES_D = [
+	'0425aeda24d2fd93e2a879c4d813e4f3997aa444f1f4a633241236f9f773df73',
 ];
 
 
@@ -32,10 +34,9 @@ const VSC_MODEL_HASHES_B = [
 const VSC_MODEL_HASHES_SUBSET_C = [
 	'6db59e9bfe6e2ce608c0ee0ade075c64e4d054f05305e3034481234703381bb5',
 	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95',
-	'7b667eee9b3517fb9aae7061617fd9cec524859fcd6a20a605bfb142a6b0f14e',
-	'1d28f8e6e5af58c60e9a52385314a3c7bc61f7226e1444e31fe60c58c30e8235',
-	'e7cfc1a7adaf9e419044e731b7a9e21940a5280a438b472db0c46752dd70eab3',
-	'3104045f9b69dbb7a3d76cc8a0aa89eb05e10677c4dd914655ea87f4be000f4e',
+	'd7b81f23b6ab47d41130359bc203a6c653bba461b3da0185406353ce2b3abfa7',
+	'1cdd4febbc7ee6b1abe0fbdd42217744c5912c79366db4befd91698b46c40a3c',
+	'0425aeda24d2fd93e2a879c4d813e4f3997aa444f1f4a633241236f9f773df73',
 ];
 
 const HIDDEN_MODEL_E_HASHES: string[] = [
@@ -127,6 +128,12 @@ export function isVSCModelC(model: LanguageModelChat | IChatEndpoint) {
 	const ID_hash = getCachedSha256Hash(getModelId(model));
 	const family_hash = getCachedSha256Hash(model.family);
 	return VSC_MODEL_HASHES_SUBSET_C.includes(ID_hash) || VSC_MODEL_HASHES_SUBSET_C.includes(family_hash);
+}
+
+export function isVSCModelD(model: LanguageModelChat | IChatEndpoint) {
+	const ID_hash = getCachedSha256Hash(getModelId(model));
+	const family_hash = getCachedSha256Hash(model.family);
+	return VSC_MODEL_HASHES_D.includes(ID_hash) || VSC_MODEL_HASHES_D.includes(family_hash);
 }
 
 export function isGpt52CodexFamily(model: LanguageModelChat | IChatEndpoint | string): boolean {
