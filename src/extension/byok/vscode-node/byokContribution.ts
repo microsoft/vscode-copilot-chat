@@ -8,6 +8,7 @@ import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { BYOKKnownModels, isBYOKEnabled } from '../../byok/common/byokProvider';
@@ -34,6 +35,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IVSCodeExtensionContext extensionContext: IVSCodeExtensionContext,
 		@IAuthenticationService authService: IAuthenticationService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
 		super();
@@ -49,7 +51,8 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		if (authService.copilotToken && isBYOKEnabled(authService.copilotToken, this._capiClientService) && !this._byokProvidersRegistered) {
 			this._byokProvidersRegistered = true;
 			// Update known models list from CDN so all providers have the same list
-			const knownModels = await this.fetchKnownModelList(this._fetcherService);
+			const modelInfoUrl = this._configurationService.getConfig(ConfigKey.BYOKModelInfoUrl);
+			const knownModels = await this.fetchKnownModelList(this._fetcherService, modelInfoUrl);
 			if (this._store.isDisposed) {
 				return;
 			}
@@ -67,8 +70,8 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			}
 		}
 	}
-	private async fetchKnownModelList(fetcherService: IFetcherService): Promise<Record<string, BYOKKnownModels>> {
-		const data = await (await fetcherService.fetch('https://main.vscode-cdn.net/extensions/copilotChat.json', { method: 'GET', callSite: 'byok-known-models' })).json();
+	private async fetchKnownModelList(fetcherService: IFetcherService, url: string): Promise<Record<string, BYOKKnownModels>> {
+		const data = await (await fetcherService.fetch(url, { method: 'GET', callSite: 'byok-known-models' })).json();
 		// Use this for testing with changes from a local file. Don't check in
 		// const data = JSON.parse((await this._fileSystemService.readFile(URI.file('/Users/roblou/code/vscode-engineering/chat/copilotChat.json'))).toString());
 		let knownModels: Record<string, BYOKKnownModels>;

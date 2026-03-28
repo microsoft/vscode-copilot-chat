@@ -3945,6 +3945,14 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.byok.modelInfoUrl": {
+						"type": "string",
+						"default": "https://main.vscode-cdn.net/extensions/copilotChat.json",
+						"markdownDescription": "%github.copilot.config.byok.modelInfoUrl%",
+						"tags": [
+							"experimental"
+						]
+					},
 					"github.copilot.chat.completionsFetcher": {
 						"type": [
 							"string",

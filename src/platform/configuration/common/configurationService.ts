@@ -951,6 +951,7 @@ export namespace ConfigKey {
 	export const VirtualToolThreshold = defineSetting<number>('chat.virtualTools.threshold', ConfigType.ExperimentBased, HARD_TOOL_LIMIT);
 	export const CurrentEditorAgentContext = defineSetting<boolean>('chat.agent.currentEditorContext.enabled', ConfigType.Simple, true);
 	/** BYOK  */
+	export const BYOKModelInfoUrl = defineSetting<string>('chat.byok.modelInfoUrl', ConfigType.Simple, 'https://main.vscode-cdn.net/extensions/copilotChat.json');
 	export const AutoFixDiagnostics = defineSetting<boolean>('chat.agent.autoFix', ConfigType.ExperimentBased, false);
 	export const NotebookFollowCellExecution = defineSetting<boolean>('chat.notebook.followCellExecution.enabled', ConfigType.Simple, false);
 	export const UseAlternativeNESNotebookFormat = defineSetting<boolean>('chat.notebook.enhancedNextEditSuggestions.enabled', ConfigType.ExperimentBased, false);
