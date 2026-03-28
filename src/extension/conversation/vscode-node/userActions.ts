@@ -211,7 +211,10 @@ export class UserFeedbackService implements IUserFeedbackService {
 					{
 						const otelOutcome = outcomes.get(e.action.outcome) ?? 'unknown';
 						emitEditFeedbackEvent(this.otelService, otelOutcome, document?.languageId ?? '', agentId, result.metadata?.responseId ?? '', 'agent', e.action.hasRemainingEdits, this.notebookService.hasSupportedNotebooks(e.action.uri));
-						GenAiMetrics.recordEditAcceptance(this.otelService, 'chat_editing', otelOutcome, document?.languageId);
+						if (e.action.outcome === vscode.ChatEditingSessionActionOutcome.Accepted
+							|| e.action.outcome === vscode.ChatEditingSessionActionOutcome.Rejected) {
+							GenAiMetrics.recordEditAcceptance(this.otelService, 'chat_editing', otelOutcome, document?.languageId);
+						}
 						GenAiMetrics.recordChatEditOutcome(this.otelService, 'chat_editing', otelOutcome, document?.languageId, e.action.hasRemainingEdits);
 					}
 
