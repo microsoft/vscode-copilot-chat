@@ -6,10 +6,13 @@
 import assert from 'assert';
 import * as vscode from 'vscode';
 import { IChatMLFetcher } from '../../../../platform/chat/common/chatMLFetcher';
+import { ChatFetchResponseType } from '../../../../platform/chat/common/commonTypes';
 import { MockChatMLFetcher } from '../../../../platform/chat/test/common/mockChatMLFetcher';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
+import { CustomDataPartMimeTypes } from '../../../../platform/endpoint/common/endpointTypes';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
+import { APIUsage } from '../../../../platform/networking/common/openai';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -85,6 +88,76 @@ suite('CopilotLanguageModelWrapper', () => {
 
 		test('good tool name', async () => {
 			await runTest([vscode.LanguageModelChatMessage.User('hello2')], [{ name: 'hello_world', description: 'my tool' }]);
+		});
+	});
+
+	suite('TokenUsage data part', () => {
+		let wrapper: CopilotLanguageModelWrapper;
+		let endpoint: IChatEndpoint;
+		let mockFetcher: MockChatMLFetcher;
+		let reportedDataParts: vscode.LanguageModelDataPart[];
+
+		setup(async () => {
+			createAccessor();
+			mockFetcher = accessor.get(IChatMLFetcher) as MockChatMLFetcher;
+			endpoint = await accessor.get(IEndpointProvider).getChatEndpoint('copilot-base');
+			wrapper = instaService.createInstance(CopilotLanguageModelWrapper);
+			reportedDataParts = [];
+		});
+
+		test('reports exactly one TokenUsage data part with valid JSON payload', async () => {
+			// Set up expected usage data
+			const expectedUsage: APIUsage = {
+				prompt_tokens: 150,
+				completion_tokens: 75,
+				total_tokens: 225,
+				prompt_tokens_details: { cached_tokens: 50 }
+			};
+
+			mockFetcher.setNextResponse({
+				type: ChatFetchResponseType.Success,
+				requestId: 'test-request-id',
+				serverRequestId: 'test-server-request-id',
+				usage: expectedUsage,
+				value: 'Test response',
+				resolvedModel: 'test-model'
+			});
+
+			// Track reported data parts
+			const progress = {
+				report: (part: vscode.LanguageModelResponsePart2) => {
+					if (part instanceof vscode.LanguageModelDataPart) {
+						reportedDataParts.push(part);
+					}
+				}
+			};
+
+			await wrapper.provideLanguageModelResponse(
+				endpoint,
+				[vscode.LanguageModelChatMessage.User('hello')],
+				{ requestInitiator: 'unknown', toolMode: vscode.LanguageModelChatToolMode.Auto },
+				vscode.extensions.all[0].id,
+				progress,
+				CancellationToken.None
+			);
+
+			// Filter for TokenUsage data parts
+			const tokenUsageParts = reportedDataParts.filter(part => part.mimeType === CustomDataPartMimeTypes.TokenUsage);
+
+			// Assert exactly one TokenUsage data part was reported
+			assert.strictEqual(tokenUsageParts.length, 1, 'Expected exactly one TokenUsage data part');
+
+			// Assert the payload is valid JSON
+			const tokenUsagePart = tokenUsageParts[0];
+			const payloadString = new TextDecoder().decode(tokenUsagePart.data);
+			let parsedPayload: unknown;
+
+			assert.doesNotThrow(() => {
+				parsedPayload = JSON.parse(payloadString);
+			}, 'Expected payload to be valid JSON');
+
+			// Assert the payload matches the expected usage
+			assert.deepStrictEqual(parsedPayload, expectedUsage, 'Expected payload to match usage returned by fetcher');
 		});
 	});
 });
