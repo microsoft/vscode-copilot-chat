@@ -13,6 +13,9 @@ import { IEndpointProvider } from '../../../platform/endpoint/common/endpointPro
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { emitEditSurvivalEvent } from '../../../platform/otel/common/genAiEvents';
+import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { IAlternativeNotebookContentEditGenerator, NotebookEditGenerationTelemtryOptions, NotebookEditGenrationSource } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
@@ -82,6 +85,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		@IConfigurationService protected readonly configurationService: IConfigurationService,
 		@IEditToolLearningService private readonly editToolLearningService: IEditToolLearningService,
 		@ILogService private readonly logService: ILogService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) { }
 
 	public abstract invoke(options: vscode.LanguageModelToolInvocationOptions<T>, token: vscode.CancellationToken): Promise<LanguageModelToolResult>;
@@ -355,6 +359,9 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 							timeDelayMs: res.timeDelayMs,
 							didBranchChange: res.didBranchChange ? 1 : 0,
 						});
+
+						emitEditSurvivalEvent(this._otelService, 'replace_string', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, this._promptContext?.requestId ?? '');
+						GenAiMetrics.recordEditSurvivalRate(this._otelService, 'replace_string', res.fourGram, res.timeDelayMs);
 					});
 				});
 
