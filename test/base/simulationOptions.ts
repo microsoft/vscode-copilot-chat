@@ -67,6 +67,15 @@ export class SimulationOptions {
 	public readonly nesUrl: string | undefined;
 	public readonly nesApiKey: string | undefined;
 
+	public readonly nesDatagen: {
+		readonly input: string;
+		readonly output: string | undefined;
+		readonly rowOffset: number;
+		readonly workerMode: boolean;
+	} | undefined;
+
+	public readonly subcommand: 'nes-datagen' | undefined;
+
 	public readonly disabledTools: Set<string>;
 
 	/** If true, all tests are run in the extension host */
@@ -156,6 +165,17 @@ export class SimulationOptions {
 
 		this.useExperimentalCodeSearchService = boolean(argv['use-experimental-code-search-service'], false);
 
+		const isNesDatagen = (argv._ as string[]).includes('nes-datagen');
+		this.subcommand = isNesDatagen ? 'nes-datagen' : undefined;
+		this.nesDatagen = isNesDatagen && argv['input']
+			? {
+				input: argv['input'],
+				output: argv['out'],
+				rowOffset: typeof argv['row-offset'] === 'number' ? argv['row-offset'] : 0,
+				workerMode: boolean(argv['worker'], false),
+			}
+			: undefined;
+
 		this.configFile = argv['config-file'];
 		this.modelConfigFile = argv['model-config-file'];
 	}
@@ -211,6 +231,36 @@ export class SimulationOptions {
 			`  --scenario-workspace-folder        If true, runs the stest inline in the scenario's workspace folder`,
 			`  --config-file                      Path to a JSON file containing configuration options`,
 			`  --model-config-file                Path to a JSON file containing model configuration options`,
+			``,
+			`Subcommands:`,
+			`  nes-datagen                        Generate training data from alternative action recordings`,
+			`                                     Run 'npm run simulate -- nes-datagen --help' for options`,
+			``,
+		].join('\n'));
+	}
+
+	public printTrainHelp(): void {
+		console.log([
+			`Usage: npm run simulate -- --config-file=<path> [global options] nes-datagen --input=<path> [options]`,
+			``,
+			`Generate training data by replaying alternative action recordings through the NES prompt pipeline.`,
+			`The prompting strategy is read from the model configuration in --config-file.`,
+			``,
+			`Options:`,
+			`  --input                            Path to a JSON file with training data recordings (required)`,
+			`  --out                              Output path for JSON file. Default: <input-path>_output.json`,
+			``,
+			`Global options (placed before 'nes-datagen'):`,
+			`  --config-file                      Path to a JSON config file (required for nes-datagen)`,
+			`                                     Must include "chat.advanced.inlineEdits.xtabProvider.modelConfiguration"`,
+			`                                     with at least { "modelName", "promptingStrategy", "includeTagsInCurrentFile" }`,
+			`  -p, --parallelism                  Number of parallel workers (default: 20)`,
+			`  --verbose                          Print detailed progress and error information`,
+			`  --help                             Show this help message`,
+			``,
+			`Examples:`,
+			`  npm run simulate -- --config-file=config.json nes-datagen --input=data.json`,
+			`  npm run simulate -- --config-file=config.json --parallelism=10 --verbose nes-datagen --input=data.json`,
 			``,
 		].join('\n'));
 	}
