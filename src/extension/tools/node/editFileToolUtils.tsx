@@ -33,6 +33,7 @@ import { Position as EditorPosition } from '../../../util/vs/editor/common/core/
 import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { EndOfLine, Position, Range, TextEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
+import { ToolName } from '../common/toolNames';
 import { formatUriForFileWidget } from '../common/toolUtils';
 
 // Simplified Hunk type for the patch
@@ -668,7 +669,7 @@ export async function applyEdit(
 
 			if (updatedFile === originalFile) {
 				throw new NoChangeError(
-					'Original and edited file match exactly. Failed to apply edit. Use the ${ToolName.ReadFile} tool to re-read the file and and determine the correct edit.',
+					`Original and edited file match exactly. Failed to apply edit. Use the ${ToolName.ReadFile} tool to re-read the file and determine the correct edit.`,
 					filePath
 				);
 			}
