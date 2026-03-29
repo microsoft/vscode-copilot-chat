@@ -108,7 +108,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 	}
 
 	protected async getFolderRepositoryForNewSession(sessionId: string | undefined, selectedFolder: vscode.Uri | undefined, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<FolderRepositoryInfo> {
-		// Get the selected folder
+		// Use the explicitly provided folder, or fall back to the session's stored folder
 		selectedFolder = selectedFolder ?? (sessionId ? (this._newSessionFolders.get(sessionId)?.uri
 			?? await this.workspaceFolderService.getSessionWorkspaceFolder(sessionId)) : undefined);
 
@@ -153,7 +153,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 			}
 
 			// If we're in a single folder workspace, possible the user has opened the worktree folder directly.
-			if (sessionId && folderUri) {
+			if (sessionId && folderUri && this.workspaceService.getWorkspaceFolders().length === 1) {
 				worktreeProperties = await this.worktreeService.getWorktreeProperties(folderUri);
 				worktree = worktreeProperties ? vscode.Uri.file(worktreeProperties.worktreePath) : undefined;
 				repositoryUri = worktreeProperties ? vscode.Uri.file(worktreeProperties.repositoryPath) : repositoryUri;

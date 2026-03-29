@@ -526,11 +526,11 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 	}
 
-	public async createSession({ model, workspace, agent, sessionId, debugTargetSessionIds, mcpServerMappings }: ICreateSessionOptions, token: CancellationToken): Promise<RefCountedSession> {
+	public async createSession({ model, workspace, agent, sessionId, debugTargetSessionIds, mcpServerMappings, additionalWorkspaces }: ICreateSessionOptions, token: CancellationToken): Promise<RefCountedSession> {
 		const { mcpConfig: mcpServers, disposable: mcpGateway } = await this.mcpHandler.loadMcpConfig();
 		try {
 			const copilotUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl) || undefined;
-			const { agentName, sessionOptions } = await this.createSessionsOptions({ model, workspace, mcpServers, agent, copilotUrl, sessionId, debugTargetSessionIds, mcpServerMappings });
+			const { agentName, sessionOptions } = await this.createSessionsOptions({ model, workspace, mcpServers, agent, copilotUrl, sessionId, debugTargetSessionIds, mcpServerMappings, additionalWorkspaces });
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 			const sdkSession = await sessionManager.createSession({ ...sessionOptions, sessionId });
 			this._newSessionIds.delete(sdkSession.sessionId);

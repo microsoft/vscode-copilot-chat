@@ -44,6 +44,7 @@ const baseNodeBuildOptions = {
 		'sqlite3',
 		'node-pty', // Required by @github/copilot
 		'@github/copilot',
+		'@github/blackbird-external-ingest-utils', // Uses __dirname to load .wasm file at runtime
 		...(isDev ? [] : ['dotenv', 'source-map-support'])
 	],
 	platform: 'node',
