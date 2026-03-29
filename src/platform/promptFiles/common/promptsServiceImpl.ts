@@ -20,7 +20,7 @@ export class PromptsServiceImpl implements IPromptsService {
 	) { }
 
 	public async parseFile(uri: URI, token: CancellationToken): Promise<ParsedPromptFile> {
-		// a temporary workaround to avoid the creating text document to read the file content, which triggers the validation of the file in core (fixed in 1.114)
+		// a temporary workaround to avoid creating a text document to read the file content, which triggers the validation of the file in core (fixed in 1.114)
 		const getTextContent = async (uri: URI) => {
 			const existingDoc = this.workspaceService.textDocuments.find(doc => extUriBiasedIgnorePathCase.isEqual(doc.uri, uri));
 			if (!existingDoc) {
