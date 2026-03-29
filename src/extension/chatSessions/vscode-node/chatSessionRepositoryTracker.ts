@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { Uri } from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableResourceMap, DisposableStore } from '../../../util/vs/base/common/lifecycle';
@@ -38,7 +37,7 @@ export class ChatSessionRepositoryTracker extends Disposable {
 
 		// Add trackers
 		for (const added of e.added) {
-			await this.createWorkspaceFolderWatcher(added.uri);
+			this.createWorkspaceFolderWatcher(added.uri);
 		}
 
 		// Dispose trackers
@@ -47,7 +46,7 @@ export class ChatSessionRepositoryTracker extends Disposable {
 		}
 	}
 
-	private async createWorkspaceFolderWatcher(uri: vscode.Uri): Promise<void> {
+	private createWorkspaceFolderWatcher(uri: vscode.Uri): void {
 		if (this.watchers.has(uri)) {
 			this.logService.trace(`[ChatSessionRepositoryTracker][createWorkspaceFolderWatcher] Already tracking file changes for workspace ${uri.toString()}.`);
 			return;
@@ -60,10 +59,10 @@ export class ChatSessionRepositoryTracker extends Disposable {
 		disposables.add(watcher);
 
 		// Consolidation file watcher events
-		const onDidChangeWorkspaceFile = Event.any<Uri>(
-			watcher.onDidChange as Event<Uri>,
-			watcher.onDidCreate as Event<Uri>,
-			watcher.onDidDelete as Event<Uri>);
+		const onDidChangeWorkspaceFile = Event.any<vscode.Uri>(
+			watcher.onDidChange as Event<vscode.Uri>,
+			watcher.onDidCreate as Event<vscode.Uri>,
+			watcher.onDidDelete as Event<vscode.Uri>);
 
 		// Filter out events from the .git and node_modules folders
 		const onDidChangeRepositoryFile = Event.filter(onDidChangeWorkspaceFile, changedUri => {
