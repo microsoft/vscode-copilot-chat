@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { tmpdir } from 'os';
+import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
@@ -48,13 +50,14 @@ class MockGlobalState implements vscode.Memento {
  */
 class MockExtensionContext extends mock<IVSCodeExtensionContext>() {
 	public override globalState = new MockGlobalState();
+	private readonly mockStoragePath = path.join(tmpdir(), 'vscode-copilot-chat-workspace-folder-service-tests');
 
 	override extensionPath = vscode.Uri.file('/mock/extension/path').fsPath;
-	override globalStorageUri = vscode.Uri.file('/mock/global/storage');
-	override storagePath = vscode.Uri.file('/mock/storage/path').fsPath;
-	override globalStoragePath = vscode.Uri.file('/mock/global/storage/path').fsPath;
-	override logPath = vscode.Uri.file('/mock/log/path').fsPath;
-	override logUri = vscode.Uri.file('/mock/log/uri');
+	override globalStorageUri = vscode.Uri.file(this.mockStoragePath);
+	override storagePath = this.mockStoragePath;
+	override globalStoragePath = this.mockStoragePath;
+	override logPath = path.join(this.mockStoragePath, 'logs');
+	override logUri = vscode.Uri.file(this.logPath);
 	override extensionUri = vscode.Uri.file('/mock/extension');
 }
 
@@ -533,7 +536,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 			it('should return cached changes on second call', async () => {
 				const repo = makeRepoContext();
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
-				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
+				gitService.exec = vi.fn().mockResolvedValue('');
 
 				const folderUri = vscode.Uri.file('/repo');
 
@@ -548,7 +551,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 			it('should invalidate cache when clearWorkspaceChanges is called', async () => {
 				const repo = makeRepoContext();
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
-				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
+				gitService.exec = vi.fn().mockResolvedValue('');
 
 				const folderUri = vscode.Uri.file('/repo');
 
@@ -562,7 +565,8 @@ describe('ChatSessionWorkspaceFolderService', () => {
 			it('should invalidate cache when handleRequestCompleted is called', async () => {
 				const repo = makeRepoContext();
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
-				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
+				gitService.exec = vi.fn().mockResolvedValue('');
+				gitService.add = vi.fn().mockResolvedValue(undefined);
 
 				const folderUri = vscode.Uri.file('/repo');
 
@@ -570,7 +574,61 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				await service.handleRequestCompleted(folderUri);
 
 				await service.getWorkspaceChanges(folderUri);
+				expect(gitService.add).not.toHaveBeenCalled();
 				expect(gitService.getRepository).toHaveBeenCalledTimes(2);
+			});
+
+			it('should derive workspace changes from a temp index without staging the repository', async () => {
+				const repo = makeRepoContext({
+					changes: {
+						mergeChanges: [],
+						indexChanges: [],
+						workingTree: [{
+							status: 5,
+							uri: URI.file('/repo/file.txt'),
+							originalUri: URI.file('/repo/file.txt'),
+							renameUri: URI.file('/repo/file.txt')
+						}],
+						untrackedChanges: []
+					}
+				});
+				gitService.getRepository = vi.fn().mockResolvedValue(repo);
+				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 99, deletions: 99 });
+				gitService.exec = vi.fn()
+					.mockResolvedValueOnce('')
+					.mockResolvedValueOnce('')
+					.mockResolvedValueOnce('1\t0\tfile.txt\x00:100644 100644 0000000 1111111 M\x00file.txt\x00');
+
+				const result = await service.getWorkspaceChanges(vscode.Uri.file('/repo'));
+
+				expect(gitService.exec).toHaveBeenNthCalledWith(
+					1,
+					repo.rootUri,
+					['read-tree', 'HEAD'],
+					expect.objectContaining({ GIT_INDEX_FILE: expect.any(String) })
+				);
+				expect(gitService.exec).toHaveBeenNthCalledWith(
+					2,
+					repo.rootUri,
+					['add', '-A', '--', '.'],
+					expect.objectContaining({ GIT_INDEX_FILE: expect.any(String) })
+				);
+				expect(gitService.exec).toHaveBeenNthCalledWith(
+					3,
+					repo.rootUri,
+					['diff', '--cached', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--'],
+					expect.objectContaining({ GIT_INDEX_FILE: expect.any(String) })
+				);
+				expect(gitService.diffIndexWithHEADShortStats).not.toHaveBeenCalled();
+				expect(result).toEqual([{
+					filePath: '/repo/file.txt',
+					originalFilePath: '/repo/file.txt',
+					modifiedFilePath: '/repo/file.txt',
+					statistics: {
+						additions: 1,
+						deletions: 0
+					}
+				}]);
 			});
 
 			it('should return empty array when repository has no changes', async () => {
@@ -591,7 +649,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 			it('should not re-fetch when cache is valid for a folder', async () => {
 				const repo = makeRepoContext();
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
-				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
+				gitService.exec = vi.fn().mockResolvedValue('');
 
 				const folderUri = vscode.Uri.file('/repo');
 
@@ -621,7 +679,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 						}
 						return Promise.resolve(repo2);
 					});
-				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 0, deletions: 0 });
+				gitService.exec = vi.fn().mockResolvedValue('');
 
 				await service.getWorkspaceChanges(folder1);
 				await service.getWorkspaceChanges(folder2);
