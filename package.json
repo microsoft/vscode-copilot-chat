@@ -6046,6 +6046,10 @@
 					{
 						"name": "compact",
 						"description": "Compact the conversation history to save context tokens"
+					},
+					{
+						"name": "troubleshoot",
+						"description": "Investigate unexpected chat behavior using debug logs"
 					}
 				]
 			},

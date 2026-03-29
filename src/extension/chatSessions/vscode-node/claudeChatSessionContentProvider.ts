@@ -229,12 +229,19 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			}
 
 			// Try to handle as a slash command first
-			const slashResult = await this.slashCommandService.tryHandleCommand(request, stream, token);
+			const effectiveSessionId = ClaudeSessionUri.getSessionId(chatSessionContext.chatSessionItem.resource);
+			const slashResult = await this.slashCommandService.tryHandleCommand({ ...request, sessionId: effectiveSessionId }, stream, token);
 			if (slashResult.handled) {
 				return slashResult.result ?? {};
 			}
 
-			const effectiveSessionId = ClaudeSessionUri.getSessionId(chatSessionContext.chatSessionItem.resource);
+			// If the slash command returned a rewritten prompt, override the prompt
+			// before it reaches the Claude SDK. Clear `command` so the SDK doesn't
+			// try to interpret it as a Claude CLI slash command.
+			const effectiveRequest = slashResult.rewrittenPrompt !== undefined
+				? { ...request, prompt: slashResult.rewrittenPrompt, command: undefined } as vscode.ChatRequest
+				: request;
+
 			const yieldRequested = () => context.yieldRequested;
 
 			// Determine whether this is a new session by checking if a session
@@ -259,7 +266,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 
 			const prompt = request.prompt;
 			this._controller.updateItemStatus(effectiveSessionId, vscode.ChatSessionStatus.InProgress, prompt);
-			const result = await this.claudeAgentManager.handleRequest(effectiveSessionId, request, context, stream, token, isNewSession, yieldRequested);
+			const result = await this.claudeAgentManager.handleRequest(effectiveSessionId, effectiveRequest, context, stream, token, isNewSession, yieldRequested);
 			this._controller.updateItemStatus(effectiveSessionId, vscode.ChatSessionStatus.Completed, prompt);
 
 			// Clear usage handler after request completes
