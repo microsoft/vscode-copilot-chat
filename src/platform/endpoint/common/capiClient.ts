@@ -45,6 +45,7 @@ export abstract class BaseCAPIClientService extends CAPIClient implements ICAPIC
 				request.headers = {};
 			}
 			request.headers['VScode-ABExpContext'] = this.abExpContext;
+			request.headers['X-Copilot-Client-Exp-Assignment-Context'] = this.abExpContext;
 		}
 		// Expected high request volume events that we don't need to collect fetch telemetry for
 		if (
