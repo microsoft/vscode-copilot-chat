@@ -65,9 +65,10 @@ export class ChatSessionRepositoryTracker extends Disposable {
 			watcher.onDidCreate as Event<Uri>,
 			watcher.onDidDelete as Event<Uri>);
 
-		// Filter out events from the .git folder
+		// Filter out events from the .git and node_modules folders
 		const onDidChangeRepositoryFile = Event.filter(onDidChangeWorkspaceFile, changedUri => {
-			return !/\.git($|\\|\/)/.test(relative(uri.fsPath, changedUri.fsPath));
+			const relativePath = relative(uri.fsPath, changedUri.fsPath);
+			return !/\.git($|\\|\/)/.test(relativePath) && !/(^|\\|\/)node_modules($|\\|\/)/.test(relativePath);
 		});
 
 		// Debounce file change events to avoid rapid consecutive updates (3 seconds)
