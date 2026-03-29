@@ -356,6 +356,7 @@
 	"github.copilot.config.anthropic.tools.websearch.blockedDomains": "List of domains to exclude from web search results (e.g., `[\"untrustedsource.com\"]`). Domains should not include the HTTP/HTTPS scheme. Subdomains are automatically excluded. Cannot be used together with allowed domains.",
 	"github.copilot.config.anthropic.tools.websearch.userLocation": "User location for personalizing web search results based on geographic context. All fields (city, region, country, timezone) are optional. Example: `{\"city\": \"San Francisco\", \"region\": \"California\", \"country\": \"US\", \"timezone\": \"America/Los_Angeles\"}`",
 	"github.copilot.config.switchAgent.enabled": "Allow agent to switch to the Plan agent for research, exploration, and planning tasks.",
+	"github.copilot.config.switchAgent.confirm": "Show a confirmation dialog before switching to a different agent.",
 	"github.copilot.config.completionsFetcher": "Sets the fetcher used for the inline completions.",
 	"github.copilot.config.nesFetcher": "Sets the fetcher used for the next edit suggestions.",
 	"github.copilot.config.debug.overrideChatEngine": "Override the chat model. This allows you to test with different models.\n\n**Note**: This is an advanced debugging setting and should not be used while self-hosting as it may lead to a different experience compared to end-users.",

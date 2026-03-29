@@ -1109,10 +1109,16 @@
 							"enum": [
 								"Plan"
 							]
+						},
+						"explainer": {
+							"type": "string",
+							"maxLength": 120,
+							"description": "A short user-facing explainer for benefits of switching (max 12 words). Shown in a confirmation dialog, so do not repeat it in your response."
 						}
 					},
 					"required": [
-						"agentName"
+						"agentName",
+						"explainer"
 					]
 				}
 			},
@@ -3367,6 +3373,15 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.switchAgent.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.switchAgent.confirm": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.switchAgent.confirm%",
 						"tags": [
 							"experimental",
 							"onExp"
