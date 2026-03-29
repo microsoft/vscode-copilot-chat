@@ -269,17 +269,16 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		this.logService.info(`[CopilotCLISession] Steering session ${this.sessionId}`);
 		const disposables = new DisposableStore();
 		const logStartTime = Date.now();
-		const abortController = new AbortController();
 		disposables.add(token.onCancellationRequested(() => {
-			abortController.abort();
+			this._sdkSession.abort();
 		}));
-		disposables.add(toDisposable(() => abortController.abort()));
+		disposables.add(toDisposable(() => this._sdkSession.abort()));
 
 		try {
 			// Send the steering prompt (completes quickly) and also wait for the
 			// previous request to finish, so this promise settles only once all
 			// in-flight work is done.
-			await Promise.all([previousRequestPromise, this.sendRequestInternal(input, attachments, true, logStartTime, abortController)]);
+			await Promise.all([previousRequestPromise, this.sendRequestInternal(input, attachments, true, logStartTime)]);
 			this._logConversation(prompt, '', modelId || '', attachments, logStartTime, 'Completed');
 		} catch (error) {
 			this._logConversation(prompt, '', modelId || '', attachments, logStartTime, 'Failed', error instanceof Error ? error.message : String(error));
@@ -350,11 +349,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		this.logService.info(`[CopilotCLISession] Invoking session ${this.sessionId}`);
 		const disposables = new DisposableStore();
 		const logStartTime = Date.now();
-		const abortController = new AbortController();
 		disposables.add(token.onCancellationRequested(() => {
-			abortController.abort();
+			this._sdkSession.abort();
 		}));
-		disposables.add(toDisposable(() => abortController.abort()));
+		disposables.add(toDisposable(() => this._sdkSession.abort()));
 
 		this._status = ChatSessionStatus.InProgress;
 		this._statusChange.fire(this._status);
@@ -657,7 +655,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			})));
 
 			if (!token.isCancellationRequested) {
-				await this.sendRequestInternal(input, attachments, false, logStartTime, abortController);
+				await this.sendRequestInternal(input, attachments, false, logStartTime);
 			}
 			this.logService.trace(`[CopilotCLISession] Invoking session (completed) ${this.sessionId}`);
 
@@ -736,7 +734,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	 *   prompt is injected into the already-running conversation rather than
 	 *   starting a new turn. This is the mechanism behind session steering.
 	 */
-	private async sendRequestInternal(input: CopilotCLISessionInput, attachments: Attachment[], steering = false, logStartTime: number, abortController: AbortController): Promise<void> {
+	private async sendRequestInternal(input: CopilotCLISessionInput, attachments: Attachment[], steering = false, logStartTime: number): Promise<void> {
 		const prompt = getPromptLabel(input);
 		this._logRequest(prompt, this._lastUsedModel || '', attachments, logStartTime);
 
@@ -763,7 +761,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			} else {
 				this._sdkSession.currentMode = 'interactive';
 			}
-			const sendOptions: SendOptions = { prompt: input.prompt, attachments, abortController, agentMode: this._sdkSession.currentMode };
+			const sendOptions: SendOptions = { prompt: input.prompt, attachments, agentMode: this._sdkSession.currentMode };
 			if (steering) {
 				sendOptions.mode = 'immediate';
 			}

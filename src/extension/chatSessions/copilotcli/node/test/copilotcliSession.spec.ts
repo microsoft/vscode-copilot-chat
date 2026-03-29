@@ -123,6 +123,10 @@ class MockSdkSession {
 
 	async compactHistory() { return { success: true }; }
 
+	async abort() { }
+
+	isAbortable(): boolean { return true; }
+
 	async initializeAndValidateTools() { }
 	getCurrentToolMetadata(): unknown[] | undefined { return this._toolMetadata; }
 	private _toolMetadata: unknown[] | undefined;
