@@ -108,7 +108,7 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 
 	const statefulMarkerAndIndex = !ignoreStatefulMarker && getStatefulMarkerAndIndex(modelId, messages);
 	let previousResponseId: string | undefined;
-	if (latestCompactionMessageIndex === undefined && statefulMarkerAndIndex) {
+	if (statefulMarkerAndIndex) {
 		previousResponseId = statefulMarkerAndIndex.statefulMarker;
 		messages = messages.slice(statefulMarkerAndIndex.index + 1);
 	}
