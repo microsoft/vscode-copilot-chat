@@ -10,6 +10,7 @@ import { IConfigurationService } from '../../../platform/configuration/common/co
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IParserService } from '../../../platform/parser/node/parserService';
@@ -28,9 +29,10 @@ import * as path from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Intent } from '../../common/constants';
-import { explainIntentPromptSnippet } from '../../intents/node/explainIntent';
+import { explainIntentPromptSnippet, explainStagedChangesMessage, explainUncommittedChangesMessage, explainUnstagedChangesMessage } from '../../intents/node/explainIntent';
 import { ChatParticipantRequestHandler } from '../../prompt/node/chatParticipantRequestHandler';
 import { sendReviewActionTelemetry } from '../../prompt/node/feedbackGenerator';
+import { CurrentChange } from '../../prompts/node/feedback/currentChange';
 import { CurrentSelection } from '../../prompts/node/panel/currentSelection';
 import { SymbolAtCursor } from '../../prompts/node/panel/symbolAtCursor';
 import { reviewFileChanges, ReviewSession } from '../../review/node/doReview';
@@ -47,6 +49,7 @@ export function registerInlineChatCommands(accessor: ServicesAccessor): IDisposa
 	const telemetryService = accessor.get(ITelemetryService);
 	const extensionContext = accessor.get(IVSCodeExtensionContext);
 	const configurationService = accessor.get(IConfigurationService);
+	const gitExtensionService = accessor.get(IGitExtensionService);
 	const parserService = accessor.get(IParserService);
 
 	const disposables = new DisposableStore();
@@ -250,6 +253,25 @@ ${message}`,
 		}).map(d => d.message).join(', ');
 		return vscode.commands.executeCommand('vscode.editorChat.start', { message: `/${Intent.Fix} ${diagnostics}`, autoSend: true, initialRange: vscode.window.activeTextEditor?.selection });
 	};
+	const openExplainChangesChat = async (group: 'all' | 'index' | 'workingTree') => {
+		const changes = await CurrentChange.getCurrentChanges(gitExtensionService, group);
+		if (!changes.length) {
+			const message = group === 'index'
+				? vscode.l10n.t('No staged changes found to explain.')
+				: group === 'workingTree'
+					? vscode.l10n.t('No unstaged changes found to explain.')
+					: vscode.l10n.t('No uncommitted changes found to explain.');
+			await vscode.window.showInformationMessage(message);
+			return;
+		}
+
+		const query = group === 'index'
+			? `/${Intent.Explain} ${explainStagedChangesMessage}`
+			: group === 'workingTree'
+				? `/${Intent.Explain} ${explainUnstagedChangesMessage}`
+				: `/${Intent.Explain} ${explainUncommittedChangesMessage}`;
+		return vscode.commands.executeCommand('workbench.action.chat.open', { query });
+	};
 
 	const doGenerateAltText = async (arg: unknown) => {
 		if (arg && typeof arg === 'object' && 'isUrl' in arg && 'resolvedImagePath' in arg && typeof arg.resolvedImagePath === 'string' && 'type' in arg) {
@@ -268,6 +290,9 @@ ${message}`,
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.stagedChanges', () => instaService.createInstance(ReviewSession).review('index', vscode.ProgressLocation.Notification)));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.unstagedChanges', () => instaService.createInstance(ReviewSession).review('workingTree', vscode.ProgressLocation.Notification)));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.changes', () => instaService.createInstance(ReviewSession).review('all', vscode.ProgressLocation.Notification)));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.explain.changes', () => openExplainChangesChat('all')));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.explain.stagedChanges', () => openExplainChangesChat('index')));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.explain.unstagedChanges', () => openExplainChangesChat('workingTree')));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.stagedFileChange', (resource: vscode.SourceControlResourceState) => {
 		return instaService.createInstance(ReviewSession).review({ group: 'index', file: resource.resourceUri }, vscode.ProgressLocation.Notification);
 	}));

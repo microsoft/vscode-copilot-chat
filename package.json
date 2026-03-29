@@ -2350,6 +2350,27 @@
 				"category": "Chat"
 			},
 			{
+				"command": "github.copilot.chat.explain.changes",
+				"title": "%github.copilot.command.explainChanges%",
+				"icon": "$(comment-discussion)",
+				"enablement": "!github.copilot.interactiveSession.disabled",
+				"category": "Chat"
+			},
+			{
+				"command": "github.copilot.chat.explain.stagedChanges",
+				"title": "%github.copilot.command.explainStagedChanges%",
+				"icon": "$(comment-discussion)",
+				"enablement": "!github.copilot.interactiveSession.disabled",
+				"category": "Chat"
+			},
+			{
+				"command": "github.copilot.chat.explain.unstagedChanges",
+				"title": "%github.copilot.command.explainUnstagedChanges%",
+				"icon": "$(comment-discussion)",
+				"enablement": "!github.copilot.interactiveSession.disabled",
+				"category": "Chat"
+			},
+			{
 				"command": "github.copilot.chat.review.stagedFileChange",
 				"title": "%github.copilot.command.reviewFileChange%",
 				"icon": "$(code-review)",
@@ -5444,8 +5465,13 @@
 			],
 			"scm/title": [
 				{
+					"command": "github.copilot.chat.explain.changes",
+					"group": "navigation@-10",
+					"when": "!github.copilot.interactiveSession.disabled && scmProvider == git && scmProviderRootUri in github.copilot.chat.reviewDiff.enabledRootUris"
+				},
+				{
 					"command": "github.copilot.chat.review.changes",
-					"group": "navigation",
+					"group": "navigation@-9",
 					"when": "config.github.copilot.chat.reviewAgent.enabled && github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmProviderRootUri in github.copilot.chat.reviewDiff.enabledRootUris"
 				}
 			],
@@ -5458,9 +5484,19 @@
 			],
 			"scm/resourceGroup/context": [
 				{
+					"command": "github.copilot.chat.explain.stagedChanges",
+					"when": "!github.copilot.interactiveSession.disabled && scmProvider == git && scmResourceGroup == index",
+					"group": "inline@-4"
+				},
+				{
 					"command": "github.copilot.chat.review.stagedChanges",
 					"when": "config.github.copilot.chat.reviewAgent.enabled && github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmResourceGroup == index",
 					"group": "inline@-3"
+				},
+				{
+					"command": "github.copilot.chat.explain.unstagedChanges",
+					"when": "!github.copilot.interactiveSession.disabled && scmProvider == git && scmResourceGroup == workingTree",
+					"group": "inline@-4"
 				},
 				{
 					"command": "github.copilot.chat.review.unstagedChanges",

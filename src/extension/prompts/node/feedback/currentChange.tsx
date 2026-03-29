@@ -254,7 +254,13 @@ export class CurrentChange extends PromptElement<CurrentChangeProps, CurrentChan
 						repository.diffWith('HEAD')
 			);
 			const changes = await Promise.all(stats.map(async change => {
-				const text = await (group === 'index' ? repository.diffIndexWithHEAD(change.uri.fsPath) : repository.diffWithHEAD(change.uri.fsPath));
+				const text = await (
+					group === 'index'
+						? repository.diffIndexWithHEAD(change.uri.fsPath)
+						: group === 'workingTree'
+							? repository.diffWithHEAD(change.uri.fsPath)
+							: repository.diffWith('HEAD', change.uri.fsPath)
+				);
 				return {
 					repository,
 					uri: change.uri,
