@@ -237,14 +237,14 @@ export interface CompletionSetupResult {
 /**
  * Sets up block mode, completion parameters, and finished callback.
  */
-export function setupCompletionParams(
+export async function setupCompletionParams(
 	accessor: ServicesAccessor,
 	document: ITextDocument,
 	position: IPosition,
 	prompt: Prompt,
 	solutionManager: SolutionManager,
 	telemetryData: TelemetryWithExp
-): CompletionSetupResult {
+): Promise<CompletionSetupResult> {
 	// Compute block mode
 	const blockMode = accessor.get(ICompletionsBlockModeConfig).forLanguage(document.detectedLanguageId, telemetryData);
 	const isSupportedLanguage = isSupportedLanguageId(document.detectedLanguageId);
@@ -262,7 +262,7 @@ export function setupCompletionParams(
 		postOptions['stop'] = ['\n\n', '\r\n\r\n'];
 	}
 
-	const engineInfo = getEngineRequestInfo(accessor, telemetryData);
+	const engineInfo = await getEngineRequestInfo(accessor, telemetryData);
 
 	let finishedCb: FinishedCallback;
 

@@ -10,32 +10,32 @@ import { Disposable } from '../../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { getUserSelectedModelConfiguration } from '../../../extension/src/modelPickerUserSelection';
 import { TokenizerName } from '../../../prompt/src/tokenization';
-import { Emitter, Event } from '../util/event';
 import { onCopilotToken } from '../auth/copilotTokenNotifier';
 import { ConfigKey, getConfig } from '../config';
 import { ICompletionsFeaturesService } from '../experiments/featuresService';
 import { ICompletionsLogTargetService, LogLevel } from '../logger';
 import { TelemetryWithExp } from '../telemetry';
+import { Emitter, Event } from '../util/event';
 import { CompletionHeaders } from './fetch';
 
 export const ICompletionsModelManagerService = createServiceIdentifier<ICompletionsModelManagerService>('ICompletionsModelManagerService');
 export interface ICompletionsModelManagerService {
 	readonly _serviceBrand: undefined;
 	readonly onDidChangeModels: Event<void>;
-	getGenericCompletionModels(): ModelItem[];
-	getDefaultModelId(): string;
-	getTokenizerForModel(modelId: string): TokenizerName;
-	getCurrentModelRequestInfo(featureSettings?: TelemetryWithExp): ModelRequestInfo;
+	getGenericCompletionModels(): Promise<ModelItem[]>;
+	getDefaultModelId(): Promise<string>;
+	getTokenizerForModel(modelId: string): Promise<TokenizerName>;
+	getCurrentModelRequestInfo(featureSettings?: TelemetryWithExp): Promise<ModelRequestInfo>;
 }
 
-const FallbackModelId = 'gpt-41-copilot';
 export class AvailableModelsManager extends Disposable implements ICompletionsModelManagerService {
 	declare _serviceBrand: undefined;
-	fetchedModelData: ICompletionModelInformation[] = [];
+	fetchedModelData: ICompletionModelInformation[] | null = null;
 	customModels: string[] = [];
 	editorPreviewFeaturesDisabled: boolean = false;
 	private readonly _onDidChangeModels = this._register(new Emitter<void>());
 	readonly onDidChangeModels = this._onDidChangeModels.event;
+	private _modelsReady: Promise<void>;
 
 	constructor(
 		shouldFetch: boolean = true,
@@ -48,32 +48,31 @@ export class AvailableModelsManager extends Disposable implements ICompletionsMo
 		super();
 
 		if (shouldFetch) {
-			this._register(onCopilotToken(authenticationService, () => this.refreshAvailableModels()));
+			this._modelsReady = this.refreshModels();
+			this._register(onCopilotToken(authenticationService, () => {
+				this._modelsReady = this.refreshModels();
+			}));
+		} else {
+			this._modelsReady = Promise.resolve();
 		}
-	}
-
-	// This will get its initial call after the initial token got fetched
-	private async refreshAvailableModels(): Promise<void> {
-		await this.refreshModels();
 	}
 
 	/**
 	 * Returns the default model, determined by the order returned from the API
 	 * Note: this does NOT fetch models to avoid side effects
 	 */
-	getDefaultModelId(): string {
-		if (this.fetchedModelData) {
-			const fetchedDefaultModel = AvailableModelsManager.filterCompletionModels(
-				this.fetchedModelData,
-				this.editorPreviewFeaturesDisabled
-			)[0];
+	async getDefaultModelId(): Promise<string> {
+		await this._modelsReady;
+		const fetchedDefaultModel = AvailableModelsManager.filterCompletionModels(
+			this.fetchedModelData ?? [],
+			this.editorPreviewFeaturesDisabled
+		)[0];
 
-			if (fetchedDefaultModel) {
-				return fetchedDefaultModel.id;
-			}
+		if (fetchedDefaultModel) {
+			return fetchedDefaultModel.id;
 		}
 
-		return FallbackModelId;
+		throw new Error('No completion models available');
 	}
 
 	async refreshModels(): Promise<void> {
@@ -88,17 +87,18 @@ export class AvailableModelsManager extends Disposable implements ICompletionsMo
 	 * Returns a list of models that are available for generic completions.
 	 * Calls to CAPI to retrieve the list.
 	 */
-	getGenericCompletionModels(): ModelItem[] {
+	async getGenericCompletionModels(): Promise<ModelItem[]> {
+		await this._modelsReady;
 		const filteredResult = AvailableModelsManager.filterCompletionModels(
-			this.fetchedModelData,
+			this.fetchedModelData ?? [],
 			this.editorPreviewFeaturesDisabled
 		);
 
 		return AvailableModelsManager.mapCompletionModels(filteredResult);
 	}
 
-	getTokenizerForModel(modelId: string): TokenizerName {
-		const modelItems = this.getGenericCompletionModels();
+	async getTokenizerForModel(modelId: string): Promise<TokenizerName> {
+		const modelItems = await this.getGenericCompletionModels();
 		const modelItem = modelItems.find(item => item.modelId === modelId);
 		if (modelItem) {
 			return modelItem.tokenizer as TokenizerName;
@@ -131,11 +131,12 @@ export class AvailableModelsManager extends Disposable implements ICompletionsMo
 		}));
 	}
 
-	getCurrentModelRequestInfo(featureSettings: TelemetryWithExp | undefined = undefined): ModelRequestInfo {
-		const defaultModelId = this.getDefaultModelId();
+	async getCurrentModelRequestInfo(featureSettings: TelemetryWithExp | undefined = undefined): Promise<ModelRequestInfo> {
+		await this._modelsReady;
+		const defaultModelId = await this.getDefaultModelId();
 		let userSelectedCompletionModel = this._instantiationService.invokeFunction(getUserSelectedModelConfiguration);
 		if (userSelectedCompletionModel) {
-			const genericModels = this.getGenericCompletionModels().map(model => model.modelId);
+			const genericModels = (await this.getGenericCompletionModels()).map(model => model.modelId);
 			if (!genericModels.includes(userSelectedCompletionModel)) {
 				if (genericModels.length > 0) {
 					this._logService.logIt(

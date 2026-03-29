@@ -82,7 +82,7 @@ export class Features implements ICompletionsFeaturesService {
 		}
 
 		const token = this.copilotTokenManager.token ?? await this.copilotTokenManager.getToken();
-		const { filters, exp } = this.createExpConfigAndFilters(token);
+		const { filters, exp } = await this.createExpConfigAndFilters(token);
 
 		return new TelemetryWithExp(telemetryData.properties, telemetryData.measurements, telemetryData.issuedTime, {
 			filters,
@@ -101,7 +101,7 @@ export class Features implements ICompletionsFeaturesService {
 		return await this.updateExPValuesAndAssignments(filtersInfo, telemetryData);
 	}
 
-	private createExpConfigAndFilters(token: CopilotToken) {
+	private async createExpConfigAndFilters(token: CopilotToken) {
 
 		const exp2: Partial<Record<ExpTreatmentVariables, ExpTreatmentVariableValue>> = {};
 		for (const varName of Object.values<ExpTreatmentVariables>(ExpTreatmentVariables)) {
@@ -116,7 +116,7 @@ export class Features implements ICompletionsFeaturesService {
 			return name + (value ? '' : 'cf');
 		});
 		const exp = new ExpConfig(exp2, features.join(';'));
-		const filterMap = this.instantiationService.invokeFunction(createCompletionsFilters, token);
+		const filterMap = await this.instantiationService.invokeFunction(createCompletionsFilters, token);
 		const filterRecord: Partial<Record<Filter, string>> = {};
 		for (const [key, value] of filterMap.entries()) {
 			filterRecord[key] = value;

@@ -44,16 +44,16 @@ export class ModelPickerManager {
 	// URL for information about Copilot models
 	private readonly MODELS_INFO_URL = 'https://aka.ms/CopilotCompletionsModelPickerLearnMore';
 
-	get models(): ModelItem[] {
+	get models(): Promise<ModelItem[]> {
 		return this._modelManager.getGenericCompletionModels();
 	}
 
-	hasMultipleModels(): boolean {
-		return this.models.length > 1;
+	async hasMultipleModels(): Promise<boolean> {
+		return (await this.models).length > 1;
 	}
 
-	private getDefaultModelId(): string {
-		return this._modelManager.getDefaultModelId();
+	private async getDefaultModelId(): Promise<string> {
+		return await this._modelManager.getDefaultModelId();
 	}
 
 	constructor(
@@ -67,8 +67,8 @@ export class ModelPickerManager {
 		this._modelManager.onDidChangeModels(() => this._updateModelPickerContext());
 	}
 
-	private _updateModelPickerContext(): void {
-		void commands.executeCommand('setContext', HasMultipleCompletionModels, this.hasMultipleModels());
+	private async _updateModelPickerContext(): Promise<void> {
+		void commands.executeCommand('setContext', HasMultipleCompletionModels, await this.hasMultipleModels());
 	}
 
 	async setUserSelectedCompletionModel(modelId: string | null) {
@@ -102,7 +102,7 @@ export class ModelPickerManager {
 			this._asyncCompletionManager.clear();
 		}
 
-		const modelSelection = model.modelId === this.getDefaultModelId() ? null : model.modelId;
+		const modelSelection = model.modelId === await this.getDefaultModelId() ? null : model.modelId;
 		await this.setUserSelectedCompletionModel(modelSelection);
 		if (modelSelection === null) {
 			logger.info(this._logTarget, `User selected default model; setting null`);
@@ -119,14 +119,15 @@ export class ModelPickerManager {
 		);
 	}
 
-	private modelsForModelPicker(): [string | null, ModelPickerItem[]] {
+	private async modelsForModelPicker(): Promise<[string | null, ModelPickerItem[]]> {
 		const currentModelSelection = this._instantiationService.invokeFunction(getUserSelectedModelConfiguration);
-		const items: ModelPickerItem[] = this.models.map(model => {
+		const defaultModelId = await this.getDefaultModelId();
+		const items: ModelPickerItem[] = (await this.models).map(model => {
 			return {
 				modelId: model.modelId,
 				label: `${model.label}${model.preview ? ' (Preview)' : ''}`,
 				description: `(${model.modelId})`,
-				alwaysShow: model.modelId === this.getDefaultModelId(),
+				alwaysShow: model.modelId === defaultModelId,
 				type: 'model' as const,
 			};
 		});
@@ -134,15 +135,15 @@ export class ModelPickerManager {
 		return [currentModelSelection, items];
 	}
 
-	showModelPicker(): QuickPick<ModelPickerItem> {
-		const [currentModelSelection, items] = this.modelsForModelPicker();
+	async showModelPicker(): Promise<QuickPick<ModelPickerItem>> {
+		const [currentModelSelection, items] = await this.modelsForModelPicker();
 
 		const quickPick = window.createQuickPick<ModelPickerItem>();
 		quickPick.title = 'Change Completions Model';
 		quickPick.items = [...items, ...defaultModelPickerItems];
 		quickPick.onDidAccept(() => this.handleModelSelection(quickPick));
 
-		const currentModelOrDefault = currentModelSelection ?? this.getDefaultModelId();
+		const currentModelOrDefault = currentModelSelection ?? await this.getDefaultModelId();
 
 		// set the currently selected model as active
 		const selectedItem = quickPick.items.find(item => item.modelId === currentModelOrDefault);
