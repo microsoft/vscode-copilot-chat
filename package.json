@@ -2851,7 +2851,7 @@
 				"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.updatePR",
 				"title": "%github.copilot.chat.createPullRequestCopilotCLIAgentSession.updatePR%",
 				"enablement": "!chatSessionRequestInProgress",
-				"icon": "$(git-pull-request)",
+				"icon": "$(sync)",
 				"category": "GitHub Copilot"
 			},
 			{
@@ -4867,8 +4867,8 @@
 				},
 				{
 					"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.hasOpenPullRequest",
-					"group": "navigation@1"
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.hasPullRequest",
+					"group": "navigation@9"
 				}
 			],
 			"chat/input/editing/sessionApplyActions": [
@@ -4879,27 +4879,27 @@
 				},
 				{
 					"command": "github.copilot.chat.mergeCopilotCLIAgentSessionChanges.merge",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && !sessions.isMergeBaseBranchProtected && !sessions.hasOpenPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && !sessions.isMergeBaseBranchProtected && !sessions.hasPullRequest",
 					"group": "merge@1"
 				},
 				{
 					"command": "github.copilot.chat.mergeCopilotCLIAgentSessionChanges.mergeAndSync",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && !sessions.isMergeBaseBranchProtected && !sessions.hasOpenPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && !sessions.isMergeBaseBranchProtected && !sessions.hasPullRequest",
 					"group": "merge@2"
 				},
 				{
 					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && !sessions.hasOpenPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && !sessions.hasPullRequest",
 					"group": "pull_request@1"
 				},
 				{
 					"command": "github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && !sessions.hasOpenPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && !sessions.hasPullRequest",
 					"group": "pull_request@2"
 				},
 				{
 					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.updatePR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasOpenPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasPullRequest && sessions.hasOpenPullRequest",
 					"group": "pull_request@1"
 				}
 			],
