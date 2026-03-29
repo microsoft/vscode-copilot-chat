@@ -3,7 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IChatSessionService } from '../../../platform/chat/common/chatSessionService';
 import { createServiceIdentifier } from '../../../util/common/services';
+import { TimeoutTimer } from '../../../util/vs/base/common/async';
+import { Disposable, DisposableMap } from '../../../util/vs/base/common/lifecycle';
 import { LRUCache } from '../../../util/vs/base/common/map';
 import { Conversation } from '../../prompt/common/conversation';
 
@@ -17,23 +20,71 @@ export interface IConversationStore {
 	lastConversation: Conversation | undefined;
 }
 
-export class ConversationStore implements IConversationStore {
-	readonly _serviceBrand: undefined;
-	private conversationMap: LRUCache<string, Conversation>;
+const CLEANUP_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
-	constructor() {
+export class ConversationStore extends Disposable implements IConversationStore {
+	readonly _serviceBrand: undefined;
+
+	private readonly conversationMap: LRUCache<string, Conversation>;
+	private readonly pendingCleanups: DisposableMap<string, TimeoutTimer> = this._register(new DisposableMap());
+	private readonly disposedSessionIds = new Set<string>();
+
+	constructor(
+		@IChatSessionService chatSessionService: IChatSessionService,
+	) {
+		super();
 		this.conversationMap = new LRUCache<string, Conversation>(1000);
+		this._register(chatSessionService.onDidDisposeChatSession(sessionId => {
+			this._scheduleSessionCleanup(sessionId);
+		}));
 	}
 
 	addConversation(responseId: string, conversation: Conversation): void {
 		this.conversationMap.set(responseId, conversation);
+		if (this.pendingCleanups.has(conversation.sessionId) || this.disposedSessionIds.has(conversation.sessionId)) {
+			this._scheduleSessionCleanup(conversation.sessionId);
+		}
 	}
 
 	getConversation(responseId: string): Conversation | undefined {
-		return this.conversationMap.get(responseId);
+		const conversation = this.conversationMap.get(responseId);
+		if (conversation && this.pendingCleanups.has(conversation.sessionId)) {
+			// Session was disposed but a consumer is still accessing it — reset the timer
+			this._scheduleSessionCleanup(conversation.sessionId);
+		}
+		return conversation;
 	}
 
 	get lastConversation(): Conversation | undefined {
-		return this.conversationMap.last;
+		const conversation = this.conversationMap.last;
+		if (conversation && this.pendingCleanups.has(conversation.sessionId)) {
+			this._scheduleSessionCleanup(conversation.sessionId);
+		}
+		return conversation;
+	}
+
+	private _scheduleSessionCleanup(sessionId: string): void {
+		this.disposedSessionIds.add(sessionId);
+		let timer = this.pendingCleanups.get(sessionId);
+		if (!timer) {
+			timer = new TimeoutTimer();
+			this.pendingCleanups.set(sessionId, timer, /* skipDisposeOnOverwrite */ true);
+		}
+		timer.cancelAndSet(() => {
+			this._cleanupSession(sessionId);
+		}, CLEANUP_TIMEOUT_MS);
+	}
+
+	private _cleanupSession(sessionId: string): void {
+		this.pendingCleanups.deleteAndDispose(sessionId);
+		const keysToDelete: string[] = [];
+		this.conversationMap.forEach((conversation, responseId) => {
+			if (conversation.sessionId === sessionId) {
+				keysToDelete.push(responseId);
+			}
+		});
+		for (const key of keysToDelete) {
+			this.conversationMap.delete(key);
+		}
 	}
 }
