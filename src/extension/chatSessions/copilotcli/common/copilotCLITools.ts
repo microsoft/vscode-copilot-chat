@@ -198,11 +198,17 @@ type ReplyToCommentTool = {
 	};
 };
 
+type TrivialChangeDeclaration = {
+	isTrivial: boolean;
+	reason: string;
+};
+
 type CodeReviewTool = {
 	toolName: 'code_review';
 	arguments: {
 		prTitle: string;
 		prDescription: string;
+		trivialChangeDeclaration?: TrivialChangeDeclaration;
 	};
 };
 
@@ -266,6 +272,7 @@ type TaskTool = {
 		description: string;
 		prompt: string;
 		agent_type: string;
+		name: string;
 		model?: string;
 		mode?: 'sync' | 'background';
 	};
@@ -342,13 +349,16 @@ type StoreMemoryTool = {
 		fact: string;
 		citations: string;
 		reason: string;
-		category: string;
 	};
 };
 
 type ParallelValidationTool = {
 	toolName: 'parallel_validation';
-	arguments: Record<string, never>;
+	arguments: {
+		prTitle: string;
+		prDescription: string;
+		trivialChangeDeclaration?: TrivialChangeDeclaration;
+	};
 };
 
 type ApplyPatchTool = {
@@ -389,7 +399,9 @@ type ToolSearchTool = {
 
 type CodeQLCheckerTool = {
 	toolName: 'codeql_checker';
-	arguments: Record<string, never>;
+	arguments: {
+		trivialChangeDeclaration?: TrivialChangeDeclaration;
+	};
 };
 
 
