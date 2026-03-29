@@ -25,6 +25,18 @@ export interface RawThinkingDelta {
 	// Anthropic fields
 	thinking?: string;
 	signature?: string;
+
+	// OpenRouter reasoning_details format
+	reasoning_details?: Array<{
+		type: string;
+		text?: string;
+		summary?: string;
+		data?: string;
+		id?: string;
+		format?: string;
+		index?: number;
+		signature?: string;
+	}>;
 }
 
 export type ThinkingDelta = {

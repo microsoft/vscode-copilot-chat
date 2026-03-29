@@ -648,6 +648,45 @@ data: [DONE]
 		expect(metadata).toBeUndefined();
 	});
 
+	test('stream containing reasoning_details (OpenRouter format)', async function () {
+		const response = [
+			`data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.text","text":"Let me think about this"}]},"index":0}],"created":1751057335,"id":"chatcmpl-test123","model":"gpt-4o","object":"chat.completion.chunk"}\n`,
+			`data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.text","text":" step by step."}]},"index":0}],"created":1751057335,"id":"chatcmpl-test123","model":"gpt-4o","object":"chat.completion.chunk"}\n`,
+			`data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.summary","summary":"The solution involves analyzing the input.","id":"reason-abc-123"}]},"index":0}],"created":1751057335,"id":"chatcmpl-test123","model":"gpt-4o","object":"chat.completion.chunk"}\n`,
+			`data: {"choices":[{"delta":{"content":"Here is my answer"},"index":0}],"created":1751057335,"id":"chatcmpl-test123","model":"gpt-4o","object":"chat.completion.chunk"}\n`,
+			`data: {"choices":[{"delta":{},"finish_reason":"stop","index":0}],"created":1751057335,"id":"chatcmpl-test123","model":"gpt-4o","object":"chat.completion.chunk"}\n`,
+			`data: [DONE]\n`,
+		];
+		const processor = await SSEProcessor.create(
+			logService,
+			telemetryService,
+			1,
+			createFakeStreamResponse(response),
+		);
+
+		let thinkingText: string | string[] | undefined = undefined;
+		let thinkingId: string | undefined = undefined;
+
+		await getAll(processor.processSSE((text: string, index: number, delta: IResponseDelta) => {
+			if (delta.thinking && !isEncryptedThinkingDelta(delta.thinking)) {
+				if (delta.thinking.text) {
+					if (thinkingText === undefined) {
+						thinkingText = '';
+					}
+					thinkingText += Array.isArray(delta.thinking.text) ? delta.thinking.text.join('') : delta.thinking.text;
+				}
+				if (delta.thinking.id) {
+					thinkingId = delta.thinking.id;
+				}
+			}
+			return Promise.resolve(undefined);
+		}));
+
+		expect(thinkingText).toBeDefined();
+		expect(thinkingText).toBe('Let me think about this step by step.The solution involves analyzing the input.');
+		expect(thinkingId).toBe('reason-abc-123');
+	});
+
 	suite('real world snapshots', () => {
 
 		async function processResponse(response: string[], expectedNumChoices = 1) {
