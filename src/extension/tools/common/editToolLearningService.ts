@@ -60,16 +60,17 @@ export class EditToolLearningService implements IEditToolLearningService {
 	}
 
 	getPreferredEndpointEditTool(endpoint: IChatEndpoint): EditTools[] | undefined {
-		if (!endpoint.isExtensionContributed) {
-			return undefined;
-		}
-
 		const fromEndpoint = endpoint.supportedEditTools
 			?.map(e => byokEditToolNamesToToolNames.hasOwnProperty(e) ? byokEditToolNamesToToolNames[e] : undefined)
 			.filter(isDefined);
 		if (fromEndpoint?.length) {
 			return fromEndpoint;
 		}
+
+		if (!endpoint.isExtensionContributed) {
+			return undefined;
+		}
+
 
 		// Note: looking at the 'name' rather than 'model' is intentional, 'model' is the user-
 		// provided model ID whereas the 'name' is the name of the model on the BYOK provider.
