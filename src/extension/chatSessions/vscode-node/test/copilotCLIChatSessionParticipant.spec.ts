@@ -2033,7 +2033,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				workspaceFolderService,
 				telemetry,
 				logService,
-				new PromptsServiceImpl(new NullWorkspaceService()),
+				new PromptsServiceImpl(new NullWorkspaceService(), new MockFileSystemService()),
 				new (mock<IChatDelegationSummaryService>())(),
 				folderRepositoryManager,
 				configurationService,
