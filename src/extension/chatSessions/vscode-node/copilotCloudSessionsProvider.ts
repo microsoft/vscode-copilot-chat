@@ -778,7 +778,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		const folder = workspaceFolders[0];
 		try {
 			// Find all .md files in .github/agents/
-			const pattern = new vscode.RelativePattern(folder, '.github/agents/*.md');
+			const pattern = new vscode.RelativePattern(Uri.joinPath(folder.uri, '.github'), '/agents/*.md');
 			const files = await vscode.workspace.findFiles(pattern);
 
 			for (const file of files) {
