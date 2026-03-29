@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
@@ -121,8 +122,43 @@ export class ClaudeCodeModels extends Disposable implements IClaudeCodeModels {
 				},
 				targetChatSessionType: 'claude-code',
 				// isDefault: endpoint.model === defaultModelId,
+				// TODO: bring this back when the UI is understood
+				...this._buildConfigurationSchema(endpoint),
 			};
 		});
+	}
+
+	private _buildConfigurationSchema(endpoint: IChatEndpoint): { configurationSchema?: vscode.LanguageModelConfigurationSchema } {
+		const effortLevels = endpoint.supportsReasoningEffort;
+		if (!effortLevels || effortLevels.length === 0) {
+			return {};
+		}
+
+		const defaultEffort = effortLevels.includes('high') ? 'high' : undefined;
+
+		return {
+			configurationSchema: {
+				properties: {
+					reasoningEffort: {
+						type: 'string',
+						title: l10n.t('Thinking Effort'),
+						enum: effortLevels,
+						enumItemLabels: effortLevels.map(level => level.charAt(0).toUpperCase() + level.slice(1)),
+						enumDescriptions: effortLevels.map(level => {
+							switch (level) {
+								case 'none': return l10n.t('No reasoning applied');
+								case 'low': return l10n.t('Faster responses with less reasoning');
+								case 'medium': return l10n.t('Balanced reasoning and speed');
+								case 'high': return l10n.t('Maximum reasoning depth');
+								default: return level;
+							}
+						}),
+						default: defaultEffort,
+						group: 'navigation',
+					}
+				}
+			}
+		};
 	}
 
 	public async getDefaultModel(): Promise<string> {
