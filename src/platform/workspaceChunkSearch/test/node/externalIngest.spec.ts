@@ -21,6 +21,7 @@ import { createPlatformServices, TestingServiceCollection } from '../../../test/
 import { IWorkspaceService, NullWorkspaceService } from '../../../workspace/common/workspaceService';
 import { ExternalIngestClient, ExternalIngestFile, ExternalIngestUpdateIndexResult, IExternalIngestClient } from '../../node/codeSearch/externalIngestClient';
 import { ExternalIngestIndex } from '../../node/codeSearch/externalIngestIndex';
+import { StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings } from '../../common/workspaceChunkSearch';
 
 const emptyProgressCb: (message: string) => void = () => { };
 const testCallTracker = new CallTracker('externalIngest.spec.ts');
@@ -28,23 +29,26 @@ const testCallTracker = new CallTracker('externalIngest.spec.ts');
 function createMockExternalIngestClient(options?: {
 	canIngestPathAndSize?: (filePath: string, size: number) => boolean;
 	canIngestDocument?: (filePath: string, data: Uint8Array) => boolean;
+	searchHint?: string;
 }): IExternalIngestClient & {
 	get ingestedFiles(): readonly ExternalIngestFile[];
-	get searchCalls(): Array<{ filesetName: string; prompt: string }>;
+	get searchCalls(): Array<{ filesetName: string; prompt: string; searchHint: string | undefined }>;
+	searchHintToReturn: string | undefined;
 } {
 	const ingestedFiles = new ResourceMap<ExternalIngestFile>();
-	const searchCalls: Array<{ filesetName: string; prompt: string }> = [];
+	const searchCalls: Array<{ filesetName: string; prompt: string; searchHint: string | undefined }> = [];
 
 	return {
 		get ingestedFiles() {
 			return Array.from(ingestedFiles.values());
 		},
 		searchCalls,
+		searchHintToReturn: options?.searchHint,
 		async updateIndex(_filesetName: string, _currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, _callTracker: CallTracker, _token: CancellationToken, _onProgress?: (message: string) => void): Promise<Result<ExternalIngestUpdateIndexResult, Error>> {
 			for await (const file of allFiles) {
 				ingestedFiles.set(file.uri, file);
 			}
-			return Result.ok({ checkpoint: 'mock-checkpoint', totalFileCount: ingestedFiles.size, updatedFileCount: ingestedFiles.size });
+			return Result.ok({ checkpoint: 'mock-checkpoint', totalFileCount: ingestedFiles.size, updatedFileCount: ingestedFiles.size, searchHint: this.searchHintToReturn });
 		},
 		async listFilesets(_callTracker: CallTracker, _token: CancellationToken): Promise<string[]> {
 			return [];
@@ -52,8 +56,8 @@ function createMockExternalIngestClient(options?: {
 		async deleteFileset(_filesetName: string, _callTracker: CallTracker, _token: CancellationToken): Promise<void> {
 			// no-op
 		},
-		async searchFilesets(filesetName: string, prompt: string, _limit: number, _callTracker: CallTracker, _token: CancellationToken): Promise<undefined> {
-			searchCalls.push({ filesetName, prompt });
+		async searchFilesets(filesetName: string, prompt: string, _limit: number, _callTracker: CallTracker, _token: CancellationToken, searchHint?: string): Promise<undefined> {
+			searchCalls.push({ filesetName, prompt, searchHint });
 			return undefined;
 		},
 		canIngestPathAndSize(filePath: string, size: number): boolean {
