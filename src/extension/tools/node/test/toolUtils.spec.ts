@@ -6,17 +6,22 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, suite, test } from 'vitest';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
+import { ICustomInstructionsService, IInstructionIndexFile } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IIgnoreService, NullIgnoreService } from '../../../../platform/ignore/common/ignoreService';
+import { MockCustomInstructionsService } from '../../../../platform/test/common/testCustomInstructionsService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { posix } from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatVariablesCollection, CustomizationsIndexId, PromptFileIdPrefix } from '../../../prompt/common/chatVariablesCollection';
+import { IBuildPromptContext } from '../../../prompt/common/intents';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { encodeUrlHostname } from '../../common/toolUtils';
 import { assertFileOkForTool, inputGlobToPattern, isDirExternalAndNeedsConfirmation, isFileExternalAndNeedsConfirmation } from '../toolUtils';
@@ -571,5 +576,260 @@ describe('inputGlobToPattern - multi-root workspace', () => {
 		expect(result.patterns).toHaveLength(1);
 		expect(result.patterns[0]).toBe('src/**/*.ts');
 		expect(result.folderName).toBeUndefined();
+	});
+});
+
+suite('toolUtils - external instructions and skills', () => {
+	let accessor: ITestingServicesAccessor;
+	let instantiationService: IInstantiationService;
+	let mockFs: MockFileSystemService;
+	let mockCustomInstructions: MockCustomInstructionsService;
+	let testRequestCounter: number;
+
+	beforeAll(() => {
+		const services = createExtensionUnitTestingServices();
+		services.define(IWorkspaceService, new SyncDescriptor(
+			TestWorkspaceService,
+			[[URI.file('/workspace')], []]
+		));
+		mockFs = new MockFileSystemService();
+		services.define(IFileSystemService, mockFs);
+		mockCustomInstructions = new MockCustomInstructionsService();
+		services.define(ICustomInstructionsService, mockCustomInstructions);
+		accessor = services.createTestingAccessor();
+		instantiationService = accessor.get(IInstantiationService);
+		testRequestCounter = 0;
+	});
+
+	afterAll(() => {
+		accessor.dispose();
+	});
+
+	function nextRequestId(): string {
+		return `test-request-${++testRequestCounter}`;
+	}
+
+	function makeBuildPromptContext(options: {
+		requestId?: string;
+		indexContent?: string;
+		promptFileUris?: URI[];
+	}): IBuildPromptContext {
+		const refs: import('vscode').ChatPromptReference[] = [];
+		if (options.indexContent !== undefined) {
+			refs.push({
+				id: CustomizationsIndexId,
+				name: 'customizations',
+				value: options.indexContent,
+			});
+		}
+		if (options.promptFileUris) {
+			for (const uri of options.promptFileUris) {
+				refs.push({
+					id: `${PromptFileIdPrefix}.${uri.fsPath}`,
+					name: uri.fsPath,
+					value: uri,
+				});
+			}
+		}
+		return {
+			requestId: options.requestId ?? nextRequestId(),
+			query: 'test',
+			history: [],
+			chatVariables: new ChatVariablesCollection(refs),
+		} as unknown as IBuildPromptContext;
+	}
+
+	function makeIndexFileWithInstructionAndSkill(instructionUri: URI, skillUri: URI): IInstructionIndexFile {
+		return {
+			instructions: new ResourceSet([instructionUri]),
+			skills: new ResourceSet([skillUri]),
+			skillFolders: new ResourceSet([URI.file(posix.dirname(skillUri.path))]),
+			agents: new Set<string>(),
+		};
+	}
+
+	function invokeIsFileExternalAndNeedsConfirmation(uri: URI, buildPromptContext?: IBuildPromptContext) {
+		return instantiationService.invokeFunction(acc => isFileExternalAndNeedsConfirmation(acc, uri, buildPromptContext));
+	}
+
+	function invokeAssertFileOkForTool(uri: URI, buildPromptContext?: IBuildPromptContext) {
+		return instantiationService.invokeFunction(acc => assertFileOkForTool(acc, uri, buildPromptContext));
+	}
+
+	function invokeIsDirExternalAndNeedsConfirmation(uri: URI, buildPromptContext?: IBuildPromptContext) {
+		return instantiationService.invokeFunction(acc => isDirExternalAndNeedsConfirmation(acc, uri, buildPromptContext));
+	}
+
+	describe('isFileExternalAndNeedsConfirmation with custom instructions index', () => {
+		const instructionUri = URI.file('/home/user/.github/copilot-instructions.md');
+		const skillUri = URI.file('/home/user/.agents/skills/my-skill/SKILL.md');
+
+		test('instruction file listed in index does not need confirmation', async () => {
+			const indexFile = makeIndexFileWithInstructionAndSkill(instructionUri, skillUri);
+			mockCustomInstructions.parseInstructionIndexFile = () => indexFile;
+			mockFs.mockFile(instructionUri, '# Instructions');
+
+			const ctx = makeBuildPromptContext({ indexContent: '<instructions></instructions>' });
+			expect(await invokeIsFileExternalAndNeedsConfirmation(instructionUri, ctx)).toBe(false);
+		});
+
+		test('skill file listed in index does not need confirmation', async () => {
+			const indexFile = makeIndexFileWithInstructionAndSkill(instructionUri, skillUri);
+			mockCustomInstructions.parseInstructionIndexFile = () => indexFile;
+			mockFs.mockFile(skillUri, '# Skill');
+
+			const ctx = makeBuildPromptContext({ indexContent: '<skills></skills>' });
+			expect(await invokeIsFileExternalAndNeedsConfirmation(skillUri, ctx)).toBe(false);
+		});
+
+		test('nested file under a skill folder does not need confirmation', async () => {
+			const nestedFile = URI.file('/home/user/.agents/skills/my-skill/primitives/agents.md');
+			const indexFile = makeIndexFileWithInstructionAndSkill(instructionUri, skillUri);
+			mockCustomInstructions.parseInstructionIndexFile = () => indexFile;
+			mockFs.mockFile(nestedFile, '# Nested skill file');
+
+			const ctx = makeBuildPromptContext({ indexContent: '<skills></skills>' });
+			expect(await invokeIsFileExternalAndNeedsConfirmation(nestedFile, ctx)).toBe(false);
+		});
+
+		test('external file NOT in index still needs confirmation', async () => {
+			const unrelatedFile = URI.file('/home/user/random/file.ts');
+			const indexFile = makeIndexFileWithInstructionAndSkill(instructionUri, skillUri);
+			mockCustomInstructions.parseInstructionIndexFile = () => indexFile;
+			mockFs.mockFile(unrelatedFile, 'content');
+
+			const ctx = makeBuildPromptContext({ indexContent: '<instructions></instructions>' });
+			expect(await invokeIsFileExternalAndNeedsConfirmation(unrelatedFile, ctx)).toBe(true);
+		});
+	});
+
+	describe('isFileExternalAndNeedsConfirmation with attached prompt files', () => {
+		test('attached prompt file does not need confirmation', async () => {
+			const promptFileUri = URI.file('/home/user/prompts/my-prompt.prompt.md');
+			mockFs.mockFile(promptFileUri, '# My Prompt');
+
+			const ctx = makeBuildPromptContext({ promptFileUris: [promptFileUri] });
+			expect(await invokeIsFileExternalAndNeedsConfirmation(promptFileUri, ctx)).toBe(false);
+		});
+
+		test('file not attached as prompt still needs confirmation', async () => {
+			const otherFile = URI.file('/home/user/prompts/other.md');
+			const promptFileUri = URI.file('/home/user/prompts/my-prompt.prompt.md');
+			mockFs.mockFile(otherFile, '# Other');
+
+			const ctx = makeBuildPromptContext({ promptFileUris: [promptFileUri] });
+			expect(await invokeIsFileExternalAndNeedsConfirmation(otherFile, ctx)).toBe(true);
+		});
+	});
+
+	describe('isFileExternalAndNeedsConfirmation with special URI schemes', () => {
+		test('vscode-chat-internal scheme does not need confirmation', async () => {
+			const uri = URI.from({ scheme: 'vscode-chat-internal', path: '/some/resource' });
+			expect(await invokeIsFileExternalAndNeedsConfirmation(uri)).toBe(false);
+		});
+
+		test('copilot-skill scheme does not need confirmation', async () => {
+			const uri = URI.from({ scheme: 'copilot-skill', path: '/my-skill/SKILL.md' });
+			expect(await invokeIsFileExternalAndNeedsConfirmation(uri)).toBe(false);
+		});
+	});
+
+	describe('isFileExternalAndNeedsConfirmation without buildPromptContext (fallback)', () => {
+		test('file recognized by customInstructionsService does not need confirmation', async () => {
+			const externalInstructionUri = URI.file('/home/user/.github/copilot-instructions.md');
+			mockCustomInstructions.setExternalFiles([externalInstructionUri]);
+			mockFs.mockFile(externalInstructionUri, '# Instructions');
+
+			expect(await invokeIsFileExternalAndNeedsConfirmation(externalInstructionUri)).toBe(false);
+			mockCustomInstructions.setExternalFiles([]);
+		});
+
+		test('file not recognized by customInstructionsService needs confirmation', async () => {
+			const randomUri = URI.file('/home/user/random-file.ts');
+			mockCustomInstructions.setExternalFiles([]);
+			mockFs.mockFile(randomUri, 'content');
+
+			expect(await invokeIsFileExternalAndNeedsConfirmation(randomUri)).toBe(true);
+		});
+	});
+
+	describe('assertFileOkForTool with custom instructions index', () => {
+		const instructionUri = URI.file('/external/instructions/guidelines.instructions.md');
+		const skillUri = URI.file('/external/skills/my-skill/SKILL.md');
+
+		test('instruction file in index is allowed', async () => {
+			const indexFile = makeIndexFileWithInstructionAndSkill(instructionUri, skillUri);
+			mockCustomInstructions.parseInstructionIndexFile = () => indexFile;
+
+			const ctx = makeBuildPromptContext({ indexContent: '<instructions></instructions>' });
+			await expect(invokeAssertFileOkForTool(instructionUri, ctx)).resolves.toBeUndefined();
+		});
+
+		test('skill file in index is allowed', async () => {
+			const indexFile = makeIndexFileWithInstructionAndSkill(instructionUri, skillUri);
+			mockCustomInstructions.parseInstructionIndexFile = () => indexFile;
+
+			const ctx = makeBuildPromptContext({ indexContent: '<skills></skills>' });
+			await expect(invokeAssertFileOkForTool(skillUri, ctx)).resolves.toBeUndefined();
+		});
+
+		test('file under skill folder is allowed', async () => {
+			const nestedFile = URI.file('/external/skills/my-skill/helpers/utils.md');
+			const indexFile = makeIndexFileWithInstructionAndSkill(instructionUri, skillUri);
+			mockCustomInstructions.parseInstructionIndexFile = () => indexFile;
+
+			const ctx = makeBuildPromptContext({ indexContent: '<skills></skills>' });
+			await expect(invokeAssertFileOkForTool(nestedFile, ctx)).resolves.toBeUndefined();
+		});
+
+		test('external file not in index throws', async () => {
+			const unrelatedFile = URI.file('/external/random/file.ts');
+			const indexFile = makeIndexFileWithInstructionAndSkill(instructionUri, skillUri);
+			mockCustomInstructions.parseInstructionIndexFile = () => indexFile;
+
+			const ctx = makeBuildPromptContext({ indexContent: '<instructions></instructions>' });
+			await expect(invokeAssertFileOkForTool(unrelatedFile, ctx))
+				.rejects.toThrow(/outside of the workspace/);
+		});
+	});
+
+	describe('isDirExternalAndNeedsConfirmation with skill folders', () => {
+		test('skill folder from index does not need confirmation', () => {
+			const skillUri = URI.file('/external/skills/my-skill/SKILL.md');
+			const skillFolderUri = URI.file('/external/skills/my-skill');
+			const indexFile: IInstructionIndexFile = {
+				instructions: new ResourceSet(),
+				skills: new ResourceSet([skillUri]),
+				skillFolders: new ResourceSet([skillFolderUri]),
+				agents: new Set<string>(),
+			};
+			mockCustomInstructions.parseInstructionIndexFile = () => indexFile;
+
+			const ctx = makeBuildPromptContext({ indexContent: '<skills></skills>' });
+			expect(invokeIsDirExternalAndNeedsConfirmation(skillFolderUri, ctx)).toBe(false);
+		});
+
+		test('external dir not in skill folders needs confirmation', () => {
+			const otherDir = URI.file('/external/other-dir');
+			const skillFolderUri = URI.file('/external/skills/my-skill');
+			const indexFile: IInstructionIndexFile = {
+				instructions: new ResourceSet(),
+				skills: new ResourceSet(),
+				skillFolders: new ResourceSet([skillFolderUri]),
+				agents: new Set<string>(),
+			};
+			mockCustomInstructions.parseInstructionIndexFile = () => indexFile;
+
+			const ctx = makeBuildPromptContext({ indexContent: '<skills></skills>' });
+			expect(invokeIsDirExternalAndNeedsConfirmation(otherDir, ctx)).toBe(true);
+		});
+
+		test('without buildPromptContext, falls back to customInstructionsService', () => {
+			const externalFolderUri = URI.file('/external/skills/my-skill');
+			mockCustomInstructions.setExternalFolders([externalFolderUri]);
+
+			expect(invokeIsDirExternalAndNeedsConfirmation(externalFolderUri)).toBe(false);
+			mockCustomInstructions.setExternalFolders([]);
+		});
 	});
 });
