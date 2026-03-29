@@ -4471,6 +4471,7 @@
 							"number",
 							"null"
 						],
+						"default": 10,
 						"markdownDescription": "%github.copilot.config.inlineEdits.triggerOnEditorChangeAfterSeconds%",
 						"tags": [
 							"advanced",
