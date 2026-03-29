@@ -68,7 +68,7 @@ export class ConversationStore extends Disposable implements IConversationStore 
 		let timer = this.pendingCleanups.get(sessionId);
 		if (!timer) {
 			timer = new TimeoutTimer();
-			this.pendingCleanups.set(sessionId, timer, /* skipDisposeOnOverwrite */ true);
+			this.pendingCleanups.set(sessionId, timer);
 		}
 		timer.cancelAndSet(() => {
 			this._cleanupSession(sessionId);
