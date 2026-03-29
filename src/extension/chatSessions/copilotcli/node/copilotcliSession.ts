@@ -30,7 +30,7 @@ import { IToolsService } from '../../../tools/common/toolsService';
 import { IChatPromptFileService } from '../../common/chatPromptFileService';
 import { IChatSessionMetadataStore, RequestDetails, StoredModeInstructions } from '../../common/chatSessionMetadataStore';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
-import { getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../../common/workspaceInfo';
+import { findOwningWorkspace, getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../../common/workspaceInfo';
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, RequestIdDetails, ToolCall, updateTodoList } from '../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
 import { getCopilotCLISessionStateDir } from './cliHelpers';
@@ -78,6 +78,7 @@ export interface ICopilotCLISession extends IDisposable {
 	readonly status: vscode.ChatSessionStatus | undefined;
 	readonly onDidChangeStatus: vscode.Event<vscode.ChatSessionStatus | undefined>;
 	readonly workspace: IWorkspaceInfo;
+	readonly additionalWorkspaces: IWorkspaceInfo[];
 	readonly pendingPrompt: string | undefined;
 	attachStream(stream: vscode.ChatResponseStream): IDisposable;
 	setPermissionLevel(level: string | undefined): void;
@@ -126,6 +127,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	}
 	public get workspace() {
 		return this._options.workspaceInfo;
+	}
+	public get additionalWorkspaces() {
+		return this._options.additionalWorkspaces;
 	}
 	private _lastUsedModel: string | undefined;
 	private _permissionLevel: string | undefined;
@@ -767,7 +771,31 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			if (steering) {
 				sendOptions.mode = 'immediate';
 			}
-			await this._sdkSession.send(sendOptions);
+			if (!steering && this.additionalWorkspaces.length > 0) {
+				await this._startFleetAndWaitForIdle(input);
+			} else {
+				await this._sdkSession.send(sendOptions);
+			}
+		}
+	}
+
+	private async _startFleetAndWaitForIdle(input: CopilotCLISessionInput): Promise<void> {
+		const prompt = 'prompt' in input ? input.prompt : undefined;
+		try {
+			const promise = new Promise<void>((resolve) => {
+				const off = this._sdkSession.on('session.idle', () => {
+					resolve();
+					off();
+				});
+			});
+			const result = await this._sdkSession.fleet.start({ prompt });
+			if (!result.started) {
+				this.logService.info('[CopilotCLISession] Fleet mode not started');
+				return;
+			}
+			await promise;
+		} catch (error) {
+			this.logService.error(`[CopilotCLISession] Fleet error: ${error}`);
 		}
 	}
 
@@ -865,22 +893,26 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	}
 
 	private isFileFromSessionWorkspace(file: Uri): boolean {
-		const workingDirectory = getWorkingDirectory(this.workspace);
-		if (workingDirectory && extUriBiasedIgnorePathCase.isEqualOrParent(file, workingDirectory)) {
-			return true;
-		}
-		if (this.workspace.folder && extUriBiasedIgnorePathCase.isEqualOrParent(file, this.workspace.folder)) {
-			return true;
-		}
-		// Only if we have a worktree should we check the repository.
-		// As this means the user created a worktree and we have a repository.
-		// & if the worktree is automatically trusted, then so is the repository as we created the worktree from that.
-		if (this.workspace.worktree && this.workspace.repository && extUriBiasedIgnorePathCase.isEqualOrParent(file, this.workspace.repository)) {
-			return true;
-		}
-
-		return false;
+		return !!findOwningWorkspace(file, this.workspace, this.additionalWorkspaces);
 	}
+
+	private async _isWriteAutoApprovedInAdditionalWorkspaces(
+		editFile: Uri, permissionRequest: PermissionRequest, toolCall?: ToolCall
+	): Promise<boolean> {
+		const owningWs = findOwningWorkspace(editFile, this.workspace, this.additionalWorkspaces);
+		if (!owningWs || owningWs === this.workspace) {
+			return false; // primary already handled
+		}
+		const wsDir = getWorkingDirectory(owningWs);
+		if (!wsDir) {
+			return false;
+		}
+		if (isIsolationEnabled(owningWs)) {
+			return true;
+		}
+		return !(await requiresFileEditconfirmation(this.instantiationService, permissionRequest, toolCall, wsDir));
+	}
+
 	private async requestPermission(
 		permissionRequest: PermissionRequest,
 		editTracker: ExternalEditTracker,
@@ -952,6 +984,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			if (!autoApprove && isWorkingDirectoryFile && !(await requiresFileEditconfirmation(this.instantiationService, permissionRequest, toolCall, workingDirectory))) {
 				autoApprove = true;
 			}
+			// If the file belongs to an additional workspace, check auto-approval there.
+			if (!autoApprove && this.additionalWorkspaces.length > 0) {
+				autoApprove = await this._isWriteAutoApprovedInAdditionalWorkspaces(editFile, permissionRequest, toolCall);
+			}
 
 			if (autoApprove) {
 				this.logService.trace(`[CopilotCLISession] Auto Approving request ${editFile.fsPath}`);
@@ -972,8 +1008,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			return { kind: 'approved' };
 		}
 
+		const owningWs = editFile ? findOwningWorkspace(editFile, this.workspace, this.additionalWorkspaces) : undefined;
+		const effectiveWorkingDir = owningWs ? getWorkingDirectory(owningWs) : getWorkingDirectory(this.workspace);
+
 		try {
-			if (await requestPermission(this.instantiationService, permissionRequest, toolCall, getWorkingDirectory(this.workspace), this._toolsService, this._toolInvocationToken as unknown as never, toolParentCallId, token)) {
+			if (await requestPermission(this.instantiationService, permissionRequest, toolCall, effectiveWorkingDir, this._toolsService, this._toolInvocationToken as unknown as never, toolParentCallId, token)) {
 				// If we're editing a file, start tracking the edit & wait for core to acknowledge it.
 				if (editFile && toolCall && this._stream) {
 					this.logService.trace(`[CopilotCLISession] Starting to track edit for toolCallId ${toolCall.toolCallId} & file ${editFile.fsPath}`);

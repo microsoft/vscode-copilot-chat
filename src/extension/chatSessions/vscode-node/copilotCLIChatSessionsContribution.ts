@@ -49,7 +49,7 @@ import { builtinSlashSCommands, CopilotCLICommand, copilotCLICommands, ICopilotC
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
 import { buildMcpServerMappings } from '../copilotcli/node/mcpHandler';
 import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
-import { ICopilotCLIChatSessionItemProvider } from './copilotCLIChatSessions';
+import { ICopilotCLIChatSessionItemProvider, MULTI_ROOT_OPTION_VALUE } from './copilotCLIChatSessions';
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
 import { ICopilotCLITerminalIntegration, TerminalOpenLocation } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
@@ -70,6 +70,7 @@ const CHECK_FOR_STEERING_DELAY = 100; // ms
 // When opening the session for readonly mode we store it here and when run the session we read from here instead of opening session in readonly mode again.
 const _sessionBranch: Map<string, string | undefined> = new Map();
 const _sessionIsolation: Map<string, IsolationMode | undefined> = new Map();
+const _sessionMultiRoot = new Set<string>();
 
 const _invalidCopilotCLISessionIdsWithErrorMessage = new Map<string, string>();
 
@@ -283,6 +284,13 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 				change.statistics.deletions)));
 		}
 
+		// Additional workspace changes
+		const additionalWorkspaces = await this.chatSessionMetadataStore.getAdditionalWorkspaces(session.id);
+		if (additionalWorkspaces.length > 0) {
+			const additionalChanges = await this._getAdditionalWorkspaceChanges(additionalWorkspaces);
+			changes.push(...additionalChanges);
+		}
+
 		// Status
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
 
@@ -354,6 +362,48 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			status,
 			metadata,
 		} satisfies vscode.ChatSessionItem;
+	}
+
+	private async _getAdditionalWorkspaceChanges(
+		additionalWorkspaces: IWorkspaceInfo[]
+	): Promise<vscode.ChatSessionChangedFile2[]> {
+		const allChanges: vscode.ChatSessionChangedFile2[] = [];
+		await Promise.allSettled(additionalWorkspaces.map(async (ws) => {
+			if (isIsolationEnabled(ws) && ws.worktreeProperties) {
+				const repoPath = vscode.Uri.file(ws.worktreeProperties.repositoryPath);
+				if (!(await vscode.workspace.isResourceTrusted(repoPath))) {
+					return;
+				}
+				const worktreeChanges = ws.worktreeProperties.changes;
+				if (worktreeChanges) {
+					for (const change of worktreeChanges) {
+						allChanges.push(new vscode.ChatSessionChangedFile2(
+							vscode.Uri.file(change.filePath),
+							change.originalFilePath ? toGitUri(vscode.Uri.file(change.originalFilePath), ws.worktreeProperties!.baseCommit) : undefined,
+							change.modifiedFilePath ? vscode.Uri.file(change.modifiedFilePath) : undefined,
+							change.statistics.additions,
+							change.statistics.deletions
+						));
+					}
+				}
+			} else {
+				const workingDir = getWorkingDirectory(ws);
+				if (!workingDir || !(await vscode.workspace.isResourceTrusted(workingDir))) {
+					return;
+				}
+				const workspaceChanges = await this.workspaceFolderService.getWorkspaceChanges(workingDir) ?? [];
+				for (const change of workspaceChanges) {
+					allChanges.push(new vscode.ChatSessionChangedFile2(
+						vscode.Uri.file(change.filePath),
+						change.originalFilePath ? toGitUri(vscode.Uri.file(change.originalFilePath), 'HEAD') : undefined,
+						change.modifiedFilePath ? vscode.Uri.file(change.modifiedFilePath) : undefined,
+						change.statistics.additions,
+						change.statistics.deletions
+					));
+				}
+			}
+		}));
+		return allChanges;
 	}
 
 	/**
@@ -743,7 +793,8 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
 		const optionGroups: vscode.ChatSessionProviderOptionGroup[] = [];
 
-		if (this._selectedRepoForBranches && isIsolationOptionFeatureEnabled(this.configurationService)) {
+		const showIsolation = (this._selectedRepoForBranches || (this._currentSessionId && _sessionMultiRoot.has(this._currentSessionId))) && isIsolationOptionFeatureEnabled(this.configurationService);
+		if (showIsolation) {
 			optionGroups.push({
 				id: ISOLATION_OPTION_ID,
 				name: l10n.t('Isolation'),
@@ -942,7 +993,18 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			}
 		}
 
-		return repoItems.sort((a, b) => a.name.localeCompare(b.name));
+		const sorted = repoItems.sort((a, b) => a.name.localeCompare(b.name));
+
+		// In multi-root workspaces with multiple repos/folders, add "Multi-root" at top
+		if (sorted.length > 1) {
+			sorted.unshift({
+				id: MULTI_ROOT_OPTION_VALUE,
+				name: l10n.t('Multi-root'),
+				icon: new vscode.ThemeIcon('root-folder-opened'),
+			});
+		}
+
+		return sorted;
 	}
 
 
@@ -953,7 +1015,35 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		const wasBranchOptionShow = !!this._selectedRepoForBranches;
 		let triggerProviderOptionsChange = false;
 		for (const update of updates) {
-			if (update.optionId === REPOSITORY_OPTION_ID && typeof update.value === 'string' && this.sessionItemProvider.isNewSession(sessionId)) {
+			if (update.optionId === REPOSITORY_OPTION_ID && typeof update.value === 'string' && update.value !== '' && this.sessionItemProvider.isNewSession(sessionId)) {
+				// Handle multi-root selection
+				if (update.value === MULTI_ROOT_OPTION_VALUE) {
+					_sessionMultiRoot.add(sessionId);
+					this._selectedRepoForBranches = undefined;
+					_sessionBranch.delete(sessionId);
+					// Set default isolation from last-used value so the isolation dropdown has a selection
+					if (isIsolationOptionFeatureEnabled(this.configurationService)) {
+						if (!_sessionIsolation.has(sessionId)) {
+							const lastUsed = this.context.globalState.get<IsolationMode>(LAST_USED_ISOLATION_OPTION_KEY, IsolationMode.Workspace);
+							_sessionIsolation.set(sessionId, lastUsed);
+						}
+						// Push isolation value to the session UI
+						const isolationMode = _sessionIsolation.get(sessionId)!;
+						this.notifySessionOptionsChange(resource, [{
+							optionId: ISOLATION_OPTION_ID,
+							value: {
+								id: isolationMode,
+								name: isolationMode === IsolationMode.Worktree ? l10n.t('Worktree') : l10n.t('Workspace'),
+								icon: new vscode.ThemeIcon(isolationMode === IsolationMode.Worktree ? 'worktree' : 'folder')
+							}
+						}]);
+					}
+					triggerProviderOptionsChange = true;
+					continue;
+				}
+				// On any other folder selection, clear multi-root state
+				_sessionMultiRoot.delete(sessionId);
+
 				const folder = vscode.Uri.file(update.value);
 				if (isEqual(folder, this._selectedRepoForBranches?.repoUri)) {
 					continue;
@@ -1109,6 +1199,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		@IChatSessionMetadataStore private readonly chatSessionMetadataStore: IChatSessionMetadataStore,
 		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		super();
 	}
@@ -1321,6 +1412,11 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (context.history.length === 0) {
 				// Create baseline checkpoint when handling the first request
 				await this.copilotCLIWorktreeCheckpointService.handleRequest(session.object.sessionId);
+
+				// Create baseline checkpoints for additional worktrees
+				if (session.object.additionalWorkspaces.length > 0) {
+					await this.copilotCLIWorktreeCheckpointService.handleAdditionalWorktreesRequest(session.object.sessionId);
+				}
 			}
 
 			sdkSessionId = session.object.sessionId;
@@ -1357,12 +1453,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
 			} else if (request.prompt && Object.values(builtinSlashSCommands).some(command => request.prompt.startsWith(command))) {
 				// Sessions app built-in slash commands
-				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.workspace, [], token);
+				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.workspace, session.object.additionalWorkspaces, token);
 				await session.object.handleRequest(request, { prompt }, attachments, model, authInfo, token);
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
 			} else {
 				// Construct the full prompt with references to be sent to CLI.
-				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.workspace, [], token);
+				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.workspace, session.object.additionalWorkspaces, token);
 				await session.object.handleRequest(request, { prompt }, attachments, model, authInfo, token);
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
 			}
@@ -1384,6 +1480,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				// Delete old information stored for untitled session id.
 				_sessionBranch.delete(id);
 				_sessionIsolation.delete(id);
+				_sessionMultiRoot.delete(id);
 				this.sessionItemProvider.untitledSessionIdMapping.delete(id);
 				this.sessionItemProvider.sdkToUntitledUriMapping.delete(session.object.sessionId);
 				this.folderRepositoryManager.deleteNewSessionFolder(id);
@@ -1423,6 +1520,39 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		// This way we can get the latest information associated with the real session.
 		const parsedId = SessionIdForCLI.parse(resource);
 		const id = this.sessionItemProvider.untitledSessionIdMapping.get(parsedId) ?? parsedId;
+
+		// Multi-root: lock with "Multi-root" label, no branch
+		if (_sessionMultiRoot.has(id)) {
+			const changes: { optionId: string; value: string | vscode.ChatSessionProviderOptionItem }[] = [
+				{
+					optionId: REPOSITORY_OPTION_ID,
+					value: {
+						id: MULTI_ROOT_OPTION_VALUE,
+						name: l10n.t('Multi-root'),
+						icon: new vscode.ThemeIcon('root-folder-opened'),
+						locked: true
+					}
+				}
+			];
+			// Lock isolation option if set
+			const selectedIsolation = _sessionIsolation.get(id);
+			if (selectedIsolation && isIsolationOptionFeatureEnabled(this.configurationService)) {
+				changes.push({
+					optionId: ISOLATION_OPTION_ID,
+					value: {
+						id: selectedIsolation,
+						name: selectedIsolation === IsolationMode.Worktree
+							? l10n.t('Worktree')
+							: l10n.t('Workspace'),
+						icon: new vscode.ThemeIcon(selectedIsolation === IsolationMode.Worktree ? 'worktree' : 'folder'),
+						locked: true
+					}
+				});
+			}
+			this.contentProvider.notifySessionOptionsChange(resource, changes);
+			return;
+		}
+
 		const folderInfo = await this.folderRepositoryManager.getFolderRepository(id, undefined, token);
 		if (folderInfo.folder) {
 			const folderName = basename(folderInfo.folder);
@@ -1505,19 +1635,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 		try {
 			if (session.status === vscode.ChatSessionStatus.Completed) {
-				const workingDirectory = getWorkingDirectory(session.workspace);
-				if (isIsolationEnabled(session.workspace)) {
-					// When isolation is enabled and we are using a git worktree, so we commit
-					// all the changes in the worktree directory when the session is completed.
-					// Note that if the worktree supports checkpoints, then the commit will be
-					// done in the checkpoint so that users can easily see the changes made in
-					// the worktree and also revert back if needed.
-					await this.copilotCLIWorktreeManagerService.handleRequestCompleted(session.sessionId);
-				} else if (workingDirectory) {
-					// When isolation is not enabled, we are operating in the workspace directly,
-					// so we stage all the changes in the workspace directory when the session is
-					// completed
-					await this.workspaceFolderService.handleRequestCompleted(workingDirectory);
+				// Primary workspace commit
+				await this._commitPrimaryWorkspace(session);
+
+				// Additional workspaces commit
+				if (session.additionalWorkspaces.length > 0) {
+					await this._commitAdditionalWorkspaces(session);
 				}
 
 				// Create checkpoint - we create a checkpoint for the worktree changes so that users
@@ -1525,11 +1648,53 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				// is used if worktree isolation is enabled, and auto-commit is disabled or workspace
 				// isolation is enabled.
 				await this.copilotCLIWorktreeCheckpointService.handleRequestCompleted(session.sessionId, request.id);
+
+				// Additional workspace checkpoints
+				if (session.additionalWorkspaces.length > 0) {
+					await this.copilotCLIWorktreeCheckpointService.handleAdditionalWorktreesRequestCompleted(session.sessionId, request.id);
+				}
 			}
 
 			void this.handlePullRequestCreated(session).catch(ex => this.logService.error(ex, 'Failed to handle pull request creation'));
 		} finally {
 			pendingRequests?.delete(request);
+		}
+	}
+
+	private async _commitPrimaryWorkspace(session: ICopilotCLISession): Promise<void> {
+		const workingDirectory = getWorkingDirectory(session.workspace);
+		if (isIsolationEnabled(session.workspace)) {
+			// When isolation is enabled and we are using a git worktree, so we commit
+			// all the changes in the worktree directory when the session is completed.
+			// Note that if the worktree supports checkpoints, then the commit will be
+			// done in the checkpoint so that users can easily see the changes made in
+			// the worktree and also revert back if needed.
+			await this.copilotCLIWorktreeManagerService.handleRequestCompleted(session.sessionId);
+		} else if (workingDirectory) {
+			// When isolation is not enabled, we are operating in the workspace directly,
+			// so we stage all the changes in the workspace directory when the session is
+			// completed
+			await this.workspaceFolderService.handleRequestCompleted(workingDirectory);
+		}
+	}
+
+	private async _commitAdditionalWorkspaces(session: ICopilotCLISession): Promise<void> {
+		const results = await Promise.allSettled(session.additionalWorkspaces.map(async (ws) => {
+			const workingDir = getWorkingDirectory(ws);
+			if (!workingDir) {
+				return;
+			}
+			if (isIsolationEnabled(ws)) {
+				await this.copilotCLIWorktreeManagerService.handleRequestCompletedForWorktree(ws.worktreeProperties!);
+			} else {
+				await this.workspaceFolderService.handleRequestCompleted(workingDir);
+			}
+		}));
+		// Log per-folder failures without blocking other folders
+		for (const result of results) {
+			if (result.status === 'rejected') {
+				this.logService.error(`[CopilotCLI] Failed to commit additional workspace: ${result.reason}`);
+			}
 		}
 	}
 
@@ -1675,7 +1840,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const id = existingSessionId ?? SessionIdForCLI.parse(resource);
 		const isNewSession = chatSessionContext.isUntitled && !existingSessionId;
 
-		const { workspaceInfo, cancelled, trusted } = await this.getOrInitializeWorkingDirectory(chatSessionContext, stream, request.toolInvocationToken, token);
+		const { workspaceInfo, additionalWorkspaces, cancelled, trusted } = await this.getOrInitializeWorkingDirectory(chatSessionContext, request, stream, request.toolInvocationToken, token);
 		const workingDirectory = getWorkingDirectory(workspaceInfo);
 		const worktreeProperties = workspaceInfo.worktreeProperties;
 		if (cancelled || token.isCancellationRequested) {
@@ -1687,8 +1852,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const debugTargetSessionIds = extractDebugTargetSessionIds(request.references);
 		const mcpServerMappings = buildMcpServerMappings(request.tools);
 		const session = isNewSession ?
-			await this.sessionService.createSession({ model, workspaceInfo, agent, debugTargetSessionIds, mcpServerMappings }, token) :
-			await this.sessionService.getSession({ sessionId: id, model, workspaceInfo, readonly: false, agent, debugTargetSessionIds, mcpServerMappings }, token);
+			await this.sessionService.createSession({ model, workspaceInfo, additionalWorkspaces, agent, debugTargetSessionIds, mcpServerMappings }, token) :
+			await this.sessionService.getSession({ sessionId: id, model, workspaceInfo, additionalWorkspaces, readonly: false, agent, debugTargetSessionIds, mcpServerMappings }, token);
 		this.sessionItemProvider.notifySessionsChange();
 		// TODO @DonJayamanne We need to refresh to add this new session, but we need a label.
 		// So when creating a session we need a dummy label (or an initial prompt).
@@ -1703,6 +1868,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			this.sessionItemProvider.sdkToUntitledUriMapping.set(session.object.sessionId, resource);
 			if (worktreeProperties) {
 				void this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.object.sessionId, worktreeProperties);
+			}
+			if (additionalWorkspaces.length > 0) {
+				void this.chatSessionMetadataStore.setAdditionalWorkspaces(session.object.sessionId, additionalWorkspaces);
 			}
 		}
 		const sessionWorkingDirectory = getWorkingDirectory(session.object.workspace);
@@ -1737,7 +1905,21 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(session.sessionId);
 		const repositoryPath = worktreeProperties?.repositoryPath ? Uri.file(worktreeProperties.repositoryPath) : getWorkingDirectory(session.workspace);
 		const repository = repositoryPath ? await this.gitService.getRepository(repositoryPath) : undefined;
-		const hasChanges = (repository?.changes?.indexChanges && repository.changes.indexChanges.length > 0);
+		let hasChanges = !!(repository?.changes?.indexChanges && repository.changes.indexChanges.length > 0);
+
+		// Check additional workspaces for changes
+		if (!hasChanges) {
+			const additionalWorkspaces = await this.chatSessionMetadataStore.getAdditionalWorkspaces(session.sessionId);
+			for (const ws of additionalWorkspaces) {
+				const wsRepo = ws.worktreeProperties
+					? await this.gitService.getRepository(Uri.file(ws.worktreeProperties.repositoryPath))
+					: (ws.folder ? await this.gitService.getRepository(ws.folder) : undefined);
+				if (wsRepo?.changes?.indexChanges?.length) {
+					hasChanges = true;
+					break;
+				}
+			}
+		}
 
 		if (hasChanges) {
 			stream.warning(l10n.t('You have uncommitted changes in your workspace. The cloud agent will start from the last committed state. Consider committing your changes first if you want to include them.'));
@@ -1750,11 +1932,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 	private async getOrInitializeWorkingDirectory(
 		chatSessionContext: vscode.ChatSessionContext | undefined,
+		request: vscode.ChatRequest,
 		stream: vscode.ChatResponseStream,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
 	): Promise<{
 		workspaceInfo: IWorkspaceInfo;
+		additionalWorkspaces: IWorkspaceInfo[];
 		cancelled: boolean;
 		trusted: boolean;
 	}> {
@@ -1765,6 +1949,11 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const isNewSession = chatSessionContext.isUntitled && !existingSessionId;
 
 			if (isNewSession) {
+				// Multi-root: initialize all workspace folders
+				if (_sessionMultiRoot.has(id)) {
+					return this._initializeMultiRootWorkingDirectories(id, request, stream, toolInvocationToken, token);
+				}
+
 				// Use FolderRepositoryManager to initialize folder/repository with worktree creation
 				const branch = _sessionBranch.get(id);
 				const isolation = _sessionIsolation.get(id) ?? undefined;
@@ -1772,6 +1961,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			} else {
 				// Existing session - use getFolderRepository for resolution with trust check
 				folderInfo = await this.folderRepositoryManager.getFolderRepository(id, { promptForTrust: true, stream }, token);
+
+				// Load additional workspaces from metadata for existing sessions
+				const additionalWorkspaces = await this.chatSessionMetadataStore.getAdditionalWorkspaces(id);
+				if (folderInfo.trusted === false || folderInfo.cancelled) {
+					return { workspaceInfo: emptyWorkspaceInfo(), additionalWorkspaces: [], cancelled: true, trusted: folderInfo.trusted !== false };
+				}
+				return { workspaceInfo: Object.assign({}, folderInfo), additionalWorkspaces, cancelled: false, trusted: true };
 			}
 		} else {
 			// No chat session context (e.g., delegation) - initialize with active repository
@@ -1779,11 +1975,78 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		if (folderInfo.trusted === false || folderInfo.cancelled) {
-			return { workspaceInfo: emptyWorkspaceInfo(), cancelled: true, trusted: folderInfo.trusted !== false };
+			return { workspaceInfo: emptyWorkspaceInfo(), additionalWorkspaces: [], cancelled: true, trusted: folderInfo.trusted !== false };
 		}
 
 		const workspaceInfo = Object.assign({}, folderInfo);
-		return { workspaceInfo, cancelled: false, trusted: true };
+		return { workspaceInfo, additionalWorkspaces: [], cancelled: false, trusted: true };
+	}
+
+	private async _initializeMultiRootWorkingDirectories(
+		sessionId: string,
+		request: vscode.ChatRequest,
+		stream: vscode.ChatResponseStream,
+		toolInvocationToken: vscode.ChatParticipantToolToken,
+		token: vscode.CancellationToken
+	): Promise<{ workspaceInfo: IWorkspaceInfo; additionalWorkspaces: IWorkspaceInfo[]; cancelled: boolean; trusted: boolean }> {
+		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
+		if (workspaceFolders.length === 0) {
+			return { workspaceInfo: emptyWorkspaceInfo(), additionalWorkspaces: [], cancelled: true, trusted: true };
+		}
+
+		const primaryFolder = this._determinePrimaryFolder(request, workspaceFolders);
+		const otherFolders = workspaceFolders.filter(f => !isEqual(f, primaryFolder));
+		const isolation = _sessionIsolation.get(sessionId) ?? undefined;
+
+		const { primary, additional } = await this.folderRepositoryManager.initializeMultiRootFolderRepositories(
+			sessionId, primaryFolder, otherFolders, { stream, toolInvocationToken, isolation, folder: primaryFolder }, token
+		);
+
+		if (primary.trusted === false || primary.cancelled) {
+			return { workspaceInfo: emptyWorkspaceInfo(), additionalWorkspaces: [], cancelled: true, trusted: primary.trusted !== false };
+		}
+
+		return {
+			workspaceInfo: {
+				folder: primary.folder,
+				repository: primary.repository,
+				worktree: primary.worktree,
+				worktreeProperties: primary.worktreeProperties,
+			},
+			additionalWorkspaces: additional,
+			cancelled: false,
+			trusted: true,
+		};
+	}
+
+	private _determinePrimaryFolder(
+		request: vscode.ChatRequest,
+		workspaceFolders: vscode.Uri[]
+	): vscode.Uri {
+		// 1. Check file attachments/references in the request
+		for (const ref of request.references) {
+			const uri = ref.value instanceof vscode.Uri
+				? ref.value
+				: (ref.value && typeof ref.value === 'object' && 'uri' in ref.value ? (ref.value as vscode.Location).uri : undefined);
+			if (uri) {
+				const folder = this.workspaceService.getWorkspaceFolder(uri);
+				if (folder && workspaceFolders.some(f => isEqual(f, folder))) {
+					return folder;
+				}
+			}
+		}
+
+		// 2. Check active editor
+		const activeEditor = vscode.window.activeTextEditor;
+		if (activeEditor) {
+			const folder = this.workspaceService.getWorkspaceFolder(activeEditor.document.uri);
+			if (folder && workspaceFolders.some(f => isEqual(f, folder))) {
+				return folder;
+			}
+		}
+
+		// 3. Fallback to first workspace folder
+		return workspaceFolders[0];
 	}
 
 	private createModeInstructions(request: vscode.ChatRequest): StoredModeInstructions | undefined {
@@ -1818,8 +2081,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return summary ? `${userPrompt}\n${summary}` : userPrompt;
 		})();
 
-		const [{ workspaceInfo, cancelled }, model, agent] = await Promise.all([
-			this.getOrInitializeWorkingDirectory(undefined, stream, request.toolInvocationToken, token),
+		const [{ workspaceInfo, additionalWorkspaces, cancelled }, model, agent] = await Promise.all([
+			this.getOrInitializeWorkingDirectory(undefined, request, stream, request.toolInvocationToken, token),
 			this.getModelId(request, token), // prefer model in request, as we're delegating from another session here.
 			this.getAgent(undefined, undefined, token)
 		]);
@@ -1830,10 +2093,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 		const workingDirectory = getWorkingDirectory(workspaceInfo);
 		const worktreeProperties = workspaceInfo.worktreeProperties;
-		const { prompt, attachments, references } = await this.promptResolver.resolvePrompt(request, await requestPromptPromise, (otherReferences || []).concat([]), workspaceInfo, [], token);
+		const { prompt, attachments, references } = await this.promptResolver.resolvePrompt(request, await requestPromptPromise, (otherReferences || []).concat([]), workspaceInfo, additionalWorkspaces, token);
 
 		const mcpServerMappings = buildMcpServerMappings(request.tools);
-		const session = await this.sessionService.createSession({ workspaceInfo, agent, model, mcpServerMappings }, token);
+		const session = await this.sessionService.createSession({ workspaceInfo, additionalWorkspaces, agent, model, mcpServerMappings }, token);
 		const modeInstructions = this.createModeInstructions(request);
 		this.chatSessionMetadataStore.updateRequestDetails(session.object.sessionId, [{ vscodeRequestId: request.id, agentId: agent?.name ?? '', modeInstructions }]).catch(ex => this.logService.error(ex, 'Failed to update request details'));
 		if (summary) {
@@ -1922,7 +2185,8 @@ export function registerCLIChatCommands(
 	folderRepositoryManager: IFolderRepositoryManager,
 	envService: INativeEnvService,
 	fileSystemService: IFileSystemService,
-	logService: ILogService
+	logService: ILogService,
+	chatSessionMetadataStore: IChatSessionMetadataStore
 ): IDisposable {
 	const disposableStore = new DisposableStore();
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
@@ -1959,6 +2223,20 @@ export function registerCLIChatCommands(
 					}
 				}
 
+				// Delete additional worktrees
+				const additionalWorkspaces = await chatSessionMetadataStore.getAdditionalWorkspaces(sessionId);
+				await Promise.allSettled(additionalWorkspaces.map(async (ws) => {
+					if (ws.worktreeProperties) {
+						try {
+							const repo = await gitService.getRepository(vscode.Uri.file(ws.worktreeProperties.repositoryPath), true);
+							if (repo) {
+								await gitService.deleteWorktree(repo.rootUri, ws.worktreeProperties.worktreePath);
+							}
+						} catch (error) {
+							logService.error(`Failed to delete additional worktree: ${error}`);
+						}
+					}
+				}));
 				copilotcliSessionItemProvider.notifySessionsChange();
 			}
 		}

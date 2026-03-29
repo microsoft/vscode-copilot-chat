@@ -71,4 +71,13 @@ export interface IChatSessionWorktreeService {
 	getWorktreeChanges(sessionId: string): Promise<readonly vscode.ChatSessionChangedFile2[] | undefined>;
 
 	handleRequestCompleted(sessionId: string): Promise<void>;
+
+	/** Get worktree properties for all additional workspaces in a session. */
+	getAdditionalWorktreeProperties(sessionId: string): Promise<ChatSessionWorktreeProperties[]>;
+
+	/** Store worktree properties for additional workspaces in a session. */
+	setAdditionalWorktreeProperties(sessionId: string, properties: ChatSessionWorktreeProperties[]): Promise<void>;
+
+	/** Commit changes in a specific worktree, identified by its properties directly. */
+	handleRequestCompletedForWorktree(worktreeProperties: ChatSessionWorktreeProperties): Promise<void>;
 }

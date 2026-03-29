@@ -41,6 +41,7 @@ export const COPILOT_CLI_DEFAULT_AGENT_ID = '___vscode_default___';
 
 export class CopilotCLISessionOptions {
 	public readonly workspaceInfo: IWorkspaceInfo;
+	public readonly additionalWorkspaces: IWorkspaceInfo[];
 	private readonly model?: string;
 	private readonly agent?: SweCustomAgent;
 	private readonly customAgents?: SweCustomAgent[];
@@ -48,8 +49,9 @@ export class CopilotCLISessionOptions {
 	private readonly copilotUrl?: string;
 	private readonly skillLocations?: Uri[];
 	private readonly systemMessage?: SessionOptions['systemMessage'];
-	constructor(options: { model?: string; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[]; copilotUrl?: string; skillLocations?: Uri[]; systemMessage?: SessionOptions['systemMessage'] }, private readonly logService: ILogService) {
+	constructor(options: { model?: string; workspaceInfo: IWorkspaceInfo; additionalWorkspaces?: IWorkspaceInfo[]; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[]; copilotUrl?: string; skillLocations?: Uri[]; systemMessage?: SessionOptions['systemMessage'] }, private readonly logService: ILogService) {
 		this.workspaceInfo = options.workspaceInfo;
+		this.additionalWorkspaces = options.additionalWorkspaces ?? [];
 		this.model = options.model;
 		this.mcpServers = options.mcpServers;
 		this.agent = options.agent;
