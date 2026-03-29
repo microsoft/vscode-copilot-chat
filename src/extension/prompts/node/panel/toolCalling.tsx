@@ -692,6 +692,10 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 	}
 
 	protected async onImage(part: LanguageModelDataPart, _imageIndex?: number) {
+		if (!this.endpoint.supportsVision) {
+			return '[Image content is not available because vision is not supported by the current model or is disabled by your organization.]';
+		}
+
 		const githubToken = (await this.authService.getGitHubSession('any', { silent: true }))?.accessToken;
 		const uploadsEnabled = this.configurationService && this.experimentationService
 			? this.configurationService.getExperimentBasedConfig(ConfigKey.EnableChatImageUpload, this.experimentationService)
