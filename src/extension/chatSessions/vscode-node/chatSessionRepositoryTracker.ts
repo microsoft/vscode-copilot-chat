@@ -48,7 +48,7 @@ export class ChatSessionRepositoryTracker extends Disposable {
 		}
 	}
 
-	private async trackFolderChanges(uri: vscode.Uri): Promise<void> {
+	async trackFolderChanges(uri: vscode.Uri): Promise<void> {
 		this.logService.trace(`[ChatSessionRepositoryTracker][trackFolderChanges] Tracking file changes for ${uri.toString()}.`);
 
 		// Open the repository so that we can track state changes

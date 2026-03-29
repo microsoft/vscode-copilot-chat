@@ -46,6 +46,7 @@ import { builtinSlashSCommands, CopilotCLICommand, copilotCLICommands, ICopilotC
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
 import { buildMcpServerMappings } from '../copilotcli/node/mcpHandler';
 import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
+import { ChatSessionRepositoryTracker } from './chatSessionRepositoryTracker';
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
 import { ICopilotCLITerminalIntegration, TerminalOpenLocation } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
@@ -1070,6 +1071,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		private readonly contentProvider: CopilotCLIChatSessionContentProvider,
 		private readonly promptResolver: CopilotCLIPromptResolver,
 		private readonly cloudSessionProvider: CopilotCloudSessionsProvider | undefined,
+		private readonly repositoryTracker: ChatSessionRepositoryTracker,
 		@IGitService private readonly gitService: IGitService,
 		@ICopilotCLIModels private readonly copilotCLIModels: ICopilotCLIModels,
 		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
@@ -1255,6 +1257,15 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (context.history.length === 0) {
 				// Create baseline checkpoint when handling the first request
 				await this.copilotCLIWorktreeCheckpointService.handleRequest(session.object.sessionId);
+			}
+
+			// For the Sessions app, we set up a tracker to track repository changes. The repository
+			// tracker is used to provide updated changes while the session is still in progress. We
+			// have to do this here since for the first request there may be a delay before the
+			// workspace folder is updated.
+			const folder = session.object.workspace.worktree ?? session.object.workspace.folder;
+			if (vscode.workspace.isAgentSessionsWorkspace && folder) {
+				await this.repositoryTracker.trackFolderChanges(folder!);
 			}
 
 			sdkSessionId = session.object.sessionId;
