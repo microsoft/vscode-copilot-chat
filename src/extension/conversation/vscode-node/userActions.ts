@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import { editsAgentName, getChatParticipantIdFromName } from '../../../platform/chat/common/chatAgents';
 import { EditSurvivalResult } from '../../../platform/editSurvivalTracking/common/editSurvivalReporter';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IMultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
@@ -14,6 +15,7 @@ import type { EditOutcome } from '../../../platform/otel/common/genAiAttributes'
 import { emitEditFeedbackEvent, emitEditHunkActionEvent, emitEditSurvivalEvent, emitInlineDoneEvent, emitUserFeedbackEvent } from '../../../platform/otel/common/genAiEvents';
 import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
 import { IOTelService } from '../../../platform/otel/common/otelService';
+import { resolveWorkspaceOTelMetadata } from '../../../platform/otel/common/workspaceOTelMetadata';
 import { ISurveyService } from '../../../platform/survey/common/surveyService';
 import { ITelemetryService, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../platform/telemetry/common/telemetry';
 import { isNotebookCellOrNotebookChatInput } from '../../../util/common/notebooks';
@@ -49,7 +51,8 @@ export class UserFeedbackService implements IUserFeedbackService {
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
 		@IMultiFileEditInternalTelemetryService private readonly multiFileEditTelemetryService: IMultiFileEditInternalTelemetryService,
 		@INotebookService private readonly notebookService: INotebookService,
-		@IOTelService private readonly otelService: IOTelService
+		@IOTelService private readonly otelService: IOTelService,
+		@IGitService private readonly gitService: IGitService
 	) { }
 
 	handleUserAction(e: vscode.ChatUserActionEvent, agentId: string): void {
@@ -210,7 +213,8 @@ export class UserFeedbackService implements IUserFeedbackService {
 
 					{
 						const otelOutcome = outcomes.get(e.action.outcome) ?? 'unknown';
-						emitEditFeedbackEvent(this.otelService, otelOutcome, document?.languageId ?? '', agentId, result.metadata?.responseId ?? '', 'agent', e.action.hasRemainingEdits, this.notebookService.hasSupportedNotebooks(e.action.uri));
+						const workspace = resolveWorkspaceOTelMetadata(this.gitService, e.action.uri);
+						emitEditFeedbackEvent(this.otelService, otelOutcome, document?.languageId ?? '', agentId, result.metadata?.responseId ?? '', 'agent', e.action.hasRemainingEdits, this.notebookService.hasSupportedNotebooks(e.action.uri), workspace);
 						if (e.action.outcome === vscode.ChatEditingSessionActionOutcome.Accepted
 							|| e.action.outcome === vscode.ChatEditingSessionActionOutcome.Rejected) {
 							GenAiMetrics.recordEditAcceptance(this.otelService, 'chat_editing', otelOutcome, document?.languageId);
@@ -253,7 +257,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 						'edit.hunk.action'
 					);
 
-					emitEditHunkActionEvent(this.otelService, outcome, document?.languageId ?? '', result.metadata?.responseId ?? '', e.action.lineCount, e.action.linesAdded, e.action.linesRemoved);
+					emitEditHunkActionEvent(this.otelService, outcome, document?.languageId ?? '', result.metadata?.responseId ?? '', e.action.lineCount, e.action.linesAdded, e.action.linesRemoved, resolveWorkspaceOTelMetadata(this.gitService, e.action.uri));
 					GenAiMetrics.recordEditAcceptance(this.otelService, 'chat_editing_hunk', outcome, document?.languageId ?? '');
 					if (outcome === 'accepted') {
 						GenAiMetrics.incrementLinesOfCode(this.otelService, 'added', document?.languageId ?? '', e.action.linesAdded);
@@ -501,7 +505,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 			...sharedMeasures, accepted
 		});
 
-		emitInlineDoneEvent(this.otelService, accepted === 1, languageId, editCount, editLineCount, interactionOutcome.kind, isNotebookDocument === 1);
+		emitInlineDoneEvent(this.otelService, accepted === 1, languageId, editCount, editLineCount, interactionOutcome.kind, isNotebookDocument === 1, resolveWorkspaceOTelMetadata(this.gitService, response.promptQuery.document.uri));
 		GenAiMetrics.recordEditAcceptance(this.otelService, 'inline_chat', accepted === 1 ? 'accepted' : 'rejected', languageId);
 
 		this.telemetryService.sendInternalMSFTTelemetryEvent('interactiveSessionDone', {
