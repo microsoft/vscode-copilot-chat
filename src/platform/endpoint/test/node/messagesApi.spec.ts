@@ -370,9 +370,32 @@ suite('rawMessagesToMessagesAPI', function () {
 
 		const toolResult = findToolResult(result.messages);
 		expect(toolResult).toBeDefined();
-		expect(toolResult!.cache_control).toEqual({ type: 'ephemeral' });
-		// The dummy whitespace-only text block should be filtered out
+		// Orphaned cache breakpoint with no content to attach to is silently dropped
+		expect(toolResult!.cache_control).toBeUndefined();
 		expect(toolResult!.content).toBeUndefined();
+	});
+
+	test('cache breakpoint before content defers cache_control to next block', function () {
+		const messages: Raw.ChatMessage[] = [
+			{
+				role: Raw.ChatRole.User,
+				content: [
+					{ type: Raw.ChatCompletionContentPartKind.CacheBreakpoint, cacheType: 'ephemeral' },
+					{ type: Raw.ChatCompletionContentPartKind.Text, text: 'hello world' },
+				],
+			},
+		];
+
+		const result = rawMessagesToMessagesAPI(messages);
+
+		expect(result.messages).toHaveLength(1);
+		const content = assertContentArray(result.messages[0].content);
+		expect(content).toHaveLength(1);
+		expect(content[0]).toEqual({
+			type: 'text',
+			text: 'hello world',
+			cache_control: { type: 'ephemeral' },
+		});
 	});
 });
 

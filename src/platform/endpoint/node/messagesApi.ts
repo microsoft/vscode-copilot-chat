@@ -381,6 +381,8 @@ function tryParseToolReferences(content: ContentBlockParam[], validToolNames?: S
 
 function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionContentPart[]): ContentBlockParam[] {
 	const convertedContent: ContentBlockParam[] = [];
+	// Track pending cache_control that couldn't be attached to a preceding block
+	let pendingCacheControl = false;
 
 	for (const part of content) {
 		switch (part.type) {
@@ -419,12 +421,12 @@ function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionConten
 				if (previousBlock && contentBlockSupportsCacheControl(previousBlock)) {
 					previousBlock.cache_control = { type: 'ephemeral' };
 				} else {
-					// Empty string is invalid
-					convertedContent.push({
-						type: 'text',
-						text: ' ',
-						cache_control: { type: 'ephemeral' }
-					});
+					// No preceding block to attach to — defer until the next
+					// cacheable content block is added, or silently drop it.
+					// Previously this created a whitespace-only text block which
+					// the Anthropic API rejects with "text content block must
+					// contain non-whitespace text".
+					pendingCacheControl = true;
 				}
 				break;
 			}
@@ -465,6 +467,15 @@ function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionConten
 					}
 				}
 				break;
+			}
+		}
+
+		// Attach any pending cache_control to the block we just added
+		if (pendingCacheControl && convertedContent.length > 0) {
+			const lastBlock = convertedContent.at(-1)!;
+			if (contentBlockSupportsCacheControl(lastBlock)) {
+				lastBlock.cache_control = { type: 'ephemeral' };
+				pendingCacheControl = false;
 			}
 		}
 	}
