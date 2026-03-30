@@ -4678,6 +4678,17 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.agentDebugLog.fileLogging.maxRetainedSessionLogs": {
+						"type": "number",
+						"default": 50,
+						"minimum": 1,
+						"markdownDescription": "%github.copilot.config.chat.agentDebugLog.fileLogging.maxRetainedSessionLogs%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.otel.enabled": {
 						"type": "boolean",
 						"default": false,
