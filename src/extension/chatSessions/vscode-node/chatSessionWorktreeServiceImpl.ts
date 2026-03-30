@@ -20,6 +20,7 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { isEqual } from '../../../util/vs/base/common/resources';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IAgentSessionsWorkspace } from '../common/agentSessionsWorkspace';
 import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
 import { ChatSessionWorktreeData, ChatSessionWorktreeFile, ChatSessionWorktreeProperties, ChatSessionWorktreePropertiesV2, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 
@@ -31,6 +32,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 	private _sessionWorktrees: Map<string, string | ChatSessionWorktreeProperties> = new Map();
 
 	constructor(
+		@IAgentSessionsWorkspace private readonly agentSessionsWorkspace: IAgentSessionsWorkspace,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IGitCommitMessageService private readonly gitCommitMessageService: IGitCommitMessageService,
 		@IGitService private readonly gitService: IGitService,
@@ -76,6 +78,23 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 			const branch = randomBranchName ? `${branchPrefix}copilot/${randomBranchName.substring(branchPrefix.length)}`
 				: `${branchPrefix}copilot/worktree-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
+
+			// When a base branch is provided, we attempt to resolve it, to see whether it has an
+			// upstream. If there is an upstream, we use the upstream as the base for the worktree
+			// since that is more likely to be up to date.
+			if (this.agentSessionsWorkspace.isAgentSessionsWorkspace && baseBranch) {
+				try {
+					// Attempt to resolve the provided base branch
+					const branchDetails = await this.gitService.getBranch(activeRepository.rootUri, baseBranch);
+					if (branchDetails?.upstream?.remote && branchDetails.upstream?.name) {
+						// If the base branch has an upstream, use it as the base for the worktree
+						baseBranch = `${branchDetails.upstream.remote}/${branchDetails.upstream.name}`;
+					}
+				} catch (error) {
+					const errorMessage = error instanceof Error ? error.message : String(error);
+					this.logService.warn(`[ChatSessionWorktreeService][_createWorktree] Failed to resolve base branch ${baseBranch}. Error: ${errorMessage}`);
+				}
+			}
 
 			const worktreePath = await this.gitService.createWorktree(activeRepository.rootUri, { branch, commitish: baseBranch });
 
