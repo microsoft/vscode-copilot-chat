@@ -875,7 +875,8 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 				(name.endsWith('.jsonl') && type === 1 /* FileType.File */)
 			);
 
-			const maxRetainedSessionLogs = Math.max(1, this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ChatDebugFileLoggingMaxRetainedSessionLogs, this._experimentationService) ?? DEFAULT_MAX_RETAINED_LOGS);
+			const configuredMax = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ChatDebugFileLoggingMaxRetainedSessionLogs, this._experimentationService);
+			const maxRetainedSessionLogs = Number.isFinite(configuredMax) && configuredMax >= 1 ? Math.trunc(configuredMax) : DEFAULT_MAX_RETAINED_LOGS;
 			if (sessionEntries.length <= maxRetainedSessionLogs) {
 				/* __GDPR__
 					"chatDebugFileLogger.cleanupOldLogs" : {
