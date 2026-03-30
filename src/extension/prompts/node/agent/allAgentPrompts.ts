@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import './anthropicPrompts';
+import './familyHPrompts';
 import './geminiPrompts';
 import './minimaxPrompts';
 import './vscModelPrompts';
