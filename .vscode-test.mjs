@@ -29,9 +29,8 @@ process.on('exit', () => writeFileSync(packageJsonPath, raw));
 
 const isRecoveryBuild = !pkg.version.endsWith('.0');
 
-export default defineConfig({
+const config = {
 	files: __dirname + (isSanity ? '/dist/sanity-test-extension.js' : '/dist/test-extension.js'),
-	version: isRecoveryBuild ? 'stable' : 'insiders-unreleased',
 	launchArgs: [
 		'--disable-extensions',
 		'--profile-temp'
@@ -42,4 +41,12 @@ export default defineConfig({
 		forbidOnly: !!process.env.CI,
 		timeout: 5000
 	}
-});
+};
+
+if (process.env.VSCODE_UNDER_TEST) {
+	config.useInstallation = { fromPath: process.env.VSCODE_UNDER_TEST };
+} else {
+	config.version = isRecoveryBuild ? 'stable' : 'insiders-unreleased';
+}
+
+export default defineConfig(config);
