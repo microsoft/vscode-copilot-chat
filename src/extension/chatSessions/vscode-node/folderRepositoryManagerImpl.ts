@@ -15,7 +15,6 @@ import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecy
 import { ResourceSet } from '../../../util/vs/base/common/map';
 import { isEqual } from '../../../util/vs/base/common/resources';
 import { createTimeout } from '../../inlineEdits/common/common';
-import { ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { ChatSessionWorktreeFile, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
@@ -254,7 +253,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		// Check for uncommitted changes and prompt user before creating worktree
 		let uncommittedChangesAction: 'move' | 'copy' | 'skip' | 'cancel' | undefined = undefined;
 		if ((!sessionId || isUntitledSessionId(sessionId)) && !worktreeProperties) {
-			uncommittedChangesAction = await this.promptForUncommittedChangesAction(sessionId, toolInvocationToken, token);
+			uncommittedChangesAction = await this.promptForUncommittedChangesAction(sessionId, repository, branch, toolInvocationToken, token);
 			if (uncommittedChangesAction === 'cancel') {
 				return { folder, repository, worktree, worktreeProperties, trusted: true, cancelled: true };
 			}
@@ -374,16 +373,14 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 	 */
 	private async promptForUncommittedChangesAction(
 		sessionId: string | undefined,
+		repositoryUri: vscode.Uri,
+		branch: string | undefined,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
 	): Promise<'move' | 'copy' | 'skip' | 'cancel' | undefined> {
-		const uncommittedChanges = await this.getUncommittedChangesPromptData(sessionId, token);
+		const uncommittedChanges = await this.getUncommittedChanges(repositoryUri, branch, token);
 		if (!uncommittedChanges) {
 			return undefined;
-		}
-
-		if (!this.toolsService.getTool('vscode_get_modified_files_confirmation')) {
-			return this.promptForUncommittedChangesActionOld(sessionId, toolInvocationToken, token);
 		}
 
 		const isDelegation = !sessionId;
@@ -422,48 +419,6 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		}
 	}
 
-	private async promptForUncommittedChangesActionOld(
-		sessionId: string | undefined,
-		toolInvocationToken: vscode.ChatParticipantToolToken,
-		token: vscode.CancellationToken
-	): Promise<'move' | 'copy' | 'skip' | 'cancel' | undefined> {
-		const isDelegation = !sessionId;
-		const title = isDelegation
-			? l10n.t('Delegate to Copilot CLI')
-			: l10n.t('Uncommitted Changes');
-		const message = isDelegation
-			? l10n.t('Copilot CLI will work in an isolated worktree to implement your requested changes.')
-			+ '\n\n'
-			+ l10n.t('The selected repository has uncommitted changes. Should these changes be included in the new worktree?')
-			: l10n.t('The selected repository has uncommitted changes. Should these changes be included in the new worktree?');
-
-		const copyChanges = l10n.t('Copy Changes');
-		const moveChanges = l10n.t('Move Changes');
-		const skipChanges = l10n.t('Skip Changes');
-		const cancel = l10n.t('Cancel');
-		const buttons = [copyChanges, moveChanges, skipChanges, cancel];
-		const input = {
-			title,
-			message,
-			buttons
-		};
-		const result = await this.toolsService.invokeTool(ToolName.CoreConfirmationToolWithOptions, { input, toolInvocationToken }, token);
-
-		const firstResultPart = result.content.at(0);
-		const selection = firstResultPart instanceof LanguageModelTextPart ? firstResultPart.value : undefined;
-
-		switch (selection?.toUpperCase()) {
-			case moveChanges.toUpperCase():
-				return 'move';
-			case copyChanges.toUpperCase():
-				return 'copy';
-			case skipChanges.toUpperCase():
-				return 'skip';
-			default:
-				return 'cancel';
-		}
-	}
-
 	private getSelectedUncommittedChangesAction(
 		result: vscode.LanguageModelToolResult,
 		options: readonly string[]
@@ -482,12 +437,18 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		return undefined;
 	}
 
-	private async getUncommittedChangesPromptData(
-		sessionId: string | undefined,
+	private async getUncommittedChanges(
+		folderPath: vscode.Uri,
+		branch: string | undefined,
 		token: vscode.CancellationToken
 	): Promise<{ repository: vscode.Uri; modifiedFiles: Array<{ uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number }> } | undefined> {
-		const repository = await this.getRepositoryForUncommittedChanges(sessionId);
+		const repository = await this.gitService.getRepository(folderPath);
 		if (!repository) {
+			return undefined;
+		}
+
+		// If the current branch is not the same as the requested branch, we cannot reliably determine the uncommitted changes, so skip the confirmation.
+		if (branch && repository.headBranchName !== branch) {
 			return undefined;
 		}
 
@@ -500,27 +461,6 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 			repository: repository.rootUri,
 			modifiedFiles
 		};
-	}
-
-	private async getRepositoryForUncommittedChanges(sessionId: string | undefined): Promise<ReturnType<IGitService['activeRepository']['get']> | undefined> {
-		if (sessionId && isUntitledSessionId(sessionId)) {
-			const folder = this._newSessionFolders.get(sessionId)?.uri
-				?? await this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
-			if (folder) {
-				return await this.gitService.getRepository(folder, false);
-			}
-			// No folder selected, fall through to the active repository check.
-		}
-
-		if (sessionId && !isUntitledSessionId(sessionId)) {
-			return undefined;
-		}
-
-		if (!isWelcomeView(this.workspaceService) && this.workspaceService.getWorkspaceFolders().length === 1) {
-			return this.gitService.activeRepository.get();
-		}
-
-		return undefined;
 	}
 
 	private async getModifiedFilesForConfirmation(

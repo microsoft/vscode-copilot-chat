@@ -412,7 +412,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			workspaceFolderService,
 			telemetry,
 			logger,
-			new PromptsServiceImpl(new NullWorkspaceService()),
+			new PromptsServiceImpl(new NullWorkspaceService(), fileSystem),
 			delegationService,
 			folderRepositoryManager,
 			configurationService,
@@ -755,7 +755,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			workspaceFolderService,
 			telemetry,
 			logService,
-			new PromptsServiceImpl(new NullWorkspaceService()),
+			new PromptsServiceImpl(new NullWorkspaceService(), new MockFileSystemService()),
 			new class extends mock<IChatDelegationSummaryService>() {
 				override async summarize(_context: vscode.ChatContext, _token: vscode.CancellationToken): Promise<string | undefined> {
 					return undefined;
@@ -827,7 +827,9 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 	it('handles /delegate command from another chat (has uncommitted changes and user copies changes)', async () => {
 		expect(manager.sessions.size).toBe(0);
-		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}workspace`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
+		const repoContext = { rootUri: Uri.file(`${sep}workspace`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext;
+		git.activeRepository = { get: () => repoContext } as unknown as IGitService['activeRepository'];
+		git.setRepo(repoContext);
 		tools.nextConfirmationButton = 'Copy Changes';
 		const request = new TestChatRequest('/delegate Build feature');
 		const context = { chatSessionContext: undefined } as vscode.ChatContext;
@@ -1899,7 +1901,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				workspaceFolderService,
 				telemetry,
 				logService,
-				new PromptsServiceImpl(new NullWorkspaceService()),
+				new PromptsServiceImpl(new NullWorkspaceService(), new MockFileSystemService()),
 				nullDelegationService,
 				folderRepositoryManager,
 				configurationService,
@@ -2031,7 +2033,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				workspaceFolderService,
 				telemetry,
 				logService,
-				new PromptsServiceImpl(new NullWorkspaceService()),
+				new PromptsServiceImpl(new NullWorkspaceService(), new MockFileSystemService()),
 				new (mock<IChatDelegationSummaryService>())(),
 				folderRepositoryManager,
 				configurationService,

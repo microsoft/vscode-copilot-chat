@@ -6,15 +6,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
-import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { RepoContext } from '../../../../platform/git/common/gitService';
 import { MockGitService } from '../../../../platform/ignore/node/test/mockGitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { mock } from '../../../../util/common/test/simpleMock';
-import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { constObservable, observableValue } from '../../../../util/vs/base/common/observableInternal';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { IAgentSessionsWorkspace } from '../../common/agentSessionsWorkspace';
 import { IChatSessionMetadataStore, WorkspaceFolderEntry } from '../../common/chatSessionMetadataStore';
 import { ChatSessionWorkspaceFolderService } from '../chatSessionWorkspaceFolderServiceImpl';
 
@@ -98,26 +95,13 @@ describe('ChatSessionWorkspaceFolderService', () => {
 	let gitService: MockGitService;
 	let logService: MockLogService;
 	let metadataStore: MockMetadataStore;
-	let fileSystemService: MockFileSystemService;
-	let agentSessionsWorkspace: IAgentSessionsWorkspace;
 
 	beforeEach(() => {
 		extensionContext = new MockExtensionContext();
 		logService = new MockLogService();
 		gitService = new MockGitService();
 		metadataStore = new MockMetadataStore();
-		fileSystemService = new MockFileSystemService();
-		agentSessionsWorkspace = { _serviceBrand: undefined, isAgentSessionsWorkspace: false };
-		vi.spyOn(fileSystemService, 'createFileSystemWatcher').mockReturnValue({
-			onDidCreate: Event.None as vscode.Event<vscode.Uri>,
-			onDidChange: Event.None as vscode.Event<vscode.Uri>,
-			onDidDelete: Event.None as vscode.Event<vscode.Uri>,
-			dispose: vi.fn(),
-			ignoreChangeEvents: false,
-			ignoreCreateEvents: false,
-			ignoreDeleteEvents: false,
-		});
-		service = new ChatSessionWorkspaceFolderService(gitService, logService, metadataStore, extensionContext, fileSystemService, agentSessionsWorkspace);
+		service = new ChatSessionWorkspaceFolderService(gitService, logService, metadataStore, extensionContext);
 	});
 
 	afterEach(() => {
@@ -561,24 +545,6 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				expect(gitService.getRepository).toHaveBeenCalledTimes(1);
 			});
 
-			it('should invalidate cache when HEAD commit hash changes', async () => {
-				const repo = makeRepoContext();
-				gitService.getRepository = vi.fn().mockResolvedValue(repo);
-				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
-
-				const folderUri = vscode.Uri.file('/repo');
-
-				const first = await service.getWorkspaceChanges(folderUri);
-				expect(first).toBeDefined();
-
-				// Simulate a commit by changing the HEAD hash
-				headCommitHash.set('def456', undefined);
-
-				await service.getWorkspaceChanges(folderUri);
-				// Cache was cleared, so getRepository is called again
-				expect(gitService.getRepository).toHaveBeenCalledTimes(2);
-			});
-
 			it('should invalidate cache when clearWorkspaceChanges is called', async () => {
 				const repo = makeRepoContext();
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
@@ -622,7 +588,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				expect(result).toEqual([]);
 			});
 
-			it('should not re-subscribe when already subscribed for a folder', async () => {
+			it('should not re-fetch when cache is valid for a folder', async () => {
 				const repo = makeRepoContext();
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
 				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
@@ -634,9 +600,6 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				service.clearWorkspaceChanges(folderUri);
 				await service.getWorkspaceChanges(folderUri);
 
-				// Changing commit hash should still invalidate (subscription still active)
-				headCommitHash.set('new-hash', undefined);
-
 				service.clearWorkspaceChanges(folderUri);
 				await service.getWorkspaceChanges(folderUri);
 
@@ -646,7 +609,6 @@ describe('ChatSessionWorkspaceFolderService', () => {
 
 			it('should track changes per workspace folder independently', async () => {
 				const repo1 = makeRepoContext();
-				const headCommitHash1 = headCommitHash;
 				const repo2 = makeRepoContext();
 
 				const folder1 = vscode.Uri.file('/repo1');
@@ -664,8 +626,8 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				await service.getWorkspaceChanges(folder1);
 				await service.getWorkspaceChanges(folder2);
 
-				// Invalidate only folder1's cache via commit
-				headCommitHash1.set('new-hash-1', undefined);
+				// Invalidate only folder1's cache
+				service.clearWorkspaceChanges(folder1);
 
 				// folder2 should still use cache
 				await service.getWorkspaceChanges(folder2);
@@ -678,92 +640,6 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				const folder2Calls = calls.filter((c: URI[]) => c[0].fsPath === folder2.fsPath).length;
 				expect(folder1Calls).toBe(2);
 				expect(folder2Calls).toBe(1);
-			});
-			it('should invalidate cache when a file is changed in the workspace', async () => {
-				const onDidChange = new Emitter<vscode.Uri>();
-				vi.spyOn(fileSystemService, 'createFileSystemWatcher').mockReturnValue({
-					onDidCreate: Event.None as vscode.Event<vscode.Uri>,
-					onDidChange: onDidChange.event as vscode.Event<vscode.Uri>,
-					onDidDelete: Event.None as vscode.Event<vscode.Uri>,
-					dispose: vi.fn(),
-					ignoreChangeEvents: false,
-					ignoreCreateEvents: false,
-					ignoreDeleteEvents: false,
-				});
-				service = new ChatSessionWorkspaceFolderService(gitService, logService, metadataStore, extensionContext, fileSystemService, agentSessionsWorkspace);
-
-				const repo = makeRepoContext();
-				gitService.getRepository = vi.fn().mockResolvedValue(repo);
-				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
-
-				const folderUri = vscode.Uri.file('/repo');
-				await service.getWorkspaceChanges(folderUri);
-
-				// Simulate a file change
-				onDidChange.fire(vscode.Uri.file('/repo/file.ts'));
-
-				await service.getWorkspaceChanges(folderUri);
-				expect(gitService.getRepository).toHaveBeenCalledTimes(2);
-
-				onDidChange.dispose();
-			});
-
-			it('should invalidate cache when a file is created in the workspace', async () => {
-				const onDidCreate = new Emitter<vscode.Uri>();
-				vi.spyOn(fileSystemService, 'createFileSystemWatcher').mockReturnValue({
-					onDidCreate: onDidCreate.event as vscode.Event<vscode.Uri>,
-					onDidChange: Event.None as vscode.Event<vscode.Uri>,
-					onDidDelete: Event.None as vscode.Event<vscode.Uri>,
-					dispose: vi.fn(),
-					ignoreChangeEvents: false,
-					ignoreCreateEvents: false,
-					ignoreDeleteEvents: false,
-				});
-				service = new ChatSessionWorkspaceFolderService(gitService, logService, metadataStore, extensionContext, fileSystemService, agentSessionsWorkspace);
-
-				const repo = makeRepoContext();
-				gitService.getRepository = vi.fn().mockResolvedValue(repo);
-				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
-
-				const folderUri = vscode.Uri.file('/repo');
-				await service.getWorkspaceChanges(folderUri);
-
-				// Simulate a file creation
-				onDidCreate.fire(vscode.Uri.file('/repo/newfile.ts'));
-
-				await service.getWorkspaceChanges(folderUri);
-				expect(gitService.getRepository).toHaveBeenCalledTimes(2);
-
-				onDidCreate.dispose();
-			});
-
-			it('should invalidate cache when a file is deleted in the workspace', async () => {
-				const onDidDelete = new Emitter<vscode.Uri>();
-				vi.spyOn(fileSystemService, 'createFileSystemWatcher').mockReturnValue({
-					onDidCreate: Event.None as vscode.Event<vscode.Uri>,
-					onDidChange: Event.None as vscode.Event<vscode.Uri>,
-					onDidDelete: onDidDelete.event as vscode.Event<vscode.Uri>,
-					dispose: vi.fn(),
-					ignoreChangeEvents: false,
-					ignoreCreateEvents: false,
-					ignoreDeleteEvents: false,
-				});
-				service = new ChatSessionWorkspaceFolderService(gitService, logService, metadataStore, extensionContext, fileSystemService, agentSessionsWorkspace);
-
-				const repo = makeRepoContext();
-				gitService.getRepository = vi.fn().mockResolvedValue(repo);
-				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
-
-				const folderUri = vscode.Uri.file('/repo');
-				await service.getWorkspaceChanges(folderUri);
-
-				// Simulate a file deletion
-				onDidDelete.fire(vscode.Uri.file('/repo/deleted.ts'));
-
-				await service.getWorkspaceChanges(folderUri);
-				expect(gitService.getRepository).toHaveBeenCalledTimes(2);
-
-				onDidDelete.dispose();
 			});
 		});
 	});

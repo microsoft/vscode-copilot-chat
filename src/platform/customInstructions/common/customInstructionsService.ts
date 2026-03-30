@@ -79,7 +79,6 @@ export interface ICustomInstructionsService {
 	refreshExtensionPromptFiles(): Promise<void>;
 	/** Gets skill info for extension-contributed skill files */
 	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI; extensionId?: string } | undefined;
-	getExtensionPromptFileInfo(uri: URI): IExtensionPromptFile | undefined;
 }
 
 export interface IInstructionIndexFile {
@@ -417,10 +416,6 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 			}
 		}
 		return undefined;
-	}
-
-	public getExtensionPromptFileInfo(uri: URI): IExtensionPromptFile | undefined {
-		return this._extensionPromptFilesCache?.find(file => extUriBiasedIgnorePathCase.isEqual(file.uri, uri));
 	}
 
 	public parseInstructionIndexFile(content: string): InstructionIndexFile {

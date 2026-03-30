@@ -15,6 +15,9 @@ import { GithubRepoId, IGitService } from '../../../platform/git/common/gitServi
 import { derivePullRequestState, PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
 import { AuthOptions, CCAEnabledResult, IGithubRepositoryService, IOctoKitService, JobInfo, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { emitCloudSessionInvokeEvent } from '../../../platform/otel/common/genAiEvents';
+import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { DeferredPromise, retry, RunOnceScheduler } from '../../../util/vs/base/common/async';
@@ -307,6 +310,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		@IChatDelegationSummaryService private readonly _chatDelegationSummaryService: IChatDelegationSummaryService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@IDomainService private readonly _domainService: IDomainService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		super();
 		this.registerCommands();
@@ -1962,6 +1966,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			partnerAgent: partnerAgent?.name ?? 'unknown',
 			model: modelId ?? 'unknown'
 		});
+		GenAiMetrics.incrementCloudSessionCount(this._otelService, partnerAgent?.name ?? 'unknown');
+		emitCloudSessionInvokeEvent(this._otelService, partnerAgent?.name ?? 'unknown', modelId ?? 'unknown', request.id);
 
 		// Follow up
 		if (context.chatSessionContext && !context.chatSessionContext.isUntitled && request.sessionResource.scheme === CopilotCloudSessionsProvider.TYPE) {
@@ -2480,6 +2486,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					}
 				*/
 				this.telemetry.sendMSFTTelemetryEvent('copilotcloud.chat.remoteAgentJobPullRequestReady');
+				GenAiMetrics.incrementCloudPrReadyCount(this._otelService);
 				this.logService.trace(`Job ${jobId} now has pull request #${jobInfo.pull_request.number}`);
 				this.refresh();
 				return jobInfo;
@@ -2559,7 +2566,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			problem_statement: problemStatement,
 			event_type: 'visual_studio_code_remote_agent_tool_invoked',
 			...(customAgentName && customAgentName !== DEFAULT_CUSTOM_AGENT_ID && { custom_agent: customAgentName }),
-			...(modelName && modelName !== DEFAULT_MODEL_ID && { model_name: modelName }),
+			...(modelName && modelName !== DEFAULT_MODEL_ID && { model: modelName }),
 			...(resolvePartnerAgentName(partnerAgentName)),
 			pull_request: {
 				title,

@@ -39,7 +39,7 @@ import { isGitHubRemoteRepository } from '../../../remoteRepositories/common/uti
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../workspace/common/workspaceService';
-import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId } from '../../common/workspaceChunkSearch';
+import { StrategySearchResult, StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions } from '../../common/workspaceChunkSearch';
 import { EmbeddingsChunkSearch } from '../embeddingsChunkSearch';
 
 import { WorkspaceChunkEmbeddingsIndex } from '../workspaceChunkEmbeddingsIndex';
@@ -87,9 +87,7 @@ interface AvailableFailureMetadata {
  * ChunkSearch strategy that first calls the Github code search API to get a context window of files that are similar to the query.
  * Then it uses the embeddings index to find the most similar chunks in the context window.
  */
-export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunkSearchStrategy {
-
-	readonly id = WorkspaceChunkSearchStrategyId.CodeSearch;
+export class CodeSearchChunkSearch extends Disposable {
 
 	/**
 	 * Maximum number of files that have changed from what code search has indexed.
@@ -157,7 +155,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		this._repoTracker = this._register(instantiationService.createInstance(CodeSearchRepoTracker));
 		this._externalIngestIndex = new Lazy(() => {
 			const client = instantiationService.createInstance(ExternalIngestClient);
-			return this._register(instantiationService.createInstance(ExternalIngestIndex, client));
+			return this._register(instantiationService.createInstance(ExternalIngestIndex, client, this.getExternalIngestRoots()));
 		});
 
 		this._register(this._repoTracker.onDidAddOrUpdateRepo(info => {
@@ -245,10 +243,6 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 					// Update external ingest index with the code search repo roots (if external ingest is enabled)
 					if (this.isExternalIngestEnabled()) {
 						this.updateExternalIngestRoots();
-					}
-
-					// Initialize external ingest index if enabled
-					if (this.isExternalIngestEnabled()) {
 						this._register(this._externalIngestIndex.value.onDidChangeState(() => {
 							this._onDidChangeIndexState.fire();
 						}));
@@ -264,15 +258,14 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		await this._initializePromise;
 	}
 
-	/**
-	 * Updates the external ingest index with the current code search repo roots.
-	 * Files under these roots will be excluded from external ingest indexing.
-	 */
-	private updateExternalIngestRoots(): void {
-		const readyRepos = Array.from(this._codeSearchRepos.values())
+	private getExternalIngestRoots(): URI[] {
+		return Array.from(this._codeSearchRepos.values())
 			.filter(entry => entry.repo.status === CodeSearchRepoStatus.Ready)
 			.map(entry => entry.repo.repoInfo.rootUri);
-		this._externalIngestIndex.rawValue?.updateCodeSearchRoots(readyRepos);
+	}
+
+	private updateExternalIngestRoots(): void {
+		this._externalIngestIndex.rawValue?.updateCodeSearchRoots(this.getExternalIngestRoots());
 	}
 
 	private isInitializing(): boolean {
@@ -680,7 +673,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		if (diffArray.length <= embeddingsMaxFiles) {
 			const batchInfo = new ComputeBatchInfo();
 			const result = await this._embeddingsChunkSearch.searchSubsetOfFiles(sizing, query, diffArray, subSearchOptions, { info: innerTelemetryInfo, batchInfo }, token);
-			return { ...result, strategyId: this._embeddingsChunkSearch.id, embeddingsComputeInfo: batchInfo };
+			return { ...result, strategyId: 'localEmbeddings', embeddingsComputeInfo: batchInfo };
 		} else {
 			// No way to search out-of-sync files; caller will use code search results alone and warn the user
 			this._logService.debug(`CodeSearchChunkSearch.searchLocalDiff: ${diffArray.length} out-of-sync files exceeds threshold (${embeddingsMaxFiles}), skipping local diff search`);

@@ -8,18 +8,19 @@ import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { getTextPart, roleToString } from '../../../platform/chat/common/globalStringUtils';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { isAutoModel } from '../../../platform/endpoint/node/autoChatEndpoint';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData as PlatformTelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { getCachedSha256Hash } from '../../../util/common/crypto';
 import { isNotebookCellOrNotebookChatInput } from '../../../util/common/notebooks';
+import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { isBYOKModel } from '../../byok/node/openAIEndpoint';
-import { EXTENSION_ID, Intent, agentsToCommands } from '../../common/constants';
+import { Intent, agentsToCommands } from '../../common/constants';
 import { DiagnosticsTelemetryData, findDiagnosticsTelemetry } from '../../inlineChat/node/diagnosticsTelemetry';
 import { InteractionOutcome } from '../../inlineChat/node/promptCraftingTypes';
 import { AgentIntent } from '../../intents/node/agentIntent';
@@ -27,6 +28,7 @@ import { EditCodeIntent } from '../../intents/node/editCodeIntent';
 import { DocumentToAstSelectionData } from '../../prompts/node/inline/inlineChatEditCodePrompt';
 import { getCustomInstructionTelemetry } from '../../prompts/node/panel/customInstructions';
 import { PATCH_PREFIX } from '../../tools/node/applyPatch/parseApplyPatch';
+import { ChatVariablesCollection, parseSlashCommand } from '../common/chatVariablesCollection';
 import { Conversation } from '../common/conversation';
 import { IToolCall, IToolCallRound } from '../common/intents';
 import { IDocumentContext } from './documentContext';
@@ -212,36 +214,25 @@ const builtinSlashCommands = new Set(
 	Object.values(agentsToCommands).flatMap(commands => commands ? Object.keys(commands) : [])
 );
 
-function getSlashCommandForTelemetry(request: vscode.ChatRequest, customInstructionsService: ICustomInstructionsService): string {
-	const command = request.command;
-	if (!command) {
+function getSlashCommandForTelemetry(request: vscode.ChatRequest, extensionUri: URI): string {
+	// Built-in slash commands (explain, fix, tests, etc.) are safe to send as plain text
+	if (request.command && builtinSlashCommands.has(request.command)) {
+		return request.command;
+	}
+
+	// Parse the query for /command and match against prompt file references
+	const match = parseSlashCommand(request.prompt, new ChatVariablesCollection(request.references));
+	if (!match) {
 		return '';
 	}
 
-	// Built-in slash commands (explain, fix, tests, etc.) are safe to send as plain text
-	if (builtinSlashCommands.has(command)) {
-		return command;
-	}
-
-	// Built-in skills (extension-provided) are safe to send as plain text
-	for (const ref of request.references) {
-		if (!URI.isUri(ref.value)) {
-			continue;
-		}
-
-		const extensionSkillInfo = customInstructionsService.getExtensionSkillInfo(ref.value);
-		if (extensionSkillInfo?.extensionId === EXTENSION_ID && extensionSkillInfo.skillName === command) {
-			return command;
-		}
-
-		const extensionPromptFileInfo = customInstructionsService.getExtensionPromptFileInfo(ref.value);
-		if (extensionPromptFileInfo?.extensionId === EXTENSION_ID && extensionPromptFileInfo.uri.path.toLowerCase().endsWith(`/${command.toLowerCase()}.prompt.md`)) {
-			return command;
-		}
+	// Extension-provided prompt files are safe to send as plain text
+	if (URI.isUri(match.variable.value) && extUriBiasedIgnorePathCase.isEqualOrParent(match.variable.value, extensionUri)) {
+		return match.command;
 	}
 
 	// User-defined prompt file slash commands may contain PII — hash them
-	return getCachedSha256Hash(command);
+	return getCachedSha256Hash(match.command);
 }
 
 export class ChatTelemetryBuilder {
@@ -608,7 +599,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		repoInfoTelemetry: RepoInfoTelemetry,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@ICustomInstructionsService private readonly _customInstructionsService: ICustomInstructionsService,
+		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
 	) {
 		super(ChatLocation.Panel,
 			sessionId,
@@ -746,7 +737,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			mode: this._getModeNameForTelemetry(),
 			parentRequestId: this._request.parentRequestId,
 			vscodeRequestId: this._request.id,
-			slashCommand: getSlashCommandForTelemetry(this._request, this._customInstructionsService)
+			slashCommand: getSlashCommandForTelemetry(this._request, URI.from(this._extensionContext.extensionUri))
 		} satisfies RequestPanelTelemetryProperties, {
 			turn: this._conversation.turns.length,
 			round: roundIndex,

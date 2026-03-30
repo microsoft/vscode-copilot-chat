@@ -13,6 +13,9 @@ import { IFileSystemService } from '../../../../platform/filesystem/common/fileS
 import { inferAlternativeNotebookContentFormat } from '../../../../platform/notebook/common/alternativeContent';
 import { IAlternativeNotebookContentEditGenerator, NotebookEditGenrationSource } from '../../../../platform/notebook/common/alternativeContentEditGenerator';
 import { INotebookService } from '../../../../platform/notebook/common/notebookService';
+import { emitEditSurvivalEvent } from '../../../../platform/otel/common/genAiEvents';
+import { GenAiMetrics } from '../../../../platform/otel/common/genAiMetrics';
+import { IOTelService } from '../../../../platform/otel/common/otelService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { findNotebook } from '../../../../util/common/notebooks';
@@ -101,6 +104,7 @@ class DocumentCodeMapper extends Disposable implements ICodeMapperService {
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IEditSurvivalTrackerService private readonly _editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) {
 		super();
 		this.codeMapper = this.instantiationService.createInstance(CodeMapper);
@@ -138,7 +142,7 @@ class DocumentCodeMapper extends Disposable implements ICodeMapperService {
 		const result = await mapCode(request, responseStream, documentContext, this.codeMapper, this._telemetryService, telemetryInfo, token);
 		const telemetry = result?.telemetry;
 		if (telemetry) {
-			editSurvivalTracker?.startReporter(res => reportEditSurvivalEvent(res, telemetry));
+			editSurvivalTracker?.startReporter(res => reportEditSurvivalEvent(res, telemetry, this._otelService));
 		}
 		return result;
 	}
@@ -291,7 +295,7 @@ function spyResponseStream(responseStream: vscode.MappedEditsResponseStream, cal
 	};
 }
 
-function reportEditSurvivalEvent(res: EditSurvivalResult, { requestId, speculationRequestId, requestSource, mapper, chatRequestModel }: CodeMapperOutcomeTelemetry) {
+function reportEditSurvivalEvent(res: EditSurvivalResult, { requestId, speculationRequestId, requestSource, mapper, chatRequestModel }: CodeMapperOutcomeTelemetry, otelService: IOTelService) {
 
 	/* __GDPR__
 		"codeMapper.trackEditSurvival" : {
@@ -341,4 +345,8 @@ function reportEditSurvivalEvent(res: EditSurvivalResult, { requestId, speculati
 		survivalRateFourGram: res.fourGram,
 		survivalRateNoRevert: res.noRevert,
 	});
+
+	emitEditSurvivalEvent(otelService, 'code_mapper', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, requestId ?? '');
+	GenAiMetrics.recordEditSurvivalFourGram(otelService, 'code_mapper', res.fourGram, res.timeDelayMs);
+	GenAiMetrics.recordEditSurvivalNoRevert(otelService, 'code_mapper', res.noRevert, res.timeDelayMs);
 }

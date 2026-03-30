@@ -16,6 +16,8 @@ import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } fro
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { ModelAliasRegistry } from '../../../platform/endpoint/common/modelAliasRegistry';
+import { encodePhaseData } from '../../../platform/endpoint/common/phaseDataContainer';
+import { encodeResponseOutputMessageId } from '../../../platform/endpoint/common/responseOutputMessageIdContainer';
 import { encodeStatefulMarker } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { AutoChatEndpoint } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
@@ -712,6 +714,20 @@ export class CopilotLanguageModelWrapper extends Disposable {
 			if (delta.statefulMarker) {
 				progress.report(
 					new vscode.LanguageModelDataPart(encodeStatefulMarker(endpoint.model, delta.statefulMarker), CustomDataPartMimeTypes.StatefulMarker)
+				);
+			}
+
+			if (delta.phase) {
+				progress.report(
+					new vscode.LanguageModelDataPart(encodePhaseData({
+						phase: delta.phase,
+					}), CustomDataPartMimeTypes.PhaseData)
+				);
+			}
+
+			if (delta.responseOutputMessageId) {
+				progress.report(
+					new vscode.LanguageModelDataPart(encodeResponseOutputMessageId(delta.responseOutputMessageId), CustomDataPartMimeTypes.ResponseOutputMessageId)
 				);
 			}
 

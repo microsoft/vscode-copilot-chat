@@ -19,7 +19,6 @@ import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart2, ChatResponseWarningPart } from '../../../vscodeTypes';
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { IAuthenticationChatUpgradeService } from '../../authentication/common/authenticationUpgrade';
 import { FileChunk, FileChunkAndScore } from '../../chunking/common/chunk';
 import { MAX_CHUNK_SIZE_TOKENS } from '../../chunking/node/naiveChunker';
 import { distance, Embedding, EmbeddingDistance, Embeddings, EmbeddingType, IEmbeddingsComputer } from '../../embeddings/common/embeddingsComputer';
@@ -29,14 +28,13 @@ import { logExecTime, LogExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
 import { IChatEndpoint } from '../../networking/common/networking';
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
-import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../workspace/common/workspaceService';
 import { IGithubAvailableEmbeddingTypesService } from '../common/githubAvailableEmbeddingTypes';
 import { IRerankerService } from '../common/rerankerService';
-import { StrategySearchResult, StrategySearchSizing, WorkspaceChunkQuery, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId, WorkspaceSearchAlert } from '../common/workspaceChunkSearch';
+import { StrategySearchResult, StrategySearchSizing, WorkspaceChunkQuery, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceSearchAlert } from '../common/workspaceChunkSearch';
 import { CodeSearchChunkSearch, CodeSearchRemoteIndexState } from './codeSearch/codeSearchChunkSearch';
-import { BuildIndexTriggerReason, CodeSearchRepoStatus, TriggerIndexingError } from './codeSearch/codeSearchRepo';
+import { BuildIndexTriggerReason, TriggerIndexingError } from './codeSearch/codeSearchRepo';
 import { IWorkspaceFileIndex } from './workspaceFileIndex';
 
 const maxEmbeddingSpread = 0.65;
@@ -49,7 +47,6 @@ interface ScoredFileChunk<T extends FileChunk = FileChunk> {
 export interface WorkspaceChunkSearchResult {
 	readonly chunks: readonly FileChunkAndScore[];
 	readonly alerts?: readonly WorkspaceSearchAlert[];
-	readonly strategy?: string;
 }
 
 export interface WorkspaceChunkSearchSizing {
@@ -88,17 +85,12 @@ export interface IWorkspaceChunkSearchService extends IDisposable {
 }
 
 
-interface StrategySearchOk {
-	readonly strategy: WorkspaceChunkSearchStrategyId;
-	readonly result: StrategySearchResult;
-}
-
 interface StrategySearchErr {
 	readonly errorDiagMessage: string;
 	alerts?: readonly WorkspaceSearchAlert[];
 }
 
-type StrategySearchOutcome = Result<StrategySearchOk, StrategySearchErr>;
+type StrategySearchOutcome = Result<StrategySearchResult, StrategySearchErr>;
 
 export class WorkspaceChunkSearchService extends Disposable implements IWorkspaceChunkSearchService {
 	declare readonly _serviceBrand: undefined;
@@ -213,9 +205,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 	constructor(
 		private readonly _embeddingType: EmbeddingType,
 		@IInstantiationService instantiationService: IInstantiationService,
-		@IAuthenticationChatUpgradeService private readonly _authUpgradeService: IAuthenticationChatUpgradeService,
 		@IEmbeddingsComputer private readonly _embeddingsComputer: IEmbeddingsComputer,
-		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@ILogService private readonly _logService: ILogService,
 		@IRerankerService private readonly _rerankerService: IRerankerService,
@@ -236,14 +226,6 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 				250
 			)(() => this._onDidChangeIndexState.fire()));
 
-		this._register(this._authUpgradeService.onDidGrantAuthUpgrade(() => {
-			if (this._experimentationService.getTreatmentVariable<boolean>('copilotchat.workspaceChunkSearch.shouldRemoteIndexOnAuthUpgrade') ?? true) {
-				void this.triggerRemoteIndexing('auto', () => { }, new TelemetryCorrelationId('onDidGrantAuthUpgrade'), CancellationToken.None).catch(e => {
-					// noop
-				});
-			}
-		}));
-
 		/* __GDPR__
 			"workspaceChunkSearch.created" : {
 				"owner": "mjbvz",
@@ -263,12 +245,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 	}
 
 	async isAvailable(): Promise<boolean> {
-		if (this._experimentationService.getTreatmentVariable<boolean>('copilotchat.workspaceChunkSearch.markAllSearchesSlow')) {
-			return false;
-		}
-
-		const indexState = await this.getIndexState();
-		return (indexState.remoteIndexState.status === 'loaded' && indexState.remoteIndexState.repos.length > 0 && indexState.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.Ready));
+		return this._codeSearchChunkSearch.isAvailable(new TelemetryCorrelationId('WorkspaceChunkSearchServiceImpl.isAvailable'), false, CancellationToken.None);
 	}
 
 	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
@@ -325,7 +302,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 				}
 			*/
 			this._telemetryService.sendMSFTTelemetryEvent('workspaceChunkSearchStrategy', {
-				strategy: searchResult.isOk() ? searchResult.val.strategy : 'none',
+				strategy: searchResult.isOk() ? 'codesearch' : 'none', // For backwards compatibility with existing telemetry only
 				errorDiagMessage: searchResult.isError() ? searchResult.err.errorDiagMessage : undefined,
 				embeddingType: this._embeddingType.id,
 				workspaceSearchSource: telemetryInfo.callTracker.toString(),
@@ -348,9 +325,9 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 				};
 			}
 
-			this._logService.trace(`WorkspaceChunkSearch.searchFileChunks: found ${searchResult.val.result.chunks.length} chunks using '${searchResult.val.strategy}'`);
+			this._logService.trace(`WorkspaceChunkSearch.searchFileChunks: found ${searchResult.val.chunks.length} chunks`);
 
-			const filteredChunks = await raceCancellationError(this.filterIgnoredChunks(searchResult.val.result.chunks), token);
+			const filteredChunks = await raceCancellationError(this.filterIgnoredChunks(searchResult.val.chunks), token);
 			if (this._simulationTestContext.isInSimulationTests) {
 				if (!filteredChunks.length) {
 					throw new Error('No chunks returned');
@@ -360,7 +337,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 			const filteredResult = {
 				...searchResult.val,
 				result: {
-					alerts: searchResult.val.result.alerts,
+					alerts: searchResult.val.alerts,
 					chunks: filteredChunks,
 				}
 			};
@@ -372,7 +349,6 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 					return {
 						chunks: reranked.slice(0, this.getMaxChunks(sizing)),
 						alerts: filteredResult.result.alerts,
-						strategy: filteredResult.strategy,
 					};
 				} catch (e) {
 					this._logService.error(e, 'Reranker service failed; falling back to local rerank');
@@ -433,17 +409,14 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 
 			const result = await raceCancellationError(this._codeSearchChunkSearch.searchWorkspace(sizing, query, options, telemetryInfo, token), token);
 			if (result) {
-				return Result.ok<StrategySearchOk>({
-					strategy: this._codeSearchChunkSearch.id,
-					result: result,
-				});
+				return Result.ok<StrategySearchResult>(result);
 			}
 		} catch (e) {
 			if (isCancellationError(e)) {
 				throw e;
 			}
 
-			this._logService.error(e, `Error during ${this._codeSearchChunkSearch.id} search`);
+			this._logService.error(e, `Error during code search chunk search`);
 		}
 
 		return Result.error<StrategySearchErr>({
@@ -477,13 +450,12 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 	}
 
 	@LogExecTime(self => self._logService, 'WorkspaceChunkSearch::rerankResultIfNeeded')
-	private async rerankResultIfNeeded(query: WorkspaceChunkQueryWithEmbeddings, result: StrategySearchOk, maxResults: number, telemetryInfo: TelemetryCorrelationId, progress: vscode.Progress<vscode.ChatResponsePart> | undefined, token: CancellationToken): Promise<WorkspaceChunkSearchResult> {
-		const chunks = result.result.chunks;
+	private async rerankResultIfNeeded(query: WorkspaceChunkQueryWithEmbeddings, result: StrategySearchResult, maxResults: number, telemetryInfo: TelemetryCorrelationId, progress: vscode.Progress<vscode.ChatResponsePart> | undefined, token: CancellationToken): Promise<WorkspaceChunkSearchResult> {
+		const chunks = result.chunks;
 		const orderedChunks = await this.rerankChunks(query, chunks, maxResults, telemetryInfo, progress, token);
 		return {
 			chunks: orderedChunks,
-			alerts: result.result.alerts,
-			strategy: result.strategy,
+			alerts: result.alerts,
 		};
 	}
 

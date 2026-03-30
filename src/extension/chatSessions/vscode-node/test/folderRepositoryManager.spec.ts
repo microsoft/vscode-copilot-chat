@@ -145,6 +145,9 @@ class FakeGitService extends mock<IGitService>() {
 
 	setTestActiveRepository(repo: RepoContext | undefined): void {
 		this._activeRepo = repo;
+		if (repo) {
+			this._repositories.set(repo.rootUri.fsPath, repo);
+		}
 	}
 }
 

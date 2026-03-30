@@ -359,6 +359,12 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		return await repository?.migrateChanges(sourceRepositoryUri.fsPath, options);
 	}
 
+	async getBranch(uri: URI, name: string): Promise<Branch | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.getBranch(name);
+	}
+
 	async getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]> {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);
