@@ -729,7 +729,16 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		contextRatio: number,
 	): void {
 		this.logService.debug(`[Agent] context at ${(contextRatio * 100).toFixed(0)}% — starting background compaction`);
-		const snapshotProps: AgentPromptProps = { ...props, promptContext: { ...props.promptContext } };
+		// Deep-copy toolCallRounds and toolCallResults so the background render
+		// sees a frozen snapshot and doesn't drift as the main loop adds rounds.
+		const snapshotProps: AgentPromptProps = {
+			...props,
+			promptContext: {
+				...props.promptContext,
+				toolCallRounds: props.promptContext.toolCallRounds ? [...props.promptContext.toolCallRounds] : undefined,
+				toolCallResults: props.promptContext.toolCallResults ? { ...props.promptContext.toolCallResults } : undefined,
+			}
+		};
 		const bgRenderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, {
 			...snapshotProps,
 			triggerSummarize: true,
@@ -786,12 +795,17 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			currentRound.summary = bgResult.summary;
 		} else {
 			// Fall back to history turns
+			let found = false;
 			for (const turn of [...promptContext.history].reverse()) {
 				const round = turn.rounds.find(r => r.id === bgResult.toolCallRoundId);
 				if (round) {
 					round.summary = bgResult.summary;
+					found = true;
 					break;
 				}
+			}
+			if (!found) {
+				this.logService.warn(`[Agent] background compaction round ${bgResult.toolCallRoundId} not found in toolCallRounds or history — summary dropped`);
 			}
 		}
 		// Invalidate the auto mode router cache so the next getChatEndpoint()
@@ -813,6 +827,9 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			metadata['summaries'] = existingSummaries;
 			(chatResult as { metadata: unknown }).metadata = metadata;
 		}
+		// Also store as a pending summary on the turn so normalizeSummariesOnRounds
+		// can restore it even when chatResult doesn't exist yet (mid-tool-call-loop).
+		turn?.addPendingSummary(bgResult.toolCallRoundId, bgResult.summary);
 		const usage = bgResult.promptTokens !== undefined && bgResult.outputTokens !== undefined
 			? { prompt_tokens: bgResult.promptTokens, completion_tokens: bgResult.outputTokens, total_tokens: bgResult.promptTokens + bgResult.outputTokens, ...(bgResult.promptCacheTokens !== undefined ? { prompt_tokens_details: { cached_tokens: bgResult.promptCacheTokens } } : {}) }
 			: undefined;
