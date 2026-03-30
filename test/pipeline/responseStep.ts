@@ -6,20 +6,10 @@
 import { ResponseFormat } from '../../src/platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { assertNever } from '../../src/util/vs/base/common/assert';
 import { splitLines } from '../../src/util/vs/base/common/strings';
+import { StringText } from '../../src/util/vs/editor/common/core/text/abstractText';
 
 export interface IGeneratedResponse {
 	readonly assistant: string;
-}
-
-export function offsetToLineNumber(content: string, offset: number): number {
-	let line = 0;
-	const clampedOffset = Math.min(offset, content.length);
-	for (let i = 0; i < clampedOffset; i++) {
-		if (content[i] === '\n') {
-			line++;
-		}
-	}
-	return line;
 }
 
 /**
@@ -161,13 +151,14 @@ export function formatAsEditWindowOnly(
 	editWindowStartLine: number,
 	editWindowLineCount: number,
 ): string {
+	const transformer = new StringText(docContent).getTransformer();
 	let windowStart = editWindowStartLine;
 	let windowEnd = editWindowStartLine + editWindowLineCount;
 
 	// Ensure the window covers all oracle edits
 	for (const [start, endEx] of oracleEdits) {
-		const editStartLine = offsetToLineNumber(docContent, start);
-		const editEndLine = offsetToLineNumber(docContent, endEx);
+		const editStartLine = transformer.getPosition(start).lineNumber - 1;
+		const editEndLine = transformer.getPosition(endEx).lineNumber - 1;
 		if (editStartLine < windowStart) {
 			windowStart = editStartLine;
 		}
@@ -182,8 +173,8 @@ export function formatAsEditWindowOnly(
 	// Calculate net line change from edits overlapping the window
 	let netLineChange = 0;
 	for (const [start, endEx, text] of oracleEdits) {
-		const editStartLine = offsetToLineNumber(docContent, start);
-		const editEndLine = offsetToLineNumber(docContent, endEx);
+		const editStartLine = transformer.getPosition(start).lineNumber - 1;
+		const editEndLine = transformer.getPosition(endEx).lineNumber - 1;
 
 		if (editStartLine < windowEnd && editEndLine >= windowStart) {
 			const oldLineCount = splitLines(docContent.substring(start, endEx)).length;
@@ -310,9 +301,10 @@ function generateEditWindowOnlyResponse(
 		startLine = findEditWindowStartLine(docContent, editWindow.lines);
 		lineCount = editWindow.lineCount;
 	} else {
-		const editStartLine = offsetToLineNumber(docContent, edits[0][0]);
+		const transformer = new StringText(docContent).getTransformer();
+		const editStartLine = transformer.getPosition(edits[0][0]).lineNumber - 1;
 		const lastEdit = edits[edits.length - 1];
-		const editEndLine = offsetToLineNumber(docContent, lastEdit[1]);
+		const editEndLine = transformer.getPosition(lastEdit[1]).lineNumber - 1;
 		const editSpan = editEndLine - editStartLine + 1;
 		const padding = Math.max(10, Math.floor(editSpan * 0.5));
 		const docLines = splitLines(docContent);
