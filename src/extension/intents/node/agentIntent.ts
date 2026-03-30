@@ -404,11 +404,13 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		const summarizationEnabled = this.configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) && this.prompt === AgentPrompt && !responsesCompactionContextManagementEnabled;
 		const backgroundCompactionEnabled = summarizationEnabled && this.configurationService.getExperimentBasedConfig(ConfigKey.BackgroundCompaction, this.expService);
 
-		// Safety margin (10%) to account for tokenizer discrepancies between
-		// our token counter and the model's actual tokenizer. Without this,
-		// an undercount could cause an API-level context_length_exceeded error
-		// instead of a graceful BudgetExceededError from prompt-tsx.
-		const messageBudget = Math.floor((baseBudget - toolTokens) * 0.9);
+		// When tools are present, apply a 10% safety margin on the message portion
+		// to account for tokenizer discrepancies between our tool-token counter and
+		// the model's actual tokenizer. Without this, an undercount could cause an
+		// API-level context_length_exceeded error instead of a graceful
+		// BudgetExceededError from prompt-tsx. When there are no tools the endpoint's
+		// own modelMaxPromptTokens is used unchanged.
+		const messageBudget = Math.max(1, Math.floor((baseBudget - toolTokens) * 0.9));
 		const safeBudget = useTruncation ? Number.MAX_SAFE_INTEGER : messageBudget;
 		const endpoint = toolTokens > 0 ? this.endpoint.cloneWithTokenOverride(safeBudget) : this.endpoint;
 
