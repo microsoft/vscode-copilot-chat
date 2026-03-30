@@ -333,8 +333,12 @@ export function isDirExternalAndNeedsConfirmation(accessor: ServicesAccessor, ur
 	}
 	if (buildPromptContext) {
 		const instructionIndexFile = getInstructionsIndexFile(buildPromptContext, customInstructionsService);
-		if (instructionIndexFile && instructionIndexFile.skillFolders.has(normalizedUri)) {
-			return false;
+		if (instructionIndexFile) {
+			for (const skillFolderUri of instructionIndexFile.skillFolders) {
+				if (extUriBiasedIgnorePathCase.isEqualOrParent(normalizedUri, skillFolderUri)) {
+					return false;
+				}
+			}
 		}
 	} else {
 		if (customInstructionsService.isExternalInstructionsFolder(normalizedUri)) {

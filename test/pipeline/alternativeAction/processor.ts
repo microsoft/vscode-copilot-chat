@@ -3,11 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IAlternativeAction } from '../../src/extension/inlineEdits/node/nextEditProviderTelemetry';
-import { Edits } from '../../src/platform/inlineEdits/common/dataTypes/edit';
-import { LogEntry } from '../../src/platform/workspaceRecorder/common/workspaceLog';
-import { StringEdit, StringReplacement } from '../../src/util/vs/editor/common/core/edits/stringEdit';
-import { OffsetRange } from '../../src/util/vs/editor/common/core/ranges/offsetRange';
+import { IAlternativeAction } from '../../../src/extension/inlineEdits/node/nextEditProviderTelemetry';
+import { Edits } from '../../../src/platform/inlineEdits/common/dataTypes/edit';
+import { LogEntry } from '../../../src/platform/workspaceRecorder/common/workspaceLog';
+import { StringEdit, StringReplacement } from '../../../src/util/vs/editor/common/core/edits/stringEdit';
+import { OffsetRange } from '../../../src/util/vs/editor/common/core/ranges/offsetRange';
 import { ISerializedEdit } from '../logRecordingTypes';
 import { IStringReplacement, NextUserEdit, Recording, Scoring, SuggestedEdit } from './types';
 import { binarySearch, log } from './util';
