@@ -134,7 +134,8 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 	}
 
 	allowTools[CUSTOM_TOOL_SEARCH_NAME] = isAnthropicCustomToolSearchEnabled(model, configurationService, experimentationService)
-		|| isResponsesApiToolSearchEnabled(model, configurationService, experimentationService);
+		|| (isResponsesApiToolSearchEnabled(model, configurationService, experimentationService)
+			&& configurationService.getConfig(ConfigKey.ResponsesApiToolSearchMode) === 'client');
 
 	const tools = toolsService.getEnabledTools(request, model, tool => {
 		if (typeof allowTools[tool.name] === 'boolean') {

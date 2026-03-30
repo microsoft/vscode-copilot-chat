@@ -39,10 +39,10 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	// compaction supported for all the models but works well for codex models and any future models after 5.3
 
 	// Tool search: when enabled, split tools into non-deferred (always loaded) and deferred (defer_loading: true).
-	// Uses OpenAI's client-executed tool search protocol: we add { type: 'tool_search', execution: 'client' }
-	// and mark deferred tools with defer_loading. The model emits tool_search_call which we handle via
-	// our ToolSearchTool embeddings search, then round-trip as tool_search_output in the next request.
+	// Mode 'server' uses OpenAI's hosted search (API handles lookup internally).
+	// Mode 'client' uses client-executed search (we run ToolSearchTool locally via embeddings).
 	const toolSearchEnabled = isResponsesApiToolSearchEnabled(endpoint, configService, expService);
+	const toolSearchMode = configService.getConfig(ConfigKey.ResponsesApiToolSearchMode);
 	const isAllowedConversationAgent = options.location === ChatLocation.Agent || options.location === ChatLocation.MessagesProxy;
 	const isSubagent = options.telemetryProperties?.subType?.startsWith('subagent') ?? false;
 	const shouldDeferTools = toolSearchEnabled && isAllowedConversationAgent && !isSubagent;
@@ -70,33 +70,46 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	const finalTools: Array<ResponsesFunctionTool | OpenAiToolSearchTool | ClientToolSearchTool> = [...functionTools];
 	const hasDeferredTools = functionTools.some(t => t.defer_loading);
 	if (hasDeferredTools) {
-		// Client-executed tool search: the model emits tool_search_call, our ToolSearchTool
-		// handles the embeddings search, and we return tool_search_output with full definitions.
-		finalTools.unshift({
-			type: 'tool_search',
-			execution: 'client',
-			description: 'Search for relevant tools by describing what you need. Returns tool definitions for tools matching your query.',
-			parameters: {
-				type: 'object',
-				properties: {
-					query: {
-						type: 'string',
-						description: 'Natural language description of what tool capability you are looking for.',
+		if (toolSearchMode === 'client') {
+			// Client-executed tool search: the model emits tool_search_call, our ToolSearchTool
+			// handles the embeddings search, and we return tool_search_output with full definitions.
+			finalTools.unshift({
+				type: 'tool_search',
+				execution: 'client',
+				description: 'Search for relevant tools by describing what you need. Returns tool definitions for tools matching your query.',
+				parameters: {
+					type: 'object',
+					properties: {
+						query: {
+							type: 'string',
+							description: 'Natural language description of what tool capability you are looking for.',
+						},
 					},
+					required: ['query'],
 				},
-				required: ['query'],
-			},
-		} as ClientToolSearchTool);
+			} as ClientToolSearchTool);
+		} else {
+			// Hosted (server) tool search: OpenAI searches deferred tools internally.
+			// No parameters needed — the API handles the lookup.
+			finalTools.unshift({ type: 'tool_search' });
+		}
 	}
 
 	// Build tools map for rawMessagesToResponseAPI to convert tool_search round-trips
+	// (needed for both server and client modes to handle namespace in function_call round-trips)
 	const toolsMap = shouldDeferTools && options.requestOptions?.tools
 		? new Map(options.requestOptions.tools.map(t => [t.function.name, t]))
 		: undefined;
 
+	// Build set of deferred tool names so that rawMessagesToResponseAPI can
+	// add the required `namespace` field when round-tripping function_calls.
+	const deferredToolNames = shouldDeferTools && toolsMap && toolDeferralService
+		? new Set([...toolsMap.keys()].filter(name => !toolDeferralService.isNonDeferredTool(name)))
+		: undefined;
+
 	const body: IEndpointBody = {
 		model,
-		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker, toolsMap),
+		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker, toolsMap, deferredToolNames),
 		stream: true,
 		tools: finalTools.length > 0 ? finalTools : undefined,
 		// Only a subset of completion post options are supported, and some
@@ -182,7 +195,7 @@ interface ResponsesToolSearchOutput {
 	tools?: unknown[];
 }
 
-function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMessage[], ignoreStatefulMarker: boolean, toolsMap?: Map<string, OpenAiFunctionTool>): { input: OpenAI.Responses.ResponseInputItem[]; previous_response_id?: string } {
+function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMessage[], ignoreStatefulMarker: boolean, toolsMap?: Map<string, OpenAiFunctionTool>, deferredToolNames?: Set<string>): { input: OpenAI.Responses.ResponseInputItem[]; previous_response_id?: string } {
 	const latestCompactionMessageIndex = getLatestCompactionMessageIndex(messages);
 	if (latestCompactionMessageIndex !== undefined) {
 		messages = messages.slice(latestCompactionMessageIndex);
@@ -235,7 +248,18 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 								// eslint-disable-next-line @typescript-eslint/no-explicit-any
 							} as any);
 						} else {
-							input.push({ type: 'function_call', name: toolCall.function.name, arguments: toolCall.function.arguments, call_id: toolCall.id });
+							// For deferred tools loaded via tool_search, include the namespace
+							// field which OpenAI requires for round-tripping. Standalone
+							// deferred functions use their own name as the namespace.
+							const ns = deferredToolNames?.has(toolCall.function.name) ? toolCall.function.name : undefined;
+							input.push({
+								type: 'function_call',
+								name: toolCall.function.name,
+								arguments: toolCall.function.arguments,
+								call_id: toolCall.id,
+								...(ns ? { namespace: ns } : {}),
+							// eslint-disable-next-line @typescript-eslint/no-explicit-any
+							} as any);
 						}
 					}
 				}
@@ -611,8 +635,8 @@ interface CapiResponsesTextDeltaEvent extends Omit<OpenAI.Responses.ResponseText
 export class OpenAIResponsesProcessor {
 	private textAccumulator: string = '';
 	private hasReceivedReasoningSummary = false;
-	/** Maps output_index to { name, callId, arguments } for streaming tool call updates */
-	private readonly toolCallInfo = new Map<number, { name: string; callId: string; arguments: string }>();
+	/** Maps output_index to { name, callId, arguments, namespace } for streaming tool call updates */
+	private readonly toolCallInfo = new Map<number, { name: string; callId: string; arguments: string; namespace?: string }>();
 
 	constructor(
 		private readonly telemetryData: TelemetryData,
@@ -644,7 +668,8 @@ export class OpenAIResponsesProcessor {
 			}
 			case 'response.output_item.added':
 				if (chunk.item.type === 'function_call') {
-					this.toolCallInfo.set(chunk.output_index, { name: chunk.item.name, callId: chunk.item.call_id, arguments: '' });
+					const ns = (chunk.item as unknown as { namespace?: string }).namespace;
+					this.toolCallInfo.set(chunk.output_index, { name: chunk.item.name, callId: chunk.item.call_id, arguments: '', namespace: ns });
 					onProgress({
 						text: '',
 						beginToolCalls: [{ name: chunk.item.name, id: chunk.item.call_id }]
@@ -696,6 +721,8 @@ export class OpenAIResponsesProcessor {
 					});
 				}
 				if (chunk.item.type === 'function_call') {
+					const info = this.toolCallInfo.get(chunk.output_index);
+					const ns = (chunk.item as unknown as { namespace?: string }).namespace ?? info?.namespace;
 					this.toolCallInfo.delete(chunk.output_index);
 					onProgress({
 						text: '',
@@ -703,6 +730,7 @@ export class OpenAIResponsesProcessor {
 							id: chunk.item.call_id,
 							name: chunk.item.name,
 							arguments: chunk.item.arguments,
+							namespace: ns,
 						}],
 						phase: (chunk.item as ResponseOutputItemWithPhase).phase
 					});

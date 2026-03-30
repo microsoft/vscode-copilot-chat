@@ -22,6 +22,8 @@ export interface IToolCall {
 	name: string;
 	arguments: string;
 	id: string;
+	/** Namespace from the Responses API function_call. Must be round-tripped when present. */
+	namespace?: string;
 }
 
 export interface IToolCallRound {

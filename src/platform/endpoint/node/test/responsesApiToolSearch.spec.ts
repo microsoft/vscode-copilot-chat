@@ -87,10 +87,11 @@ describe('createResponsesRequestBody tools', () => {
 		expect(tools.every(t => !t.defer_loading)).toBe(true);
 	});
 
-	it('adds client tool_search and defer_loading when enabled', () => {
+	it('adds client tool_search and defer_loading when enabled with client mode', () => {
 		const endpoint = createMockEndpoint('gpt-5.4-preview');
 		const configService = accessor.get(IConfigurationService) as InMemoryConfigurationService;
 		configService.setConfig(ConfigKey.ResponsesApiToolSearchEnabled, true);
+		configService.setConfig(ConfigKey.ResponsesApiToolSearchMode, 'client');
 
 		const body = accessor.get(IInstantiationService).invokeFunction(
 			createResponsesRequestBody, createMockOptions(), endpoint.model, endpoint
@@ -111,6 +112,88 @@ describe('createResponsesRequestBody tools', () => {
 		// Deferred tools should have defer_loading: true
 		expect(tools.find(t => t.name === 'some_mcp_tool')?.defer_loading).toBe(true);
 		expect(tools.find(t => t.name === 'another_deferred_tool')?.defer_loading).toBe(true);
+	});
+
+	it('adds server tool_search and defer_loading when enabled with server mode', () => {
+		const endpoint = createMockEndpoint('gpt-5.4-preview');
+		const configService = accessor.get(IConfigurationService) as InMemoryConfigurationService;
+		configService.setConfig(ConfigKey.ResponsesApiToolSearchEnabled, true);
+		configService.setConfig(ConfigKey.ResponsesApiToolSearchMode, 'server');
+
+		const body = accessor.get(IInstantiationService).invokeFunction(
+			createResponsesRequestBody, createMockOptions(), endpoint.model, endpoint
+		);
+
+		const tools = body.tools as any[];
+		expect(tools).toBeDefined();
+
+		// Should have hosted (server) tool_search without execution or parameters
+		const toolSearchTool = tools.find(t => t.type === 'tool_search');
+		expect(toolSearchTool).toBeDefined();
+		expect(toolSearchTool.execution).toBeUndefined();
+		expect(toolSearchTool.parameters).toBeUndefined();
+
+		// Deferred tools should still have defer_loading: true
+		expect(tools.find(t => t.name === 'some_mcp_tool')?.defer_loading).toBe(true);
+		expect(tools.find(t => t.name === 'another_deferred_tool')?.defer_loading).toBe(true);
+	});
+
+	it('defaults to server mode when mode is not explicitly set', () => {
+		const endpoint = createMockEndpoint('gpt-5.4-preview');
+		const configService = accessor.get(IConfigurationService) as InMemoryConfigurationService;
+		configService.setConfig(ConfigKey.ResponsesApiToolSearchEnabled, true);
+		// mode defaults to 'server'
+
+		const body = accessor.get(IInstantiationService).invokeFunction(
+			createResponsesRequestBody, createMockOptions(), endpoint.model, endpoint
+		);
+
+		const tools = body.tools as any[];
+		const toolSearchTool = tools.find(t => t.type === 'tool_search');
+		expect(toolSearchTool).toBeDefined();
+		expect(toolSearchTool.execution).toBeUndefined();
+	});
+
+	it('includes namespace for deferred tool function_calls in round-trip', () => {
+		const endpoint = createMockEndpoint('gpt-5.4-preview');
+		const configService = accessor.get(IConfigurationService) as InMemoryConfigurationService;
+		configService.setConfig(ConfigKey.ResponsesApiToolSearchEnabled, true);
+		configService.setConfig(ConfigKey.ResponsesApiToolSearchMode, 'server');
+
+		// Simulate a conversation with a previous tool call for a deferred tool
+		const messages: Raw.ChatMessage[] = [
+			{ role: Raw.ChatRole.User, content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'Hello' }] },
+			{
+				role: Raw.ChatRole.Assistant,
+				content: [],
+				toolCalls: [
+					{ id: 'call_1', type: 'function', function: { name: 'some_mcp_tool', arguments: '{"input":"test"}' } },
+					{ id: 'call_2', type: 'function', function: { name: 'read_file', arguments: '{"path":"/test.txt"}' } },
+				]
+			},
+			{ role: Raw.ChatRole.Tool, content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'result1' }], toolCallId: 'call_1' },
+			{ role: Raw.ChatRole.Tool, content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'result2' }], toolCallId: 'call_2' },
+			{ role: Raw.ChatRole.User, content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'Continue' }] },
+		];
+
+		const options = createMockOptions({ messages });
+		const body = accessor.get(IInstantiationService).invokeFunction(
+			createResponsesRequestBody, options, endpoint.model, endpoint
+		);
+
+		// Find the function_call items in the input
+		const functionCalls = (body.input as any[]).filter(i => i.type === 'function_call');
+		expect(functionCalls).toHaveLength(2);
+
+		// Deferred tool (some_mcp_tool) should have namespace
+		const deferredCall = functionCalls.find(fc => fc.name === 'some_mcp_tool');
+		expect(deferredCall).toBeDefined();
+		expect(deferredCall.namespace).toBe('some_mcp_tool');
+
+		// Non-deferred tool (read_file) should NOT have namespace
+		const nonDeferredCall = functionCalls.find(fc => fc.name === 'read_file');
+		expect(nonDeferredCall).toBeDefined();
+		expect(nonDeferredCall.namespace).toBeUndefined();
 	});
 
 	it('does not defer tools for unsupported models', () => {
@@ -321,5 +404,47 @@ describe('OpenAIResponsesProcessor tool search events', () => {
 		expect(deltas[3].copilotToolCalls).toBeDefined();
 		expect(deltas[3].copilotToolCalls![0].name).toBe('read_file');
 		expect(deltas[3].copilotToolCalls![0].arguments).toBe('{"path": "/test.txt"}');
+	});
+
+	it('captures namespace from function_call items loaded via tool search', () => {
+		const processor = createProcessor();
+		const deltas = collectDeltas(processor, [
+			{
+				type: 'response.output_item.added',
+				output_index: 0,
+				item: {
+					type: 'function_call',
+					name: 'run_vscode_command',
+					namespace: 'run_vscode_command',
+					call_id: 'call_ns_1',
+					arguments: '',
+					id: 'fc_ns_001',
+					status: 'in_progress',
+				} as any,
+			},
+			{
+				type: 'response.function_call_arguments.delta',
+				output_index: 0,
+				delta: '{"commandId": "test"}',
+			},
+			{
+				type: 'response.output_item.done',
+				output_index: 0,
+				item: {
+					type: 'function_call',
+					name: 'run_vscode_command',
+					namespace: 'run_vscode_command',
+					call_id: 'call_ns_1',
+					arguments: '{"commandId": "test"}',
+					id: 'fc_ns_001',
+					status: 'completed',
+				} as any,
+			},
+		]);
+
+		// The completed copilotToolCall should include the namespace
+		const completedDelta = deltas.find(d => d.copilotToolCalls?.length);
+		expect(completedDelta).toBeDefined();
+		expect(completedDelta!.copilotToolCalls![0].namespace).toBe('run_vscode_command');
 	});
 });

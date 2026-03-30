@@ -3305,6 +3305,18 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.responsesApi.toolSearchTool.mode": {
+						"type": "string",
+						"enum": [
+							"server",
+							"client"
+						],
+						"default": "server",
+						"markdownDescription": "%github.copilot.config.responsesApi.toolSearchTool.mode%",
+						"tags": [
+							"preview"
+						]
+					},
 					"github.copilot.chat.conversationTranscriptLookup.enabled": {
 						"type": "boolean",
 						"default": false,

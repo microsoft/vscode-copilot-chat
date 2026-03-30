@@ -49,7 +49,8 @@ export const toResponseDelta = (part: ResponsePart): IResponseDelta => {
 				copilotToolCalls: [{
 					name: part.name,
 					arguments: part.arguments,
-					id: part.id
+					id: part.id,
+					namespace: part.namespace,
 				}]
 			};
 		case ResponsePartKind.ThinkingDelta:
@@ -98,7 +99,8 @@ export function* fromResponseDelta(delta: IResponseDelta): Iterable<ResponsePart
 				partId: toolCall.id,
 				name: toolCall.name,
 				arguments: toolCall.arguments,
-				id: toolCall.id
+				id: toolCall.id,
+				namespace: toolCall.namespace,
 			};
 		}
 	}
