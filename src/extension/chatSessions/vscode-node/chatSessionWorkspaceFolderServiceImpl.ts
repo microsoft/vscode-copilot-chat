@@ -187,6 +187,7 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 
 		return diffChanges;
 	}
+
 	clearWorkspaceChanges(workspaceFolderUri: vscode.Uri): void {
 		this.workspaceFolderChanges.delete(workspaceFolderUri);
 	}

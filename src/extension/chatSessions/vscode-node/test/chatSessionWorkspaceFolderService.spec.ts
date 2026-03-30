@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { promises as fs } from 'fs';
 import { tmpdir } from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -50,15 +51,29 @@ class MockGlobalState implements vscode.Memento {
  */
 class MockExtensionContext extends mock<IVSCodeExtensionContext>() {
 	public override globalState = new MockGlobalState();
-	private readonly mockStoragePath = path.join(tmpdir(), 'vscode-copilot-chat-workspace-folder-service-tests');
+	private readonly mockStoragePath: string;
 
 	override extensionPath = vscode.Uri.file('/mock/extension/path').fsPath;
-	override globalStorageUri = vscode.Uri.file(this.mockStoragePath);
-	override storagePath = this.mockStoragePath;
-	override globalStoragePath = this.mockStoragePath;
-	override logPath = path.join(this.mockStoragePath, 'logs');
-	override logUri = vscode.Uri.file(this.logPath);
+	override globalStorageUri: vscode.Uri;
+	override storagePath: string;
+	override globalStoragePath: string;
+	override logPath: string;
+	override logUri: vscode.Uri;
 	override extensionUri = vscode.Uri.file('/mock/extension');
+
+	constructor(storagePath: string) {
+		super();
+		this.mockStoragePath = storagePath;
+		this.globalStorageUri = vscode.Uri.file(storagePath);
+		this.storagePath = storagePath;
+		this.globalStoragePath = storagePath;
+		this.logPath = path.join(storagePath, 'logs');
+		this.logUri = vscode.Uri.file(this.logPath);
+	}
+
+	async cleanup(): Promise<void> {
+		await fs.rm(this.mockStoragePath, { recursive: true, force: true });
+	}
 }
 
 /**
@@ -99,16 +114,18 @@ describe('ChatSessionWorkspaceFolderService', () => {
 	let logService: MockLogService;
 	let metadataStore: MockMetadataStore;
 
-	beforeEach(() => {
-		extensionContext = new MockExtensionContext();
+	beforeEach(async () => {
+		const storagePath = await fs.mkdtemp(path.join(tmpdir(), 'vscode-copilot-chat-workspace-folder-service-tests-'));
+		extensionContext = new MockExtensionContext(storagePath);
 		logService = new MockLogService();
 		gitService = new MockGitService();
 		metadataStore = new MockMetadataStore();
 		service = new ChatSessionWorkspaceFolderService(gitService, logService, metadataStore, extensionContext);
 	});
 
-	afterEach(() => {
+	afterEach(async () => {
 		vi.clearAllMocks();
+		await extensionContext.cleanup();
 	});
 
 	describe('trackSessionWorkspaceFolder', () => {
@@ -583,21 +600,20 @@ describe('ChatSessionWorkspaceFolderService', () => {
 					changes: {
 						mergeChanges: [],
 						indexChanges: [],
-						workingTree: [{
-							status: 5,
+						workingTree: [],
+						untrackedChanges: [{
+							status: 7,
 							uri: URI.file('/repo/file.txt'),
-							originalUri: URI.file('/repo/file.txt'),
+							originalUri: undefined,
 							renameUri: URI.file('/repo/file.txt')
-						}],
-						untrackedChanges: []
+						}]
 					}
 				});
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
-				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 99, deletions: 99 });
 				gitService.exec = vi.fn()
 					.mockResolvedValueOnce('')
 					.mockResolvedValueOnce('')
-					.mockResolvedValueOnce('1\t0\tfile.txt\x00:100644 100644 0000000 1111111 M\x00file.txt\x00');
+					.mockResolvedValueOnce('1\t0\tfile.txt\x00:000000 100644 0000000 1111111 A\x00file.txt\x00');
 
 				const result = await service.getWorkspaceChanges(vscode.Uri.file('/repo'));
 
@@ -619,7 +635,41 @@ describe('ChatSessionWorkspaceFolderService', () => {
 					['diff', '--cached', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--'],
 					expect.objectContaining({ GIT_INDEX_FILE: expect.any(String) })
 				);
-				expect(gitService.diffIndexWithHEADShortStats).not.toHaveBeenCalled();
+				expect(result).toEqual([{
+					filePath: '/repo/file.txt',
+					originalFilePath: undefined,
+					modifiedFilePath: '/repo/file.txt',
+					statistics: {
+						additions: 1,
+						deletions: 0
+					}
+				}]);
+			});
+
+			it('should use git diff against HEAD when only tracked changes are present', async () => {
+				const repo = makeRepoContext({
+					changes: {
+						mergeChanges: [],
+						indexChanges: [],
+						workingTree: [{
+							status: 5,
+							uri: URI.file('/repo/file.txt'),
+							originalUri: URI.file('/repo/file.txt'),
+							renameUri: URI.file('/repo/file.txt')
+						}],
+						untrackedChanges: []
+					}
+				});
+				gitService.getRepository = vi.fn().mockResolvedValue(repo);
+				gitService.exec = vi.fn().mockResolvedValue('1\t0\tfile.txt\x00:100644 100644 0000000 1111111 M\x00file.txt\x00');
+
+				const result = await service.getWorkspaceChanges(vscode.Uri.file('/repo'));
+
+				expect(gitService.exec).toHaveBeenCalledTimes(1);
+				expect(gitService.exec).toHaveBeenCalledWith(
+					repo.rootUri,
+					['diff', 'HEAD', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--']
+				);
 				expect(result).toEqual([{
 					filePath: '/repo/file.txt',
 					originalFilePath: '/repo/file.txt',
@@ -629,6 +679,49 @@ describe('ChatSessionWorkspaceFolderService', () => {
 						deletions: 0
 					}
 				}]);
+			});
+
+			it('should use an empty tree for temp-index diffs when HEAD does not exist', async () => {
+				const repo = makeRepoContext({
+					headCommitHash: undefined,
+					headCommitHashObs: constObservable(undefined),
+					changes: {
+						mergeChanges: [],
+						indexChanges: [],
+						workingTree: [],
+						untrackedChanges: [{
+							status: 7,
+							uri: URI.file('/repo/file.txt'),
+							originalUri: undefined,
+							renameUri: undefined
+						}]
+					}
+				});
+				gitService.getRepository = vi.fn().mockResolvedValue(repo);
+				gitService.exec = vi.fn()
+					.mockResolvedValueOnce('')
+					.mockResolvedValueOnce('')
+					.mockResolvedValueOnce('1\t0\tfile.txt\x00:000000 100644 0000000 1111111 A\x00file.txt\x00');
+
+				await service.getWorkspaceChanges(vscode.Uri.file('/repo'));
+
+				expect(gitService.exec).toHaveBeenNthCalledWith(
+					1,
+					repo.rootUri,
+					['read-tree', '--empty'],
+					expect.objectContaining({ GIT_INDEX_FILE: expect.any(String) })
+				);
+			});
+
+			it('should return empty array without running git commands when change lists are empty', async () => {
+				const repo = makeRepoContext();
+				gitService.getRepository = vi.fn().mockResolvedValue(repo);
+				gitService.exec = vi.fn().mockResolvedValue('');
+
+				const result = await service.getWorkspaceChanges(vscode.Uri.file('/repo'));
+
+				expect(result).toEqual([]);
+				expect(gitService.exec).not.toHaveBeenCalled();
 			});
 
 			it('should return empty array when repository has no changes', async () => {
