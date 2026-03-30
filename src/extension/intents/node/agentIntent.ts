@@ -395,7 +395,6 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			throw new Error(`Setting github.copilot.${ConfigKey.Advanced.SummarizeAgentConversationHistoryThreshold.id} is too low`);
 		}
 
-		// Reserve extra space when tools are involved due to token counting issues
 		const baseBudget = Math.min(
 			this.configurationService.getConfig<number | undefined>(ConfigKey.Advanced.SummarizeAgentConversationHistoryThreshold) ?? this.endpoint.modelMaxPromptTokens,
 			this.endpoint.modelMaxPromptTokens
@@ -405,8 +404,12 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		const summarizationEnabled = this.configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) && this.prompt === AgentPrompt && !responsesCompactionContextManagementEnabled;
 		const backgroundCompactionEnabled = summarizationEnabled && this.configurationService.getExperimentBasedConfig(ConfigKey.BackgroundCompaction, this.expService);
 
-		const budgetThreshold = Math.floor((baseBudget - toolTokens) * 0.85);
-		const safeBudget = useTruncation ? Number.MAX_SAFE_INTEGER : budgetThreshold;
+		// Safety margin (10%) to account for tokenizer discrepancies between
+		// our token counter and the model's actual tokenizer. Without this,
+		// an undercount could cause an API-level context_length_exceeded error
+		// instead of a graceful BudgetExceededError from prompt-tsx.
+		const messageBudget = Math.floor((baseBudget - toolTokens) * 0.9);
+		const safeBudget = useTruncation ? Number.MAX_SAFE_INTEGER : messageBudget;
 		const endpoint = toolTokens > 0 ? this.endpoint.cloneWithTokenOverride(safeBudget) : this.endpoint;
 
 		this.logService.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}), summarizationEnabled=${summarizationEnabled}`);
@@ -436,12 +439,12 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		//   ≥ 95% + InProgress             → block on the background compaction
 		//                                    completing, then apply before rendering.
 		//
-		//   ≥ 75% + Idle (post-render)     → kick off background compaction so
+		//   ≥ 80% + Idle (post-render)     → kick off background compaction so
 		//                                    it is ready for a future iteration.
 		//
 		const backgroundSummarizer = backgroundCompactionEnabled ? this._getOrCreateBackgroundSummarizer(promptContext.conversation?.sessionId) : undefined;
-		const contextRatio = backgroundSummarizer && budgetThreshold > 0
-			? this._lastRenderTokenCount / budgetThreshold
+		const contextRatio = backgroundSummarizer && baseBudget > 0
+			? (this._lastRenderTokenCount + toolTokens) / baseBudget
 			: 0;
 
 		// Track whether we applied a summary in this iteration so we don't
@@ -625,8 +628,8 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 
 		// 3. Post-render background compaction checks.
 		if (backgroundCompactionEnabled && backgroundSummarizer && !summaryAppliedThisIteration) {
-			const postRenderRatio = budgetThreshold > 0
-				? result.tokenCount / budgetThreshold
+			const postRenderRatio = baseBudget > 0
+				? (result.tokenCount + toolTokens) / baseBudget
 				: 0;
 
 			if (postRenderRatio >= 0.95 && backgroundSummarizer.state === BackgroundSummarizationState.InProgress) {
@@ -654,8 +657,8 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 					this.logService.debug(`[Agent] post-render background compaction finished but produced no usable result`);
 					this._sendBackgroundCompactionTelemetry('postRenderBlocked', 'noResult', postRenderRatio, promptContext);
 				}
-			} else if (postRenderRatio >= 0.75 && (backgroundSummarizer.state === BackgroundSummarizationState.Idle || backgroundSummarizer.state === BackgroundSummarizationState.Failed)) {
-				// At ≥ 75% with no running compaction (or a previous failure) — kick off background work.
+			} else if (postRenderRatio >= 0.80 && (backgroundSummarizer.state === BackgroundSummarizationState.Idle || backgroundSummarizer.state === BackgroundSummarizationState.Failed)) {
+				// At ≥ 80% with no running compaction (or a previous failure) — kick off background work.
 				this._startBackgroundSummarization(backgroundSummarizer, props, endpoint, token, postRenderRatio);
 			}
 		}
