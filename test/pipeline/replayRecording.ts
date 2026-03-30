@@ -3,11 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Processor } from '../../script/alternativeAction/processor';
 import { IRecordingInformation, ObservableWorkspaceRecordingReplayer } from '../../src/extension/inlineEdits/common/observableWorkspaceRecordingReplayer';
 import { DocumentId } from '../../src/platform/inlineEdits/common/dataTypes/documentId';
 import { IObservableDocument, MutableObservableWorkspace } from '../../src/platform/inlineEdits/common/observableWorkspace';
 import { coalesce } from '../../src/util/vs/base/common/arrays';
+import { Processor } from './alternativeAction/processor';
 import { IInputRow } from './parseInput';
 
 /**

@@ -8,9 +8,9 @@ import * as fs from 'fs/promises';
 import minimist from 'minimist';
 import { IAlternativeAction } from '../../src/extension/inlineEdits/node/nextEditProviderTelemetry';
 import { coalesce } from '../../src/util/vs/base/common/arrays';
-import { Processor } from './processor';
-import { IData, Scoring } from './types';
-import { Either, log } from './util';
+import { Processor } from '../../test/pipeline/alternativeAction/processor';
+import { IData, Scoring } from '../../test/pipeline/alternativeAction/types';
+import { Either, log } from '../../test/pipeline/alternativeAction/util';
 
 async function extractFromCsv(csvContents: string): Promise<(Scoring.t | undefined)[]> {
 	const options = {
