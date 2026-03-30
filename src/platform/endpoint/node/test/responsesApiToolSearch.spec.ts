@@ -244,11 +244,42 @@ describe('OpenAIResponsesProcessor tool search events', () => {
 		return deltas;
 	}
 
-	it('handles server tool_search_call in output_item.added', () => {
+	it('does not emit server tool_search_call on output_item.added (waits for done)', () => {
 		const processor = createProcessor();
 		const deltas = collectDeltas(processor, [
 			{
 				type: 'response.output_item.added',
+				output_index: 0,
+				item: {
+					type: 'tool_search_call' as any,
+					id: 'ts_001',
+					execution: 'server',
+					call_id: null,
+					status: 'in_progress',
+				} as any,
+			}
+		]);
+
+		// Server tool_search_call should not emit on 'added', only on 'done'
+		expect(deltas).toHaveLength(0);
+	});
+
+	it('emits server tool_search_call on output_item.done with full data', () => {
+		const processor = createProcessor();
+		const deltas = collectDeltas(processor, [
+			{
+				type: 'response.output_item.added',
+				output_index: 0,
+				item: {
+					type: 'tool_search_call' as any,
+					id: 'ts_001',
+					execution: 'server',
+					call_id: null,
+					status: 'in_progress',
+				} as any,
+			},
+			{
+				type: 'response.output_item.done',
 				output_index: 0,
 				item: {
 					type: 'tool_search_call' as any,
@@ -266,8 +297,10 @@ describe('OpenAIResponsesProcessor tool search events', () => {
 		expect(deltas[0].serverToolCalls![0]).toMatchObject({
 			isServer: true,
 			name: 'tool_search',
-			id: 'ts_001',
+			args: { paths: ['crm'] },
 		});
+		// ID should be a generated UUID (not the raw OpenAI base64 id) for URI safety
+		expect(deltas[0].serverToolCalls![0].id).toBeTruthy();
 	});
 
 	it('handles client tool_search_call as copilotToolCall', () => {
@@ -338,15 +371,15 @@ describe('OpenAIResponsesProcessor tool search events', () => {
 		expect(deltas[0].serverToolCalls![0]).toMatchObject({
 			isServer: true,
 			name: 'tool_search_output',
-			id: 'tso_001',
 			result: { tools: loadedTools },
 		});
+		expect(deltas[0].serverToolCalls![0].id).toBeTruthy();
 	});
 
 	it('still handles regular function calls correctly alongside tool search events', () => {
 		const processor = createProcessor();
 		const deltas = collectDeltas(processor, [
-			// Tool search call (server)
+			// Tool search call (server) — not emitted on 'added', only on 'done'
 			{
 				type: 'response.output_item.added',
 				output_index: 0,
@@ -355,7 +388,7 @@ describe('OpenAIResponsesProcessor tool search events', () => {
 					id: 'ts_003',
 					execution: 'server',
 					call_id: null,
-					status: 'completed',
+					status: 'in_progress',
 				} as any,
 			},
 			// Regular function call
@@ -390,20 +423,19 @@ describe('OpenAIResponsesProcessor tool search events', () => {
 			},
 		]);
 
-		// First delta: tool search server call
-		expect(deltas[0].serverToolCalls).toBeDefined();
+		// Server tool_search_call on 'added' doesn't emit — so no serverToolCalls delta
 
-		// Second delta: beginToolCalls for function_call
-		expect(deltas[1].beginToolCalls).toBeDefined();
-		expect(deltas[1].beginToolCalls![0].name).toBe('read_file');
+		// First delta: beginToolCalls for function_call
+		expect(deltas[0].beginToolCalls).toBeDefined();
+		expect(deltas[0].beginToolCalls![0].name).toBe('read_file');
 
-		// Third delta: streaming arguments
-		expect(deltas[2].copilotToolCallStreamUpdates).toBeDefined();
+		// Second delta: streaming arguments
+		expect(deltas[1].copilotToolCallStreamUpdates).toBeDefined();
 
-		// Fourth delta: completed tool call
-		expect(deltas[3].copilotToolCalls).toBeDefined();
-		expect(deltas[3].copilotToolCalls![0].name).toBe('read_file');
-		expect(deltas[3].copilotToolCalls![0].arguments).toBe('{"path": "/test.txt"}');
+		// Third delta: completed tool call
+		expect(deltas[2].copilotToolCalls).toBeDefined();
+		expect(deltas[2].copilotToolCalls![0].name).toBe('read_file');
+		expect(deltas[2].copilotToolCalls![0].arguments).toBe('{"path": "/test.txt"}');
 	});
 
 	it('captures namespace from function_call items loaded via tool search', () => {

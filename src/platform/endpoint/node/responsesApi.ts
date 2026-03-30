@@ -684,13 +684,9 @@ export class OpenAIResponsesProcessor {
 							text: '',
 							beginToolCalls: [{ name: CUSTOM_TOOL_SEARCH_NAME, id: tsItem.call_id }]
 						});
-					} else {
-						// Server-hosted tool search: just log it
-						onProgress({
-							text: '',
-							serverToolCalls: [{ isServer: true, name: 'tool_search', id: tsItem.id ?? '' }]
-						});
 					}
+					// Server-hosted tool search: don't emit on `added`; wait for `done`
+					// to have complete data (id, arguments) for the debug pane entry.
 				}
 				return;
 			case 'response.function_call_arguments.delta': {
@@ -766,13 +762,16 @@ export class OpenAIResponsesProcessor {
 							}],
 						});
 					} else {
-						// Server-mode: just log it
+						// Server-mode: log with full data from the completed item.
+						// Always use generateUuid() for the id because OpenAI item IDs
+						// are base64-encoded and contain URI-unsafe characters (+, =)
+						// that cause mismatches when round-tripped through Uri.parse/toString.
 						onProgress({
 							text: '',
 							serverToolCalls: [{
 								isServer: true,
 								name: 'tool_search',
-								id: tsCall.id ?? '',
+								id: generateUuid(),
 								args: tsCall.arguments,
 							}]
 						});
@@ -785,7 +784,7 @@ export class OpenAIResponsesProcessor {
 						serverToolCalls: [{
 							isServer: true,
 							name: 'tool_search_output',
-							id: tsOutput.id ?? '',
+							id: generateUuid(),
 							result: { tools: tsOutput.tools },
 						}]
 					});
