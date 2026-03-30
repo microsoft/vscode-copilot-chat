@@ -132,6 +132,59 @@ describe('copilotCloudSessionsProvider helpers', () => {
 		expect(result).toBe(false);
 	});
 
+	it('keeps the provided base ref when the default repository is selected', () => {
+		const result = shouldResolveDelegationBaseRef(
+			'feature/current-branch',
+			{ owner: 'microsoft', name: 'vscode-copilot-chat' },
+			'___vscode_repository_default___',
+		);
+
+		expect(result).toBe(false);
+	});
+
+	it('resolves the default branch when no base ref was provided', () => {
+		const result = shouldResolveDelegationBaseRef(
+			undefined,
+			{ owner: 'microsoft', name: 'vscode-copilot-chat' },
+			undefined,
+		);
+
+		expect(result).toBe(true);
+	});
+
+	it('ignores malformed selected repository values', () => {
+		const result = shouldResolveDelegationBaseRef(
+			'feature/current-branch',
+			{ owner: 'microsoft', name: 'vscode-copilot-chat' },
+			'microsoft/vscode-copilot-chat/extra',
+		);
+
+		expect(result).toBe(false);
+	});
+
+	it('ignores selected repository values with empty owner or repo segments', () => {
+		expect(shouldResolveDelegationBaseRef(
+			'feature/current-branch',
+			{ owner: 'microsoft', name: 'vscode-copilot-chat' },
+			'/vscode-copilot-chat',
+		)).toBe(false);
+		expect(shouldResolveDelegationBaseRef(
+			'feature/current-branch',
+			{ owner: 'microsoft', name: 'vscode-copilot-chat' },
+			'microsoft/',
+		)).toBe(false);
+	});
+
+	it('resolves the base ref when the selected repository is explicit but the current repository is unknown', () => {
+		const result = shouldResolveDelegationBaseRef(
+			'feature/current-branch',
+			{ owner: undefined, name: undefined },
+			'github/copilot-docs',
+		);
+
+		expect(result).toBe(true);
+	});
+
 	it('re-resolves the base ref when delegating to a different selected repository', () => {
 		const result = shouldResolveDelegationBaseRef(
 			'feature/current-branch',

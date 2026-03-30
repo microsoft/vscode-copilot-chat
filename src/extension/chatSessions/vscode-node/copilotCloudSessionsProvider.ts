@@ -151,9 +151,18 @@ export function shouldResolveDelegationBaseRef(
 		return false;
 	}
 
-	const [selectedOwner, selectedName] = selectedRepository.split('/');
+	const selectedRepositoryParts = selectedRepository.split('/');
+	if (selectedRepositoryParts.length !== 2) {
+		return false;
+	}
+
+	const [selectedOwner, selectedName] = selectedRepositoryParts;
 	if (!selectedOwner || !selectedName) {
 		return false;
+	}
+
+	if (!currentRepository.owner || !currentRepository.name) {
+		return true;
 	}
 
 	return currentRepository.owner !== selectedOwner || currentRepository.name !== selectedName;
@@ -1588,8 +1597,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		const repoId = repoIds?.[0];
 		let repoOwner = repoId?.org;
 		let repoName = repoId?.repo;
+		let baseRefToUse = base_ref;
 		const [selectedRepoOwner, selectedRepoName] = (selectedRepository && selectedRepository !== DEFAULT_REPOSITORY_ID) ? selectedRepository.split('/') : [];
-		if (shouldResolveDelegationBaseRef(base_ref, { owner: repoOwner, name: repoName }, selectedRepository)) {
+		if (!baseRefToUse || shouldResolveDelegationBaseRef(baseRefToUse, { owner: repoOwner, name: repoName }, selectedRepository)) {
 			if (selectedRepoOwner && selectedRepoName) {
 				repoOwner = selectedRepoOwner;
 				repoName = selectedRepoName;
@@ -1601,10 +1611,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				repoName = repoId.repo;
 			}
 			const { default_branch } = await this._githubRepositoryService.getRepositoryInfo(repoOwner, repoName);
-			base_ref = default_branch;
-		}
-		if (!base_ref) {
-			throw new Error(vscode.l10n.t('Unable to determine the base branch for cloud agent delegation.'));
+			baseRefToUse = default_branch;
 		}
 
 		const { number, sessionId } = await this.invokeRemoteAgent(
@@ -1612,7 +1619,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			[result, history].filter(Boolean).join('\n\n').trim(),
 			token,
 			stream,
-			base_ref,
+			baseRefToUse,
 			head_ref,
 			customAgentName,
 			modelName,
