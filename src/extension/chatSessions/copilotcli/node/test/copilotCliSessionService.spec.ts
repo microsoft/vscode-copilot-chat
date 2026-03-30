@@ -143,9 +143,6 @@ describe('CopilotCLISessionService', () => {
 				if (ctor === CopilotCLISessionWorkspaceTracker) {
 					return new class extends mock<CopilotCLISessionWorkspaceTracker>() {
 						override async initialize(): Promise<void> { return; }
-						override async trackSession(_sessionId: string, _operation: 'add' | 'delete'): Promise<void> {
-							return;
-						}
 						override shouldShowSession(_sessionId: string): { isOldGlobalSession?: boolean; isWorkspaceSession?: boolean } {
 							return { isOldGlobalSession: false, isWorkspaceSession: true };
 						}

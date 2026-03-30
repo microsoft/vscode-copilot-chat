@@ -14,7 +14,7 @@ import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/ch
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
-import { createDirectoryIfNotExists, IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { deriveCopilotCliOTelEnv } from '../../../../platform/otel/common/agentOTelEnv';
@@ -547,7 +547,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				});
 			}
 			this.logService.trace(`[CopilotCLISession] Created new CopilotCLI session ${sdkSession.sessionId}.`);
-			void this._sessionTracker.trackSession(sdkSession.sessionId, 'add');
 
 			const session = await this.createCopilotSession(sdkSession, options, sessionManager);
 			session.object.add(mcpGateway);
@@ -924,7 +923,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	public async deleteSession(sessionId: string): Promise<void> {
-		void this._sessionTracker.trackSession(sessionId, 'delete');
 		this._sessionLabels.delete(sessionId);
 		this._partialSessionHistories.delete(sessionId);
 		this._sessionWorkingDirectories.delete(sessionId);
@@ -1010,7 +1008,6 @@ export class CopilotCLISessionWorkspaceTracker {
 			}
 
 			await Promise.all([
-				createDirectoryIfNotExists(this.fileSystem, this.context.globalStorageUri),
 				// Load old sessions
 				(async () => {
 					const oldSessions = await this.fileSystem.readFile(globalFile).then(c => new TextDecoder().decode(c).split(',')).catch(() => undefined);
@@ -1033,23 +1030,6 @@ export class CopilotCLISessionWorkspaceTracker {
 
 	public async initialize(): Promise<void> {
 		await this._initializeSessionStorageFiles.value;
-	}
-
-	public async trackSession(sessionId: string, operation: 'add' | 'delete'): Promise<void> {
-		// If we're not in a workspace, do not track sessions as these are global sessions.
-		if (this.workspaceService.getWorkspaceFolders().length === 0) {
-			return;
-		}
-		if (operation === 'add') {
-			this._workspaceSessions.add(sessionId);
-		} else {
-			this._workspaceSessions.delete(sessionId);
-		}
-
-		const sessions = Array.from(this._workspaceSessions).join(',');
-		const { workspace } = await this._initializeSessionStorageFiles.value;
-		// No need to block caller anymore, we've tracked in memory for now.
-		void this.fileSystem.writeFile(workspace, Buffer.from(sessions));
 	}
 
 	/**
