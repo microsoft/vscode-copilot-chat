@@ -1016,7 +1016,7 @@ class SummaryMessageElement extends PromptElement<SummaryMessageProps> {
 			<Tag name='conversation-summary'>
 				{this.props.summaryText}
 			</Tag>
-			{this.props.transcriptPath && <><br />If you need specific details from before compaction (such as exact code snippets, error messages, tool results, or content you previously generated), use the {ToolName.ReadFile} tool to look up the full uncompacted conversation transcript at: "{this.props.transcriptPath}"{this.props.transcriptLineCount !== undefined && <><br />The transcript had {this.props.transcriptLineCount} lines before compaction.</>}<br />Example usage: {ToolName.ReadFile}(filePath: "{this.props.transcriptPath}")</>}
+			{this.props.transcriptPath && <><br />If you need specific details from before compaction (such as exact code snippets, error messages, tool results, or content you previously generated), use the {ToolName.ReadFile} tool to look up the full uncompacted conversation transcript at: "{this.props.transcriptPath}"{this.props.transcriptLineCount !== undefined && <><br />At the time of this request, the transcript has {this.props.transcriptLineCount} lines.</>}<br />Example usage: {ToolName.ReadFile}(filePath: "{this.props.transcriptPath}")</>}
 			{this.props.endpoint.family === 'gpt-4.1' && <Tag name='reminderInstructions'>
 				<DefaultOpenAIKeepGoingReminder />
 			</Tag>}
