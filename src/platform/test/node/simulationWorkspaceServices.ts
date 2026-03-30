@@ -826,6 +826,10 @@ export class TestingGitService implements IGitService {
 		return;
 	}
 
+	async getBranch(_uri: URI, _name: string): Promise<Branch | undefined> {
+		return undefined;
+	}
+
 	async getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]> {
 		return [];
 	}
