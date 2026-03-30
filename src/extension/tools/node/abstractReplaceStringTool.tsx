@@ -360,7 +360,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 							didBranchChange: res.didBranchChange ? 1 : 0,
 						});
 
-						emitEditSurvivalEvent(this._otelService, 'replace_string', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, this._promptContext?.requestId ?? '');
+						emitEditSurvivalEvent(this._otelService, 'replace_string', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, this._promptContext?.requestId ?? '', res.workspace);
 						GenAiMetrics.recordEditSurvivalFourGram(this._otelService, 'replace_string', res.fourGram, res.timeDelayMs);
 						GenAiMetrics.recordEditSurvivalNoRevert(this._otelService, 'replace_string', res.noRevert, res.timeDelayMs);
 					});

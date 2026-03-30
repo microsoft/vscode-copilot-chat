@@ -471,7 +471,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 							didBranchChange: res.didBranchChange ? 1 : 0,
 						});
 
-						emitEditSurvivalEvent(this._otelService, 'apply_patch', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, this._promptContext?.requestId ?? '');
+						emitEditSurvivalEvent(this._otelService, 'apply_patch', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, this._promptContext?.requestId ?? '', res.workspace);
 						GenAiMetrics.recordEditSurvivalFourGram(this._otelService, 'apply_patch', res.fourGram, res.timeDelayMs);
 						GenAiMetrics.recordEditSurvivalNoRevert(this._otelService, 'apply_patch', res.noRevert, res.timeDelayMs);
 					});

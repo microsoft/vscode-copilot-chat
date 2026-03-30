@@ -346,7 +346,7 @@ function reportEditSurvivalEvent(res: EditSurvivalResult, { requestId, speculati
 		survivalRateNoRevert: res.noRevert,
 	});
 
-	emitEditSurvivalEvent(otelService, 'code_mapper', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, requestId ?? '');
+	emitEditSurvivalEvent(otelService, 'code_mapper', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, requestId ?? '', res.workspace);
 	GenAiMetrics.recordEditSurvivalFourGram(otelService, 'code_mapper', res.fourGram, res.timeDelayMs);
 	GenAiMetrics.recordEditSurvivalNoRevert(otelService, 'code_mapper', res.noRevert, res.timeDelayMs);
 }
