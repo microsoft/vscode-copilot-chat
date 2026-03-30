@@ -573,7 +573,13 @@ function reportInlineEditSurvivalEvent(res: EditSurvivalResult, sharedProps: Tel
 		timeDelayMs: res.timeDelayMs,
 		didBranchChange: res.didBranchChange ? 1 : 0,
 	});
-	res.telemetryService.sendGHTelemetryEvent('inline.trackEditSurvival', sharedProps, {
+	res.telemetryService.sendGHTelemetryEvent('inline.trackEditSurvival', {
+		...sharedProps,
+		headBranchName: res.workspace?.headBranchName,
+		headCommitHash: res.workspace?.headCommitHash,
+		remoteUrl: res.workspace?.remoteUrl,
+		fileRelativePath: res.workspace?.fileRelativePath,
+	}, {
 		...sharedMeasures,
 		survivalRateFourGram: res.fourGram,
 		survivalRateNoRevert: res.noRevert,

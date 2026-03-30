@@ -352,7 +352,11 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 						res.telemetryService.sendGHTelemetryEvent('replaceString/trackEditSurvival', {
 							headerRequestId: this._promptContext?.requestId,
 							requestSource: 'agent',
-							mapper: 'stringReplaceTool'
+							mapper: 'stringReplaceTool',
+							headBranchName: res.workspace?.headBranchName,
+							headCommitHash: res.workspace?.headCommitHash,
+							remoteUrl: res.workspace?.remoteUrl,
+							fileRelativePath: res.workspace?.fileRelativePath,
 						}, {
 							survivalRateFourGram: res.fourGram,
 							survivalRateNoRevert: res.noRevert,

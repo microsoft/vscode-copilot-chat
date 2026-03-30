@@ -463,7 +463,11 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 						res.telemetryService.sendGHTelemetryEvent('applyPatch/trackEditSurvival', {
 							headerRequestId: this._promptContext?.requestId,
 							requestSource: 'agent',
-							mapper: 'applyPatchTool'
+							mapper: 'applyPatchTool',
+							headBranchName: res.workspace?.headBranchName,
+							headCommitHash: res.workspace?.headCommitHash,
+							remoteUrl: res.workspace?.remoteUrl,
+							fileRelativePath: res.workspace?.fileRelativePath,
 						}, {
 							survivalRateFourGram: res.fourGram,
 							survivalRateNoRevert: res.noRevert,

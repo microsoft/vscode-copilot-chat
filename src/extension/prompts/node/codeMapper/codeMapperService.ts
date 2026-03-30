@@ -339,7 +339,11 @@ function reportEditSurvivalEvent(res: EditSurvivalResult, { requestId, speculati
 		headerRequestId: speculationRequestId,
 		completionTextJson: res.currentFileContent,
 		chatRequestModel,
-		requestSource
+		requestSource,
+		headBranchName: res.workspace?.headBranchName,
+		headCommitHash: res.workspace?.headCommitHash,
+		remoteUrl: res.workspace?.remoteUrl,
+		fileRelativePath: res.workspace?.fileRelativePath,
 	}, {
 		timeDelayMs: res.timeDelayMs,
 		survivalRateFourGram: res.fourGram,
