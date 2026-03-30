@@ -11,7 +11,7 @@ import { TestLogService } from '../../../../platform/testing/common/testLogServi
 import { mock } from '../../../../util/common/test/simpleMock';
 import { ChatResponseMarkdownPart, ChatResponseTurn2 } from '../../../../vscodeTypes';
 import { ChatSessionContentBuilder } from '../copilotCloudSessionContentBuilder';
-import { normalizeInitialSessionOptions, parseSessionLogChunksSafely } from '../copilotCloudSessionsProvider';
+import { normalizeInitialSessionOptions, parseSessionLogChunksSafely, shouldResolveDelegationBaseRef } from '../copilotCloudSessionsProvider';
 
 vi.mock('vscode', async () => {
 	const actual = await import('../../../../vscodeTypes');
@@ -120,6 +120,26 @@ describe('copilotCloudSessionsProvider helpers', () => {
 
 		expect(result).toEqual([]);
 		expect(logService.error).toHaveBeenCalledWith(expect.any(SyntaxError), expect.stringContaining('Failed to parse streamed log content'));
+	});
+
+	it('keeps the provided base ref when delegating from the current repository', () => {
+		const result = shouldResolveDelegationBaseRef(
+			'feature/current-branch',
+			{ owner: 'microsoft', name: 'vscode-copilot-chat' },
+			undefined,
+		);
+
+		expect(result).toBe(false);
+	});
+
+	it('re-resolves the base ref when delegating to a different selected repository', () => {
+		const result = shouldResolveDelegationBaseRef(
+			'feature/current-branch',
+			{ owner: 'microsoft', name: 'vscode-copilot-chat' },
+			'github/copilot-docs',
+		);
+
+		expect(result).toBe(true);
 	});
 });
 

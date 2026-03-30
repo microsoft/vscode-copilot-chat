@@ -138,6 +138,27 @@ export function parseSessionLogChunksSafely(rawText: string, logService: ILogSer
 	}
 }
 
+export function shouldResolveDelegationBaseRef(
+	baseRef: string | undefined,
+	currentRepository: { owner?: string; name?: string },
+	selectedRepository?: string,
+): boolean {
+	if (!baseRef) {
+		return true;
+	}
+
+	if (!selectedRepository || selectedRepository === DEFAULT_REPOSITORY_ID) {
+		return false;
+	}
+
+	const [selectedOwner, selectedName] = selectedRepository.split('/');
+	if (!selectedOwner || !selectedName) {
+		return false;
+	}
+
+	return currentRepository.owner !== selectedOwner || currentRepository.name !== selectedName;
+}
+
 const CUSTOM_AGENTS_OPTION_GROUP_ID = 'customAgents';
 const MODELS_OPTION_GROUP_ID = 'models';
 const PARTNER_AGENTS_OPTION_GROUP_ID = 'partnerAgents';
@@ -1568,7 +1589,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		let repoOwner = repoId?.org;
 		let repoName = repoId?.repo;
 		const [selectedRepoOwner, selectedRepoName] = (selectedRepository && selectedRepository !== DEFAULT_REPOSITORY_ID) ? selectedRepository.split('/') : [];
-		if (!base_ref || repoOwner !== selectedRepoOwner || repoName !== selectedRepoName) {
+		if (shouldResolveDelegationBaseRef(base_ref, { owner: repoOwner, name: repoName }, selectedRepository)) {
 			if (selectedRepoOwner && selectedRepoName) {
 				repoOwner = selectedRepoOwner;
 				repoName = selectedRepoName;
@@ -1581,6 +1602,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 			const { default_branch } = await this._githubRepositoryService.getRepositoryInfo(repoOwner, repoName);
 			base_ref = default_branch;
+		}
+		if (!base_ref) {
+			throw new Error(vscode.l10n.t('Unable to determine the base branch for cloud agent delegation.'));
 		}
 
 		const { number, sessionId } = await this.invokeRemoteAgent(
