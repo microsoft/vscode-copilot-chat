@@ -777,9 +777,9 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		if (opts.useWebSocket && retryResult.type === ChatFetchResponseType.Success) {
 			this._consecutiveWebSocketRetryFallbacks++;
 			this._logService.info(`[ChatWebSocketManager] WebSocket request failed with successful HTTP fallback (${this._consecutiveWebSocketRetryFallbacks} consecutive).`);
-			if (opts.conversationId && opts.turnId) {
+			if (opts.conversationId) {
 				// Closing here because the retry is transparent.
-				this._webSocketManager.closeConnection(opts.conversationId, opts.turnId);
+				this._webSocketManager.closeConnection(opts.conversationId);
 			}
 		}
 		return { retryResult, connectivityTestError, connectivityTestErrorGitHubRequestId };
@@ -1026,7 +1026,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		if (request.messages?.some((m: CAPIChatMessage) => Array.isArray(m.content) ? m.content.some(c => 'image_url' in c) : false) && chatEndpointInfo.supportsVision) {
 			additionalHeaders['Copilot-Vision-Request'] = 'true';
 		}
-		const connection = this._webSocketManager.getOrCreateConnection(conversationId, turnId, additionalHeaders);
+		const connection = this._webSocketManager.getOrCreateConnection(conversationId, additionalHeaders);
 		try {
 			await connection.connect();
 		} catch (err) {
@@ -1061,7 +1061,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		this._telemetryService.sendGHTelemetryEvent('request.sent', telemetryData.properties, telemetryData.measurements);
 
 		const requestStart = Date.now();
-		const handle = connection.sendRequest(request, { userInitiated: !!userInitiatedRequest }, cancellationToken);
+		const handle = connection.sendRequest(request, { userInitiated: !!userInitiatedRequest, turnId }, cancellationToken);
 
 		const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId });
 		const processor = this._instantiationService.createInstance(OpenAIResponsesProcessor, extendedBaseTelemetryData, modelRequestId.headerRequestId, modelRequestId.gitHubRequestId);

@@ -22,7 +22,6 @@ import { HAS_IGNORED_FILES_MESSAGE } from '../../../platform/ignore/common/ignor
 import { ILogService } from '../../../platform/log/common/logService';
 import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { FilterReason } from '../../../platform/networking/common/openai';
-import { IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { IOTelService } from '../../../platform/otel/common/otelService';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -100,7 +99,6 @@ export class DefaultIntentRequestHandler {
 		@IEditSurvivalTrackerService private readonly _editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IChatHookService private readonly _chatHookService: IChatHookService,
-		@IChatWebSocketManager private readonly _webSocketManager: IChatWebSocketManager,
 		@IOctoKitService private readonly _octoKitService: IOctoKitService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
@@ -400,7 +398,6 @@ export class DefaultIntentRequestHandler {
 			result.chatResult = this.resultWithMetadatas(result.chatResult);
 			return { ...result, lastRequestTelemetry: loop.telemetry };
 		} finally {
-			this._webSocketManager.closeConnection(this.conversation.sessionId, this.turn.id);
 			await Promise.allSettled(responseHandlers);
 			store.dispose();
 		}
