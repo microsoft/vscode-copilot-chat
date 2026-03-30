@@ -27,7 +27,6 @@ export class ConversationStore extends Disposable implements IConversationStore 
 
 	private readonly conversationMap: LRUCache<string, Conversation>;
 	private readonly pendingCleanups: DisposableMap<string, TimeoutTimer> = this._register(new DisposableMap());
-	private readonly disposedSessionIds = new Set<string>();
 
 	constructor(
 		@IChatSessionService chatSessionService: IChatSessionService,
@@ -41,30 +40,26 @@ export class ConversationStore extends Disposable implements IConversationStore 
 
 	addConversation(responseId: string, conversation: Conversation): void {
 		this.conversationMap.set(responseId, conversation);
-		if (this.pendingCleanups.has(conversation.sessionId) || this.disposedSessionIds.has(conversation.sessionId)) {
-			this._scheduleSessionCleanup(conversation.sessionId);
-		}
+		this.pendingCleanups.deleteAndDispose(conversation.sessionId);
 	}
 
 	getConversation(responseId: string): Conversation | undefined {
 		const conversation = this.conversationMap.get(responseId);
-		if (conversation && this.pendingCleanups.has(conversation.sessionId)) {
-			// Session was disposed but a consumer is still accessing it — reset the timer
-			this._scheduleSessionCleanup(conversation.sessionId);
+		if (conversation) {
+			this.pendingCleanups.deleteAndDispose(conversation.sessionId);
 		}
 		return conversation;
 	}
 
 	get lastConversation(): Conversation | undefined {
 		const conversation = this.conversationMap.last;
-		if (conversation && this.pendingCleanups.has(conversation.sessionId)) {
-			this._scheduleSessionCleanup(conversation.sessionId);
+		if (conversation) {
+			this.pendingCleanups.deleteAndDispose(conversation.sessionId);
 		}
 		return conversation;
 	}
 
 	private _scheduleSessionCleanup(sessionId: string): void {
-		this.disposedSessionIds.add(sessionId);
 		let timer = this.pendingCleanups.get(sessionId);
 		if (!timer) {
 			timer = new TimeoutTimer();
