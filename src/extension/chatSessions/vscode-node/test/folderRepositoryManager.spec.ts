@@ -96,6 +96,9 @@ class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFo
 	setTestWorkspaceChanges(folder: vscode.Uri, changes: readonly ChatSessionWorktreeFile[] | undefined): void {
 		this._workspaceChanges.set(folder.toString(), changes);
 	}
+	override clearWorkspaceChanges(workspaceFolderUri: vscode.Uri): void {
+		this._workspaceChanges.delete(workspaceFolderUri.toString());
+	}
 }
 
 /**
