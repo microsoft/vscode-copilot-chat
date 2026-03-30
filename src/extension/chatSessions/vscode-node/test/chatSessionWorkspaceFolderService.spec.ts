@@ -12,7 +12,6 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { constObservable, observableValue } from '../../../../util/vs/base/common/observableInternal';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { IAgentSessionsWorkspace } from '../../common/agentSessionsWorkspace';
 import { IChatSessionMetadataStore, WorkspaceFolderEntry } from '../../common/chatSessionMetadataStore';
 import { ChatSessionWorkspaceFolderService } from '../chatSessionWorkspaceFolderServiceImpl';
 
@@ -96,15 +95,13 @@ describe('ChatSessionWorkspaceFolderService', () => {
 	let gitService: MockGitService;
 	let logService: MockLogService;
 	let metadataStore: MockMetadataStore;
-	let agentSessionsWorkspace: IAgentSessionsWorkspace;
 
 	beforeEach(() => {
 		extensionContext = new MockExtensionContext();
 		logService = new MockLogService();
 		gitService = new MockGitService();
 		metadataStore = new MockMetadataStore();
-		agentSessionsWorkspace = { _serviceBrand: undefined, isAgentSessionsWorkspace: false };
-		service = new ChatSessionWorkspaceFolderService(gitService, logService, metadataStore, extensionContext, agentSessionsWorkspace);
+		service = new ChatSessionWorkspaceFolderService(gitService, logService, metadataStore, extensionContext);
 	});
 
 	afterEach(() => {

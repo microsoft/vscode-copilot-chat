@@ -32,7 +32,7 @@ export namespace DocumentLogEntry {
 }
 
 /** First entry of the log */
-export type HeaderLogEntry = { documentType: "workspaceRecording@1.0"; kind: 'header'; repoRootUri: string; time: number; uuid: string };
+export type HeaderLogEntry = { documentType: 'workspaceRecording@1.0'; kind: 'header'; repoRootUri: string; time: number; uuid: string };
 
 export type ApplicationStartLogEntry = { kind: 'applicationStart'; time: number };
 

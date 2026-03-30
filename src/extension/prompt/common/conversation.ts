@@ -63,6 +63,9 @@ export class Turn {
 
 	private readonly _metadata = new Map<unknown, unknown[]>();
 
+	/** Summaries applied during the tool-call loop, before setResponse is called. */
+	private _pendingSummaries: { toolCallRoundId: string; text: string }[] = [];
+
 	public readonly startTime = Date.now();
 
 	static fromRequest(
@@ -186,6 +189,19 @@ export class Turn {
 		arr.push(value);
 		this._metadata.set(key, arr);
 	}
+
+	/**
+	 * Store a background-compaction summary on this turn so it can be picked up
+	 * by `normalizeSummariesOnRounds` even before `setResponse` is called
+	 * (i.e. while the tool-call loop is still running).
+	 */
+	addPendingSummary(toolCallRoundId: string, text: string): void {
+		this._pendingSummaries.push({ toolCallRoundId, text });
+	}
+
+	get pendingSummaries(): readonly { toolCallRoundId: string; text: string }[] {
+		return this._pendingSummaries;
+	}
 }
 
 // TODO handle persisted 'previous' and '' IDs (?)
@@ -198,7 +214,9 @@ export class Turn {
  */
 export function normalizeSummariesOnRounds(turns: readonly Turn[]): void {
 	for (const [idx, turn] of turns.entries()) {
-		const turnSummaries = turn.resultMetadata?.summaries ?? (turn.resultMetadata?.summary ? [turn.resultMetadata.summary] : []);
+		// Try persisted summaries from resultMetadata first, fall back to pending
+		// summaries that were stored during the tool-call loop (before setResponse).
+		const turnSummaries = turn.resultMetadata?.summaries ?? (turn.resultMetadata?.summary ? [turn.resultMetadata.summary] : turn.pendingSummaries);
 		// Each summary supersedes all previous ones, so only the last one matters for restoration
 		const turnSummary = turnSummaries.at(-1);
 		if (!turnSummary) {
