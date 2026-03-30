@@ -109,8 +109,8 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 
 	protected async getFolderRepositoryForNewSession(sessionId: string | undefined, selectedFolder: vscode.Uri | undefined, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<FolderRepositoryInfo> {
 		// Get the selected folder
-		selectedFolder = sessionId ? (this._newSessionFolders.get(sessionId)?.uri
-			?? await this.workspaceFolderService.getSessionWorkspaceFolder(sessionId)) : undefined;
+		selectedFolder = selectedFolder ?? (sessionId ? (this._newSessionFolders.get(sessionId)?.uri
+			?? await this.workspaceFolderService.getSessionWorkspaceFolder(sessionId)) : undefined);
 
 		// If no folder selected and we have a single workspace folder, use active repository
 		let repositoryUri: vscode.Uri | undefined;
@@ -252,7 +252,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 
 		// Check for uncommitted changes and prompt user before creating worktree
 		let uncommittedChangesAction: 'move' | 'copy' | 'skip' | 'cancel' | undefined = undefined;
-		if ((!sessionId || isUntitledSessionId(sessionId)) && !worktreeProperties) {
+		if (!worktreeProperties) {
 			uncommittedChangesAction = await this.promptForUncommittedChangesAction(sessionId, repository, branch, toolInvocationToken, token);
 			if (uncommittedChangesAction === 'cancel') {
 				return { folder, repository, worktree, worktreeProperties, trusted: true, cancelled: true };
