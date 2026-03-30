@@ -81,6 +81,7 @@ export interface IGitService extends IDisposable {
 	push(uri: URI): Promise<void>;
 	rebase(uri: URI, branch: string): Promise<void>;
 
+	getBranch(uri: URI, name: string): Promise<Branch | undefined>;
 	getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]>;
 	isBranchProtected(uri: URI, branch?: string | Branch): Promise<boolean | undefined>;
 

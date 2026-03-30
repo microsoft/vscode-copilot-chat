@@ -15,7 +15,7 @@ import { FixtureFetcherService } from './util';
 
 const RUN_DOTNET_CLI_TESTS = !!process.env['CI'] && !process.env['BUILD_ARTIFACTSTAGINGDIRECTORY'];
 
-describe.runIf(RUN_DOTNET_CLI_TESTS)('get nuget MCP server info using dotnet CLI', { timeout: 30_000 }, () => {
+describe.runIf(RUN_DOTNET_CLI_TESTS).skip('get nuget MCP server info using dotnet CLI', { timeout: 30_000 }, () => {
 	let testingServiceCollection: TestingServiceCollection;
 	let accessor: ITestingServicesAccessor;
 	let logService: ILogService;

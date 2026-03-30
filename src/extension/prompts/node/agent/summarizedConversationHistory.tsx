@@ -248,7 +248,7 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 		}
 
 		if (summaryForCurrentTurn) {
-			history.push(<SummaryMessageElement endpoint={this.props.endpoint} summaryText={summaryForCurrentTurn} transcriptPath={this.props.transcriptPath} />);
+			history.push(<SummaryMessageElement endpoint={this.props.endpoint} summaryText={summaryForCurrentTurn} transcriptPath={this.props.transcriptPath} transcriptLineCount={this.props.transcriptLineCount} />);
 
 			return (<PrioritizedList priority={this.props.priority} descending={false} passPriority={true}>
 				{history.reverse()}
@@ -308,7 +308,7 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 
 			if (summaryForTurn) {
 				// We have a summary for a tool call round that was part of this turn
-				turnComponents.push(<SummaryMessageElement endpoint={this.props.endpoint} summaryText={summaryForTurn.text} transcriptPath={this.props.transcriptPath} />);
+				turnComponents.push(<SummaryMessageElement endpoint={this.props.endpoint} summaryText={summaryForTurn.text} transcriptPath={this.props.transcriptPath} transcriptLineCount={this.props.transcriptLineCount} />);
 			} else if (!turn.isContinuation) {
 				turnComponents.push(<AgentUserMessage flexGrow={1} {...getUserMessagePropsFromTurn(turn, this.props.endpoint, {
 					userQueryTagName: this.props.userQueryTagName,
@@ -410,6 +410,8 @@ export interface SummarizedAgentHistoryProps extends BasePromptElementProps, Age
 	readonly summarizationSource?: 'background' | 'foreground';
 	/** Path to the conversation transcript JSONL file, used to inform the model after summarization */
 	readonly transcriptPath?: string;
+	/** Number of lines in the transcript at the time of compaction */
+	readonly transcriptLineCount?: number;
 }
 
 /**
@@ -458,6 +460,7 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 
 		// Resolve transcript path and flush to disk so the model can read the up-to-date file
 		let transcriptPath: string | undefined;
+		let transcriptLineCount: number | undefined;
 		if (transcriptLookupEnabled) {
 			const sessionId = this.props.promptContext.conversation?.sessionId;
 			if (sessionId) {
@@ -465,6 +468,7 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 				if (transcriptUri) {
 					await this.sessionTranscriptService.flush(sessionId);
 					transcriptPath = transcriptUri.fsPath;
+					transcriptLineCount = this.sessionTranscriptService.getLineCount(sessionId);
 				}
 			}
 		}
@@ -475,6 +479,7 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 				{...this.props}
 				promptContext={promptContext}
 				transcriptPath={transcriptPath}
+				transcriptLineCount={transcriptLineCount}
 				enableCacheBreakpoints={this.props.enableCacheBreakpoints} />
 		</>;
 	}
@@ -1002,6 +1007,7 @@ interface SummaryMessageProps extends BasePromptElementProps {
 	readonly summaryText: string;
 	readonly endpoint: IChatEndpoint;
 	readonly transcriptPath?: string;
+	readonly transcriptLineCount?: number;
 }
 
 class SummaryMessageElement extends PromptElement<SummaryMessageProps> {
@@ -1010,7 +1016,7 @@ class SummaryMessageElement extends PromptElement<SummaryMessageProps> {
 			<Tag name='conversation-summary'>
 				{this.props.summaryText}
 			</Tag>
-			{this.props.transcriptPath && <><br />If you need specific details from before compaction (such as exact code snippets, error messages, tool results, or content you previously generated), use the {ToolName.ReadFile} tool to look up the full uncompacted conversation transcript at: {this.props.transcriptPath}</>}
+			{this.props.transcriptPath && <><br />If you need specific details from before compaction (such as exact code snippets, error messages, tool results, or content you previously generated), use the {ToolName.ReadFile} tool to look up the full uncompacted conversation transcript at: "{this.props.transcriptPath}"{this.props.transcriptLineCount !== undefined && <><br />At the time of this request, the transcript has {this.props.transcriptLineCount} lines.</>}<br />Example usage: {ToolName.ReadFile}(filePath: "{this.props.transcriptPath}")</>}
 			{this.props.endpoint.family === 'gpt-4.1' && <Tag name='reminderInstructions'>
 				<DefaultOpenAIKeepGoingReminder />
 			</Tag>}
