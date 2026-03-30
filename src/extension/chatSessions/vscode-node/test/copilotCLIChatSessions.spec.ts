@@ -33,6 +33,7 @@ import { ICopilotCLISessionService } from '../../copilotcli/node/copilotcliSessi
 import { ICopilotCLISessionTracker } from '../../copilotcli/vscode-node/copilotCLISessionTracker';
 import { CopilotCLIChatSessionContentProvider } from '../copilotCLIChatSessions';
 import { ICopilotCLITerminalIntegration } from '../copilotCLITerminalIntegration';
+import { IAgentSessionsWorkspace } from '../../common/agentSessionsWorkspace';
 vi.mock('../copilotCLIShim.ps1', () => ({ default: '# mock powershell script' }));
 
 beforeAll(() => {
@@ -198,6 +199,7 @@ function createProvider() {
 		workspaceFolderService,
 		octoKitService,
 		logService,
+		new class extends mock<IAgentSessionsWorkspace>() { override get isAgentSessionsWorkspace() { return false; } }
 	);
 
 	return {
