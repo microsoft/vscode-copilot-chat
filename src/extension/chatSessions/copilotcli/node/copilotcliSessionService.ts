@@ -324,13 +324,12 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		// 	return sessionItem;
 		// }
 
-		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
-		const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
-		await this._sessionTracker.initialize();
-		const metadata = sessionMetadataList.find(s => s.sessionId === sessionId);
-		if (!metadata) {
+		const sessionManager = await raceCancellation(this.getSessionManager(), token);
+		const metadata = sessionManager ? await raceCancellationError(sessionManager.getSessionMetadata({ sessionId }), token) : undefined;
+		if (!metadata || token.isCancellationRequested) {
 			return;
 		}
+		await this._sessionTracker.initialize();
 		return await this.constructSessionItem(metadata, token);
 	}
 
