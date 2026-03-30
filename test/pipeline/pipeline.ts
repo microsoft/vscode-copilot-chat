@@ -12,14 +12,14 @@ import { ConfigKey, IConfigurationService } from '../../src/platform/configurati
 import { ResponseFormat } from '../../src/platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { Limiter } from '../../src/util/vs/base/common/async';
 import { applyConfigFile, loadConfigFile } from '../base/simulationContext';
-import { SimulationOptions } from '../base/simulationOptions';
+import { NesDatagen, SimulationOptions } from '../base/simulationOptions';
 import { assembleSample, ISample, resolveOutputPath, writeSamples } from './output';
 import { loadAndParseInput } from './parseInput';
 import { generatePromptFromRecording, IGeneratedPrompt } from './promptStep';
 import { parseSuggestedEdit, processAllRows } from './replayRecording';
 import { generateAllResponses, generateResponse, IResponseGenerationInput } from './responseStep';
 
-function logErrors(errors: readonly { error: string }[], verbose: boolean): void {
+function logErrors(errors: readonly { error: string }[], verbose: boolean, log: (...ps: any[]) => void): void {
 	if (errors.length > 0 && verbose) {
 		for (const err of errors) {
 			console.log(`    ${err.error}`);
@@ -32,7 +32,17 @@ function formatElapsed(startTime: number): string {
 	return `${elapsed}s`;
 }
 
-export async function runInputPipeline(opts: SimulationOptions, log = console.log.bind(console)): Promise<void> {
+export type RunPipelineOptions = {
+	readonly nesDatagen: NesDatagen | undefined;
+	/**
+	 * path to config file
+	 */
+	readonly configFile: string | undefined;
+	readonly verbose: number | boolean | undefined;
+	readonly parallelism: number;
+}
+
+export async function runInputPipeline(opts: RunPipelineOptions, log = console.log.bind(console)): Promise<void> {
 	const nesDatagenOpts = opts.nesDatagen!;
 	const inputPath = nesDatagenOpts.input;
 	if (!opts.configFile) {
@@ -50,14 +60,14 @@ export async function runInputPipeline(opts: SimulationOptions, log = console.lo
 	// Step 1: Parse input
 	const { rows, errors } = await loadAndParseInput(inputPath, verbose);
 	log(`  [1/5] Input parsed: ${rows.length} rows, ${errors.length} errors`);
-	logErrors(errors, verbose);
+	logErrors(errors, verbose, log);
 
 	// Step 2: Replay recordings
 	const { processed, errors: replayErrors } = processAllRows(rows);
 	log(`  [2/5] Recordings replayed: ${processed.length} ok, ${replayErrors.length} errors`);
 	logErrors(replayErrors.map(e => ({
 		error: `[sample ${e.rowIndex + rowOffset}, ${rows[e.rowIndex]?.activeDocumentLanguageId ?? '?'}] ${e.error}`,
-	})), verbose);
+	})), verbose, log);
 
 	// Step 3: Generate prompts
 	const serviceCollection = createExtensionUnitTestingServices();
@@ -102,7 +112,7 @@ export async function runInputPipeline(opts: SimulationOptions, log = console.lo
 		));
 
 		log(`  [3/5] Prompts generated: ${prompts.length} ok, ${promptErrors.length} errors (${formatElapsed(promptStartTime)})`);
-		logErrors(promptErrors, verbose);
+		logErrors(promptErrors, verbose, log);
 
 		// Step 4: Generate responses
 		const processedByOriginalIndex = new Map(processed.map(p => [p.originalRowIndex, p]));
@@ -127,7 +137,7 @@ export async function runInputPipeline(opts: SimulationOptions, log = console.lo
 		logErrors(responseErrors.map(e => {
 			const p = processedByOriginalIndex.get(e.index);
 			return { error: `[sample ${e.index + rowOffset}, ${p?.row.activeDocumentLanguageId ?? '?'}] ${e.error}` };
-		}), verbose);
+		}), verbose, log);
 
 		// Step 5: Write output
 		const responseByIndex = new Map(responses.map(r => [r.index, r.response]));

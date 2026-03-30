@@ -6,8 +6,8 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { IGeneratedPrompt } from './promptStep';
-import { IGeneratedResponse } from './responseStep';
 import { IProcessedRow } from './replayRecording';
+import { IGeneratedResponse } from './responseStep';
 
 export interface IMessage {
 	readonly role: 'system' | 'user' | 'assistant';
@@ -23,6 +23,7 @@ export interface ISampleMetadata {
 	readonly filePath: string;
 	readonly docContent: string;
 	readonly oracleEdits: readonly (readonly [start: number, endEx: number, text: string])[];
+	readonly originalPrompt: unknown[];
 	readonly modelResponse: string;
 }
 
@@ -68,6 +69,7 @@ export function assembleSample(
 		filePath: processedRow.activeFilePath.replace(/\\/g, '/'),
 		docContent: processedRow.activeDocument.value.get().value,
 		oracleEdits: processedRow.nextUserEdit?.edit ?? [],
+		originalPrompt: processedRow.row.prompt,
 		modelResponse,
 	};
 

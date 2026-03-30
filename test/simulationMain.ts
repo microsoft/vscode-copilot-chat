@@ -44,7 +44,7 @@ import { drainStdoutAndExit } from './base/stdout';
 import { SimulationSuite, SimulationTest, SimulationTestsRegistry, createSimulationTestFilter } from './base/stest';
 import { CollectingJSONOutputPrinter, ConsoleJSONOutputPrinter, IJSONOutputPrinter, ProxiedSONOutputPrinter } from './jsonOutputPrinter';
 import { green, orange, red, violet, yellow } from './outputColorer';
-import { runInputPipeline, runInputPipelineParallel } from './pipeline/trainPipeline';
+import { runInputPipeline, runInputPipelineParallel } from './pipeline/pipeline';
 import { ITestDiscoveryOptions, discoverTests } from './simulation/externalScenarios';
 import { discoverCoffeTests } from './simulation/nesCoffeTests';
 import { discoverNesTests } from './simulation/nesExternalTests';
