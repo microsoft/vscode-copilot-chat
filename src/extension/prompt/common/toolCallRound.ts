@@ -47,6 +47,7 @@ export class ToolCallRound implements IToolCallRound {
 	 * @param toolCalls The tool calls made by the assistant
 	 * @param toolInputRetry The number of times this round has been retried due to tool input validation failures
 	 * @param id A stable identifier for this round
+	 * @param responseOutputMessageId Optional message ID from the responses API, used for associating the assistant's response with tool call results
 	 * @param statefulMarker Optional stateful marker used with the responses API
 	 * @param thinking Optional thinking/reasoning data
 	 * @param timestamp Epoch millis when this round started (defaults to `Date.now()`)
