@@ -468,6 +468,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		repository: NonNullable<ReturnType<IGitService['activeRepository']['get']>>,
 		token: vscode.CancellationToken
 	): Promise<Array<{ uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number }>> {
+		this.workspaceFolderService.clearWorkspaceChanges(repositoryUri);
 		const workspaceChanges = await this.workspaceFolderService.getWorkspaceChanges(repositoryUri) ?? [];
 		if (workspaceChanges.length > 0) {
 			return workspaceChanges.map(change => this.toModifiedFileConfirmationEntry(change));
