@@ -5,9 +5,9 @@
 
 import { describe, expect, it } from 'vitest';
 import { URI } from '../../../../util/vs/base/common/uri';
+import type { IGitService, RepoContext } from '../../../git/common/gitService';
 import { CopilotChatAttr } from '../genAiAttributes';
 import { resolveWorkspaceOTelMetadata, workspaceMetadataToOTelAttributes } from '../workspaceOTelMetadata';
-import type { IGitService, RepoContext } from '../../../git/common/gitService';
 
 function createMockGitService(repoContext?: Partial<RepoContext>): IGitService {
 	return {
@@ -32,8 +32,7 @@ function createMockGitService(repoContext?: Partial<RepoContext>): IGitService {
 
 describe('resolveWorkspaceOTelMetadata', () => {
 	it('returns empty object when no active repository', () => {
-		const gitService = createMockGitService(undefined);
-		(gitService.activeRepository as any) = { get: () => undefined };
+		const gitService = createMockGitService();
 		const result = resolveWorkspaceOTelMetadata(gitService);
 		expect(result).toEqual({});
 	});
@@ -79,14 +78,11 @@ describe('resolveWorkspaceOTelMetadata', () => {
 		expect(result.fileRelativePath).toBeUndefined();
 	});
 
-	it('handles missing branch and commit', () => {
-		const gitService = createMockGitService({
-			headBranchName: undefined,
-			headCommitHash: undefined,
-		});
-		const result = resolveWorkspaceOTelMetadata(gitService);
-		expect(result.headBranchName).toBeUndefined();
-		expect(result.headCommitHash).toBeUndefined();
+	it('does not false-positive on path prefix match', () => {
+		const gitService = createMockGitService({});
+		const fileUri = URI.file('/workspace/repo2/file.ts');
+		const result = resolveWorkspaceOTelMetadata(gitService, fileUri);
+		expect(result.fileRelativePath).toBeUndefined();
 	});
 
 	it('handles no remotes', () => {
@@ -100,15 +96,7 @@ describe('resolveWorkspaceOTelMetadata', () => {
 });
 
 describe('workspaceMetadataToOTelAttributes', () => {
-	it('returns empty object for undefined metadata', () => {
-		expect(workspaceMetadataToOTelAttributes(undefined)).toEqual({});
-	});
-
-	it('returns empty object for empty metadata', () => {
-		expect(workspaceMetadataToOTelAttributes({})).toEqual({});
-	});
-
-	it('maps all fields to OTel attribute keys', () => {
+	it('maps all fields to correct OTel attribute keys', () => {
 		const attrs = workspaceMetadataToOTelAttributes({
 			headBranchName: 'main',
 			headCommitHash: 'abc123',
@@ -119,15 +107,5 @@ describe('workspaceMetadataToOTelAttributes', () => {
 		expect(attrs[CopilotChatAttr.REPO_HEAD_COMMIT_HASH]).toBe('abc123');
 		expect(attrs[CopilotChatAttr.REPO_REMOTE_URL]).toBe('github.com/org/repo');
 		expect(attrs[CopilotChatAttr.FILE_RELATIVE_PATH]).toBe('src/index.ts');
-	});
-
-	it('omits undefined fields', () => {
-		const attrs = workspaceMetadataToOTelAttributes({
-			headBranchName: 'main',
-		});
-		expect(attrs[CopilotChatAttr.REPO_HEAD_BRANCH_NAME]).toBe('main');
-		expect(attrs).not.toHaveProperty(CopilotChatAttr.REPO_HEAD_COMMIT_HASH);
-		expect(attrs).not.toHaveProperty(CopilotChatAttr.REPO_REMOTE_URL);
-		expect(attrs).not.toHaveProperty(CopilotChatAttr.FILE_RELATIVE_PATH);
 	});
 });

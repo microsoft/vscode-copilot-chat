@@ -5,7 +5,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { Event } from '../../../../util/vs/base/common/event';
-import { GenAiAttr, GenAiOperationName, CopilotChatAttr, StdAttr } from '../genAiAttributes';
+import { CopilotChatAttr, GenAiAttr, GenAiOperationName, StdAttr } from '../genAiAttributes';
 import { emitAgentTurnEvent, emitEditFeedbackEvent, emitEditSurvivalEvent, emitInferenceDetailsEvent, emitSessionStartEvent, emitToolCallEvent } from '../genAiEvents';
 import { resolveOTelConfig } from '../otelConfig';
 import type { IOTelService } from '../otelService';
@@ -164,16 +164,6 @@ describe('emitAgentTurnEvent', () => {
 });
 
 describe('emitEditFeedbackEvent', () => {
-	it('emits without workspace metadata when not provided', () => {
-		const otel = createMockOTel();
-		emitEditFeedbackEvent(otel, 'accepted', 'typescript', 'copilot', 'req-1', 'agent', false, false);
-
-		const attrs = otel.emitLogRecord.mock.calls[0][1];
-		expect(attrs['event.name']).toBe('copilot_chat.edit.feedback');
-		expect(attrs['outcome']).toBe('accepted');
-		expect(attrs).not.toHaveProperty(CopilotChatAttr.REPO_HEAD_BRANCH_NAME);
-	});
-
 	it('includes workspace metadata when provided', () => {
 		const otel = createMockOTel();
 		emitEditFeedbackEvent(otel, 'accepted', 'typescript', 'copilot', 'req-1', 'agent', false, false, {

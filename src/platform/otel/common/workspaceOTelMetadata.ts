@@ -3,8 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { getOrderedRepoInfosFromContext, type IGitService, normalizeFetchUrl, type RepoContext } from '../../git/common/gitService';
 import { URI } from '../../../util/vs/base/common/uri';
+import { isEqualOrParent, relativePath } from '../../../util/vs/base/common/resources';
+import { getOrderedRepoInfosFromContext, type IGitService, normalizeFetchUrl, type RepoContext } from '../../git/common/gitService';
 import { CopilotChatAttr } from './genAiAttributes';
 
 export interface WorkspaceOTelMetadata {
@@ -37,12 +38,8 @@ function buildWorkspaceMetadata(repoContext: RepoContext, fileUri?: URI): Worksp
 	}
 
 	let fileRelativePath: string | undefined;
-	if (fileUri) {
-		const rootPath = repoContext.rootUri.path;
-		const filePath = fileUri.path;
-		if (filePath.startsWith(rootPath)) {
-			fileRelativePath = filePath.slice(rootPath.length).replace(/^\//, '');
-		}
+	if (fileUri && isEqualOrParent(fileUri, repoContext.rootUri)) {
+		fileRelativePath = relativePath(repoContext.rootUri, fileUri);
 	}
 
 	return {
@@ -63,9 +60,17 @@ export function workspaceMetadataToOTelAttributes(
 		return {};
 	}
 	const attrs: Record<string, string> = {};
-	if (metadata.headBranchName) { attrs[CopilotChatAttr.REPO_HEAD_BRANCH_NAME] = metadata.headBranchName; }
-	if (metadata.headCommitHash) { attrs[CopilotChatAttr.REPO_HEAD_COMMIT_HASH] = metadata.headCommitHash; }
-	if (metadata.remoteUrl) { attrs[CopilotChatAttr.REPO_REMOTE_URL] = metadata.remoteUrl; }
-	if (metadata.fileRelativePath) { attrs[CopilotChatAttr.FILE_RELATIVE_PATH] = metadata.fileRelativePath; }
+	if (metadata.headBranchName) {
+		attrs[CopilotChatAttr.REPO_HEAD_BRANCH_NAME] = metadata.headBranchName;
+	}
+	if (metadata.headCommitHash) {
+		attrs[CopilotChatAttr.REPO_HEAD_COMMIT_HASH] = metadata.headCommitHash;
+	}
+	if (metadata.remoteUrl) {
+		attrs[CopilotChatAttr.REPO_REMOTE_URL] = metadata.remoteUrl;
+	}
+	if (metadata.fileRelativePath) {
+		attrs[CopilotChatAttr.FILE_RELATIVE_PATH] = metadata.fileRelativePath;
+	}
 	return attrs;
 }
