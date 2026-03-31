@@ -19,7 +19,7 @@ import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, ICopilotCLIAgents, I
 import { CopilotCLIImageSupport, ICopilotCLIImageSupport } from '../../src/extension/chatSessions/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLIPromptResolver } from '../../src/extension/chatSessions/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../src/extension/chatSessions/copilotcli/node/copilotcliSession';
-import { CopilotCLISessionCreationResult, CopilotCLISessionService, ICopilotCLISessionService } from '../../src/extension/chatSessions/copilotcli/node/copilotcliSessionService';
+import { CopilotCLISessionService, ICopilotCLISessionService } from '../../src/extension/chatSessions/copilotcli/node/copilotcliSessionService';
 import { CopilotCLISkills, ICopilotCLISkills } from '../../src/extension/chatSessions/copilotcli/node/copilotCLISkills';
 import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../src/extension/chatSessions/copilotcli/node/mcpHandler';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../src/extension/chatSessions/copilotcli/node/userInputHelpers';
