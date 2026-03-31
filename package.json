@@ -1070,29 +1070,6 @@
 				}
 			},
 			{
-				"name": "copilot_toolReplay",
-				"modelDescription": "Replays a tool call from a previous chat session.",
-				"displayName": "tool replay",
-				"when": "false",
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"toolCallId": {
-							"type": "string",
-							"description": "the id of the tool original tool call"
-						},
-						"toolName": {
-							"type": "string",
-							"description": "the name of the tool being replayed"
-						},
-						"toolCallArgs": {
-							"type": "object",
-							"description": "the arguments of the tool call"
-						}
-					}
-				}
-			},
-			{
 				"name": "copilot_switchAgent",
 				"toolReferenceName": "switchAgent",
 				"displayName": "%copilot.tools.switchAgent.name%",
@@ -1734,15 +1711,6 @@
 						]
 					}
 				]
-			},
-			{
-				"id": "github.copilot.chatReplay",
-				"name": "chatReplay",
-				"fullName": "Chat Replay",
-				"when": "debugType == 'vscode-chat-replay'",
-				"locations": [
-					"panel"
-				]
 			}
 		],
 		"languageModelChatProviders": [
@@ -2257,24 +2225,6 @@
 				"category": "Copilot CLI"
 			},
 			{
-				"command": "github.copilot.chat.replay",
-				"title": "Start Chat Replay",
-				"icon": "$(debug-line-by-line)",
-				"enablement": "resourceFilename === 'benchRun.chatReplay.json' && !inDebugMode"
-			},
-			{
-				"command": "github.copilot.chat.replay.enableWorkspaceEditTracing",
-				"title": "%github.copilot.command.enableEditTracing%",
-				"category": "Developer",
-				"enablement": "!github.copilot.chat.replay.workspaceEditTracing"
-			},
-			{
-				"command": "github.copilot.chat.replay.disableWorkspaceEditTracing",
-				"title": "%github.copilot.command.disableEditTracing%",
-				"category": "Developer",
-				"enablement": "github.copilot.chat.replay.workspaceEditTracing"
-			},
-			{
 				"command": "github.copilot.chat.compact",
 				"title": "%github.copilot.command.compactConversation%"
 			},
@@ -2699,11 +2649,6 @@
 				"command": "github.copilot.nes.captureExpected.submit",
 				"title": "Submit NES Captures",
 				"category": "Copilot"
-			},
-			{
-				"command": "github.copilot.chat.showAsChatSession",
-				"title": "Show as chat session",
-				"icon": "$(chat-sparkle)"
 			},
 			{
 				"command": "github.copilot.debug.collectWorkspaceIndexDiagnostics",
@@ -4776,16 +4721,6 @@
 					"group": "navigation@10"
 				},
 				{
-					"command": "github.copilot.chat.replay",
-					"group": "navigation@9",
-					"when": "resourceFilename === 'benchRun.chatReplay.json'"
-				},
-				{
-					"command": "github.copilot.chat.showAsChatSession",
-					"group": "navigation@9",
-					"when": "resourceFilename === 'benchRun.chatReplay.json' || resourceFilename === 'chat-export-logs.json'"
-				},
-				{
 					"command": "github.copilot.chat.copilotCLI.acceptDiff",
 					"group": "navigation@1",
 					"when": "github.copilot.chat.copilotCLI.hasActiveDiff"
@@ -4804,11 +4739,6 @@
 				}
 			],
 			"explorer/context": [
-				{
-					"command": "github.copilot.chat.showAsChatSession",
-					"when": "resourceFilename === 'benchRun.chatReplay.json' || resourceFilename === 'chat-export-logs.json'",
-					"group": "2_copilot@1"
-				},
 				{
 					"command": "github.copilot.chat.copilotCLI.addFileReference",
 					"group": "copilot",
@@ -5219,10 +5149,6 @@
 				},
 				{
 					"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
-					"when": "false"
-				},
-				{
-					"command": "github.copilot.chat.showAsChatSession",
 					"when": "false"
 				},
 				{
@@ -5743,17 +5669,6 @@
 				]
 			}
 		],
-		"notebooks": [
-			{
-				"type": "copilot-chat-replay",
-				"displayName": "Copilot Chat Replay",
-				"selector": [
-					{
-						"filenamePattern": "*.chatreplay.json"
-					}
-				]
-			}
-		],
 		"views": {
 			"copilot-chat": [
 				{
@@ -6107,35 +6022,6 @@
 					"supportsFileAttachments": true
 				},
 				"autoAttachReferences": true
-			}
-		],
-		"debuggers": [
-			{
-				"type": "vscode-chat-replay",
-				"label": "vscode-chat-replay",
-				"languages": [
-					"json"
-				],
-				"when": "resourceFilename === 'benchRun.chatReplay.json'",
-				"configurationAttributes": {
-					"launch": {
-						"properties": {
-							"program": {
-								"type": "string",
-								"description": "Chat replay file to debug (parse for headers)",
-								"default": "${file}"
-							},
-							"stopOnEntry": {
-								"type": "boolean",
-								"default": true,
-								"description": "Break immediately to step through manually."
-							}
-						},
-						"required": [
-							"program"
-						]
-					}
-				}
 			}
 		],
 		"chatAgents": [],
