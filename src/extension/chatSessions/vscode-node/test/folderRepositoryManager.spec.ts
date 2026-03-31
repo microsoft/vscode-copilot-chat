@@ -58,15 +58,18 @@ class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>()
  */
 class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFolderService>() {
 	private _sessionWorkspaceFolders = new Map<string, vscode.Uri>();
+	private _sessionWorkspaceFolderRepositories = new Map<string, vscode.Uri | undefined>();
 	private _recentFolders: { folder: vscode.Uri; lastAccessTime: number }[] = [];
 	private _workspaceChanges = new Map<string, readonly ChatSessionWorktreeFile[] | undefined>();
 
-	override trackSessionWorkspaceFolder = vi.fn(async (sessionId: string, workspaceFolderUri: string, _repositoryPath?: string): Promise<void> => {
+	override trackSessionWorkspaceFolder = vi.fn(async (sessionId: string, workspaceFolderUri: string, repositoryPath?: string): Promise<void> => {
 		this._sessionWorkspaceFolders.set(sessionId, vscode.Uri.file(workspaceFolderUri));
+		this._sessionWorkspaceFolderRepositories.set(sessionId, repositoryPath ? vscode.Uri.file(repositoryPath) : undefined);
 	});
 
 	override deleteTrackedWorkspaceFolder = vi.fn(async (sessionId: string): Promise<void> => {
 		this._sessionWorkspaceFolders.delete(sessionId);
+		this._sessionWorkspaceFolderRepositories.delete(sessionId);
 	});
 
 	override deleteRecentFolder = vi.fn(async (folder: vscode.Uri): Promise<void> => {
@@ -75,6 +78,20 @@ class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFo
 
 	override getSessionWorkspaceFolder = vi.fn(async (sessionId: string): Promise<vscode.Uri | undefined> => {
 		return this._sessionWorkspaceFolders.get(sessionId);
+	});
+
+	override getSessionWorkspaceFolderEntry = vi.fn(async (sessionId: string) => {
+		const folder = this._sessionWorkspaceFolders.get(sessionId);
+		if (!folder) {
+			return undefined;
+		}
+
+		const repository = this._sessionWorkspaceFolderRepositories.get(sessionId);
+		return {
+			folderPath: folder.fsPath,
+			repositoryPath: repository?.fsPath,
+			timestamp: Date.now()
+		};
 	});
 
 	override getRecentFolders = vi.fn(async (): Promise<{ folder: vscode.Uri; lastAccessTime: number }[]> => {
@@ -91,6 +108,11 @@ class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFo
 
 	setTestSessionWorkspaceFolder(sessionId: string, folder: vscode.Uri): void {
 		this._sessionWorkspaceFolders.set(sessionId, folder);
+	}
+
+	setTestSessionWorkspaceFolderEntry(sessionId: string, folder: vscode.Uri, repository?: vscode.Uri): void {
+		this._sessionWorkspaceFolders.set(sessionId, folder);
+		this._sessionWorkspaceFolderRepositories.set(sessionId, repository);
 	}
 
 	setTestWorkspaceChanges(folder: vscode.Uri, changes: readonly ChatSessionWorktreeFile[] | undefined): void {

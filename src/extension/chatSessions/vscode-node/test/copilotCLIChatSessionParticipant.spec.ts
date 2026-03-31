@@ -125,16 +125,32 @@ class FakeToolsService extends mock<IToolsService>() {
 
 class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFolderService>() {
 	private _sessionWorkspaceFolders = new Map<string, vscode.Uri>();
+	private _sessionWorkspaceFolderRepositories = new Map<string, vscode.Uri | undefined>();
 	private _recentFolders: { folder: vscode.Uri; lastAccessTime: number }[] = [];
 	private _workspaceChanges = new Map<string, readonly ChatSessionWorktreeFile[] | undefined>();
-	override trackSessionWorkspaceFolder = vi.fn(async (sessionId: string, workspaceFolderUri: string) => {
+	override trackSessionWorkspaceFolder = vi.fn(async (sessionId: string, workspaceFolderUri: string, repositoryFolderUri?: string) => {
 		this._sessionWorkspaceFolders.set(sessionId, vscode.Uri.file(workspaceFolderUri));
+		this._sessionWorkspaceFolderRepositories.set(sessionId, repositoryFolderUri ? vscode.Uri.file(repositoryFolderUri) : undefined);
 	});
 	override deleteTrackedWorkspaceFolder = vi.fn(async (sessionId: string) => {
 		this._sessionWorkspaceFolders.delete(sessionId);
+		this._sessionWorkspaceFolderRepositories.delete(sessionId);
 	});
 	override getSessionWorkspaceFolder = vi.fn(async (sessionId: string): Promise<vscode.Uri | undefined> => {
 		return this._sessionWorkspaceFolders.get(sessionId);
+	});
+	override getSessionWorkspaceFolderEntry = vi.fn(async (sessionId: string) => {
+		const folder = this._sessionWorkspaceFolders.get(sessionId);
+		if (!folder) {
+			return undefined;
+		}
+
+		const repository = this._sessionWorkspaceFolderRepositories.get(sessionId);
+		return {
+			folderPath: folder.fsPath,
+			repositoryPath: repository?.fsPath,
+			timestamp: Date.now()
+		};
 	});
 	override getRecentFolders = vi.fn((): Promise<{ folder: vscode.Uri; lastAccessTime: number }[]> => {
 		return Promise.resolve(this._recentFolders);
@@ -147,6 +163,11 @@ class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFo
 	}
 	setTestSessionWorkspaceFolder(sessionId: string, folder: vscode.Uri): void {
 		this._sessionWorkspaceFolders.set(sessionId, folder);
+	}
+
+	setTestSessionWorkspaceFolderEntry(sessionId: string, folder: vscode.Uri, repository?: vscode.Uri): void {
+		this._sessionWorkspaceFolders.set(sessionId, folder);
+		this._sessionWorkspaceFolderRepositories.set(sessionId, repository);
 	}
 	setTestWorkspaceChanges(folder: vscode.Uri, changes: readonly ChatSessionWorktreeFile[] | undefined): void {
 		this._workspaceChanges.set(folder.toString(), changes);
