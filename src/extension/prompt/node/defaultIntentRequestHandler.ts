@@ -8,7 +8,6 @@ import { Raw } from '@vscode/prompt-tsx';
 import type { ChatRequest, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
-import { sessionResourceToId } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { IChatHookService, UserPromptSubmitHookInput, UserPromptSubmitHookOutput } from '../../../platform/chat/common/chatHookService';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
@@ -18,12 +17,12 @@ import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession, NullEditSurv
 import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { HAS_IGNORED_FILES_MESSAGE } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { FilterReason } from '../../../platform/networking/common/openai';
-import { IChatWebSocketManager } from '../../../platform/networking/node/chatWebSocketManager';
 import { IOTelService } from '../../../platform/otel/common/otelService';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -38,7 +37,6 @@ import { Iterable } from '../../../util/vs/base/common/iterator';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { mixin } from '../../../util/vs/base/common/objects';
 import { assertType, Mutable } from '../../../util/vs/base/common/types';
-import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
@@ -51,7 +49,7 @@ import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { IToolGrouping, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
-import { ChatVariablesCollection, isSessionReferenceScheme } from '../common/chatVariablesCollection';
+import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 import { AnthropicTokenUsageMetadata, Conversation, getUniqueReferences, GlobalContextMessageMetadata, IResultMetadata, RenderedUserMessageMetadata, RequestDebugInformation, ResponseStreamParticipant, Turn, TurnStatus } from '../common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../common/intents';
 import { isToolCallLimitCancellation, ISwitchToAutoOnRateLimitConfirmation } from '../common/specialRequestTypes';
@@ -102,7 +100,6 @@ export class DefaultIntentRequestHandler {
 		@IEditSurvivalTrackerService private readonly _editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IChatHookService private readonly _chatHookService: IChatHookService,
-		@IChatWebSocketManager private readonly _webSocketManager: IChatWebSocketManager,
 		@IOctoKitService private readonly _octoKitService: IOctoKitService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
@@ -140,8 +137,6 @@ export class DefaultIntentRequestHandler {
 			// This enables explicit linking between the parent's runSubagent tool call and the subagent trajectory.
 			// For main requests, use the VS Code chat sessionId directly as the trajectory session ID.
 			const isSubagent = !!this.request.subAgentInvocationId;
-			const sessionRefs = this.request.references.filter(ref => URI.isUri(ref.value) && isSessionReferenceScheme(ref.value.scheme));
-			const debugTargetSessionIds = sessionRefs.length > 0 ? sessionRefs.map(ref => sessionResourceToId(ref.value as URI)) : undefined;
 			const capturingToken = new CapturingToken(
 				this.request.prompt,
 				'comment',
@@ -152,7 +147,6 @@ export class DefaultIntentRequestHandler {
 				// For subagents, link back to the parent session
 				isSubagent ? this.request.sessionId : undefined,
 				isSubagent ? `runSubagent-${this.request.subAgentName ?? 'default'}` : undefined,
-				debugTargetSessionIds,
 			);
 			const resultDetails = await this._requestLogger.captureInvocation(capturingToken, () => this.runWithToolCalling(intentInvocation));
 
@@ -405,7 +399,6 @@ export class DefaultIntentRequestHandler {
 			result.chatResult = this.resultWithMetadatas(result.chatResult);
 			return { ...result, lastRequestTelemetry: loop.telemetry };
 		} finally {
-			this._webSocketManager.closeConnection(this.conversation.sessionId, this.turn.id);
 			await Promise.allSettled(responseHandlers);
 			store.dispose();
 		}
@@ -626,8 +619,9 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@ISessionTranscriptService sessionTranscriptService: ISessionTranscriptService,
 		@IFileSystemService fileSystemService: IFileSystemService,
 		@IOTelService otelService: IOTelService,
+		@IGitService gitService: IGitService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService, fileSystemService, otelService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService, fileSystemService, otelService, gitService);
 
 		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength, toolTokenCount }) => {
 			if (result.metadata.get(SummarizedConversationHistoryMetadata)) {

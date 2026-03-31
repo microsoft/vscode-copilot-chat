@@ -224,6 +224,45 @@ invoke_agent copilot                           [~15s]
 
 **`copilot_chat.time_to_first_token` attributes:** `gen_ai.request.model`
 
+#### Agent Activity & Outcome Metrics
+
+These metrics track the activity and outcomes of agentic code changes across all surfaces (agent mode, inline chat, background CLI, cloud sessions).
+
+| Metric | Type | Unit | Description |
+|---|---|---|---|
+| `copilot_chat.edit.acceptance.count` | Counter | edits | Edit accept/reject decisions (inline chat, chat editing, hunk-level) |
+| `copilot_chat.chat_edit.outcome.count` | Counter | edits | File-level chat editing session outcomes (accepted/rejected/saved) |
+| `copilot_chat.lines_of_code.count` | Counter | lines | Lines of code added/removed by accepted agent edits |
+| `copilot_chat.edit.survival.four_gram` | Histogram | ratio (0-1) | 4-gram text similarity survival score |
+| `copilot_chat.edit.survival.no_revert` | Histogram | ratio (0-1) | No-revert survival score |
+| `copilot_chat.user.action.count` | Counter | actions | User engagement: copy, insert, apply, followup |
+| `copilot_chat.user.feedback.count` | Counter | votes | Thumbs up/down on chat responses |
+| `copilot_chat.agent.edit_response.count` | Counter | responses | Agent edit responses by success/error |
+| `copilot_chat.agent.summarization.count` | Counter | events | Context summarization outcomes (applied/failed) |
+| `copilot_chat.pull_request.count` | Counter | PRs | Pull requests created via CLI agent |
+| `copilot_chat.cloud.session.count` | Counter | sessions | Cloud/remote agent sessions by partner |
+| `copilot_chat.cloud.pr_ready.count` | Counter | events | Remote agent job PR ready notifications |
+
+**`copilot_chat.edit.acceptance.count` attributes:** `copilot_chat.edit.source` (`inline_chat`/`chat_editing`/`chat_editing_hunk`/`apply_patch`/`replace_string`/`code_mapper`), `copilot_chat.edit.outcome` (`accepted`/`rejected`), `copilot_chat.language_id` (optional)
+
+**`copilot_chat.chat_edit.outcome.count` attributes:** `copilot_chat.edit.source`, `copilot_chat.edit.outcome` (`accepted`/`rejected`/`saved`), `copilot_chat.language_id` (optional), `copilot_chat.has_remaining_edits` (optional)
+
+**`copilot_chat.lines_of_code.count` attributes:** `type` (`added`/`removed`), `copilot_chat.language_id` (optional)
+
+**`copilot_chat.edit.survival.four_gram` attributes:** `copilot_chat.edit.source`, `copilot_chat.time_delay_ms`
+
+**`copilot_chat.edit.survival.no_revert` attributes:** `copilot_chat.edit.source`, `copilot_chat.time_delay_ms`
+
+**`copilot_chat.user.action.count` attributes:** `action` (`copy`/`insert`/`apply`/`followup`)
+
+**`copilot_chat.user.feedback.count` attributes:** `rating` (`positive`/`negative`)
+
+**`copilot_chat.agent.edit_response.count` attributes:** `outcome` (`success`/`error`)
+
+**`copilot_chat.agent.summarization.count` attributes:** `outcome` (`applied`/`failed`)
+
+**`copilot_chat.cloud.session.count` attributes:** `partner_agent` (`copilot`/`claude`/`codex`)
+
 ### Events
 
 #### `gen_ai.client.inference.operation.details`
@@ -277,6 +316,84 @@ Emitted for each LLM round-trip within an agent invocation.
 | `gen_ai.usage.input_tokens` | Input tokens this turn |
 | `gen_ai.usage.output_tokens` | Output tokens this turn |
 | `tool_call_count` | Number of tool calls this turn |
+
+#### Agent Activity & Outcome Events
+
+These events provide drill-down detail for the agent activity metrics above. They are emitted as OTel log records.
+
+##### `copilot_chat.edit.feedback`
+
+Emitted when a user accepts or rejects a file-level edit from the agent.
+
+| Attribute | Description |
+|---|---|
+| `outcome` | `accepted` or `rejected` |
+| `language_id` | Language of the edited file |
+| `participant` | Chat participant that proposed the edit |
+| `request_id` | Chat request identifier |
+| `edit_surface` | `agent` or `inline_chat` |
+| `has_remaining_edits` | Whether unreviewed edits remain |
+| `is_notebook` | Whether the file is a notebook |
+
+##### `copilot_chat.edit.hunk.action`
+
+Emitted when a user accepts or rejects an individual hunk.
+
+| Attribute | Description |
+|---|---|
+| `outcome` | `accepted` or `rejected` |
+| `language_id` | Language of the edited file |
+| `request_id` | Chat request identifier |
+| `line_count` | Total lines in the hunk |
+| `lines_added` | Lines added |
+| `lines_removed` | Lines removed |
+
+##### `copilot_chat.inline.done`
+
+Emitted when an inline chat edit is accepted or rejected.
+
+| Attribute | Description |
+|---|---|
+| `accepted` | `true` or `false` |
+| `language_id` | Language of the edited file |
+| `edit_count` | Number of edits suggested |
+| `edit_line_count` | Total lines across all edits |
+| `reply_type` | How the response was shown |
+| `is_notebook` | Whether the document is a notebook |
+
+##### `copilot_chat.edit.survival`
+
+Emitted at intervals (5s, 30s, 2min, 5min, 10min, 15min) after an edit is accepted, measuring how much of the AI-generated code survives.
+
+| Attribute | Description |
+|---|---|
+| `edit_source` | `apply_patch`, `replace_string`, `code_mapper`, or `inline_chat` |
+| `survival_rate_four_gram` | 0-1 ratio of AI edit still present (4-gram similarity) |
+| `survival_rate_no_revert` | 0-1 ratio of edit ranges not reverted |
+| `time_delay_ms` | Milliseconds since edit acceptance |
+| `did_branch_change` | Whether git branch changed (ignore if `true`) |
+| `request_id` | Chat request identifier |
+
+##### `copilot_chat.user.feedback`
+
+Emitted when a user votes on a chat response (thumbs up/down).
+
+| Attribute | Description |
+|---|---|
+| `rating` | `positive` or `negative` |
+| `participant` | Chat participant name |
+| `conversation_id` | Conversation session ID |
+| `request_id` | Chat request identifier |
+
+##### `copilot_chat.cloud.session.invoke`
+
+Emitted when a cloud/remote agent session is started.
+
+| Attribute | Description |
+|---|---|
+| `partner_agent` | `copilot`, `claude`, or `codex` |
+| `model` | Model identifier |
+| `request_id` | Chat request identifier |
 
 ### Resource Attributes
 
@@ -449,9 +566,9 @@ In your trace viewer, filter by `service.name` to see traces from specific agent
 
 **Traces** — Visualize the full agent execution in Jaeger or Grafana Tempo. Each `invoke_agent` span contains child `chat` and `execute_tool` spans, making it easy to identify bottlenecks and debug failures. Subagent invocations appear as nested `invoke_agent` spans under `execute_tool runSubagent`.
 
-**Metrics** — Track token usage trends by model and provider, monitor tool success rates via `copilot_chat.tool.call.count`, and watch perceived latency with `copilot_chat.time_to_first_token`. All metrics carry the same resource attributes (`service.name`, `service.version`, `session.id`) for consistent filtering.
+**Metrics** — Track token usage trends by model and provider, monitor tool success rates via `copilot_chat.tool.call.count`, and watch perceived latency with `copilot_chat.time_to_first_token`. Agent activity metrics (`copilot_chat.edit.acceptance.count`, `copilot_chat.edit.survival.four_gram`, `copilot_chat.lines_of_code.count`) power accept rate and edit survival dashboards. All metrics carry the same resource attributes (`service.name`, `service.version`, `session.id`) for consistent filtering.
 
-**Events** — `copilot_chat.session.start` tracks session creation. `copilot_chat.tool.call` events provide per-invocation timing and error details. `gen_ai.client.inference.operation.details` gives the full LLM call record including token usage and, when content capture is enabled, the complete prompt/response messages. Use `gen_ai.conversation.id` to correlate all signals belonging to the same session.
+**Events** — `copilot_chat.session.start` tracks session creation. `copilot_chat.tool.call` events provide per-invocation timing and error details. `copilot_chat.edit.feedback` and `copilot_chat.edit.survival` events enable drill-down into which edits were accepted/rejected and how code survival varies by edit source. `copilot_chat.user.feedback` links thumbs-up/down votes to specific conversations for quality investigation. `gen_ai.client.inference.operation.details` gives the full LLM call record including token usage and, when content capture is enabled, the complete prompt/response messages. Use `gen_ai.conversation.id` to correlate all signals belonging to the same session.
 
 ---
 

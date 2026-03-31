@@ -9,8 +9,10 @@ import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessa
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
+import { buildToolInputSchema } from '../../../platform/endpoint/node/messagesApi';
 import { ILogService } from '../../../platform/log/common/logService';
-import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicMemoryToolEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
+import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicMemoryToolEnabled, isAnthropicToolSearchEnabled, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
+import { IToolDeferralService } from '../../../platform/networking/common/toolDeferralService';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
 import { CopilotChatAttr, emitInferenceDetailsEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, type OTelModelOptions, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
@@ -39,6 +41,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IOTelService private readonly _otelService: IOTelService,
+		@IToolDeferralService private readonly _toolDeferralService: IToolDeferralService,
 	) {
 		super(AnthropicLMProvider.providerName.toLowerCase(), AnthropicLMProvider.providerName, knownModels, byokStorageService, logService);
 
@@ -168,7 +171,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				}
 
 				// Mark tools for deferred loading when tool search is enabled, except for frequently used tools
-				const shouldDefer = toolSearchEnabled ? !nonDeferredToolNames.has(tool.name) : undefined;
+				const shouldDefer = toolSearchEnabled ? !this._toolDeferralService.isNonDeferredTool(tool.name) : undefined;
 
 				if (!tool.inputSchema) {
 					tools.push({
@@ -187,12 +190,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				tools.push({
 					name: tool.name,
 					description: tool.description,
-					input_schema: {
-						type: 'object',
-						properties: (tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {},
-						required: (tool.inputSchema as { required?: string[] }).required ?? [],
-						$schema: (tool.inputSchema as { $schema?: unknown }).$schema
-					},
+					input_schema: buildToolInputSchema(tool.inputSchema as Record<string, unknown>),
 					...(shouldDefer ? { defer_loading: shouldDefer } : {})
 				});
 			}
@@ -205,7 +203,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				const allowedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchAllowedDomains);
 				const blockedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchBlockedDomains);
 				const userLocation = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchUserLocation);
-				const shouldDeferWebSearch = toolSearchEnabled ? !nonDeferredToolNames.has('web_search') : undefined;
+				const shouldDeferWebSearch = toolSearchEnabled ? !this._toolDeferralService.isNonDeferredTool('web_search') : undefined;
 
 				const webSearchTool: Anthropic.Beta.BetaWebSearchTool20250305 = {
 					name: 'web_search',

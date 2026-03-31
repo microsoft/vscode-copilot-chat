@@ -5,13 +5,10 @@
 
 import { BasePromptElementProps, PromptElement, PromptReference, PromptSizing } from '@vscode/prompt-tsx';
 import type { ChatLanguageModelToolReference } from 'vscode';
-import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
-import { getCurrentCapturingToken } from '../../../../platform/requestLogger/node/requestLogger';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { joinPath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
@@ -32,7 +29,6 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@IChatDebugFileLoggerService private readonly chatDebugFileLoggerService: IChatDebugFileLoggerService,
 	) {
 		super(props);
 	}
@@ -76,18 +72,7 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 					bodyOffset = match.index! + match[0].length;
 				}
 			}
-			let bodyContent = content.substring(bodyOffset);
-
-			// Replace session log placeholder for troubleshoot skill
-			if (fileUri.scheme === 'copilot-skill' && fileUri.path.includes('/troubleshoot/') && bodyContent.includes('{{CURRENT_SESSION_LOG}}')) {
-				const token = getCurrentCapturingToken();
-				const sessionIds = token?.debugTargetSessionIds ?? (token?.chatSessionId ? [token.chatSessionId] : []);
-				const logDir = this.chatDebugFileLoggerService.debugLogsDir;
-				if (sessionIds.length > 0 && logDir) {
-					const sessionLogDirs = sessionIds.map(id => this.promptPathRepresentationService.getFilePath(joinPath(logDir, id)));
-					bodyContent = bodyContent.replaceAll('{{CURRENT_SESSION_LOG}}', () => sessionLogDirs.join(', '));
-				}
-			}
+			const bodyContent = content.substring(bodyOffset);
 
 			return bodyContent;
 		} catch (e) {

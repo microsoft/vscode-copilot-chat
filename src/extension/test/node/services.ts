@@ -77,6 +77,8 @@ import { IToolsService } from '../../tools/common/toolsService';
 import { IToolEmbeddingsComputer } from '../../tools/common/virtualTools/toolEmbeddingsComputer';
 import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
 import '../../tools/node/allTools';
+import { IToolDeferralService } from '../../../platform/networking/common/toolDeferralService';
+import { ToolDeferralService } from '../../tools/common/toolDeferralService';
 import { TestToolsService } from '../../tools/node/test/testToolsService';
 import { TestToolEmbeddingsComputer } from '../../tools/test/node/virtualTools/testVirtualTools';
 import { ISimilarFilesContextService } from '../../xtab/common/similarFilesContextService';
@@ -116,6 +118,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IFeedbackReporter, new SyncDescriptor(NullFeedbackReporterImpl));
 	testingServiceCollection.define(IChatMLFetcher, new SyncDescriptor(MockChatMLFetcher));
 	testingServiceCollection.define(IToolsService, new SyncDescriptor(TestToolsService, [new Set()]));
+	testingServiceCollection.define(IToolDeferralService, new ToolDeferralService());
 	testingServiceCollection.define(IChatDiskSessionResources, new SyncDescriptor(ChatDiskSessionResources));
 	testingServiceCollection.define(IClaudeCodeSdkService, new SyncDescriptor(MockClaudeCodeSdkService));
 	testingServiceCollection.define(IClaudeToolPermissionService, new SyncDescriptor(MockClaudeToolPermissionService));

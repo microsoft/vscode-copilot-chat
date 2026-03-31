@@ -10,4 +10,5 @@ export { toInputMessages, toOutputMessages, toSystemInstructions, toToolDefiniti
 export { NoopOTelService } from './noopOtelService';
 export { resolveOTelConfig, type OTelConfig, type OTelConfigInput } from './otelConfig';
 export { IOTelService, SpanKind, SpanStatusCode, type ICompletedSpanData, type ISpanEventData, type ISpanEventRecord, type ISpanHandle, type OTelModelOptions, type SpanOptions, type TraceContext } from './otelService';
+export { resolveWorkspaceOTelMetadata, workspaceMetadataToOTelAttributes, type WorkspaceOTelMetadata } from './workspaceOTelMetadata';
 

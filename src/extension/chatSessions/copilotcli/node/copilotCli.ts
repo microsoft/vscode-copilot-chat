@@ -7,7 +7,6 @@ import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import type * as vscode from 'vscode';
-import type { Uri } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../../platform/env/common/envService';
@@ -23,7 +22,6 @@ import { basename } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IChatPromptFileService } from '../../common/chatPromptFileService';
-import { getWorkingDirectory, IWorkspaceInfo } from '../../common/workspaceInfo';
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
 import { ensureRipgrepShim } from './ripgrepShim';
@@ -37,67 +35,6 @@ const COPILOT_CLI_SESSION_AGENTS_MEMENTO_KEY = 'github.copilot.cli.sessionAgents
  * Left here for backward compatibility (for state stored by older versions of Chat extension).
  */
 export const COPILOT_CLI_DEFAULT_AGENT_ID = '___vscode_default___';
-
-export class CopilotCLISessionOptions {
-	public readonly workspaceInfo: IWorkspaceInfo;
-	private readonly model?: string;
-	private readonly agent?: SweCustomAgent;
-	private readonly customAgents?: SweCustomAgent[];
-	private readonly mcpServers?: SessionOptions['mcpServers'];
-	private readonly copilotUrl?: string;
-	private readonly skillLocations?: Uri[];
-	constructor(options: { model?: string; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[]; copilotUrl?: string; skillLocations?: Uri[] }, private readonly logService: ILogService) {
-		this.workspaceInfo = options.workspaceInfo;
-		this.model = options.model;
-		this.mcpServers = options.mcpServers;
-		this.agent = options.agent;
-		this.customAgents = options.customAgents;
-		this.copilotUrl = options.copilotUrl;
-		this.skillLocations = options.skillLocations;
-	}
-
-	public get agentName(): string | undefined {
-		return this.agent?.name;
-	}
-
-	public toSessionOptions(): Readonly<SessionOptions> {
-		const allOptions: SessionOptions = {
-			clientName: 'vscode',
-		};
-
-		const workingDirectory = getWorkingDirectory(this.workspaceInfo);
-		if (workingDirectory) {
-			allOptions.workingDirectory = workingDirectory.fsPath;
-		}
-		if (this.model) {
-			allOptions.model = this.model as unknown as SessionOptions['model'];
-		}
-		if (this.mcpServers && Object.keys(this.mcpServers).length > 0) {
-			allOptions.mcpServers = this.mcpServers;
-			this.logService.info(`[CopilotCLISession] Passing ${Object.keys(this.mcpServers).length} MCP server(s) to SDK: [${Object.keys(this.mcpServers).join(', ')}]`);
-			for (const [id, cfg] of Object.entries(this.mcpServers)) {
-				this.logService.info(`[CopilotCLISession]   ${id}: type=${cfg.type}`);
-			}
-		} else {
-			this.logService.info('[CopilotCLISession] No MCP servers to pass to SDK');
-		}
-		if (this.skillLocations) {
-			allOptions.skillDirectories = this.skillLocations.map(uri => uri.fsPath);
-		}
-		if (this.agent) {
-			allOptions.selectedCustomAgent = this.agent;
-		}
-		if (this.customAgents) {
-			allOptions.customAgents = this.customAgents;
-		}
-		allOptions.enableStreaming = true;
-		if (this.copilotUrl) {
-			allOptions.copilotUrl = this.copilotUrl;
-		}
-		allOptions.sessionCapabilities = new Set(['plan-mode', 'memory', 'cli-documentation', 'ask-user', 'interactive-mode', 'system-notifications']);
-		return allOptions as Readonly<SessionOptions>;
-	}
-}
 
 export interface CopilotCLIModelInfo {
 	readonly id: string;
@@ -334,7 +271,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 			});
 		}
 
-		return this._agentsPromise;
+		return this._agentsPromise.then(agents => agents.map(agent => this.cloneAgent(agent)));
 	}
 
 	async getAgentsImpl(): Promise<Readonly<SweCustomAgent>[]> {

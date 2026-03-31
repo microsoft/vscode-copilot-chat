@@ -6,7 +6,6 @@
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatContext, ChatParticipantToolToken } from 'vscode';
-import { NullChatDebugFileLoggerService } from '../../../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { NoopOTelService, resolveOTelConfig } from '../../../../../platform/otel/common/index';
@@ -29,7 +28,7 @@ import { MockChatSessionMetadataStore } from '../../../common/test/mockChatSessi
 import { IWorkspaceInfo } from '../../../common/workspaceInfo';
 import { FakeToolsService, ToolCall } from '../../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
-import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
+import { ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
@@ -124,6 +123,10 @@ class MockSdkSession {
 
 	async compactHistory() { return { success: true }; }
 
+	async abort() { }
+
+	isAbortable(): boolean { return true; }
+
 	async initializeAndValidateTools() { }
 	getCurrentToolMetadata(): unknown[] | undefined { return this._toolMetadata; }
 	private _toolMetadata: unknown[] | undefined;
@@ -164,7 +167,8 @@ describe('CopilotCLISession', () => {
 	let sdkSession: MockSdkSession;
 	let workspaceService: IWorkspaceService;
 	let logger: ILogService;
-	let sessionOptions: CopilotCLISessionOptions;
+	let sessionWorkspaceInfo: IWorkspaceInfo;
+	let sessionAgentName: string | undefined;
 	let instaService: IInstantiationService;
 	let sdk: ICopilotCLISDK;
 	let requestLogger: IRequestLogger;
@@ -201,7 +205,8 @@ describe('CopilotCLISession', () => {
 		chatSessionMetadataStore = new MockChatSessionMetadataStore();
 		sdkSession = new MockSdkSession();
 		workspaceService = createWorkspaceService('/workspace');
-		sessionOptions = new CopilotCLISessionOptions({ workspaceInfo: workspaceInfoFor(workspaceService.getWorkspaceFolders()![0]) }, logger);
+		sessionWorkspaceInfo = workspaceInfoFor(workspaceService.getWorkspaceFolders()![0]);
+		sessionAgentName = undefined;
 		configurationService = accessor.get(IConfigurationService);
 		await configurationService.setConfig(ConfigKey.Advanced.CLIPlanExitModeEnabled, true);
 		instaService = services.seal();
@@ -222,7 +227,8 @@ describe('CopilotCLISession', () => {
 			}
 		}
 		return disposables.add(new CopilotCLISession(
-			sessionOptions,
+			sessionWorkspaceInfo,
+			sessionAgentName,
 			sdkSession as unknown as Session,
 			logger,
 			workspaceService,
@@ -236,7 +242,6 @@ describe('CopilotCLISession', () => {
 			new FakeUserQuestionHandler(),
 			configurationService,
 			new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })),
-			new NullChatDebugFileLoggerService(),
 			new class extends mock<IChatPromptFileService>() { override get customAgentPromptFiles() { return []; } }(),
 		));
 	}
@@ -438,7 +443,7 @@ describe('CopilotCLISession', () => {
 
 	it('auto-approves read permission inside working directory without external handler', async () => {
 		let result: unknown;
-		sessionOptions = new CopilotCLISessionOptions({ workspaceInfo: workspaceInfoFor(URI.file('/workingDirectory')) }, logger);
+		sessionWorkspaceInfo = workspaceInfoFor(URI.file('/workingDirectory'));
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
@@ -459,14 +464,12 @@ describe('CopilotCLISession', () => {
 		let result: unknown;
 		const worktreeUri = URI.file('/worktrees/session1');
 		const folderUri = URI.file('/original-repo');
-		sessionOptions = new CopilotCLISessionOptions({
-			workspaceInfo: {
-				folder: folderUri,
-				repository: folderUri,
-				worktree: worktreeUri,
-				worktreeProperties: { version: 1, autoCommit: false, baseCommit: 'abc', branchName: 'main', repositoryPath: '/original-repo', worktreePath: '/worktrees/session1' },
-			}
-		}, logger);
+		sessionWorkspaceInfo = {
+			folder: folderUri,
+			repository: folderUri,
+			worktree: worktreeUri,
+			worktreeProperties: { version: 1, autoCommit: false, baseCommit: 'abc', branchName: 'main', repositoryPath: '/original-repo', worktreePath: '/worktrees/session1' },
+		};
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
@@ -486,14 +489,12 @@ describe('CopilotCLISession', () => {
 		let result: unknown;
 		const worktreeUri = URI.file('/worktrees/session1');
 		const folderUri = URI.file('/original-repo');
-		sessionOptions = new CopilotCLISessionOptions({
-			workspaceInfo: {
-				folder: folderUri,
-				repository: folderUri,
-				worktree: worktreeUri,
-				worktreeProperties: { version: 1, autoCommit: false, baseCommit: 'abc', branchName: 'main', repositoryPath: '/original-repo', worktreePath: '/worktrees/session1' },
-			}
-		}, logger);
+		sessionWorkspaceInfo = {
+			folder: folderUri,
+			repository: folderUri,
+			worktree: worktreeUri,
+			worktreeProperties: { version: 1, autoCommit: false, baseCommit: 'abc', branchName: 'main', repositoryPath: '/original-repo', worktreePath: '/worktrees/session1' },
+		};
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });

@@ -36,6 +36,7 @@ export interface ISearchSubagentParams {
 
 class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 	public static readonly toolName = ToolName.SearchSubagent;
+	public static readonly nonDeferred = true;
 	private _inputContext: IBuildPromptContext | undefined;
 
 	constructor(

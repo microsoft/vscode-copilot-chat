@@ -47,7 +47,7 @@ async function getAuthSession(providerId: string, defaultScopes: string[], getSi
 		// This will force GitHub auth to present a picker to choose which account you want to log in to if there
 		// are multiple accounts.
 		// When GitHub becomes a true multi-account provider, we can change this to just createIfNone: true.
-		const session = await authentication.getSession(providerId, defaultScopes, { forceNewSession: { learnMore: URI.parse('https://aka.ms/copilotRepoScope') }, clearSessionPreference: true });
+		const session = await authentication.getSession(providerId, defaultScopes, options);
 		return session;
 	}
 	// Pass the options in as they are

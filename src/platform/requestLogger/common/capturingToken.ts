@@ -44,11 +44,5 @@ export class CapturingToken {
 		 * Used to name the child log file within the parent session's directory.
 		 */
 		public readonly debugLogLabel?: string,
-		/**
-		 * Optional override session IDs for debug log resolution.
-		 * When set (e.g., from attached session references), the troubleshoot skill
-		 * targets these sessions' logs instead of the current chat session.
-		 */
-		public readonly debugTargetSessionIds?: readonly string[],
 	) { }
 }

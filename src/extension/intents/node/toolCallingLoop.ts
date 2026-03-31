@@ -16,17 +16,19 @@ import { isAnthropicFamily, isGeminiFamily } from '../../../platform/endpoint/co
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAIContextManagementResponse, OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
-import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
+import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, resolveWorkspaceOTelMetadata, StdAttr, truncateForOTel, workspaceMetadataToOTelAttributes } from '../../../platform/otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { getCurrentCapturingToken, IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { computePromptTokenDetails } from '../../../platform/tokenizer/node/promptTokenDetails';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
+import { ChatExtPerfMark, markChatExt } from '../../../util/common/performance';
 import { DeferredPromise, timeout } from '../../../util/vs/base/common/async';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
@@ -203,6 +205,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@ISessionTranscriptService protected readonly _sessionTranscriptService: ISessionTranscriptService,
 		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 		@IOTelService protected readonly _otelService: IOTelService,
+		@IGitService private readonly _gitService: IGitService,
 	) {
 		super();
 	}
@@ -726,6 +729,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					[GenAiAttr.CONVERSATION_ID]: this.options.conversation.sessionId,
 					[CopilotChatAttr.SESSION_ID]: this.options.conversation.sessionId,
 					...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}),
+					...workspaceMetadataToOTelAttributes(resolveWorkspaceOTelMetadata(this._gitService)),
 				},
 				parentTraceContext,
 			},
@@ -1094,7 +1098,13 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let availableTools = await this.getAvailableTools(outputStream, token);
 		const context = this.createPromptContext(availableTools, outputStream);
 		const isContinuation = context.isContinuation || false;
-		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
+		markChatExt(this.options.conversation.sessionId, ChatExtPerfMark.WillBuildPrompt);
+		let buildPromptResult: IBuildPromptResult;
+		try {
+			buildPromptResult = await this.buildPrompt2(context, outputStream, token);
+		} finally {
+			markChatExt(this.options.conversation.sessionId, ChatExtPerfMark.DidBuildPrompt);
+		}
 		this.throwIfCancelled(token);
 		this.turn.addReferences(buildPromptResult.references);
 		// Possible the tool call resulted in new tools getting added.
@@ -1205,6 +1215,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const enableThinking = !shouldDisableThinking;
 		let phase: string | undefined;
 		let compaction: OpenAIContextManagementResponse | undefined;
+		markChatExt(this.options.conversation.sessionId, ChatExtPerfMark.WillFetch);
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(effectiveBuildPromptResult.messages, { stripOrphanedToolCalls: isGeminiFamily(endpoint) }),
 			turnId: this.turn.id,
@@ -1258,6 +1269,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}, token).finally(() => {
 			this.stopHookUserInitiated = false;
 		});
+		markChatExt(this.options.conversation.sessionId, ChatExtPerfMark.DidFetch);
 
 		const promptTokenDetails = await computePromptTokenDetails({
 			messages: effectiveBuildPromptResult.messages,

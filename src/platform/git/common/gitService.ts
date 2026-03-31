@@ -66,6 +66,7 @@ export interface IGitService extends IDisposable {
 	diffIndexWithHEADShortStats(uri: URI): Promise<CommitShortStat | undefined>;
 	fetch(uri: URI, remote?: string, ref?: string, depth?: number): Promise<void>;
 	getMergeBase(uri: URI, ref1: string, ref2: string): Promise<string | undefined>;
+	restore(uri: URI, paths: string[], options?: { staged?: boolean; ref?: string }): Promise<void>;
 
 	createWorktree(uri: URI, options?: { path?: string; commitish?: string; branch?: string }): Promise<string | undefined>;
 	deleteWorktree(uri: URI, path: string, options?: { force?: boolean }): Promise<void>;
@@ -80,6 +81,7 @@ export interface IGitService extends IDisposable {
 	push(uri: URI): Promise<void>;
 	rebase(uri: URI, branch: string): Promise<void>;
 
+	getBranch(uri: URI, name: string): Promise<Branch | undefined>;
 	getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]>;
 	isBranchProtected(uri: URI, branch?: string | Branch): Promise<boolean | undefined>;
 

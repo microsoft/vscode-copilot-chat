@@ -36,7 +36,7 @@ import { CompletionsSQLiteCache, ICompletionsCache } from './base/completionsCac
 import { usedEmbeddingsCaches } from './base/embeddingsCache';
 import { TestingCacheSalts } from './base/salts';
 import { ICompleteBaselineComparison, IModifiedScenario, SimulationBaseline } from './base/simulationBaseline';
-import { CacheMode, CurrentTestRunInfo, SimulationServicesOptions, createSimulationChatModelThrottlingTaskLaunchers } from './base/simulationContext';
+import { CacheMode, CurrentTestRunInfo, SimulationServicesOptions, createSimulationChatModelThrottlingTaskLaunchers, loadConfigFile } from './base/simulationContext';
 import { ProxiedSimulationEndpointHealth, SimulationEndpointHealthImpl } from './base/simulationEndpointHealth';
 import { BASELINE_RUN_COUNT, SimulationOptions } from './base/simulationOptions';
 import { ProxiedSimulationOutcome, SimulationOutcomeImpl } from './base/simulationOutcome';
@@ -44,6 +44,7 @@ import { drainStdoutAndExit } from './base/stdout';
 import { SimulationSuite, SimulationTest, SimulationTestsRegistry, createSimulationTestFilter } from './base/stest';
 import { CollectingJSONOutputPrinter, ConsoleJSONOutputPrinter, IJSONOutputPrinter, ProxiedSONOutputPrinter } from './jsonOutputPrinter';
 import { green, orange, red, violet, yellow } from './outputColorer';
+import { runInputPipeline, runInputPipelineParallel } from './pipeline/pipeline';
 import { ITestDiscoveryOptions, discoverTests } from './simulation/externalScenarios';
 import { discoverCoffeTests } from './simulation/nesCoffeTests';
 import { discoverNesTests } from './simulation/nesExternalTests';
@@ -100,10 +101,19 @@ async function run(opts: SimulationOptions): Promise<RunResult> {
 	}
 
 	switch (true) {
+		case opts.help && opts.subcommand === 'nes-datagen':
+			return opts.printTrainHelp();
 		case opts.help:
 			return opts.printHelp();
 		case opts.listModels:
 			await listChatModels(opts.modelCacheMode === CacheMode.Disable);
+			return;
+		case !!opts.nesDatagen:
+			if (opts.parallelism > 1 && !opts.nesDatagen.workerMode) {
+				await runInputPipelineParallel(opts);
+			} else {
+				await runInputPipeline(opts);
+			}
 			return;
 		case opts.listSuites: // intentional fallthrough
 		case opts.listTests: {
@@ -265,15 +275,7 @@ async function prepareTestEnvironment(opts: SimulationOptions, jsonOutputPrinter
 		await fs.promises.copyFile(baseline.baselinePath, path.join(outputPath, OLD_BASELINE_FILENAME));
 	}
 
-	let configs: Record<string, unknown> | undefined;
-	if (opts.configFile) {
-		const configFilePath = path.isAbsolute(opts.configFile) ? opts.configFile : path.join(process.cwd(), opts.configFile);
-		const configFileContents = await fs.promises.readFile(configFilePath, 'utf-8');
-		configs = JSON.parse(configFileContents);
-		if (!configs || typeof configs !== 'object') {
-			throw new Error('Invalid configuration file ' + opts.configFile);
-		}
-	}
+	const configs = opts.configFile ? loadConfigFile(opts.configFile) : undefined;
 
 	return {
 		...createSimulationTestContext(opts, runningAllTests, baseline, canUseBaseline, jsonOutputPrinter, outputPath, externalScenariosPath, rpcInExtensionHost, configs),

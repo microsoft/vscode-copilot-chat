@@ -4,8 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import type { AuthenticationGetSessionOptions, AuthenticationGetSessionPresentationOptions, AuthenticationSession } from 'vscode';
-import { BaseAuthenticationService, IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import type { AuthenticationGetSessionOptions, AuthenticationSession } from 'vscode';
+import { BaseAuthenticationService, IAuthenticationService, StrictAuthenticationPresentationOptions } from '../../../../platform/authentication/common/authentication';
 import { CopilotToken } from '../../../../platform/authentication/common/copilotToken';
 import { ICopilotTokenManager } from '../../../../platform/authentication/common/copilotTokenManager';
 import { CopilotTokenStore, ICopilotTokenStore } from '../../../../platform/authentication/common/copilotTokenStore';
@@ -42,8 +42,8 @@ class TestAuthenticationService extends BaseAuthenticationService {
 		this.fireAuthenticationChange('setPermissiveGitHubSession');
 	}
 
-	override getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { createIfNone: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
-	override getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { forceNewSession: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+	override getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { createIfNone: StrictAuthenticationPresentationOptions }): Promise<AuthenticationSession>;
+	override getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { forceNewSession: StrictAuthenticationPresentationOptions }): Promise<AuthenticationSession>;
 	override getGitHubSession(kind: 'permissive' | 'any', options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
 		if (kind === 'permissive') {
 			if (options?.createIfNone && !this._permissiveGitHubSession) {

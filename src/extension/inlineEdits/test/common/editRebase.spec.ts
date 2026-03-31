@@ -298,10 +298,10 @@ int main()
 		}
 	});
 
-	test('absorbSubsequenceTyping: user types partial params "(n: )" absorbed', () => {
+	test('absorbSubsequenceTyping: user types partial params "(n: )" NOT absorbed (not an auto-close pair)', () => {
 		// User types "(n: )" in "function fib" → "function fib(n: )\n"
-		// "(n: )" is a subsequence of "(n: number): number {" because each character
-		// ( → 0, n → 1, : → 2, ' ' → 3, ) → 10 aligns in order.
+		// "(n: )" is a subsequence of the suggestion but is NOT an auto-close pair,
+		// so absorption does not apply.
 		const originalDocument = 'function fib\n';
 		const originalEdits = [
 			StringReplacement.replace(new OffsetRange(0, 12), 'function fib(n: number): number {'),
@@ -316,20 +316,8 @@ int main()
 		const nesConfigs = { absorbSubsequenceTyping: true };
 		const logger = new TestLogService();
 
-		const final = 'function fib(n: number): number {\n    if (n <= 1) return n;\n    return fib(n - 1) + fib(n - 2);\n}\n';
-
-		{
-			const res = tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'strict', logger, nesConfigs);
-			expect(res).toBeTypeOf('object');
-			const result = res as Exclude<typeof res, string>;
-			expect(StringEdit.create(result.map(r => r.rebasedEdit)).apply(currentDocumentContent)).toBe(final);
-		}
-		{
-			const res = tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'lenient', logger, nesConfigs);
-			expect(res).toBeTypeOf('object');
-			const result = res as Exclude<typeof res, string>;
-			expect(StringEdit.create(result.map(r => r.rebasedEdit)).apply(currentDocumentContent)).toBe(final);
-		}
+		expect(tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'strict', logger, nesConfigs)).toBe('rebaseFailed');
+		expect(tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'lenient', logger, nesConfigs)).toBe('rebaseFailed');
 	});
 
 	test('absorbSubsequenceTyping: semicolon NOT absorbed when it cannot align with suggestion', () => {
@@ -352,9 +340,10 @@ int main()
 		expect(tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'lenient', logger, nesConfigs)).toBe('rebaseFailed');
 	});
 
-	test('absorbSubsequenceTyping: semicolon absorbed when suggestion contains semicolon', () => {
+	test('absorbSubsequenceTyping: semicolon NOT absorbed (not an auto-close pair)', () => {
 		// User types ";" and suggestion inserts ": string = \"hello\";"
-		// ";" IS a subsequence of ": string = \"hello\";", so absorption succeeds
+		// ";" is present in the suggestion but is NOT an auto-close pair,
+		// so absorption does not apply.
 		const originalDocument = 'const x\n';
 		const originalEdits = [
 			StringReplacement.replace(new OffsetRange(0, 7), 'const x: string = "hello";'),
@@ -368,14 +357,9 @@ int main()
 		const nesConfigs = { absorbSubsequenceTyping: true };
 		const logger = new TestLogService();
 
-		const final = 'const x: string = "hello";\n';
-
-		{
-			const res = tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'strict', logger, nesConfigs);
-			expect(res).toBeTypeOf('object');
-			const result = res as Exclude<typeof res, string>;
-			expect(StringEdit.create(result.map(r => r.rebasedEdit)).apply(currentDocumentContent)).toBe(final);
-		}
+		// Strict rejects the exact match (offset 25 > maxAgreementOffset) and absorption
+		// doesn't apply because ";" is not an auto-close pair.
+		expect(tryRebase(originalDocument, editWindow, originalEdits, [], userEditSince, currentDocumentContent, currentSelection, 'strict', logger, nesConfigs)).toBe('rebaseFailed');
 	});
 
 	test('absorbSubsequenceTyping: text NOT a subsequence of suggestion is NOT absorbed', () => {
@@ -458,7 +442,7 @@ int main()
 		expect(res!.apply(currentDocument)).toBe(suggestedEdit.apply(originalDocument));
 	});
 
-	test('absorbSubsequenceTyping via tryRebaseStringEdits: curly brace absorbed', () => {
+	test('absorbSubsequenceTyping via tryRebaseStringEdits: single curly brace NOT absorbed (not an auto-close pair)', () => {
 		const text = 'if (true)\n';
 		const suggestion = StringEdit.create([
 			StringReplacement.replace(new OffsetRange(0, 9), 'if (true) {\n    console.log("yes");\n}'),
@@ -469,16 +453,11 @@ int main()
 		const current = userEdit.apply(text);
 		expect(current).toBe('if (true){\n');
 
-		const final = suggestion.apply(text);
-		expect(final).toBe('if (true) {\n    console.log("yes");\n}\n');
-
 		// Without config: fails
 		expect(tryRebaseStringEdits(text, suggestion, userEdit, 'strict')).toBeUndefined();
 
-		// With config: succeeds because "{" aligns with "{" in the suggestion
-		const result = tryRebaseStringEdits(text, suggestion, userEdit, 'strict', { absorbSubsequenceTyping: true });
-		expect(result).toBeDefined();
-		expect(result!.apply(current)).toBe(final);
+		// With config: still fails because a single "{" is not an auto-close pair
+		expect(tryRebaseStringEdits(text, suggestion, userEdit, 'strict', { absorbSubsequenceTyping: true })).toBeUndefined();
 	});
 
 	test('absorbSubsequenceTyping: "{}" NOT absorbed when suggestion only has opening brace', () => {

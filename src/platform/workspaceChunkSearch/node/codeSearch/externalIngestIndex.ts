@@ -145,6 +145,7 @@ export class ExternalIngestIndex extends Disposable {
 
 	constructor(
 		client: IExternalIngestClient,
+		initialCodeSearchRoots: URI[],
 		@IEnvService private readonly _envService: IEnvService,
 		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
@@ -159,6 +160,10 @@ export class ExternalIngestIndex extends Disposable {
 
 		this._client = client;
 		this.workspaceFolderIdMap = new WorkspaceFolderIdMap(this._vsExtensionContext.workspaceState);
+
+		for (const root of initialCodeSearchRoots) {
+			this._codeSearchRepoRoots.add(root);
+		}
 
 		let dbPath: string;
 		if (debug || !this._vsExtensionContext.storageUri || this._vsExtensionContext.storageUri.scheme !== Schemas.file) {
@@ -414,7 +419,7 @@ export class ExternalIngestIndex extends Disposable {
 		const sw = new StopWatch();
 
 		try {
-			const resolvedQuery = await query.resolveQuery(token);
+			const resolvedQuery = query.queryText;
 
 			const ingestResult = await raceCancellationError(this.doIngest(callTracker, () => { }, token), token);
 			if (!ingestResult.isOk()) {

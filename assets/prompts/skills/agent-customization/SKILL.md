@@ -30,7 +30,7 @@ Consult the reference docs for templates, domain examples, advanced frontmatter 
 | Custom Agents | `*.agent.md` | `.github/agents/` | [Link](./references/agents.md) |
 | Skills | `SKILL.md` | `.github/skills/<name>/`, `.agents/skills/<name>/`, `.claude/skills/<name>/` | [Link](./references/skills.md) |
 
-**User-level**: `{{USER_PROMPTS_FOLDER}}/` (*.prompt.md, *.instructions.md, *.agent.md; not skills)
+**User-level**: `{{VSCODE_USER_PROMPTS_FOLDER}}/` (*.prompt.md, *.instructions.md, *.agent.md; not skills)
 Customizations roam with user's settings sync
 
 ## Creation Process
@@ -43,7 +43,7 @@ Follow these steps when creating any customization file.
 
 Ask the user where they want the customization:
 - **Workspace**: For project-specific, team-shared customizations → `.github/` folder
-- **User profile**: For personal, cross-workspace customizations → `{{USER_PROMPTS_FOLDER}}/`
+- **User profile**: For personal, cross-workspace customizations → `{{VSCODE_USER_PROMPTS_FOLDER}}/`
 
 ### 2. Choose the Right Primitive
 

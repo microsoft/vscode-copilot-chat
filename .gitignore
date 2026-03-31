@@ -61,3 +61,4 @@ test/aml/out
 .github/prompts/*.local.prompt.md
 .agents/skills/.local/
 .github/skills/.local/
+*.vsix

@@ -5,7 +5,6 @@
 import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptReference } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
-import { IChatDebugFileLoggerService, sessionResourceToId } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
@@ -21,11 +20,10 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { getCachedSha256Hash } from '../../../util/common/crypto';
 import { clamp } from '../../../util/vs/base/common/numbers';
-import { dirname, extUriBiasedIgnorePathCase, joinPath } from '../../../util/vs/base/common/resources';
+import { dirname, extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult, Location, MarkdownString, Range } from '../../../vscodeTypes';
-import { isSessionReferenceScheme } from '../../prompt/common/chatVariablesCollection';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { BinaryFileHexdump, hexdumpIfBinary } from '../../prompts/node/panel/binaryFileHexdump';
@@ -114,6 +112,7 @@ const getParamRanges = (params: ReadFileParams, snapshot: NotebookDocumentSnapsh
 
 export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 	public static toolName = ToolName.ReadFile;
+	public static readonly nonDeferred = true;
 	private _promptContext: IBuildPromptContext | undefined;
 
 	constructor(
@@ -128,7 +127,6 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
-		@IChatDebugFileLoggerService private readonly chatDebugFileLoggerService: IChatDebugFileLoggerService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ReadFileParams>, token: vscode.CancellationToken) {
@@ -328,25 +326,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 			return this.workspaceService.openNotebookDocumentAndSnapshot(uri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model));
 		}
 
-		const snapshot = TextDocumentSnapshot.create(await this.workspaceService.openTextDocument(uri));
-
-		// Replace the session log placeholder for the troubleshoot skill
-		if (uri.scheme === 'copilot-skill' && uri.path.includes('/troubleshoot/')) {
-			const sessionRefs = this._promptContext?.request?.references?.filter(ref => URI.isUri(ref.value) && isSessionReferenceScheme(ref.value.scheme)) ?? [];
-			const sessionResources = sessionRefs.length > 0
-				? sessionRefs.map(ref => ref.value as URI)
-				: (this._promptContext?.request?.sessionResource ? [this._promptContext.request.sessionResource] : []);
-			if (sessionResources.length > 0) {
-				const logDir = this.chatDebugFileLoggerService.debugLogsDir;
-				if (logDir) {
-					const sessionLogDirs = sessionResources.map(res => this.promptPathRepresentationService.getFilePath(joinPath(logDir, sessionResourceToId(res))));
-					const replaced = snapshot.getText().replaceAll('{{CURRENT_SESSION_LOG}}', () => sessionLogDirs.join(', '));
-					return TextDocumentSnapshot.fromNewText(replaced, snapshot);
-				}
-			}
-		}
-
-		return snapshot;
+		return TextDocumentSnapshot.create(await this.workspaceService.openTextDocument(uri));
 	}
 
 	private async sendReadFileTelemetry(outcome: string, options: Pick<vscode.LanguageModelToolInvocationOptions<ReadFileParams>, 'model' | 'chatRequestId' | 'input'>, { start, end, truncated }: IParamRanges, uri: URI | undefined) {

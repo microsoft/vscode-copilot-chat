@@ -18,11 +18,11 @@ import { addPullRequestCommentGraphQLRequest, AssignableActor, closePullRequest,
  */
 export interface AuthOptions {
 	/**
-	 * If true, prompts the user to sign in if no authentication token is available.
-	 * If false or undefined, fails silently without prompting.
-	 * @default false
+	 * If provided, prompts the user to sign in if no authentication token is available,
+	 * displaying the given detail message to explain why authentication is needed.
+	 * If undefined, fails silently without prompting.
 	 */
-	readonly createIfNone?: boolean;
+	readonly createIfNone?: { readonly detail: string };
 }
 
 export type IGetRepositoryInfoResponseData = Endpoints['GET /repos/{owner}/{repo}']['response']['data'];
@@ -464,10 +464,6 @@ export class BaseOctoKitService {
 
 	async getCurrentAuthedUserWithToken(token: string): Promise<IOctoKitUser | undefined> {
 		return this._makeGHAPIRequest('user', 'GET', token, undefined, undefined, 'github-rest-get-user');
-	}
-
-	async getTeamMembershipWithToken(teamId: number, token: string, username: string): Promise<any | undefined> {
-		return this._makeGHAPIRequest(`teams/${teamId}/memberships/${username}`, 'GET', token, undefined, undefined, 'github-rest-get-team-membership');
 	}
 
 	async getGitHubOutageStatus(): Promise<GitHubOutageStatus> {

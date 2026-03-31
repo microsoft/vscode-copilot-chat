@@ -19,7 +19,7 @@ import { ICodeSearchAuthenticationService } from '../../remoteCodeSearch/node/co
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId } from '../common/workspaceChunkSearch';
+import { StrategySearchResult, StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions } from '../common/workspaceChunkSearch';
 import { BuildIndexTriggerReason } from './codeSearch/codeSearchRepo';
 import { WorkspaceChunkEmbeddingsIndex } from './workspaceChunkEmbeddingsIndex';
 import { IWorkspaceFileIndex } from './workspaceFileIndex';
@@ -41,9 +41,7 @@ export enum LocalEmbeddingsIndexStatus {
  *
  * This can be costly so it is only available for smaller workspaces.
  */
-export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunkSearchStrategy {
-
-	readonly id = WorkspaceChunkSearchStrategyId.Embeddings;
+export class EmbeddingsChunkSearch extends Disposable {
 
 	/** Max workspace size that will be automatically indexed. */
 	private static readonly defaultAutomaticIndexingFileCap = 750;

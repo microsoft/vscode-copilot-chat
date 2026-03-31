@@ -22,6 +22,7 @@ export interface IReplaceStringToolParams {
 
 export class ReplaceStringTool<T extends IReplaceStringToolParams = IReplaceStringToolParams> extends AbstractReplaceStringTool<T> {
 	public static toolName = ToolName.ReplaceString;
+	public static readonly nonDeferred = true;
 
 	protected extractReplaceInputs(input: T): IAbstractReplaceStringInput[] {
 		return [{

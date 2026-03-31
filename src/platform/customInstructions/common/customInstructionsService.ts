@@ -52,6 +52,7 @@ export const ICustomInstructionsService = createServiceIdentifier<ICustomInstruc
 export interface IExtensionPromptFile {
 	uri: URI;
 	type: PromptsType;
+	extensionId?: string;
 }
 
 export interface ICustomInstructionsService {
@@ -77,7 +78,7 @@ export interface ICustomInstructionsService {
 	 */
 	refreshExtensionPromptFiles(): Promise<void>;
 	/** Gets skill info for extension-contributed skill files */
-	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined;
+	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI; extensionId?: string } | undefined;
 }
 
 export interface IInstructionIndexFile {
@@ -401,7 +402,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		});
 	}
 
-	public getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {
+	public getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI; extensionId?: string } | undefined {
 		if (!this._extensionPromptFilesCache) {
 			return undefined;
 		}
@@ -410,7 +411,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 				const skillFolderUri = extUriBiasedIgnorePathCase.dirname(file.uri);
 				if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, skillFolderUri)) {
 					const skillName = extUriBiasedIgnorePathCase.basename(skillFolderUri);
-					return { skillName, skillFolderUri };
+					return { skillName, skillFolderUri, extensionId: file.extensionId };
 				}
 			}
 		}
