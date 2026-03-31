@@ -59,7 +59,6 @@ import { IProxyModelsService } from '../../../platform/proxyModels/common/proxyM
 import { ProxyModelsService } from '../../../platform/proxyModels/node/proxyModelsService';
 import { AdoCodeSearchService, IAdoCodeSearchService } from '../../../platform/remoteCodeSearch/common/adoCodeSearchService';
 import { GithubCodeSearchService, IGithubCodeSearchService } from '../../../platform/remoteCodeSearch/common/githubCodeSearchService';
-import { ScenarioAutomationGithubCodeSearchService } from '../../../platform/remoteCodeSearch/common/scenarioAutomationGithubCodeSearchService';
 import { ICodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/node/codeSearchRepoAuth';
 import { VsCodeCodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/vscode-node/codeSearchRepoAuth';
 import { IDocsSearchClient } from '../../../platform/remoteSearch/common/codeOrDocsSearchClient';
@@ -195,7 +194,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 		builder.define(IEndpointProvider, new SyncDescriptor(ScenarioAutomationEndpointProviderImpl));
 		builder.define(IIgnoreService, new SyncDescriptor(NullIgnoreService));
 		builder.define(ICAPIClientService, new SyncDescriptor(ScenarioAutomationCAPIClientImpl));
-		builder.define(IGithubCodeSearchService, new SyncDescriptor(ScenarioAutomationGithubCodeSearchService));
+		builder.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));
 		builder.define(IGithubAvailableEmbeddingTypesService, new MockGithubAvailableEmbeddingTypesService());
 		builder.define(IWorkspaceChunkSearchService, new SyncDescriptor(ScenarioAutomationWorkspaceChunkSearchService));
 	} else {
