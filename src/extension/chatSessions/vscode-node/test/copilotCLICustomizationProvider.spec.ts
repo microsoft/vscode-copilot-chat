@@ -3,15 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { SweCustomAgent } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as vscode from 'vscode';
+import { INativeEnvService } from '../../../../platform/env/common/envService';
+import { ILogService } from '../../../../platform/log/common/logService';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { mock } from '../../../../util/common/test/simpleMock';
 import { Emitter } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { mock } from '../../../../util/common/test/simpleMock';
 import { IChatPromptFileService } from '../../common/chatPromptFileService';
-import { ILogService } from '../../../../platform/log/common/logService';
-import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { ICopilotCLIAgents } from '../../copilotcli/node/copilotCli';
 import { CopilotCLICustomizationProvider } from '../copilotCLICustomizationProvider';
 
 class FakeChatSessionCustomizationType {
@@ -21,6 +24,17 @@ class FakeChatSessionCustomizationType {
 	static readonly Prompt = new FakeChatSessionCustomizationType('prompt');
 	static readonly Hook = new FakeChatSessionCustomizationType('hook');
 	constructor(readonly id: string) { }
+}
+
+function makeSweAgent(name: string, description = ''): Readonly<SweCustomAgent> {
+	return {
+		name,
+		displayName: name,
+		description,
+		tools: null,
+		prompt: () => Promise.resolve(''),
+		disableModelInvocation: false,
+	};
 }
 
 class MockChatPromptFileService extends mock<IChatPromptFileService>() {
@@ -54,10 +68,25 @@ class MockChatPromptFileService extends mock<IChatPromptFileService>() {
 	}
 }
 
+class MockCopilotCLIAgents extends mock<ICopilotCLIAgents>() {
+	private readonly _onDidChangeAgents = new Emitter<void>();
+	override readonly onDidChangeAgents = this._onDidChangeAgents.event;
+	private _agents: Readonly<SweCustomAgent>[] = [];
+
+	setAgents(agents: Readonly<SweCustomAgent>[]) { this._agents = agents; }
+	override async getAgents(): Promise<Readonly<SweCustomAgent>[]> { return this._agents; }
+	fireAgentsChanged() { this._onDidChangeAgents.fire(); }
+	dispose() { this._onDidChangeAgents.dispose(); }
+}
+
 class MockWorkspaceService extends mock<IWorkspaceService>() {
 	private _folders: URI[] = [];
 	setFolders(folders: URI[]) { this._folders = folders; }
 	override getWorkspaceFolders(): URI[] { return this._folders; }
+}
+
+class MockEnvService extends mock<INativeEnvService>() {
+	override userHome = URI.file('/home/user');
 }
 
 class TestLogService extends mock<ILogService>() {
@@ -69,6 +98,7 @@ const WORKSPACE = URI.file('/workspace');
 describe('CopilotCLICustomizationProvider', () => {
 	let disposables: DisposableStore;
 	let mockPromptFileService: MockChatPromptFileService;
+	let mockCopilotCLIAgents: MockCopilotCLIAgents;
 	let mockWorkspaceService: MockWorkspaceService;
 	let provider: CopilotCLICustomizationProvider;
 
@@ -76,11 +106,14 @@ describe('CopilotCLICustomizationProvider', () => {
 		(vscode as Record<string, unknown>).ChatSessionCustomizationType = FakeChatSessionCustomizationType;
 		disposables = new DisposableStore();
 		mockPromptFileService = disposables.add(new MockChatPromptFileService());
+		mockCopilotCLIAgents = disposables.add(new MockCopilotCLIAgents());
 		mockWorkspaceService = new MockWorkspaceService();
 		mockWorkspaceService.setFolders([WORKSPACE]);
 		provider = disposables.add(new CopilotCLICustomizationProvider(
 			mockPromptFileService,
+			mockCopilotCLIAgents,
 			mockWorkspaceService,
+			new MockEnvService(),
 			new TestLogService(),
 		));
 	});
@@ -102,95 +135,153 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(unsupported![0]).toBe(FakeChatSessionCustomizationType.Hook);
 			expect(unsupported![1]).toBe(FakeChatSessionCustomizationType.Prompt);
 		});
-
-		it('does not expose workspaceSubpaths', () => {
-			expect('workspaceSubpaths' in CopilotCLICustomizationProvider.metadata).toBe(false);
-		});
 	});
 
 	describe('provideChatSessionCustomizations', () => {
-		it('returns empty array when no files exist', () => {
-			const items = provider.provideChatSessionCustomizations(undefined!);
+		it('returns empty array when no files exist', async () => {
+			const items = await provider.provideChatSessionCustomizations(undefined!);
 			expect(items).toEqual([]);
 		});
 
-		it('returns all agents regardless of path', () => {
+		it('returns all agents regardless of path', async () => {
 			mockPromptFileService.setCustomAgents([
 				{ uri: URI.file('/workspace/.github/my-agent.agent.md') },
 				{ uri: URI.file('/workspace/root-agent.agent.md') },
 				{ uri: URI.file('/other/path/agent.agent.md') },
 			]);
 
-			const items = provider.provideChatSessionCustomizations(undefined!);
+			const items = await provider.provideChatSessionCustomizations(undefined!);
 			expect(items).toHaveLength(3);
-			expect(items.every(i => i.type === FakeChatSessionCustomizationType.Agent)).toBe(true);
+			expect(items.every((i: vscode.ChatSessionCustomizationItem) => i.type === FakeChatSessionCustomizationType.Agent)).toBe(true);
 		});
 
-		it('returns instructions under .github/ paths', () => {
+		it('enriches agents with description from ICopilotCLIAgents', async () => {
+			mockPromptFileService.setCustomAgents([
+				{ uri: URI.file('/workspace/.github/explore.agent.md') },
+			]);
+			mockCopilotCLIAgents.setAgents([
+				makeSweAgent('explore', 'Fast code exploration'),
+			]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			expect(items).toHaveLength(1);
+			expect(items[0].description).toBe('Fast code exploration');
+			expect(items[0].name).toBe('explore');
+		});
+
+		it('uses displayName from SDK agents when available', async () => {
+			mockPromptFileService.setCustomAgents([
+				{ uri: URI.file('/workspace/.github/code-review.agent.md') },
+			]);
+			const agent = makeSweAgent('code-review', 'Reviews code');
+			(agent as any).displayName = 'Code Review';
+			mockCopilotCLIAgents.setAgents([agent]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			expect(items[0].name).toBe('Code Review');
+		});
+
+		it('returns instructions under .github/ paths', async () => {
 			const uri = URI.file('/workspace/.github/copilot-instructions.md');
 			mockPromptFileService.setInstructions([{ uri }]);
 
-			const items = provider.provideChatSessionCustomizations(undefined!);
+			const items = await provider.provideChatSessionCustomizations(undefined!);
 			expect(items).toHaveLength(1);
 			expect(items[0].uri).toBe(uri);
 			expect(items[0].type).toBe(FakeChatSessionCustomizationType.Instructions);
 		});
 
-		it('returns instructions under .copilot/ paths', () => {
+		it('returns instructions under .copilot/ paths', async () => {
 			const uri = URI.file('/workspace/.copilot/setup.instructions.md');
 			mockPromptFileService.setInstructions([{ uri }]);
 
-			const items = provider.provideChatSessionCustomizations(undefined!);
+			const items = await provider.provideChatSessionCustomizations(undefined!);
 			expect(items).toHaveLength(1);
 			expect(items[0].uri).toBe(uri);
 			expect(items[0].type).toBe(FakeChatSessionCustomizationType.Instructions);
 		});
 
-		it('filters out instructions not under .github/ or .copilot/', () => {
+		it('returns instructions under .agents/ paths', async () => {
+			const uri = URI.file('/workspace/.agents/setup.instructions.md');
+			mockPromptFileService.setInstructions([{ uri }]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			expect(items).toHaveLength(1);
+			expect(items[0].type).toBe(FakeChatSessionCustomizationType.Instructions);
+		});
+
+		it('filters out instructions not under CLI paths', async () => {
 			mockPromptFileService.setInstructions([
 				{ uri: URI.file('/workspace/.claude/some.instructions.md') },
 				{ uri: URI.file('/workspace/root.instructions.md') },
 			]);
 
-			const items = provider.provideChatSessionCustomizations(undefined!);
+			const items = await provider.provideChatSessionCustomizations(undefined!);
 			expect(items).toHaveLength(0);
 		});
 
-		it('returns skills under .github/skills/', () => {
+		it('returns skills under .github/skills/', async () => {
 			const uri = URI.file('/workspace/.github/skills/lint-check/SKILL.md');
 			mockPromptFileService.setSkills([{ uri }]);
 
-			const items = provider.provideChatSessionCustomizations(undefined!);
+			const items = await provider.provideChatSessionCustomizations(undefined!);
 			expect(items).toHaveLength(1);
 			expect(items[0].uri).toBe(uri);
 			expect(items[0].type).toBe(FakeChatSessionCustomizationType.Skill);
 			expect(items[0].name).toBe('lint-check');
 		});
 
-		it('returns skills under .copilot/skills/', () => {
+		it('returns skills under .copilot/skills/', async () => {
 			const uri = URI.file('/workspace/.copilot/skills/my-skill/SKILL.md');
 			mockPromptFileService.setSkills([{ uri }]);
 
-			const items = provider.provideChatSessionCustomizations(undefined!);
+			const items = await provider.provideChatSessionCustomizations(undefined!);
 			expect(items).toHaveLength(1);
 			expect(items[0].name).toBe('my-skill');
 		});
 
-		it('filters out skills not under .github/ or .copilot/', () => {
+		it('returns skills under .agents/skills/', async () => {
+			const uri = URI.file('/workspace/.agents/skills/agent-skill/SKILL.md');
+			mockPromptFileService.setSkills([{ uri }]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			expect(items).toHaveLength(1);
+			expect(items[0].name).toBe('agent-skill');
+		});
+
+		it('filters out skills not under CLI paths', async () => {
 			mockPromptFileService.setSkills([
 				{ uri: URI.file('/workspace/.claude/skills/claude-skill/SKILL.md') },
 			]);
 
-			const items = provider.provideChatSessionCustomizations(undefined!);
+			const items = await provider.provideChatSessionCustomizations(undefined!);
 			expect(items).toHaveLength(0);
 		});
 
-		it('returns all matching types combined', () => {
+		it('includes instructions from home directory ~/.copilot/', async () => {
+			const uri = URI.file('/home/user/.copilot/custom.instructions.md');
+			mockPromptFileService.setInstructions([{ uri }]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			expect(items).toHaveLength(1);
+			expect(items[0].type).toBe(FakeChatSessionCustomizationType.Instructions);
+		});
+
+		it('includes skills from home directory ~/.agents/', async () => {
+			const uri = URI.file('/home/user/.agents/skills/personal/SKILL.md');
+			mockPromptFileService.setSkills([{ uri }]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			expect(items).toHaveLength(1);
+			expect(items[0].type).toBe(FakeChatSessionCustomizationType.Skill);
+		});
+
+		it('returns all matching types combined', async () => {
 			mockPromptFileService.setCustomAgents([{ uri: URI.file('/workspace/a.agent.md') }]);
 			mockPromptFileService.setInstructions([{ uri: URI.file('/workspace/.github/b.instructions.md') }]);
 			mockPromptFileService.setSkills([{ uri: URI.file('/workspace/.github/skills/c/SKILL.md') }]);
 
-			const items = provider.provideChatSessionCustomizations(undefined!);
+			const items = await provider.provideChatSessionCustomizations(undefined!);
 			expect(items).toHaveLength(3);
 		});
 	});
@@ -217,6 +308,14 @@ describe('CopilotCLICustomizationProvider', () => {
 			disposables.add(provider.onDidChange(() => { fired = true; }));
 
 			mockPromptFileService.fireSkillsChanged();
+			expect(fired).toBe(true);
+		});
+
+		it('fires when ICopilotCLIAgents agents change', () => {
+			let fired = false;
+			disposables.add(provider.onDidChange(() => { fired = true; }));
+
+			mockCopilotCLIAgents.fireAgentsChanged();
 			expect(fired).toBe(true);
 		});
 	});

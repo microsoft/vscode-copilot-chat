@@ -3,21 +3,29 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-// TODO(joshspicer): Work in progress — depends on the proposed chatSessionCustomizationProvider
-// API which is off by default in VS Code.
-
 import * as vscode from 'vscode';
-import { ILogService } from '../../../platform/log/common/logService';
 import { AGENT_FILE_EXTENSION, INSTRUCTION_FILE_EXTENSION, SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
+import { INativeEnvService } from '../../../platform/env/common/envService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { basename } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IChatPromptFileService } from '../common/chatPromptFileService';
+import { ICopilotCLIAgents } from '../copilotcli/node/copilotCli';
 
-/** Workspace-relative path prefixes that are relevant to Copilot CLI. */
-const CLI_SUBPATHS = ['.github/', '.copilot/'];
+/**
+ * Workspace-relative path prefixes that are relevant to Copilot CLI.
+ * Matches the copilot-agent-runtime discovery paths for skills, instructions, and agents.
+ */
+const CLI_SUBPATHS = ['.github/', '.copilot/', '.agents/'];
+
+/**
+ * Home-directory relative path prefixes for Copilot CLI customizations.
+ * Matches the copilot-agent-runtime personal skill/instruction directories.
+ */
+const CLI_HOME_SUBPATHS = ['.copilot/', '.agents/'];
 
 export class CopilotCLICustomizationProvider extends Disposable implements vscode.ChatSessionCustomizationProvider {
 
@@ -34,7 +42,9 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 
 	constructor(
 		@IChatPromptFileService private readonly chatPromptFileService: IChatPromptFileService,
+		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@INativeEnvService private readonly envService: INativeEnvService,
 		@ILogService private readonly logService: ILogService,
 	) {
 		super();
@@ -42,17 +52,25 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 		this._register(this.chatPromptFileService.onDidChangeCustomAgents(() => this._onDidChange.fire()));
 		this._register(this.chatPromptFileService.onDidChangeInstructions(() => this._onDidChange.fire()));
 		this._register(this.chatPromptFileService.onDidChangeSkills(() => this._onDidChange.fire()));
+		this._register(this.copilotCLIAgents.onDidChangeAgents(() => this._onDidChange.fire()));
 	}
 
-	provideChatSessionCustomizations(_token: vscode.CancellationToken): vscode.ChatSessionCustomizationItem[] {
+	async provideChatSessionCustomizations(_token: vscode.CancellationToken): Promise<vscode.ChatSessionCustomizationItem[]> {
 		const items: vscode.ChatSessionCustomizationItem[] = [];
+
+		// Build a lookup from agent name → SDK agent for enriching with descriptions
+		const sdkAgents = await this.copilotCLIAgents.getAgents();
+		const agentLookup = new Map(sdkAgents.map(a => [a.name.toLowerCase(), a]));
 
 		// Agents (.agent.md) are Copilot-specific — include all of them
 		for (const agent of this.chatPromptFileService.customAgents) {
+			const name = deriveNameFromUri(agent.uri, AGENT_FILE_EXTENSION);
+			const sdkAgent = agentLookup.get(name.toLowerCase());
 			items.push({
 				uri: agent.uri,
 				type: vscode.ChatSessionCustomizationType.Agent,
-				name: deriveNameFromUri(agent.uri, AGENT_FILE_EXTENSION),
+				name: sdkAgent?.displayName || name,
+				description: sdkAgent?.description,
 			});
 		}
 
@@ -81,6 +99,7 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 	}
 
 	private isCLIPath(uri: URI): boolean {
+		// Check workspace folder paths
 		const folders = this.workspaceService.getWorkspaceFolders();
 		for (const folder of folders) {
 			const folderPath = folder.path.endsWith('/') ? folder.path : folder.path + '/';
@@ -91,6 +110,17 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 				}
 			}
 		}
+
+		// Check home directory paths (e.g., ~/.copilot/skills/, ~/.agents/skills/)
+		const homePath = this.envService.userHome.path;
+		const homePrefix = homePath.endsWith('/') ? homePath : homePath + '/';
+		if (uri.path.startsWith(homePrefix)) {
+			const relative = uri.path.slice(homePrefix.length);
+			if (CLI_HOME_SUBPATHS.some(prefix => relative.startsWith(prefix))) {
+				return true;
+			}
+		}
+
 		return false;
 	}
 }
