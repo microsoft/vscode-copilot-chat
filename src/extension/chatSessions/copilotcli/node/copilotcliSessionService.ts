@@ -44,11 +44,12 @@ import { buildChatHistoryFromEvents, stripReminders } from '../common/copilotCLI
 import { ICustomSessionTitleService } from '../common/customSessionTitleService';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
 import { getCopilotCLISessionDir, getCopilotCLISessionEventsFile, getCopilotCLIWorkspaceFile } from './cliHelpers';
-import { CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLISDK } from './copilotCli';
+import { ICopilotCLIAgents, ICopilotCLISDK } from './copilotCli';
 import { CopilotCliBridgeSpanProcessor } from './copilotCliBridgeSpanProcessor';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { ICopilotCLISkills } from './copilotCLISkills';
-import { ICopilotCLIMCPHandler, McpServerMappings } from './mcpHandler';
+import { ICopilotCLIMCPHandler, McpServerMappings, remapCustomAgentTools } from './mcpHandler';
+
 
 const COPILOT_CLI_WORKSPACE_JSON_FILE_KEY = 'github.copilot.cli.workspaceSessionFile';
 
@@ -525,9 +526,9 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		const { mcpConfig: mcpServers, disposable: mcpGateway } = await this.mcpHandler.loadMcpConfig();
 		try {
 			const copilotUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl) || undefined;
-			const options = await this.createSessionsOptions({ model, workspaceInfo, mcpServers, agent, copilotUrl, sessionId, debugTargetSessionIds });
+			const { agentName, sessionOptions } = await this.createSessionsOptions({ model, workspaceInfo, mcpServers, agent, copilotUrl, sessionId, debugTargetSessionIds, mcpServerMappings });
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
-			const sdkSession = await sessionManager.createSession({ ...options.toSessionOptions(mcpServerMappings), sessionId });
+			const sdkSession = await sessionManager.createSession({ ...sessionOptions, sessionId });
 			this._newSessionIds.delete(sdkSession.sessionId);
 			// After the first session creation, the SDK's OTel TracerProvider is
 			// initialized. Install the bridge processor so SDK-native spans flow
@@ -549,7 +550,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			this.logService.trace(`[CopilotCLISession] Created new CopilotCLI session ${sdkSession.sessionId}.`);
 			void this._sessionTracker.trackSession(sdkSession.sessionId, 'add');
 
-			const session = await this.createCopilotSession(sdkSession, options, sessionManager);
+			const session = await this.createCopilotSession(sdkSession, workspaceInfo, agentName, sessionManager);
 			session.object.add(mcpGateway);
 			return session;
 		}
@@ -639,14 +640,59 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		return false;
 	}
 
-	protected async createSessionsOptions(options: { model?: string; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; agent: SweCustomAgent | undefined; copilotUrl?: string; sessionId?: string; debugTargetSessionIds?: readonly string[] }, readonly?: boolean): Promise<CopilotCLISessionOptions> {
+	protected async createSessionsOptions(options: { model?: string; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; agent: SweCustomAgent | undefined; copilotUrl?: string; sessionId?: string; debugTargetSessionIds?: readonly string[]; mcpServerMappings?: McpServerMappings }, readonly?: boolean): Promise<{ readonly sessionOptions: Readonly<SessionOptions>; readonly agentName: string | undefined }> {
 		const [customAgents, skillLocations] = await Promise.all([
 			this.agents.getAgents(),
-			readonly ? Promise.resolve([]) : this.copilotCLISkills.getSkillsLocations(),
+			readonly ? Promise.resolve<Uri[]>([]) : this.copilotCLISkills.getSkillsLocations(),
 		]);
 		const variablesContext = this._promptVariablesService.buildTemplateVariablesContext(options.sessionId, options.debugTargetSessionIds);
 		const systemMessage = variablesContext ? { mode: 'append' as const, content: variablesContext } : undefined;
-		return new CopilotCLISessionOptions({ ...options, customAgents, skillLocations, systemMessage }, this.logService);
+
+		const allOptions: SessionOptions = {
+			clientName: 'vscode',
+		};
+
+		const workingDirectory = getWorkingDirectory(options.workspaceInfo);
+		if (workingDirectory) {
+			allOptions.workingDirectory = workingDirectory.fsPath;
+		}
+		if (options.model) {
+			allOptions.model = options.model as unknown as SessionOptions['model'];
+		}
+		if (options.mcpServers && Object.keys(options.mcpServers).length > 0) {
+			allOptions.mcpServers = options.mcpServers;
+			this.logService.info(`[CopilotCLISession] Passing ${Object.keys(options.mcpServers).length} MCP server(s) to SDK: [${Object.keys(options.mcpServers).join(', ')}]`);
+			for (const [id, cfg] of Object.entries(options.mcpServers)) {
+				this.logService.info(`[CopilotCLISession]   ${id}: type=${cfg.type}`);
+			}
+		} else {
+			this.logService.info('[CopilotCLISession] No MCP servers to pass to SDK');
+		}
+		if (skillLocations.length > 0) {
+			allOptions.skillDirectories = skillLocations.map(uri => uri.fsPath);
+		}
+		if (options.mcpServerMappings?.size && customAgents && options.mcpServers) {
+			remapCustomAgentTools(customAgents, options.mcpServerMappings, options.mcpServers, options.agent);
+		}
+		if (options.agent) {
+			allOptions.selectedCustomAgent = options.agent;
+		}
+		if (customAgents.length > 0) {
+			allOptions.customAgents = customAgents;
+		}
+		allOptions.enableStreaming = true;
+		if (options.copilotUrl) {
+			allOptions.copilotUrl = options.copilotUrl;
+		}
+		if (systemMessage) {
+			allOptions.systemMessage = systemMessage;
+		}
+		allOptions.sessionCapabilities = new Set(['plan-mode', 'memory', 'cli-documentation', 'ask-user', 'interactive-mode', 'system-notifications']);
+
+		return {
+			sessionOptions: allOptions as Readonly<SessionOptions>,
+			agentName: options.agent?.name,
+		};
 	}
 
 	public async getSession({ sessionId, model, workspaceInfo, readonly, agent, debugTargetSessionIds, mcpServerMappings }: { sessionId: string; model?: string; workspaceInfo: IWorkspaceInfo; readonly: boolean; agent?: SweCustomAgent; debugTargetSessionIds?: readonly string[]; mcpServerMappings?: McpServerMappings }, token: CancellationToken): Promise<RefCountedSession | undefined> {
@@ -678,15 +724,15 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			]);
 			try {
 				const copilotUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl) || undefined;
-				const options = await this.createSessionsOptions({ model, agent, workspaceInfo, mcpServers, copilotUrl, sessionId, debugTargetSessionIds }, readonly);
+				const { agentName, sessionOptions } = await this.createSessionsOptions({ model, agent, workspaceInfo, mcpServers, copilotUrl, sessionId, debugTargetSessionIds, mcpServerMappings }, readonly);
 
-				const sdkSession = await sessionManager.getSession({ ...options.toSessionOptions(mcpServerMappings), sessionId }, !readonly);
+				const sdkSession = await sessionManager.getSession({ ...sessionOptions, sessionId }, !readonly);
 				if (!sdkSession) {
 					this.logService.error(`[CopilotCLISession] CopilotCLI failed to get session ${sessionId}.`);
 					return undefined;
 				}
 
-				const session = await this.createCopilotSession(sdkSession, options, sessionManager, readonly);
+				const session = await this.createCopilotSession(sdkSession, workspaceInfo, agentName, sessionManager, readonly);
 				session.object.add(mcpGateway);
 				return session;
 			}
@@ -723,9 +769,9 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			]);
 
 			const copilotUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl) || undefined;
-			const options = await this.createSessionsOptions({ workspaceInfo, mcpServers: undefined, copilotUrl, agent: undefined, sessionId: newSessionId }, false);
+			const { agentName, sessionOptions } = await this.createSessionsOptions({ workspaceInfo, mcpServers: undefined, copilotUrl, agent: undefined, sessionId: newSessionId }, false);
 
-			const sdkSession = await sessionManager.getSession({ ...options.toSessionOptions(), sessionId: newSessionId }, false);
+			const sdkSession = await sessionManager.getSession({ ...sessionOptions, sessionId: newSessionId }, false);
 			if (!sdkSession) {
 				this.logService.error(`[CopilotCLISession] CopilotCLI failed to open forked session ${newSessionId}.`);
 				throw new Error(`Failed to fork session ${sessionId}`);
@@ -737,7 +783,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			let events: ReturnType<typeof sdkSession.getEvents> = [];
 			// Only if we have a request to truncate should we open and trucate.
 			if (requestId) {
-				const session = this.createCopilotSession(sdkSession, options, sessionManager, false, true);
+				const session = this.createCopilotSession(sdkSession, workspaceInfo, agentName, sessionManager, false, true);
 				disposables.add(session);
 				const history = await session.object.getChatHistory();
 				const requestToTruncateTo = history.find(event => event instanceof ChatRequestTurn2 && event.id === requestId);
@@ -857,8 +903,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		return firstUserMessage;
 	}
 
-	private createCopilotSession(sdkSession: Session, options: CopilotCLISessionOptions, sessionManager: internal.LocalSessionManager, readonly = false, nowait = false): RefCountedSession {
-		const session = this.instantiationService.createInstance(CopilotCLISession, options, sdkSession);
+	private createCopilotSession(sdkSession: Session, workspaceInfo: IWorkspaceInfo, agentName: string | undefined, sessionManager: internal.LocalSessionManager, readonly = false, nowait = false): RefCountedSession {
+		const session = this.instantiationService.createInstance(CopilotCLISession, workspaceInfo, agentName, sdkSession);
 		this._debugFileLogger.startSession(session.sessionId).catch(err => {
 			this.logService.error('[CopilotCLISession] Failed to start debug log session', err);
 		});

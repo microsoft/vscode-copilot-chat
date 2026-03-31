@@ -34,7 +34,7 @@ import { getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../../c
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, RequestIdDetails, ToolCall, updateTodoList } from '../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
 import { getCopilotCLISessionStateDir } from './cliHelpers';
-import { CopilotCLISessionOptions, getAgentFileNameFromFilePath, ICopilotCLISDK } from './copilotCli';
+import { getAgentFileNameFromFilePath, ICopilotCLISDK } from './copilotCli';
 import type { CopilotCliBridgeSpanProcessor } from './copilotCliBridgeSpanProcessor';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
 import { PermissionRequest, requestPermission, requiresFileEditconfirmation } from './permissionHelpers';
@@ -125,7 +125,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		return this._sdkSession;
 	}
 	public get workspace() {
-		return this._options.workspaceInfo;
+		return this._workspaceInfo;
 	}
 	private _lastUsedModel: string | undefined;
 	private _permissionLevel: string | undefined;
@@ -145,7 +145,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		this._updateSdkTraceContext = updater;
 	}
 	constructor(
-		private readonly _options: CopilotCLISessionOptions,
+		private readonly _workspaceInfo: IWorkspaceInfo,
+		private readonly _agentName: string | undefined,
 		private readonly _sdkSession: Session,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
@@ -671,7 +672,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					vscodeRequestId: request.id,
 					copilotRequestId: sdkRequestId,
 					toolIdEditMap: resolvedToolIdEditMap,
-					agentId: this._options.agentName,
+					agentId: this._agentName,
 				}]).catch(error => {
 					this.logService.error(`[CopilotCLISession] Failed to update chat session metadata store for request ${request.id}`, error);
 				});
