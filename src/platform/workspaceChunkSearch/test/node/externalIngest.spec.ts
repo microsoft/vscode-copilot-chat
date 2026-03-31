@@ -21,7 +21,6 @@ import { createPlatformServices, TestingServiceCollection } from '../../../test/
 import { IWorkspaceService, NullWorkspaceService } from '../../../workspace/common/workspaceService';
 import { ExternalIngestClient, ExternalIngestFile, ExternalIngestUpdateIndexResult, IExternalIngestClient } from '../../node/codeSearch/externalIngestClient';
 import { ExternalIngestIndex } from '../../node/codeSearch/externalIngestIndex';
-import { StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings } from '../../common/workspaceChunkSearch';
 
 const emptyProgressCb: (message: string) => void = () => { };
 const testCallTracker = new CallTracker('externalIngest.spec.ts');
