@@ -23,6 +23,9 @@ const additionalNonDeferredToolNames = new Set<string>([
 	ToolName.ToolSearch,
 	// Dynamically injected tools (no ToolName enum entry)
 	'task_complete',
+	// VS Code built-in language tools that should always be available
+	'vscode_renameSymbol',
+	'vscode_listCodeUsages',
 ]);
 
 /**
