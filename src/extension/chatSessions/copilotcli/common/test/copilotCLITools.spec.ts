@@ -1005,8 +1005,6 @@ describe('CopilotCLITools', () => {
 			const [part] = pending.get('task-1')!;
 			expect(part).toBeInstanceOf(ChatToolInvocationPart);
 			const toolPart = part as ChatToolInvocationPart;
-			// expect(toolPart.invocationMessage).toBe('Code Review Agent');
-			// expect(toolPart.pastTenseMessage).toBe('Code Review Agent');
 			const data = toolPart.toolSpecificData as any;
 			expect(data.agentName).toBe('Code Review Agent');
 			expect(data.description).toBe('Reviews code for bugs');
@@ -1035,8 +1033,6 @@ describe('CopilotCLITools', () => {
 			const toolParts = parts.filter((p: any) => p instanceof ChatToolInvocationPart);
 			expect(toolParts).toHaveLength(1);
 			const toolPart = toolParts[0] as ChatToolInvocationPart;
-			// Should be enriched with display name from subagent.started
-			// expect(toolPart.invocationMessage).toBe('Code Review Agent');
 			const data = toolPart.toolSpecificData as any;
 			expect(data.agentName).toBe('Code Review Agent');
 			expect(data.description).toBe('Reviews code carefully');

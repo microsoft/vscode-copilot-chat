@@ -859,8 +859,6 @@ export function enrichToolInvocationWithSubagentMetadata(
 			part.toolSpecificData.description = agentDescription;
 		}
 	}
-	// part.invocationMessage = agentDisplayName;
-	// part.pastTenseMessage = agentDisplayName;
 }
 
 export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart | undefined {
