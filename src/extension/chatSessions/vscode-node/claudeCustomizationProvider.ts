@@ -3,20 +3,38 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-// TODO(joshspicer): Work in progress — depends on the proposed chatSessionCustomizationProvider
-// API which is off by default in VS Code.
-
 import * as vscode from 'vscode';
+import { SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
 import { INativeEnvService } from '../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { INSTRUCTION_FILE_EXTENSION, SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { basename } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
+import { IClaudeRuntimeDataService } from '../claude/common/claudeRuntimeDataService';
+import { ClaudeSessionUri } from '../claude/common/claudeSessionUri';
 import { IChatPromptFileService } from '../common/chatPromptFileService';
+
+// TODO: Consider reporting Claude slash commands (from Query.supportedCommands()) when appropriate
+// TODO: Report MCP servers when ChatSessionCustomizationType.Mcp is available (use Query.mcpServerStatus())
+
+/**
+ * Hard-coded CLAUDE.md instruction file names that Claude recognizes.
+ * Per workspace folder: CLAUDE.md, CLAUDE.local.md, .claude/CLAUDE.md, .claude/CLAUDE.local.md
+ * User home: ~/.claude/CLAUDE.md
+ */
+const WORKSPACE_INSTRUCTION_PATHS = [
+	'CLAUDE.md',
+	'CLAUDE.local.md',
+	['.claude', 'CLAUDE.md'] as const,
+	['.claude', 'CLAUDE.local.md'] as const,
+] as const;
+
+const HOME_INSTRUCTION_PATHS = [
+	['.claude', 'CLAUDE.md'] as const,
+] as const;
 
 /**
  * Hook event IDs that Claude supports, matching the HookEvent types from
@@ -51,12 +69,13 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 		return {
 			label: 'Claude',
 			iconId: 'claude',
-			unsupportedTypes: [vscode.ChatSessionCustomizationType.Agent, vscode.ChatSessionCustomizationType.Prompt],
+			unsupportedTypes: [vscode.ChatSessionCustomizationType.Prompt],
 		};
 	}
 
 	constructor(
 		@IChatPromptFileService private readonly chatPromptFileService: IChatPromptFileService,
+		@IClaudeRuntimeDataService private readonly runtimeDataService: IClaudeRuntimeDataService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@INativeEnvService private readonly envService: INativeEnvService,
@@ -64,24 +83,30 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 	) {
 		super();
 
-		this._register(this.chatPromptFileService.onDidChangeCustomAgents(() => this._onDidChange.fire()));
-		this._register(this.chatPromptFileService.onDidChangeInstructions(() => this._onDidChange.fire()));
+		this._register(this.runtimeDataService.onDidChange(() => this._onDidChange.fire()));
 		this._register(this.chatPromptFileService.onDidChangeSkills(() => this._onDidChange.fire()));
+		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => this._onDidChange.fire()));
 	}
 
 	async provideChatSessionCustomizations(_token: vscode.CancellationToken): Promise<vscode.ChatSessionCustomizationItem[]> {
 		const items: vscode.ChatSessionCustomizationItem[] = [];
 
-		for (const instruction of this.chatPromptFileService.instructions) {
-			if (this.isClaudePath(instruction.uri)) {
-				items.push({
-					uri: instruction.uri,
-					type: vscode.ChatSessionCustomizationType.Instructions,
-					name: deriveNameFromUri(instruction.uri, INSTRUCTION_FILE_EXTENSION),
-				});
-			}
+		// Agents from the Claude SDK (built-in subagents like "Explore")
+		for (const agent of this.runtimeDataService.getAgents()) {
+			items.push({
+				uri: URI.from({ scheme: ClaudeSessionUri.scheme, path: `/agents/${agent.name}` }),
+				type: vscode.ChatSessionCustomizationType.Agent,
+				name: agent.name,
+				description: agent.description,
+				groupKey: 'Built-in',
+			});
 		}
 
+		// Instructions from hard-coded CLAUDE.md paths (checked for existence)
+		const instructionItems = await this.discoverInstructions();
+		items.push(...instructionItems);
+
+		// Skills from .claude/skills/ directories (user-defined SKILL.md files)
 		for (const skill of this.chatPromptFileService.skills) {
 			if (this.isClaudePath(skill.uri)) {
 				items.push({
@@ -92,12 +117,53 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 			}
 		}
 
-		// Discover hooks from .claude/settings.json files
+		// Hooks from .claude/settings.json files
 		const hookItems = await this.discoverHooks();
 		items.push(...hookItems);
 
 		this.logService.trace(`[ClaudeCustomizationProvider] Provided ${items.length} customization items`);
 		return items;
+	}
+
+	private async discoverInstructions(): Promise<vscode.ChatSessionCustomizationItem[]> {
+		const items: vscode.ChatSessionCustomizationItem[] = [];
+		const candidates: URI[] = [];
+
+		for (const folder of this.workspaceService.getWorkspaceFolders()) {
+			for (const entry of WORKSPACE_INSTRUCTION_PATHS) {
+				if (typeof entry === 'string') {
+					candidates.push(URI.joinPath(folder, entry));
+				} else {
+					candidates.push(URI.joinPath(folder, ...entry));
+				}
+			}
+		}
+
+		for (const entry of HOME_INSTRUCTION_PATHS) {
+			candidates.push(URI.joinPath(this.envService.userHome, ...entry));
+		}
+
+		for (const uri of candidates) {
+			if (await this.fileExists(uri)) {
+				const name = basename(uri).replace(/\.md$/i, '');
+				items.push({
+					uri,
+					type: vscode.ChatSessionCustomizationType.Instructions,
+					name,
+				});
+			}
+		}
+
+		return items;
+	}
+
+	private async fileExists(uri: URI): Promise<boolean> {
+		try {
+			await this.fileSystemService.readFile(uri);
+			return true;
+		} catch {
+			return false;
+		}
 	}
 
 	private async discoverHooks(): Promise<vscode.ChatSessionCustomizationItem[]> {
