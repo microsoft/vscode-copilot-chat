@@ -563,16 +563,10 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	}
 
 	private async getSessionHistory(sessionId: string, workspaceInfo: IWorkspaceInfo, token: vscode.CancellationToken) {
-		const disposables = new DisposableStore();
 		try {
-			const session = await this.sessionService.getSession({ sessionId, workspaceInfo, readonly: true }, token);
-			if (session) {
-				disposables.add(session);
-				_invalidCopilotCLISessionIdsWithErrorMessage.delete(sessionId);
-				const history = await session.object.getChatHistory();
-				return history;
-			}
-			return [];
+			_invalidCopilotCLISessionIdsWithErrorMessage.delete(sessionId);
+			const history = await this.sessionService.getChatHistory({ sessionId, workspace: workspaceInfo }, token);
+			return history;
 		} catch (error) {
 			if (!isUnknownEventTypeError(error)) {
 				throw error;
@@ -585,8 +579,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			}
 
 			throw error;
-		} finally {
-			disposables.dispose();
 		}
 	}
 
@@ -1368,7 +1360,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const mcpServerMappings = buildMcpServerMappings(request.tools);
 		const session = isNewSession ?
 			await this.sessionService.createSession({ sessionId, model, workspaceInfo, agent, debugTargetSessionIds, mcpServerMappings }, token) :
-			await this.sessionService.getSession({ sessionId, model, workspaceInfo, agent, readonly: false, debugTargetSessionIds, mcpServerMappings }, token);
+			await this.sessionService.getSession({ sessionId, model, workspaceInfo, agent, debugTargetSessionIds, mcpServerMappings }, token);
 
 		if (!session) {
 			stream.warning(l10n.t('Chat session not found.'));

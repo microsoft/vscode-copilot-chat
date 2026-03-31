@@ -713,16 +713,10 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	}
 
 	private async getSessionHistory(sessionId: string, workspaceInfo: IWorkspaceInfo, token: vscode.CancellationToken) {
-		const disposables = new DisposableStore();
 		try {
-			const session = await this.sessionService.getSession({ sessionId, workspaceInfo, readonly: true }, token);
-			if (session) {
-				disposables.add(session);
-				_invalidCopilotCLISessionIdsWithErrorMessage.delete(sessionId);
-				const history = await session.object.getChatHistory();
-				return history;
-			}
-			return [];
+			_invalidCopilotCLISessionIdsWithErrorMessage.delete(sessionId);
+			const history = await this.sessionService.getChatHistory({ sessionId, workspace: workspaceInfo }, token);
+			return history;
 		} catch (error) {
 			if (!isUnknownEventTypeError(error)) {
 				throw error;
@@ -735,8 +729,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			}
 
 			throw error;
-		} finally {
-			disposables.dispose();
 		}
 	}
 
@@ -1688,7 +1680,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const mcpServerMappings = buildMcpServerMappings(request.tools);
 		const session = isNewSession ?
 			await this.sessionService.createSession({ model, workspaceInfo, agent, debugTargetSessionIds, mcpServerMappings }, token) :
-			await this.sessionService.getSession({ sessionId: id, model, workspaceInfo, readonly: false, agent, debugTargetSessionIds, mcpServerMappings }, token);
+			await this.sessionService.getSession({ sessionId: id, model, workspaceInfo, agent, debugTargetSessionIds, mcpServerMappings }, token);
 		this.sessionItemProvider.notifySessionsChange();
 		// TODO @DonJayamanne We need to refresh to add this new session, but we need a label.
 		// So when creating a session we need a dummy label (or an initial prompt).

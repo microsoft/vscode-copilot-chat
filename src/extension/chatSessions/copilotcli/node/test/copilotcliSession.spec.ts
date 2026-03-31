@@ -5,7 +5,7 @@
 
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatContext, ChatParticipantToolToken } from 'vscode';
+import type { ChatParticipantToolToken } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { NoopOTelService, resolveOTelConfig } from '../../../../../platform/otel/common/index';
@@ -13,7 +13,6 @@ import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nu
 import { IRequestLogger } from '../../../../../platform/requestLogger/node/requestLogger';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
-import { mock } from '../../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import * as path from '../../../../../util/vs/base/common/path';
@@ -22,13 +21,10 @@ import { IInstantiationService } from '../../../../../util/vs/platform/instantia
 import { ChatSessionStatus, ChatToolInvocationPart, Uri } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
-import { IChatPromptFileService } from '../../../common/chatPromptFileService';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
 import { MockChatSessionMetadataStore } from '../../../common/test/mockChatSessionMetadataStore';
 import { IWorkspaceInfo } from '../../../common/workspaceInfo';
 import { FakeToolsService, ToolCall } from '../../common/copilotCLITools';
-import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
-import { ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
 import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
@@ -170,19 +166,10 @@ describe('CopilotCLISession', () => {
 	let sessionWorkspaceInfo: IWorkspaceInfo;
 	let sessionAgentName: string | undefined;
 	let instaService: IInstantiationService;
-	let sdk: ICopilotCLISDK;
 	let requestLogger: IRequestLogger;
 	let toolsService: FakeToolsService;
 	let configurationService: IConfigurationService;
 	let chatSessionMetadataStore: MockChatSessionMetadataStore;
-	const delegationService = new class extends mock<IChatDelegationSummaryService>() {
-		override async summarize(context: ChatContext, token: CancellationToken): Promise<string | undefined> {
-			return undefined;
-		}
-		override extractPrompt(_sessionId: string, _message: string) {
-			return undefined;
-		}
-	}();
 	let authInfo: NonNullable<SessionOptions['authInfo']>;
 	beforeEach(async () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
@@ -193,14 +180,6 @@ describe('CopilotCLISession', () => {
 			type: 'token',
 			token: '',
 			host: 'https://github.com'
-		};
-		sdk = new class extends mock<ICopilotCLISDK>() {
-			override async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
-				return authInfo;
-			}
-			override getRequestId(_sdkRequestId: string) {
-				return undefined;
-			}
 		};
 		chatSessionMetadataStore = new MockChatSessionMetadataStore();
 		sdkSession = new MockSdkSession();
@@ -232,17 +211,14 @@ describe('CopilotCLISession', () => {
 			sdkSession as unknown as Session,
 			logger,
 			workspaceService,
-			sdk,
 			chatSessionMetadataStore,
 			instaService,
-			delegationService,
 			requestLogger,
 			new NullICopilotCLIImageSupport(),
 			toolsService,
 			new FakeUserQuestionHandler(),
 			configurationService,
 			new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })),
-			new class extends mock<IChatPromptFileService>() { override get customAgentPromptFiles() { return []; } }(),
 		));
 	}
 
@@ -257,52 +233,6 @@ describe('CopilotCLISession', () => {
 		expect(session.status).toBe(ChatSessionStatus.Completed);
 		expect(stream.output.join('\n')).toContain('Echo: Hello');
 		// Listeners are disposed after completion, so we only assert original streamed content.
-	});
-
-	describe('request mapping migration', () => {
-		it('getChatHistory should prefer request details from chat session metadata store', async () => {
-			chatSessionMetadataStore = new MockChatSessionMetadataStore();
-			await chatSessionMetadataStore.updateRequestDetails('mock-session-id', [{
-				vscodeRequestId: 'vscode-request-1',
-				copilotRequestId: 'sdk-request-1',
-				toolIdEditMap: {}
-			}]);
-			const legacyGetSpy = vi.spyOn(sdk, 'getRequestId').mockReturnValue(undefined);
-			(sdkSession as unknown as { getEvents: () => unknown[] }).getEvents = () => [
-				{ id: 'sdk-request-1', type: 'user.message', data: { content: 'hello', attachments: [] } }
-			];
-
-			const session = await createSession();
-			await session.getChatHistory();
-
-			expect(legacyGetSpy).not.toHaveBeenCalled();
-		});
-
-		it('getChatHistory should fallback to legacy SDK mapping and persist to metadata store', async () => {
-			chatSessionMetadataStore = new MockChatSessionMetadataStore();
-			const updateSpy = vi.spyOn(chatSessionMetadataStore, 'updateRequestDetails');
-			vi.spyOn(sdk, 'getRequestId').mockImplementation(sdkRequestId => {
-				if (sdkRequestId !== 'sdk-request-2') {
-					return undefined;
-				}
-				return {
-					requestId: 'vscode-request-2',
-					toolIdEditMap: { 'tool-1': 'edit-1' },
-				};
-			});
-			(sdkSession as unknown as { getEvents: () => unknown[] }).getEvents = () => [
-				{ id: 'sdk-request-2', type: 'user.message', data: { content: 'hello', attachments: [] } }
-			];
-
-			const session = await createSession();
-			await session.getChatHistory();
-
-			expect(updateSpy).toHaveBeenCalledWith('mock-session-id', [{
-				vscodeRequestId: 'vscode-request-2',
-				copilotRequestId: 'sdk-request-2',
-				toolIdEditMap: { 'tool-1': 'edit-1' }
-			}]);
-		});
 	});
 
 	it('switches model when different modelId provided', async () => {
