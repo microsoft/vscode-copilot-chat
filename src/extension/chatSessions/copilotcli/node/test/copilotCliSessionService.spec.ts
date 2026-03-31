@@ -94,7 +94,7 @@ function workspaceInfoFor(workingDirectory: Uri | undefined): IWorkspaceInfo {
 
 function sessionOptionsFor(workingDirectory?: Uri) {
 	return {
-		workspaceInfo: workspaceInfoFor(workingDirectory),
+		workspace: workspaceInfoFor(workingDirectory),
 	};
 }
 

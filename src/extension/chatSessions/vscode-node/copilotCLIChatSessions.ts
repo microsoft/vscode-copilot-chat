@@ -288,7 +288,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			controller.forkHandler = async (sessionResource: Uri, request: ChatRequestTurn2 | undefined, token: vscode.CancellationToken) => {
 				const sessionId = SessionIdForCLI.parse(sessionResource);
 				const folderInfo = await this.folderRepositoryManager.getFolderRepository(sessionId, undefined, token);
-				const forkedSessionId = await this.sessionService.forkSession(sessionId, request?.id, { workspaceInfo: folderInfo }, token);
+				const forkedSessionId = await this.sessionService.forkSession({ sessionId, requestId: request?.id, workspace: folderInfo }, token);
 				const item = await this.sessionService.getSessionItem(forkedSessionId, token);
 				if (!item) {
 					throw new Error(`Failed to get session item for forked session ${forkedSessionId}`);
@@ -1359,8 +1359,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const debugTargetSessionIds = extractDebugTargetSessionIds(request.references);
 		const mcpServerMappings = buildMcpServerMappings(request.tools);
 		const session = isNewSession ?
-			await this.sessionService.createSession({ sessionId, model, workspaceInfo, agent, debugTargetSessionIds, mcpServerMappings }, token) :
-			await this.sessionService.getSession({ sessionId, model, workspaceInfo, agent, debugTargetSessionIds, mcpServerMappings }, token);
+			await this.sessionService.createSession({ sessionId, model, workspace: workspaceInfo, agent, debugTargetSessionIds, mcpServerMappings }, token) :
+			await this.sessionService.getSession({ sessionId, model, workspace: workspaceInfo, agent, debugTargetSessionIds, mcpServerMappings }, token);
 
 		if (!session) {
 			stream.warning(l10n.t('Chat session not found.'));
@@ -1517,7 +1517,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const { prompt, attachments, references } = await this.promptResolver.resolvePrompt(request, await requestPromptPromise, (otherReferences || []).concat([]), workspaceInfo, [], token);
 
 		const mcpServerMappings = buildMcpServerMappings(request.tools);
-		const session = await this.sessionService.createSession({ workspaceInfo, agent, model, mcpServerMappings }, token);
+		const session = await this.sessionService.createSession({ workspace: workspaceInfo, agent, model, mcpServerMappings }, token);
 		const modeInstructions = this.createModeInstructions(request);
 		this.chatSessionMetadataStore.updateRequestDetails(session.object.sessionId, [{ vscodeRequestId: request.id, agentId: agent?.name ?? '', modeInstructions }]).catch(ex => this.logService.error(ex, 'Failed to update request details'));
 		if (summary) {
