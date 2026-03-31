@@ -141,11 +141,12 @@ describe('ClaudeCustomizationProvider', () => {
 			expect(ClaudeCustomizationProvider.metadata.iconId).toBe('claude');
 		});
 
-		it('marks only Prompt type as unsupported', () => {
+		it('marks Prompt and plugins as unsupported', () => {
 			const unsupported = ClaudeCustomizationProvider.metadata.unsupportedTypes;
 			expect(unsupported).toBeDefined();
-			expect(unsupported).toHaveLength(1);
+			expect(unsupported).toHaveLength(2);
 			expect(unsupported![0]).toBe(FakeChatSessionCustomizationType.Prompt);
+			expect(unsupported![1].id).toBe('plugins');
 		});
 	});
 

@@ -69,7 +69,10 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 		return {
 			label: 'Claude',
 			iconId: 'claude',
-			unsupportedTypes: [vscode.ChatSessionCustomizationType.Prompt],
+			unsupportedTypes: [
+				vscode.ChatSessionCustomizationType.Prompt,
+				new vscode.ChatSessionCustomizationType('plugins'),
+			],
 		};
 	}
 
