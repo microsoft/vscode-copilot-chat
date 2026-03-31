@@ -472,6 +472,8 @@
 	"copilot.tools.runSubagent.description": "Runs a task within an isolated subagent context. Enables efficient organization of tasks and context window management.",
 	"copilot.tools.searchSubagent.name": "Search Subagent",
 	"copilot.tools.searchSubagent.description": "Launch an iterative search-focused subagent to find relevant code in your workspace.",
+	"copilot.tools.loadSkill.name": "Load Skill",
+	"copilot.tools.loadSkill.description": "Load a skill's SKILL.md instructions. Supports inline (default) and fork modes for skill-guided task execution.",
 	"github.copilot.config.searchSubagent.enabled": "Enable the search subagent tool for iterative code exploration in the workspace.",
 	"github.copilot.config.searchSubagent.useAgenticProxy": "Use the agentic proxy for the search subagent tool.",
 	"github.copilot.config.searchSubagent.model": "Model to use for the search subagent. When useAgenticProxy is enabled, defaults to 'agentic-search-v3'. Otherwise defaults to the main agent model.",

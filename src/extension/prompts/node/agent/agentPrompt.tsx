@@ -530,7 +530,7 @@ class SkillAdherenceReminder extends PromptElement<SkillAdherenceReminderProps> 
 		}
 
 		return <Tag name='additional_skills_reminder'>
-			Always check if any skills apply to the user's request. If so, use the {ToolName.ReadFile} tool to read the corresponding SKILL.md files. Multiple skill files may be needed for a single request. These files contain best practices built from testing that are needed for high-quality outputs.<br />
+			Always check if any skills apply to the user's request. If so, use the {ToolName.LoadSkill} tool to load the corresponding SKILL.md files. Multiple skill files may be needed for a single request. These files contain best practices built from testing that are needed for high-quality outputs.<br />
 		</Tag>;
 	}
 }

@@ -19,6 +19,7 @@ import './githubRepoTool';
 import './insertEditTool';
 import './installExtensionTool';
 import './listDirTool';
+import './loadSkillTool';
 import './manageTodoListTool';
 import './memoryTool';
 import './multiReplaceStringTool';
@@ -40,3 +41,4 @@ import './toolSearchTool';
 import './viewImageTool';
 import './vscodeAPITool';
 import './vscodeCmdTool';
+

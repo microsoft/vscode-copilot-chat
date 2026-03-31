@@ -235,6 +235,39 @@
 				}
 			},
 			{
+				"name": "load_skill",
+				"toolReferenceName": "loadSkill",
+				"displayName": "%copilot.tools.loadSkill.name%",
+				"icon": "$(book)",
+				"userDescription": "%copilot.tools.loadSkill.description%",
+				"modelDescription": "Load a skill's SKILL.md instructions file. By default (context='inline'), returns the skill instructions as context to the current agent. With context='fork', spawns a subagent with the skill instructions injected as system context to perform the task autonomously.\n\nInput fields:\n- skillPath: Absolute path to the SKILL.md file.\n- context: Optional. 'inline' (default) or 'fork'.\n- query: Required when context='fork'. The task for the skill subagent.\n- description: Required when context='fork'. Short user-visible description.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"skillPath": {
+							"type": "string",
+							"description": "The absolute path to the SKILL.md file to load."
+						},
+						"context": {
+							"type": "string",
+							"enum": ["inline", "fork"],
+							"description": "The mode. 'inline' (default) returns skill content as context to the current agent. 'fork' spawns a subagent with the skill instructions."
+						},
+						"query": {
+							"type": "string",
+							"description": "Required when context is 'fork'. The task for the skill subagent to perform."
+						},
+						"description": {
+							"type": "string",
+							"description": "Required when context is 'fork'. A short user-visible description of the task."
+						}
+					},
+					"required": [
+						"skillPath"
+					]
+				}
+			},
+			{
 				"name": "copilot_searchWorkspaceSymbols",
 				"toolReferenceName": "symbols",
 				"displayName": "%copilot.tools.searchWorkspaceSymbols.name%",
@@ -1249,7 +1282,8 @@
 					"problems",
 					"readFile",
 					"viewImage",
-					"readNotebookCellOutput"
+					"readNotebookCellOutput",
+					"loadSkill"
 				]
 			},
 			{
