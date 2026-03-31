@@ -6,6 +6,7 @@
 import * as os from 'os';
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
+import { DEFAULT_OTLP_ENDPOINT } from '../../../platform/otel/common/otelConfig';
 import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IOTelSqliteStore, type OTelSqliteStore } from '../../../platform/otel/node/sqlite/otelSqliteStore';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -130,7 +131,7 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 			exporterType: config.exporterType,
 			captureContent: String(config.captureContent),
 			protocol: config.otlpProtocol,
-			hasCustomEndpoint: String(config.enabled && config.otlpEndpoint !== 'http://localhost:4318/'),
+			hasCustomEndpoint: String(config.enabled && config.otlpEndpoint !== DEFAULT_OTLP_ENDPOINT && config.otlpEndpoint !== DEFAULT_OTLP_ENDPOINT + '/'),
 			hasCustomServiceName: String(config.serviceName !== 'copilot-chat'),
 			hasResourceAttributes: String(Object.keys(config.resourceAttributes).length > 0),
 		});

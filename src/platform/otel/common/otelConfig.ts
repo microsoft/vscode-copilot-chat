@@ -7,6 +7,9 @@ export type OTelExporterType = 'otlp-grpc' | 'otlp-http' | 'console' | 'file';
 
 export type OTelEnabledVia = 'envVar' | 'setting' | 'otlpEndpointEnvVar' | 'dbSpanExporterOnly' | 'disabled';
 
+/** Default OTLP endpoint used when no env var or setting overrides it. */
+export const DEFAULT_OTLP_ENDPOINT = 'http://localhost:4318';
+
 export interface OTelConfig {
 	readonly enabled: boolean;
 	/** True when OTel was enabled via setting/env var, not just implied by dbSpanExporter. */
@@ -133,8 +136,8 @@ export function resolveOTelConfig(input: OTelConfigInput): OTelConfig {
 	const rawEndpoint = env['COPILOT_OTEL_ENDPOINT']
 		?? env['OTEL_EXPORTER_OTLP_ENDPOINT']
 		?? input.settingOtlpEndpoint
-		?? 'http://localhost:4318';
-	const otlpEndpoint = parseOtlpEndpoint(rawEndpoint, protocol) ?? 'http://localhost:4318';
+		?? DEFAULT_OTLP_ENDPOINT;
+	const otlpEndpoint = parseOtlpEndpoint(rawEndpoint, protocol) ?? DEFAULT_OTLP_ENDPOINT;
 
 	// File exporter path
 	const fileExporterPath = env['COPILOT_OTEL_FILE_EXPORTER_PATH'] ?? input.settingOutfile;
