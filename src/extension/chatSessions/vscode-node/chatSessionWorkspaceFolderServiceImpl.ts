@@ -89,6 +89,14 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 		return await this.metadataStore.getSessionWorkspaceFolder(sessionId);
 	}
 
+	async getSessionWorkspaceFolderEntry(sessionId: string): Promise<WorkspaceFolderEntry | undefined> {
+		const entry = this.workspaceState.get(sessionId);
+		if (entry) {
+			return entry;
+		}
+		return await this.metadataStore.getSessionWorkspaceFolderEntry(sessionId);
+	}
+
 	async handleRequestCompleted(workspaceFolderUri: vscode.Uri): Promise<void> {
 		// Clear changes cache
 		this.workspaceFolderChanges.delete(workspaceFolderUri);
