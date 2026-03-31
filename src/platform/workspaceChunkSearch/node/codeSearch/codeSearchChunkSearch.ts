@@ -334,16 +334,22 @@ export class CodeSearchChunkSearch extends Disposable {
 		});
 
 		if (codeSearchCheckResult.isError()) {
-			this._logService.debug(`CodeSearchChunkSearch.isAvailable: false. ${codeSearchCheckResult.err.unavailableReason}`);
-		} else {
-			this._logService.debug(`CodeSearchChunkSearch.isAvailable: true`);
+			this._logService.debug(`CodeSearchChunkSearch.isAvailable: codeSearchCheckResult returned error: ${codeSearchCheckResult.err.unavailableReason}`);
 		}
 
 		if (codeSearchCheckResult.isOk()) {
+			this._logService.debug(`CodeSearchChunkSearch.isAvailable: true since code search is available`);
 			return true;
 		}
 
-		return !!this.isExternalIngestEnabled();
+		const hasExternalIngest = !!this.isExternalIngestEnabled();
+		if (hasExternalIngest) {
+			this._logService.debug(`CodeSearchChunkSearch.isAvailable: true since external ingest is enabled`);
+		} else {
+			this._logService.debug(`CodeSearchChunkSearch.isAvailable: false since external ingest is not enabled and no code search repos found`);
+		}
+
+		return hasExternalIngest;
 	}
 
 	private async isCodeSearchAvailable(canPrompt = false, token: CancellationToken): Promise<Result<AvailableSuccessMetadata, AvailableFailureMetadata>> {
