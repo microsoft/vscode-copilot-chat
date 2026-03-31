@@ -255,7 +255,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						const userContent = typeof lastUserMsg.content === 'string'
 							? lastUserMsg.content
 							: JSON.stringify(lastUserMsg.content);
-						otelInferenceSpan.setAttribute(CopilotChatAttr.USER_REQUEST, userContent);
+						otelInferenceSpan.setAttribute(CopilotChatAttr.USER_REQUEST, truncateForOTel(userContent));
 					}
 					// System instructions — check messages array, top-level system (Anthropic), or instructions (Responses API)
 					const systemMsg = capiMessages?.find(m => m.role === 'system');
@@ -272,10 +272,15 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 				// Always capture full request content for the debug panel
 				if (otelInferenceSpan) {
-					const body = requestBody as { messages?: ReadonlyArray<{ role?: string; content?: string }>; input?: ReadonlyArray<{ role?: string; content?: string }> };
+					const body = requestBody as { messages?: ReadonlyArray<{ role?: string; content?: string | unknown[] }>; input?: ReadonlyArray<{ role?: string; content?: string | unknown[] }> };
 					const capiMessages = body.messages ?? body.input;
 					if (capiMessages) {
-						otelInferenceSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, truncateForOTel(JSON.stringify(toInputMessages(capiMessages))));
+						// Normalize non-string content (Anthropic arrays, Responses API parts) to strings for OTel schema
+						const normalized = capiMessages.map(m => ({
+							...m,
+							content: typeof m.content === 'string' ? m.content : m.content ? JSON.stringify(m.content) : undefined,
+						}));
+						otelInferenceSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, truncateForOTel(JSON.stringify(toInputMessages(normalized))));
 					}
 				}
 				tokenCount = await chatEndpoint.acquireTokenizer().countMessagesTokens(messages);

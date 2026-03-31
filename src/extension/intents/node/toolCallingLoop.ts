@@ -785,7 +785,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				});
 
 				try {
-					const result = await this._runLoop(outputStream, token, span);
+					const result = await this._runLoop(outputStream, token, span, chatSessionId);
 					span.setAttributes({
 						[CopilotChatAttr.TURN_COUNT]: result.toolCallRounds.length,
 						[GenAiAttr.USAGE_INPUT_TOKENS]: totalInputTokens,
@@ -803,9 +803,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						}
 						// Log tool definitions once on the agent span (same set across all turns)
 						if (result.availableTools.length > 0) {
-							span.setAttribute(GenAiAttr.TOOL_DEFINITIONS, truncateForOTel(JSON.stringify(
+							span.setAttribute(GenAiAttr.TOOL_DEFINITIONS, JSON.stringify(
 								result.availableTools.map(t => ({ type: 'function', name: t.name, description: t.description }))
-							)));
+							));
 						}
 					}
 					span.setStatus(SpanStatusCode.OK);
@@ -827,7 +827,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		);
 	}
 
-	private async _runLoop(outputStream: ChatResponseStream | undefined, token: CancellationToken, agentSpan?: ISpanHandle): Promise<IToolCallLoopResult> {
+	private async _runLoop(outputStream: ChatResponseStream | undefined, token: CancellationToken, agentSpan?: ISpanHandle, chatSessionId?: string): Promise<IToolCallLoopResult> {
 		let i = 0;
 		let lastResult: IToolCallSingleResult | undefined;
 		let lastRequestMessagesStartingIndexForRun: number | undefined;
@@ -859,7 +859,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			try {
 				const turnId = String(i);
 				this._sessionTranscriptService.logAssistantTurnStart(sessionId, turnId);
-				agentSpan?.addEvent('turn_start', { turnId, [CopilotChatAttr.CHAT_SESSION_ID]: sessionId });
+				agentSpan?.addEvent('turn_start', { turnId, ...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}) });
 				this.resolveAutopilotProgress();
 				const result = await this.runOne(outputStream, i, token);
 				if (lastRequestMessagesStartingIndexForRun === undefined) {
@@ -872,7 +872,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 				this.toolCallRounds.push(result.round);
 				this._sessionTranscriptService.logAssistantTurnEnd(sessionId, turnId);
-				agentSpan?.addEvent('turn_end', { turnId, [CopilotChatAttr.CHAT_SESSION_ID]: sessionId });
+				agentSpan?.addEvent('turn_end', { turnId, ...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}) });
 
 				// If the model produced productive (non-task_complete) tool calls after being nudged,
 				// reset the stop hook flag and iteration count so it can be nudged again.
