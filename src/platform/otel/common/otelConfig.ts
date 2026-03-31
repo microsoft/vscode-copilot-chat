@@ -115,7 +115,7 @@ export function resolveOTelConfig(input: OTelConfigInput): OTelConfig {
 
 	// Determine how OTel was enabled for telemetry tracking
 	let enabledVia: OTelEnabledVia;
-	if (envBool(env['COPILOT_OTEL_ENABLED']) !== undefined) {
+	if (envBool(env['COPILOT_OTEL_ENABLED']) === true) {
 		enabledVia = 'envVar';
 	} else if (input.settingEnabled === true) {
 		enabledVia = 'setting';

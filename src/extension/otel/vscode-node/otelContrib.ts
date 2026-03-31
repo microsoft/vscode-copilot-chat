@@ -130,7 +130,7 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 			exporterType: config.exporterType,
 			captureContent: String(config.captureContent),
 			protocol: config.otlpProtocol,
-			hasCustomEndpoint: String(config.enabled && config.otlpEndpoint !== 'http://localhost:4318'),
+			hasCustomEndpoint: String(config.enabled && config.otlpEndpoint !== 'http://localhost:4318/'),
 			hasCustomServiceName: String(config.serviceName !== 'copilot-chat'),
 			hasResourceAttributes: String(Object.keys(config.resourceAttributes).length > 0),
 		});
