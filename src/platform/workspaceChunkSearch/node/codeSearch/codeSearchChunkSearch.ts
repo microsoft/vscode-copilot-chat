@@ -276,6 +276,10 @@ export class CodeSearchChunkSearch extends Disposable {
 	async isAvailable(searchTelemetryInfo?: TelemetryCorrelationId, canPrompt = false, token = CancellationToken.None): Promise<boolean> {
 		const sw = new StopWatch();
 		const codeSearchCheckResult = await this.isCodeSearchAvailable(canPrompt, token);
+		if (this._isDisposed) {
+			return false;
+		}
+
 		const hasExternalIngest = !!this.isExternalIngestEnabled();
 
 		// Track where indexed repos are located related to the workspace
