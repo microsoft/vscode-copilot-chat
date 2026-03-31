@@ -54,6 +54,10 @@ const HIDDEN_MODEL_J_HASHES: string[] = [
 	'5a81e6aa7556585ba7c569881d1103683adc9e0124ff7952df423afba2f167b5',
 ];
 
+const HIDDEN_FAMILY_H_HASHES: string[] = [
+	'70fcded3f255d368e868cc807d8838a62108bfa5c86ce7d37966f58cda229e33',
+];
+
 function getModelId(model: LanguageModelChat | IChatEndpoint): string {
 	return 'id' in model ? model.id : model.model;
 }
@@ -77,6 +81,11 @@ export function isHiddenModelF(model: LanguageModelChat | IChatEndpoint) {
 export function isHiddenModelG(model: LanguageModelChat | IChatEndpoint) {
 	const family_hash = getCachedSha256Hash(model.family);
 	return family_hash === '0d90e0e579352b8502fc2a46b40961ee941adc26ce67c2b1438f0e4ea97d932f';
+}
+
+export function isHiddenFamilyH(model: LanguageModelChat | IChatEndpoint) {
+	const family_hash = getCachedSha256Hash(model.family);
+	return HIDDEN_FAMILY_H_HASHES.includes(family_hash);
 }
 
 
@@ -189,14 +198,14 @@ export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat 
  * Model supports replace_string_in_file as an edit tool.
  */
 export function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.toLowerCase().includes('gemini') || model.family.includes('grok-code') || modelSupportsMultiReplaceString(model) || isHiddenModelF(model) || isMinimaxFamily(model);
+	return model.family.toLowerCase().includes('gemini') || model.family.includes('grok-code') || modelSupportsMultiReplaceString(model) || isHiddenModelF(model) || isMinimaxFamily(model) || isHiddenFamilyH(model);
 }
 
 /**
  * Model supports multi_replace_string_in_file as an edit tool.
  */
 export function modelSupportsMultiReplaceString(model: LanguageModelChat | IChatEndpoint): boolean {
-	return isAnthropicFamily(model) || isHiddenModelE(model) || isVSCModelC(model) || isMinimaxFamily(model);
+	return isAnthropicFamily(model) || isHiddenModelE(model) || isVSCModelC(model) || isMinimaxFamily(model) || isHiddenFamilyH(model);
 }
 
 /**
@@ -204,7 +213,7 @@ export function modelSupportsMultiReplaceString(model: LanguageModelChat | IChat
  * without needing insert_edit_into_file.
  */
 export function modelCanUseReplaceStringExclusively(model: LanguageModelChat | IChatEndpoint): boolean {
-	return isAnthropicFamily(model) || model.family.includes('grok-code') || isHiddenModelE(model) || model.family.toLowerCase().includes('gemini-3') || isVSCModelC(model) || isHiddenModelF(model) || isMinimaxFamily(model);
+	return isAnthropicFamily(model) || model.family.includes('grok-code') || isHiddenModelE(model) || model.family.toLowerCase().includes('gemini-3') || isVSCModelC(model) || isHiddenModelF(model) || isMinimaxFamily(model) || isHiddenFamilyH(model);
 }
 
 /**

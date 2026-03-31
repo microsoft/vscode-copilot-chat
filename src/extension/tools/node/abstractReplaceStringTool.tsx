@@ -352,7 +352,11 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 						res.telemetryService.sendGHTelemetryEvent('replaceString/trackEditSurvival', {
 							headerRequestId: this._promptContext?.requestId,
 							requestSource: 'agent',
-							mapper: 'stringReplaceTool'
+							mapper: 'stringReplaceTool',
+							headBranchName: res.workspace?.headBranchName,
+							headCommitHash: res.workspace?.headCommitHash,
+							remoteUrl: res.workspace?.remoteUrl,
+							fileRelativePath: res.workspace?.fileRelativePath,
 						}, {
 							survivalRateFourGram: res.fourGram,
 							survivalRateNoRevert: res.noRevert,
@@ -360,7 +364,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 							didBranchChange: res.didBranchChange ? 1 : 0,
 						});
 
-						emitEditSurvivalEvent(this._otelService, 'replace_string', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, this._promptContext?.requestId ?? '');
+						emitEditSurvivalEvent(this._otelService, 'replace_string', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, this._promptContext?.requestId ?? '', res.workspace);
 						GenAiMetrics.recordEditSurvivalFourGram(this._otelService, 'replace_string', res.fourGram, res.timeDelayMs);
 						GenAiMetrics.recordEditSurvivalNoRevert(this._otelService, 'replace_string', res.noRevert, res.timeDelayMs);
 					});

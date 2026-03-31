@@ -6,17 +6,22 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, suite, test } from 'vitest';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
+import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IIgnoreService, NullIgnoreService } from '../../../../platform/ignore/common/ignoreService';
+import { MockCustomInstructionsService } from '../../../../platform/test/common/testCustomInstructionsService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { posix } from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatVariablesCollection, CustomizationsIndexId } from '../../../prompt/common/chatVariablesCollection';
+import { IBuildPromptContext } from '../../../prompt/common/intents';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { encodeUrlHostname } from '../../common/toolUtils';
 import { assertFileOkForTool, inputGlobToPattern, isDirExternalAndNeedsConfirmation, isFileExternalAndNeedsConfirmation } from '../toolUtils';
@@ -217,6 +222,83 @@ suite('toolUtils - additionalReadAccessPaths', () => {
 			await configService.setConfig(ConfigKey.AdditionalReadAccessPaths, ['/external']);
 			expect(invokeIsDirExternalAndNeedsConfirmation(URI.file('/external/dir'), false)).toBe(true);
 		});
+	});
+});
+
+suite('toolUtils - isDirExternalAndNeedsConfirmation with skill folders', () => {
+	let accessor: ITestingServicesAccessor;
+	let instantiationService: IInstantiationService;
+	let mockCustomInstructionsService: MockCustomInstructionsService;
+
+	const skillFolderUri = URI.file('/home/user/.agents/skills/my-skill');
+
+	function makeBuildPromptContext(requestId: string): IBuildPromptContext {
+		return {
+			requestId,
+			query: 'test',
+			history: [],
+			chatVariables: new ChatVariablesCollection([{
+				id: CustomizationsIndexId,
+				name: 'customizations-index',
+				value: '<index/>',
+			}]),
+		};
+	}
+
+	beforeAll(() => {
+		const services = createExtensionUnitTestingServices();
+		services.define(IWorkspaceService, new SyncDescriptor(
+			TestWorkspaceService,
+			[[URI.file('/workspace')], []]
+		));
+		mockCustomInstructionsService = new MockCustomInstructionsService();
+		const skillFolders = new ResourceSet();
+		skillFolders.add(skillFolderUri);
+		mockCustomInstructionsService.parseInstructionIndexFile = () => ({
+			instructions: new ResourceSet(),
+			skills: new ResourceSet(),
+			skillFolders,
+			agents: new Set<string>(),
+		});
+		services.define(ICustomInstructionsService, mockCustomInstructionsService);
+		accessor = services.createTestingAccessor();
+		instantiationService = accessor.get(IInstantiationService);
+	});
+
+	afterAll(() => {
+		accessor.dispose();
+	});
+
+	function invokeIsDirExternalAndNeedsConfirmation(uri: URI, buildPromptContext?: IBuildPromptContext) {
+		return instantiationService.invokeFunction(acc => isDirExternalAndNeedsConfirmation(acc, uri, buildPromptContext));
+	}
+
+	test('exact skill folder does not need confirmation', () => {
+		expect(invokeIsDirExternalAndNeedsConfirmation(skillFolderUri, makeBuildPromptContext('req-1'))).toBe(false);
+	});
+
+	test('subdirectory under skill folder does not need confirmation', () => {
+		const subDir = URI.file('/home/user/.agents/skills/my-skill/references');
+		expect(invokeIsDirExternalAndNeedsConfirmation(subDir, makeBuildPromptContext('req-2'))).toBe(false);
+	});
+
+	test('deeply nested subdirectory under skill folder does not need confirmation', () => {
+		const deepDir = URI.file('/home/user/.agents/skills/my-skill/a/b/c');
+		expect(invokeIsDirExternalAndNeedsConfirmation(deepDir, makeBuildPromptContext('req-3'))).toBe(false);
+	});
+
+	test('sibling of skill folder still needs confirmation', () => {
+		const siblingDir = URI.file('/home/user/.agents/skills/other-skill');
+		expect(invokeIsDirExternalAndNeedsConfirmation(siblingDir, makeBuildPromptContext('req-4'))).toBe(true);
+	});
+
+	test('parent of skill folder still needs confirmation', () => {
+		const parentDir = URI.file('/home/user/.agents/skills');
+		expect(invokeIsDirExternalAndNeedsConfirmation(parentDir, makeBuildPromptContext('req-5'))).toBe(true);
+	});
+
+	test('without buildPromptContext, external dir needs confirmation', () => {
+		expect(invokeIsDirExternalAndNeedsConfirmation(skillFolderUri)).toBe(true);
 	});
 });
 

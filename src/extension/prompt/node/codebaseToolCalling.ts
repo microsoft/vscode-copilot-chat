@@ -12,6 +12,7 @@ import { ISessionTranscriptService } from '../../../platform/chat/common/session
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -50,8 +51,9 @@ export class CodebaseToolCallingLoop extends ToolCallingLoop<ICodebaseToolCallin
 		@ISessionTranscriptService sessionTranscriptService: ISessionTranscriptService,
 		@IFileSystemService fileSystemService: IFileSystemService,
 		@IOTelService otelService: IOTelService,
+		@IGitService gitService: IGitService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService, fileSystemService, otelService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService, fileSystemService, otelService, gitService);
 	}
 
 	private async getEndpoint(request: ChatRequest) {

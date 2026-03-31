@@ -5,6 +5,7 @@
 
 import type vscode from 'vscode';
 import { IGitService } from '../../../platform/git/common/gitService';
+import { resolveWorkspaceOTelMetadata, type WorkspaceOTelMetadata } from '../../../platform/otel/common/workspaceOTelMetadata';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { TimeoutTimer } from '../../../util/vs/base/common/async';
@@ -21,6 +22,7 @@ export interface EditSurvivalResult {
 	readonly timeDelayMs: number;
 	readonly didBranchChange: boolean;
 	readonly currentFileContent?: string;
+	readonly workspace?: WorkspaceOTelMetadata;
 
 	/**
 	 * Set includeArc to get this!
@@ -113,6 +115,7 @@ export class EditSurvivalReporter {
 
 		const currentBranch = this._getCurrentBranchName();
 		const didBranchChange = currentBranch !== this._initialBranchName;
+		const workspace = resolveWorkspaceOTelMetadata(this._gitService, this._document.uri);
 		this._sendTelemetryEvent({
 			telemetryService: this._telemetryService,
 			fourGram: survivalRate.fourGram,
@@ -120,6 +123,7 @@ export class EditSurvivalReporter {
 			timeDelayMs: timeMs,
 			didBranchChange,
 			currentFileContent: this._document.getText(),
+			workspace,
 			arc: this._arcTracker?.getAcceptedRestrainedCharactersCount(),
 			textBeforeAiEdits: survivalRate.textBeforeAiEdits,
 			textAfterAiEdits: survivalRate.textAfterAiEdits,

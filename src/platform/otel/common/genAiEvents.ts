@@ -6,6 +6,7 @@
 import { GenAiAttr, GenAiOperationName, StdAttr } from './genAiAttributes';
 import { truncateForOTel } from './messageFormatters';
 import type { IOTelService } from './otelService';
+import { type WorkspaceOTelMetadata, workspaceMetadataToOTelAttributes } from './workspaceOTelMetadata';
 
 /**
  * Emit OTel GenAI standard events via the IOTelService abstraction.
@@ -126,6 +127,7 @@ export function emitEditFeedbackEvent(
 	editSurface: string,
 	hasRemainingEdits: boolean,
 	isNotebook: boolean,
+	workspace?: WorkspaceOTelMetadata,
 ): void {
 	otel.emitLogRecord(`copilot_chat.edit.feedback: ${outcome}`, {
 		'event.name': 'copilot_chat.edit.feedback',
@@ -136,6 +138,7 @@ export function emitEditFeedbackEvent(
 		'edit_surface': editSurface,
 		'has_remaining_edits': hasRemainingEdits,
 		'is_notebook': isNotebook,
+		...workspaceMetadataToOTelAttributes(workspace),
 	});
 }
 
@@ -147,6 +150,7 @@ export function emitEditHunkActionEvent(
 	lineCount: number,
 	linesAdded: number,
 	linesRemoved: number,
+	workspace?: WorkspaceOTelMetadata,
 ): void {
 	otel.emitLogRecord(`copilot_chat.edit.hunk.action: ${outcome}`, {
 		'event.name': 'copilot_chat.edit.hunk.action',
@@ -156,6 +160,7 @@ export function emitEditHunkActionEvent(
 		'line_count': lineCount,
 		'lines_added': linesAdded,
 		'lines_removed': linesRemoved,
+		...workspaceMetadataToOTelAttributes(workspace),
 	});
 }
 
@@ -167,6 +172,7 @@ export function emitInlineDoneEvent(
 	editLineCount: number,
 	replyType: string,
 	isNotebook: boolean,
+	workspace?: WorkspaceOTelMetadata,
 ): void {
 	otel.emitLogRecord(`copilot_chat.inline.done: ${accepted ? 'accepted' : 'rejected'}`, {
 		'event.name': 'copilot_chat.inline.done',
@@ -176,6 +182,7 @@ export function emitInlineDoneEvent(
 		'edit_line_count': editLineCount,
 		'reply_type': replyType,
 		'is_notebook': isNotebook,
+		...workspaceMetadataToOTelAttributes(workspace),
 	});
 }
 
@@ -187,6 +194,7 @@ export function emitEditSurvivalEvent(
 	timeDelayMs: number,
 	didBranchChange: boolean,
 	requestId: string,
+	workspace?: WorkspaceOTelMetadata,
 ): void {
 	otel.emitLogRecord(`copilot_chat.edit.survival: ${editSource}`, {
 		'event.name': 'copilot_chat.edit.survival',
@@ -196,6 +204,7 @@ export function emitEditSurvivalEvent(
 		'time_delay_ms': timeDelayMs,
 		'did_branch_change': didBranchChange,
 		'request_id': requestId,
+		...workspaceMetadataToOTelAttributes(workspace),
 	});
 }
 

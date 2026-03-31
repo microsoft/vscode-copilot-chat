@@ -16,11 +16,12 @@ import { isAnthropicFamily, isGeminiFamily } from '../../../platform/endpoint/co
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAIContextManagementResponse, OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
-import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
+import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, resolveWorkspaceOTelMetadata, StdAttr, truncateForOTel, workspaceMetadataToOTelAttributes } from '../../../platform/otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { getCurrentCapturingToken, IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -204,6 +205,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@ISessionTranscriptService protected readonly _sessionTranscriptService: ISessionTranscriptService,
 		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 		@IOTelService protected readonly _otelService: IOTelService,
+		@IGitService private readonly _gitService: IGitService,
 	) {
 		super();
 	}
@@ -727,6 +729,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					[GenAiAttr.CONVERSATION_ID]: this.options.conversation.sessionId,
 					[CopilotChatAttr.SESSION_ID]: this.options.conversation.sessionId,
 					...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}),
+					...workspaceMetadataToOTelAttributes(resolveWorkspaceOTelMetadata(this._gitService)),
 				},
 				parentTraceContext,
 			},

@@ -69,6 +69,7 @@ class NullChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFo
 	override getSessionWorkspaceFolder = vi.fn(async () => undefined);
 	override handleRequestCompleted = vi.fn(async () => { });
 	override getWorkspaceChanges = vi.fn(async () => undefined);
+	override clearWorkspaceChanges = vi.fn(() => { });
 }
 
 class NullChatSessionWorktreeService extends mock<IChatSessionWorktreeService>() {
@@ -138,19 +139,16 @@ describe('CopilotCLISessionService', () => {
 			invokeFunction(fn: (accessor: unknown, ...args: any[]) => any, ...args: any[]): any {
 				return fn(accessor, ...args);
 			},
-			createInstance: (ctor: unknown, options: any, sdkSession: any) => {
+			createInstance: (ctor: unknown, workspaceInfo: any, agentName: any, sdkSession: any) => {
 				if (ctor === CopilotCLISessionWorkspaceTracker) {
 					return new class extends mock<CopilotCLISessionWorkspaceTracker>() {
 						override async initialize(): Promise<void> { return; }
-						override async trackSession(_sessionId: string, _operation: 'add' | 'delete'): Promise<void> {
-							return;
-						}
 						override shouldShowSession(_sessionId: string): { isOldGlobalSession?: boolean; isWorkspaceSession?: boolean } {
 							return { isOldGlobalSession: false, isWorkspaceSession: true };
 						}
 					}();
 				}
-				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, new MockChatSessionMetadataStore(), instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new class extends mock<IChatPromptFileService>() { override get customAgentPromptFiles() { return []; } }));
+				return disposables.add(new CopilotCLISession(workspaceInfo, agentName, sdkSession, logService, workspaceService, sdk, new MockChatSessionMetadataStore(), instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })), new class extends mock<IChatPromptFileService>() { override get customAgentPromptFiles() { return []; } }));
 			}
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);

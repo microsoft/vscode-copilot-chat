@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Attachment, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
+import type { Attachment, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, ChatSessionProviderOptionItem, Uri } from 'vscode';
@@ -339,6 +339,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 			metadata = {
 				isolationMode: IsolationMode.Workspace,
+				repositoryPath: session.repositoryDirectory?.fsPath,
 				workingDirectoryPath: workingDirectory?.fsPath,
 				firstCheckpointRef,
 				lastCheckpointRef

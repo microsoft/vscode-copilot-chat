@@ -20,7 +20,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IExtensionContribution } from '../../common/contributions';
 
 const DEBUG_LOGS_DIR_NAME = 'debug-logs';
-const MAX_RETAINED_LOGS = 50;
+const DEFAULT_MAX_RETAINED_LOGS = 50;
 const DEFAULT_FLUSH_INTERVAL_MS = 4_000;
 const MIN_FLUSH_INTERVAL_MS = 2_000;
 const MAX_ATTR_VALUE_LENGTH = 5_000;
@@ -875,7 +875,9 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 				(name.endsWith('.jsonl') && type === 1 /* FileType.File */)
 			);
 
-			if (sessionEntries.length <= MAX_RETAINED_LOGS) {
+			const configuredMax = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ChatDebugFileLoggingMaxRetainedSessionLogs, this._experimentationService);
+			const maxRetainedSessionLogs = Number.isFinite(configuredMax) && configuredMax >= 1 ? Math.trunc(configuredMax) : DEFAULT_MAX_RETAINED_LOGS;
+			if (sessionEntries.length <= maxRetainedSessionLogs) {
 				/* __GDPR__
 					"chatDebugFileLogger.cleanupOldLogs" : {
 						"owner": "vijayupadya",
@@ -904,7 +906,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 
 			entryStats.sort((a, b) => a.mtime - b.mtime);
 
-			const toDelete = entryStats.length - MAX_RETAINED_LOGS;
+			const toDelete = entryStats.length - maxRetainedSessionLogs;
 			let deleted = 0;
 			for (const entry of entryStats) {
 				if (deleted >= toDelete) {
