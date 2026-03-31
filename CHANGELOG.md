@@ -1,3 +1,57 @@
+# GitHub Copilot Chat in VS Code - Changelog
+
+You can find the latest AI-related updates for GitHub Copilot in VS Code in the weekly [VS Code release notes](https://code.visualstudio.com/updates).
+
+For more frequent updates, check the [Commit log](https://github.com/Microsoft/vscode/commits/main) and [vscode-copilot-chat commit log](https://github.com/microsoft/vscode-copilot-chat/commits/main) on GitHub.
+
+---
+
+# Past updates
+
+## 0.41 (2026-03-25)
+
+GitHub Copilot updates for [VS Code 1.113](https://code.visualstudio.com/updates/v1_113):
+
+- MCP support in Copilot CLI & Claude agents
+- Forking sessions in Copilot CLI & Claude agents
+- Agent debug logs for Copilot CLI and Claude CLI sessions (Preview)
+- Claude session listing powered by SDK APIs
+- Nested subagents
+- Manage plugin marketplaces
+- URL handlers for plugin installation
+- Chat Customizations editor (Preview)
+- Configurable thinking effort in model picker
+- Images preview for chat attachments
+
+## 0.40 (2026-03-18)
+
+GitHub Copilot updates for [VS Code 1.112](https://code.visualstudio.com/updates/v1_112):
+
+- Message steering and queueing in Copilot CLI
+- Preview changes before delegating to Copilot CLI
+- Clickable file links in Copilot CLI terminal output
+- Permissions levels in Copilot CLI
+- Troubleshoot agent behavior with /troubleshoot (Preview)
+- Export and import agent debug logs (Preview)
+- Image and binary file support for agents
+- Automatic symbol references on paste in chat
+- Customizations discovery in parent repositories
+- Sandbox locally running MCP servers (Linux and macOS)
+- Improved UI for MCP Elicitation
+- Enable or disable plugins and MCP servers
+- Automatic plugin updates
+
+
+## 0.39 (2026-03-09)
+
+GitHub Copilot updates for [VS Code 1.111](https://code.visualstudio.com/updates/v1_111):
+
+- Autopilot and agent permissions
+- Agent-scoped hooks (Preview)
+- Debug events snapshot
+- Chat tip improvements
+- AI CLI profile group in terminal dropdown (Experimental)
+
 ## 0.38 (2026-03-05)
 
 GitHub Copilot updates from [February 2026](https://code.visualstudio.com/updates/v1_110):

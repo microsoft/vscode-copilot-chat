@@ -50,4 +50,8 @@ export class ImageServiceImpl implements IImageService {
 			throw new Error(`Error uploading image: ${error}`);
 		}
 	}
+
+	async resizeImage(data: Uint8Array, mimeType: string): Promise<{ data: Uint8Array; mimeType: string }> {
+		return { data, mimeType };
+	}
 }

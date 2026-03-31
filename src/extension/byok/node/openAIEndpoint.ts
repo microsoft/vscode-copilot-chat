@@ -34,6 +34,7 @@ function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {
 			reason: response.capiError ? 'Rate limit exceeded\n\n' + JSON.stringify(response.capiError) : 'Rate limit exceeded',
 			rateLimitKey: '',
 			retryAfter: undefined,
+			isAuto: false,
 			capiError: response.capiError
 		};
 	}

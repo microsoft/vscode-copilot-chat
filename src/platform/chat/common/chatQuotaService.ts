@@ -52,11 +52,27 @@ export interface IChatQuota {
 	resetDate: Date;
 }
 
+export interface QuotaSnapshot {
+	/** String representation of the entitlement count, "-1" for unlimited. */
+	readonly entitlement: string;
+	/** Percentage of quota remaining (0–100), rounded up to 1 decimal. */
+	readonly percent_remaining: number;
+	/** Whether overage (usage beyond entitlement) is permitted. */
+	readonly overage_permitted: boolean;
+	/** Number of overage units consumed, rounded up to 1 decimal. */
+	readonly overage_count: number;
+	/** ISO 8601 date when the quota resets, if applicable. */
+	readonly reset_date?: string;
+}
+
+export type QuotaSnapshots = Record<string, QuotaSnapshot>;
+
 export interface IChatQuotaService {
 	readonly _serviceBrand: undefined;
 	quotaExhausted: boolean;
 	overagesEnabled: boolean;
 	processQuotaHeaders(headers: IHeaders): void;
+	processQuotaSnapshots(snapshots: QuotaSnapshots): void;
 	clearQuota(): void;
 }
 

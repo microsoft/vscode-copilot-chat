@@ -5,71 +5,86 @@
 
 import assert from 'assert';
 import { suite, test } from 'vitest';
-import { AdoRepoId, getAdoRepoIdFromFetchUrl, getGithubRepoIdFromFetchUrl, GithubRepoId, normalizeFetchUrl, parseRemoteUrl } from '../../common/gitService';
+import { AdoRepoId, getAdoRepoIdFromFetchUrl, getGithubRepoIdFromFetchUrl, GithubRepoId, normalizeFetchUrl, parseRemoteUrl, toGithubWebUrl } from '../../common/gitService';
 
-function assertGitIdEquals(a: GithubRepoId | undefined, b: { org: string; repo: string } | undefined, message?: string) {
+function assertGitIdEquals(a: GithubRepoId | undefined, b: { org: string; repo: string; host?: string } | undefined, message?: string) {
 	assert.strictEqual(a?.org, b?.org, message);
 	assert.strictEqual(a?.repo, b?.repo, message);
+	if (b?.host !== undefined) {
+		assert.strictEqual(a?.host, b.host, message);
+	}
 }
 
 suite('parseRemoteUrl', () => {
 	test('Should handle basic https', () => {
 		assert.deepStrictEqual(
 			parseRemoteUrl('https://example.com/owner/repo.git'),
-			{ host: 'example.com', path: '/owner/repo.git' });
+			{ host: 'example.com', rawHost: 'example.com', path: '/owner/repo.git' });
 	});
 
 	test('Should find full subdomain with https', () => {
 		assert.deepStrictEqual(
 			parseRemoteUrl('https://sub1.sub2.example.com/owner/repo.git'),
-			{ host: 'sub1.sub2.example.com', path: '/owner/repo.git' });
+			{ host: 'sub1.sub2.example.com', rawHost: 'sub1.sub2.example.com', path: '/owner/repo.git' });
 	});
 
 	test('Should handle basic Azure dev ops url', () => {
 		assert.deepStrictEqual(
 			parseRemoteUrl('https://test@dev.azure.com/test/project/_git/vscode-stuff'),
-			{ host: 'dev.azure.com', path: '/test/project/_git/vscode-stuff' });
+			{ host: 'dev.azure.com', rawHost: 'dev.azure.com', path: '/test/project/_git/vscode-stuff' });
 	});
 
 	test('Should handle basic visual studio url', () => {
 		assert.deepStrictEqual(
 			parseRemoteUrl('https://test.visualstudio.com/project/one/_git/two'),
-			{ host: 'test.visualstudio.com', path: '/project/one/_git/two' });
+			{ host: 'test.visualstudio.com', rawHost: 'test.visualstudio.com', path: '/project/one/_git/two' });
 	});
 
 	test('Should strip out ports', () => {
 		assert.deepStrictEqual(
 			parseRemoteUrl('https://example.com:8080/owner/repo.git'),
-			{ host: 'example.com', path: '/owner/repo.git' });
+			{ host: 'example.com', rawHost: 'example.com', path: '/owner/repo.git' });
 	});
 
 	test('Should handle ssh syntax', () => {
 		assert.deepStrictEqual(
 			parseRemoteUrl('ssh://git@github.com/owner/repo.git'),
-			{ host: 'github.com', path: '/owner/repo.git' });
+			{ host: 'github.com', rawHost: 'github.com', path: '/owner/repo.git' });
 	});
 
 	test('Should strip user ids', () => {
 		assert.deepStrictEqual(
 			parseRemoteUrl('https://myname@github.com/owner/repo.git'),
-			{ host: 'github.com', path: '/owner/repo.git' },
+			{ host: 'github.com', rawHost: 'github.com', path: '/owner/repo.git' },
 			'https, name only');
 
 		assert.deepStrictEqual(
 			// [SuppressMessage("Microsoft.Security", "CS002:SecretInNextLine", Justification="test credentials")]
 			parseRemoteUrl('https://myname:ghp_1234556@github.com/owner/repo.git'),
-			{ host: 'github.com', path: '/owner/repo.git' },
+			{ host: 'github.com', rawHost: 'github.com', path: '/owner/repo.git' },
 			'https, with name and PAT');
 
 		assert.deepStrictEqual(
 			parseRemoteUrl('https://ghp_1234556@github.com/owner/repo.git'),
-			{ host: 'github.com', path: '/owner/repo.git' },
+			{ host: 'github.com', rawHost: 'github.com', path: '/owner/repo.git' },
 			'https, PAT only');
 
 		assert.deepStrictEqual(
 			parseRemoteUrl('ssh://name@github.com/owner/repo.git'),
-			{ host: 'github.com', path: '/owner/repo.git' },
+			{ host: 'github.com', rawHost: 'github.com', path: '/owner/repo.git' },
 			'ssh, name only');
+	});
+
+	test('Should preserve rawHost for SSH alias hostnames', () => {
+		const result = parseRemoteUrl('git@my-user-name-github.com:owner/repo.git');
+		assert.strictEqual(result?.host, 'github.com');
+		assert.strictEqual(result?.rawHost, 'my-user-name-github.com');
+	});
+
+	test('Should handle GHE SSH shorthand with alias prefix', () => {
+		const result = parseRemoteUrl('msdemo-eu@msdemo-eu.ghe.com:sandbox/repo.git');
+		assert.strictEqual(result?.host, 'eu.ghe.com');
+		assert.strictEqual(result?.rawHost, 'msdemo-eu.ghe.com');
 	});
 });
 
@@ -230,6 +245,166 @@ suite('getGithubRepoIdFromFetchUrl', () => {
 			getGithubRepoIdFromFetchUrl('git@github.com-my-user-name:owner/repo.git'),
 			{ org: 'owner', repo: 'repo' },
 			'Custom name after github.com');
+	});
+
+	test('should set host to github.com for github.com URLs', () => {
+		const result = getGithubRepoIdFromFetchUrl('https://github.com/owner/repo.git');
+		assert.strictEqual(result?.host, 'github.com');
+	});
+
+	test('should set host to ghe.com subdomain for GHE URLs', () => {
+		const result = getGithubRepoIdFromFetchUrl('https://xyz.ghe.com/owner/repo.git');
+		assert.strictEqual(result?.host, 'xyz.ghe.com');
+	});
+
+	test('should set host to ghe.com subdomain for GHE SSH shorthand URLs', () => {
+		const result = getGithubRepoIdFromFetchUrl('git@msdemo-eu.ghe.com:sandbox/repo.git');
+		assert.strictEqual(result?.host, 'msdemo-eu.ghe.com');
+	});
+
+	test('should set host to github.com for SSH alias URLs', () => {
+		const result = getGithubRepoIdFromFetchUrl('git@my-user-name-github.com:owner/repo.git');
+		assert.strictEqual(result?.host, 'github.com');
+	});
+
+	test('should set host to github.com for ssh:// github.com URLs', () => {
+		const result = getGithubRepoIdFromFetchUrl('ssh://git@github.com/owner/repo.git');
+		assert.strictEqual(result?.host, 'github.com');
+	});
+
+	test('should set host to ghe.com subdomain for ssh:// ghe URLs', () => {
+		const result = getGithubRepoIdFromFetchUrl('ssh://git@myco.ghe.com/owner/repo.git');
+		assert.strictEqual(result?.host, 'myco.ghe.com');
+	});
+
+	test('should set host to github.com for http github.com URLs', () => {
+		const result = getGithubRepoIdFromFetchUrl('http://github.com/owner/repo.git');
+		assert.strictEqual(result?.host, 'github.com');
+	});
+
+	test('should set host to github.com for www.github.com URLs', () => {
+		const result = getGithubRepoIdFromFetchUrl('https://www.github.com/owner/repo.git');
+		assert.strictEqual(result?.host, 'github.com');
+	});
+
+	test('should set host to github.com for SSH alias with suffix', () => {
+		const result = getGithubRepoIdFromFetchUrl('git@github.com-my-user-name:owner/repo.git');
+		assert.strictEqual(result?.host, 'github.com');
+	});
+
+	test('should resolve host and org/repo correctly for real-world GHE SSH shorthand', () => {
+		// Real-world scenario: msdemo-eu@msdemo-eu.ghe.com:sandbox/repo.git
+		const result = getGithubRepoIdFromFetchUrl('msdemo-eu@msdemo-eu.ghe.com:sandbox/repo.git');
+		assert.ok(result, 'Should parse successfully');
+		assert.strictEqual(result.org, 'sandbox');
+		assert.strictEqual(result.repo, 'repo');
+		assert.strictEqual(result.host, 'msdemo-eu.ghe.com');
+	});
+
+	test('should resolve host for GHE HTTPS with credentials', () => {
+		const result = getGithubRepoIdFromFetchUrl('https://user@myco.ghe.com/org/repo.git');
+		assert.ok(result, 'Should parse successfully');
+		assert.strictEqual(result.host, 'myco.ghe.com');
+		assert.strictEqual(result.org, 'org');
+		assert.strictEqual(result.repo, 'repo');
+	});
+
+	test('should resolve host for GHE HTTPS without .git extension', () => {
+		const result = getGithubRepoIdFromFetchUrl('https://myco.ghe.com/org/repo');
+		assert.ok(result, 'Should parse successfully');
+		assert.strictEqual(result.host, 'myco.ghe.com');
+	});
+});
+
+suite('GithubRepoId', () => {
+	test('should default host to github.com', () => {
+		const id = new GithubRepoId('owner', 'repo');
+		assert.strictEqual(id.host, 'github.com');
+	});
+
+	test('should accept custom host', () => {
+		const id = new GithubRepoId('owner', 'repo', 'myco.ghe.com');
+		assert.strictEqual(id.host, 'myco.ghe.com');
+	});
+
+	test('toString should return org/repo without host', () => {
+		const id = new GithubRepoId('Owner', 'Repo', 'myco.ghe.com');
+		assert.strictEqual(id.toString(), 'owner/repo');
+	});
+
+	test('parse should default host to github.com', () => {
+		const id = GithubRepoId.parse('owner/repo');
+		assert.ok(id);
+		assert.strictEqual(id.host, 'github.com');
+	});
+
+	test('parse should return undefined for invalid nwo', () => {
+		assert.strictEqual(GithubRepoId.parse('invalid'), undefined);
+		assert.strictEqual(GithubRepoId.parse('a/b/c'), undefined);
+		assert.strictEqual(GithubRepoId.parse(''), undefined);
+	});
+
+	test('type should be github', () => {
+		const id = new GithubRepoId('owner', 'repo');
+		assert.strictEqual(id.type, 'github');
+	});
+});
+
+suite('toGithubWebUrl', () => {
+	test('should return github.com URL for default host', () => {
+		const id = new GithubRepoId('owner', 'repo');
+		assert.strictEqual(toGithubWebUrl(id), 'https://github.com/owner/repo');
+	});
+
+	test('should return GHE URL for custom host', () => {
+		const id = new GithubRepoId('owner', 'repo', 'myco.ghe.com');
+		assert.strictEqual(toGithubWebUrl(id), 'https://myco.ghe.com/owner/repo');
+	});
+
+	test('should preserve case in org and repo', () => {
+		const id = new GithubRepoId('MyOrg', 'MyRepo', 'myco.ghe.com');
+		assert.strictEqual(toGithubWebUrl(id), 'https://myco.ghe.com/MyOrg/MyRepo');
+	});
+
+	test('should handle deeply nested GHE subdomain', () => {
+		const id = new GithubRepoId('org', 'repo', 'dept.company.ghe.com');
+		assert.strictEqual(toGithubWebUrl(id), 'https://dept.company.ghe.com/org/repo');
+	});
+});
+
+suite('parseRemoteUrl rawHost', () => {
+	test('should return matching host and rawHost for plain HTTPS URLs', () => {
+		const result = parseRemoteUrl('https://github.com/owner/repo.git');
+		assert.strictEqual(result?.host, 'github.com');
+		assert.strictEqual(result?.rawHost, 'github.com');
+	});
+
+	test('should return matching host and rawHost for GHE HTTPS', () => {
+		const result = parseRemoteUrl('https://myco.ghe.com/owner/repo.git');
+		assert.strictEqual(result?.host, 'myco.ghe.com');
+		assert.strictEqual(result?.rawHost, 'myco.ghe.com');
+	});
+
+	test('should return different host and rawHost for SSH alias prefix', () => {
+		const result = parseRemoteUrl('git@my-alias-github.com:owner/repo.git');
+		assert.strictEqual(result?.rawHost, 'my-alias-github.com');
+		assert.strictEqual(result?.host, 'github.com');
+	});
+
+	test('should return different host and rawHost for SSH alias suffix', () => {
+		const result = parseRemoteUrl('git@github.com-my-alias:owner/repo.git');
+		assert.strictEqual(result?.rawHost, 'github.com-my-alias');
+		assert.strictEqual(result?.host, 'github.com');
+	});
+
+	test('should strip port from rawHost', () => {
+		const result = parseRemoteUrl('ssh://git@github.com:443/owner/repo.git');
+		assert.strictEqual(result?.rawHost, 'github.com');
+	});
+
+	test('should strip user from rawHost', () => {
+		const result = parseRemoteUrl('https://user@myco.ghe.com/owner/repo.git');
+		assert.strictEqual(result?.rawHost, 'myco.ghe.com');
 	});
 });
 

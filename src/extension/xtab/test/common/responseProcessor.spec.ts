@@ -5,9 +5,9 @@
 
 import { describe, expect, it, suite, test } from 'vitest';
 import { ResponseProcessor } from '../../../../platform/inlineEdits/common/responseProcessor';
+import { AsyncIterUtils } from '../../../../util/common/asyncIterableUtils';
 import { LineEdit, LineReplacement } from '../../../../util/vs/editor/common/core/edits/lineEdit';
 import { LineRange } from '../../../../util/vs/editor/common/core/ranges/lineRange';
-import { AsyncIterUtils } from '../../../../util/common/asyncIterableUtils';
 
 suite('stream diffing', () => {
 
@@ -397,7 +397,7 @@ describe('emitFastCursorLineChange with empty lines', () => {
 		editWindow: string[],
 		updatedEditWindowLines: string[],
 		cursorOffset: number,
-		emitFastCursorLineChange: ResponseProcessor.EmitFastCursorLineChange = ResponseProcessor.EmitFastCursorLineChange.Always,
+		emitFastCursorLineChange: ResponseProcessor.EmitFastCursorLineChange = ResponseProcessor.EmitFastCursorLineChange.AdditiveOnly,
 	) {
 		const updatedEditWindowLinesStream = AsyncIterUtils.fromArray(updatedEditWindowLines);
 

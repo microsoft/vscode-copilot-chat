@@ -10,7 +10,7 @@ import { IObservable } from '../../../../util/vs/base/common/observableInternal'
 import { observableValue } from '../../../../util/vs/base/common/observableInternal/observables/observableValue';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IGitService, RepoContext } from '../../../git/common/gitService';
-import { Change, Commit, CommitOptions, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, RepositoryAccessDetails } from '../../../git/vscode/git';
+import { Branch, Change, Commit, CommitOptions, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, RepositoryAccessDetails, RepositoryState } from '../../../git/vscode/git';
 
 /**
  * A configurable mock implementation of IGitService for testing.
@@ -42,6 +42,10 @@ export class MockGitService implements IGitService {
 		return [];
 	}
 
+	initRepository(_uri: URI): Promise<RepoContext | undefined> {
+		return Promise.resolve(undefined);
+	}
+
 	getRepositoryFetchUrls = vi.fn().mockImplementation((): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined> => {
 		this.getRepositoryFetchUrlsCallCount++;
 		return Promise.resolve(this._repositoryFetchUrls);
@@ -58,11 +62,19 @@ export class MockGitService implements IGitService {
 		return Promise.resolve(undefined);
 	}
 
+	getRepositoryState(uri: URI, forceOpen?: boolean): Promise<RepositoryState | undefined> {
+		return Promise.resolve(undefined);
+	}
+
 	initialize(): Promise<void> {
 		return Promise.resolve();
 	}
 
 	add(_uri: URI, _paths: string[]): Promise<void> {
+		return Promise.resolve();
+	}
+
+	restore(_uri: URI, _paths: string[], _options?: { staged?: boolean; ref?: string }): Promise<void> {
 		return Promise.resolve();
 	}
 
@@ -75,6 +87,10 @@ export class MockGitService implements IGitService {
 	}
 
 	diffBetweenWithStats(_uri: URI, _ref1: string, _ref2: string, _path?: string): Promise<DiffChange[] | undefined> {
+		return Promise.resolve(undefined);
+	}
+
+	diffBetweenWithStats2(uri: URI, ref: string, path?: string): Promise<DiffChange[] | undefined> {
 		return Promise.resolve(undefined);
 	}
 
@@ -122,6 +138,10 @@ export class MockGitService implements IGitService {
 		return Promise.resolve();
 	}
 
+	push(_uri: URI): Promise<void> {
+		return Promise.resolve();
+	}
+
 	rebase(_uri: URI, _branch: string): Promise<void> {
 		return Promise.resolve();
 	}
@@ -130,12 +150,24 @@ export class MockGitService implements IGitService {
 		return Promise.resolve();
 	}
 
+	getBranch(_uri: URI, _name: string): Promise<Branch | undefined> {
+		return Promise.resolve(undefined);
+	}
+
 	getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]> {
 		return Promise.resolve([]);
 	}
 
+	isBranchProtected(_uri: URI, _branch?: string | Branch): Promise<boolean | undefined> {
+		return Promise.resolve(undefined);
+	}
+
 	generateRandomBranchName(_uri: URI): Promise<string | undefined> {
 		return Promise.resolve(undefined);
+	}
+
+	exec(uri: URI, args: string[], env?: Record<string, string>): Promise<string> {
+		return Promise.resolve('');
 	}
 
 	dispose(): void {

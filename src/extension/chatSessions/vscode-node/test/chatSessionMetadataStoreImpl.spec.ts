@@ -14,7 +14,9 @@ import { Emitter } from '../../../../util/vs/base/common/event';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { eventToPromise } from '../../../completions-core/vscode-node/lib/src/prompt/asyncUtils';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
+import { IWorkspaceInfo } from '../../common/workspaceInfo';
 import { getCopilotCLISessionDir } from '../../copilotcli/node/cliHelpers';
+import { NullCopilotCLIAgents } from '../../copilotcli/node/test/testHelpers';
 import { ChatSessionMetadataStore } from '../chatSessionMetadataStoreImpl';
 
 vi.mock('../../copilotcli/node/cliHelpers', async (importOriginal) => {
@@ -91,6 +93,10 @@ function sessionMetadataFileUri(sessionId: string): Uri {
 	return Uri.joinPath(sessionDirectoryUri(sessionId), 'vscode.metadata.json');
 }
 
+function sessionRequestMetadataFileUri(sessionId: string): Uri {
+	return Uri.joinPath(sessionDirectoryUri(sessionId), 'vscode.requests.metadata.json');
+}
+
 function makeWorktreeV1Props(overrides?: Partial<ChatSessionWorktreeProperties>): ChatSessionWorktreeProperties {
 	return {
 		version: 1,
@@ -161,6 +167,7 @@ describe('ChatSessionMetadataStore', () => {
 			mockFs,
 			logService,
 			extensionContext,
+			new NullCopilotCLIAgents(),
 		);
 		// Flush microtasks to let initialization settle
 		await vi.advanceTimersByTimeAsync(0);
@@ -339,7 +346,7 @@ describe('ChatSessionMetadataStore', () => {
 			store.dispose();
 		});
 
-		it('should not retry entries with no workspaceFolder or worktreeProperties', async () => {
+		it('should not retry entries with no workspaceFolder, worktreeProperties, or additionalWorkspaces', async () => {
 			const existingData = {
 				'session-empty': {},
 				'session-folder': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
@@ -356,6 +363,32 @@ describe('ChatSessionMetadataStore', () => {
 				c => c[0].toString().includes('session-empty'),
 			);
 			expect(sessionEmptyStatCalls).toHaveLength(0);
+			store.dispose();
+		});
+
+		it('should retry entries that only have additionalWorkspaces (not delete as invalid data)', async () => {
+			// A session with only additionalWorkspaces and writtenToDisc: false
+			// must be retried, not deleted from cache — otherwise data is lost after a crash.
+			const existingData = {
+				'session-only-additional': {
+					additionalWorkspaces: [
+						{ workspaceFolder: { folderPath: Uri.file('/extra/workspace').fsPath, timestamp: 100 } },
+					],
+				},
+			};
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify(existingData));
+
+			// Pre-create the session directory so the recovery write can succeed
+			await mockFs.createDirectory(sessionDirectoryUri('session-only-additional'));
+			const fileCreated = eventToPromise(mockFs.onDidCreateFile.event);
+
+			const store = await createStore();
+			await fileCreated;
+
+			const fileUri = sessionMetadataFileUri('session-only-additional');
+			const rawContent = await mockFs.readFile(fileUri);
+			const written = JSON.parse(new TextDecoder().decode(rawContent));
+			expect(written.additionalWorkspaces).toHaveLength(1);
 			store.dispose();
 		});
 	});
@@ -1410,6 +1443,387 @@ describe('ChatSessionMetadataStore', () => {
 	});
 
 	// ──────────────────────────────────────────────────────────────────────────
+	// setAdditionalWorkspaces / getAdditionalWorkspaces
+	// ──────────────────────────────────────────────────────────────────────────
+	describe('setAdditionalWorkspaces / getAdditionalWorkspaces', () => {
+		it('should store and retrieve workspace-folder type additional workspaces', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			const workspaces: IWorkspaceInfo[] = [
+				{ folder: Uri.file('/extra/a'), repository: undefined, worktree: undefined, worktreeProperties: undefined },
+				{ folder: Uri.file('/extra/b'), repository: undefined, worktree: undefined, worktreeProperties: undefined },
+			];
+			await store.setAdditionalWorkspaces('session-1', workspaces);
+
+			const result = await store.getAdditionalWorkspaces('session-1');
+			expect(result).toHaveLength(2);
+			expect(result[0].folder?.fsPath).toBe(Uri.file('/extra/a').fsPath);
+			expect(result[1].folder?.fsPath).toBe(Uri.file('/extra/b').fsPath);
+			store.dispose();
+		});
+
+		it('should store and retrieve worktree type additional workspaces', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+			const props = makeWorktreeV1Props();
+
+			const workspaces: IWorkspaceInfo[] = [
+				{ folder: undefined, repository: Uri.file('/repo'), worktree: Uri.file('/repo/.worktrees/wt'), worktreeProperties: props },
+			];
+			await store.setAdditionalWorkspaces('session-wt', workspaces);
+
+			const result = await store.getAdditionalWorkspaces('session-wt');
+			expect(result).toHaveLength(1);
+			expect(result[0].worktreeProperties?.branchName).toBe(props.branchName);
+			expect(result[0].worktree?.fsPath).toBe(Uri.file('/repo/.worktrees/wt').fsPath);
+			// worktreeProperties present → folder should be undefined per getAdditionalWorkspaces logic
+			expect(result[0].folder).toBeUndefined();
+			store.dispose();
+		});
+
+		it('should return empty array when no additional workspaces are set', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-1': { workspaceFolder: { folderPath: Uri.file('/a').fsPath, timestamp: 1 } },
+			}));
+			const store = await createStore();
+
+			const result = await store.getAdditionalWorkspaces('session-1');
+			expect(result).toEqual([]);
+			store.dispose();
+		});
+
+		it('should return empty array for unknown session', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			const result = await store.getAdditionalWorkspaces('nonexistent');
+			expect(result).toEqual([]);
+			store.dispose();
+		});
+
+		it('should write additionalWorkspaces to per-session file', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.setAdditionalWorkspaces('session-1', [
+				{ folder: Uri.file('/extra/a'), repository: undefined, worktree: undefined, worktreeProperties: undefined },
+			]);
+
+			const fileUri = sessionMetadataFileUri('session-1');
+			const rawContent = await mockFs.readFile(fileUri);
+			const written = JSON.parse(new TextDecoder().decode(rawContent));
+			expect(written.additionalWorkspaces).toHaveLength(1);
+			expect(written.additionalWorkspaces[0].workspaceFolder?.folderPath).toBe(Uri.file('/extra/a').fsPath);
+			store.dispose();
+		});
+
+		it('should preserve existing workspaceFolder when setting additionalWorkspaces', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-1': { workspaceFolder: { folderPath: Uri.file('/primary').fsPath, timestamp: 100 } },
+			}));
+			const store = await createStore();
+
+			await store.setAdditionalWorkspaces('session-1', [
+				{ folder: Uri.file('/extra/a'), repository: undefined, worktree: undefined, worktreeProperties: undefined },
+			]);
+
+			// Primary workspace folder should still be accessible
+			const folder = await store.getSessionWorkspaceFolder('session-1');
+			expect(folder?.fsPath).toBe(Uri.file('/primary').fsPath);
+
+			// Additional workspaces should also be present
+			const result = await store.getAdditionalWorkspaces('session-1');
+			expect(result).toHaveLength(1);
+			expect(result[0].folder?.fsPath).toBe(Uri.file('/extra/a').fsPath);
+			store.dispose();
+		});
+
+		it('should replace previous additionalWorkspaces on subsequent call', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.setAdditionalWorkspaces('session-1', [
+				{ folder: Uri.file('/old'), repository: undefined, worktree: undefined, worktreeProperties: undefined },
+			]);
+			await store.setAdditionalWorkspaces('session-1', [
+				{ folder: Uri.file('/new/a'), repository: undefined, worktree: undefined, worktreeProperties: undefined },
+				{ folder: Uri.file('/new/b'), repository: undefined, worktree: undefined, worktreeProperties: undefined },
+			]);
+
+			const result = await store.getAdditionalWorkspaces('session-1');
+			expect(result).toHaveLength(2);
+			expect(result[0].folder?.fsPath).toBe(Uri.file('/new/a').fsPath);
+			store.dispose();
+		});
+
+		it('should trigger debounced bulk storage update', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.setAdditionalWorkspaces('session-1', [
+				{ folder: Uri.file('/extra'), repository: undefined, worktree: undefined, worktreeProperties: undefined },
+			]);
+			await vi.advanceTimersByTimeAsync(1_100);
+
+			const rawContent = await mockFs.readFile(BULK_METADATA_FILE);
+			const written = JSON.parse(new TextDecoder().decode(rawContent));
+			expect(written['session-1']?.additionalWorkspaces).toBeDefined();
+			store.dispose();
+		});
+
+		it('should restore additionalWorkspaces from bulk file on startup', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-1': {
+					additionalWorkspaces: [
+						{ workspaceFolder: { folderPath: Uri.file('/restored/a').fsPath, timestamp: 100 } },
+					],
+					writtenToDisc: true,
+				},
+			}));
+			const store = await createStore();
+
+			const result = await store.getAdditionalWorkspaces('session-1');
+			expect(result).toHaveLength(1);
+			expect(result[0].folder?.fsPath).toBe(Uri.file('/restored/a').fsPath);
+			store.dispose();
+		});
+
+		it('should survive crash recovery: entry with only additionalWorkspaces is re-persisted not deleted', async () => {
+			// Simulate VS Code crash: bulk file has the entry but writtenToDisc is falsy
+			// (updateSessionMetadata never completed before the crash).
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-crash': {
+					additionalWorkspaces: [
+						{ workspaceFolder: { folderPath: Uri.file('/extra/workspace').fsPath, timestamp: 100 } },
+					],
+					// writtenToDisc intentionally absent (falsy) — simulates crash before write completed
+				},
+			}));
+
+			// Pre-create session directory so recovery write can succeed
+			await mockFs.createDirectory(sessionDirectoryUri('session-crash'));
+			const fileCreated = eventToPromise(mockFs.onDidCreateFile.event);
+
+			const store = await createStore();
+			await fileCreated;
+
+			// Entry should have been re-persisted to per-session file
+			const fileUri = sessionMetadataFileUri('session-crash');
+			const rawContent = await mockFs.readFile(fileUri);
+			const written = JSON.parse(new TextDecoder().decode(rawContent));
+			expect(written.additionalWorkspaces).toHaveLength(1);
+			expect(written.additionalWorkspaces[0].workspaceFolder?.folderPath).toBe(Uri.file('/extra/workspace').fsPath);
+
+			// And still readable via the API
+			const result = await store.getAdditionalWorkspaces('session-crash');
+			expect(result).toHaveLength(1);
+			store.dispose();
+		});
+	});
+
+	// ──────────────────────────────────────────────────────────────────────────
+	// setSessionFirstUserMessage / getSessionFirstUserMessage
+	// ──────────────────────────────────────────────────────────────────────────
+	describe('setSessionFirstUserMessage / getSessionFirstUserMessage', () => {
+		it('should store and retrieve the first user message', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await mockFs.createDirectory(sessionDirectoryUri('session-1'));
+			await store.setSessionFirstUserMessage('session-1', 'Hello, world!');
+
+			const result = await store.getSessionFirstUserMessage('session-1');
+			expect(result).toBe('Hello, world!');
+			store.dispose();
+		});
+
+		it('should return undefined for a session with no first user message', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
+			}));
+			const store = await createStore();
+
+			const result = await store.getSessionFirstUserMessage('session-1');
+			expect(result).toBeUndefined();
+			store.dispose();
+		});
+
+		it('should return undefined for an unknown session', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			const result = await store.getSessionFirstUserMessage('nonexistent');
+			expect(result).toBeUndefined();
+			store.dispose();
+		});
+
+		it('should persist firstUserMessage to the per-session file', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await mockFs.createDirectory(sessionDirectoryUri('session-1'));
+			await store.setSessionFirstUserMessage('session-1', 'My first message');
+
+			const fileUri = sessionMetadataFileUri('session-1');
+			const rawContent = await mockFs.readFile(fileUri);
+			const written = JSON.parse(new TextDecoder().decode(rawContent));
+			expect(written.firstUserMessage).toBe('My first message');
+			store.dispose();
+		});
+
+		it('should preserve existing metadata when setting firstUserMessage', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
+			}));
+			const store = await createStore();
+
+			await mockFs.createDirectory(sessionDirectoryUri('session-1'));
+			await store.setSessionFirstUserMessage('session-1', 'My first message');
+
+			const fileUri = sessionMetadataFileUri('session-1');
+			const rawContent = await mockFs.readFile(fileUri);
+			const written = JSON.parse(new TextDecoder().decode(rawContent));
+			expect(written.firstUserMessage).toBe('My first message');
+			expect(written.workspaceFolder?.folderPath).toBe(Uri.file('/workspace/a').fsPath);
+			store.dispose();
+		});
+
+		it('should read firstUserMessage from pre-existing per-session metadata file', async () => {
+			const sessionId = 'session-preexisting';
+			await mockFs.createDirectory(sessionDirectoryUri(sessionId));
+			const fileUri = sessionMetadataFileUri(sessionId);
+			await mockFs.writeFile(fileUri, new TextEncoder().encode(JSON.stringify({ firstUserMessage: 'Cached message' })));
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+
+			const store = await createStore();
+			const result = await store.getSessionFirstUserMessage(sessionId);
+			expect(result).toBe('Cached message');
+			store.dispose();
+		});
+	});
+
+	// ──────────────────────────────────────────────────────────────────────────
+	// getRequestDetails / appendRequestDetails
+	// ──────────────────────────────────────────────────────────────────────────
+	describe('getRequestDetails / appendRequestDetails', () => {
+		it('should append and retrieve request details', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-1', copilotRequestId: 'sdk-1', toolIdEditMap: { 'tool-1': 'edit-1' } }]);
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-2', copilotRequestId: 'sdk-2', toolIdEditMap: { 'tool-2': 'edit-2' } }]);
+
+			const details = await store.getRequestDetails('session-1');
+			expect(details).toEqual([
+				{ vscodeRequestId: 'request-1', copilotRequestId: 'sdk-1', toolIdEditMap: { 'tool-1': 'edit-1' } },
+				{ vscodeRequestId: 'request-2', copilotRequestId: 'sdk-2', toolIdEditMap: { 'tool-2': 'edit-2' } },
+			]);
+			store.dispose();
+		});
+
+		it('should return empty array when request details file does not exist', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			const details = await store.getRequestDetails('missing-session');
+			expect(details).toEqual([]);
+			store.dispose();
+		});
+
+
+		it('should merge with existing request details on append', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const sessionId = 'session-merge';
+			await mockFs.createDirectory(sessionDirectoryUri(sessionId));
+			const fileUri = sessionRequestMetadataFileUri(sessionId);
+			// Seed with existing array-format request details
+			await mockFs.writeFile(fileUri, new TextEncoder().encode(JSON.stringify([
+				{ vscodeRequestId: 'request-existing', copilotRequestId: 'sdk-existing', toolIdEditMap: { 'tool-1': 'edit-1' } },
+			])));
+
+			const store = await createStore();
+			await store.updateRequestDetails(sessionId, [{ vscodeRequestId: 'request-new', copilotRequestId: 'sdk-new', toolIdEditMap: { 'tool-2': 'edit-2' } }]);
+
+			const raw = await mockFs.readFile(fileUri);
+			const parsed = JSON.parse(new TextDecoder().decode(raw));
+			expect(parsed).toEqual([
+				{ vscodeRequestId: 'request-existing', copilotRequestId: 'sdk-existing', toolIdEditMap: { 'tool-1': 'edit-1' } },
+				{ vscodeRequestId: 'request-new', copilotRequestId: 'sdk-new', toolIdEditMap: { 'tool-2': 'edit-2' } },
+			]);
+			store.dispose();
+		});
+
+		it('should merge fields when appending with same vscodeRequestId', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-1', toolIdEditMap: { 'tool-1': 'edit-1' } }]);
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-1', copilotRequestId: 'sdk-1', toolIdEditMap: { 'tool-1': 'edit-1' } }]);
+
+			const details = await store.getRequestDetails('session-1');
+			expect(details).toHaveLength(1);
+			expect(details[0].copilotRequestId).toBe('sdk-1');
+			store.dispose();
+		});
+
+		it('should serialize concurrent appends to the same session', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await Promise.all([
+				store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-1', copilotRequestId: 'sdk-1', toolIdEditMap: { 'tool-1': 'edit-1' } }]),
+				store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-2', copilotRequestId: 'sdk-2', toolIdEditMap: { 'tool-2': 'edit-2' } }]),
+				store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-3', copilotRequestId: 'sdk-3', toolIdEditMap: { 'tool-3': 'edit-3' } }]),
+			]);
+
+			const details = await store.getRequestDetails('session-1');
+			expect(details).toHaveLength(3);
+			expect(details.map(d => d.vscodeRequestId)).toEqual(['request-1', 'request-2', 'request-3']);
+			store.dispose();
+		});
+
+	});
+
+	// ──────────────────────────────────────────────────────────────────────────
+	// getSessionAgent
+	// ──────────────────────────────────────────────────────────────────────────
+	describe('getSessionAgent', () => {
+		it('should return agent from last request details entry with agentId', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'req-1', toolIdEditMap: {}, agentId: 'agent-a' }]);
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'req-2', toolIdEditMap: {} }]);
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'req-3', toolIdEditMap: {}, agentId: 'agent-b' }]);
+
+			const agent = await store.getSessionAgent('session-1');
+			expect(agent).toBe('agent-b');
+			store.dispose();
+		});
+
+		it('should return undefined when no entries have agentId', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'req-1', toolIdEditMap: {} }]);
+
+			const agent = await store.getSessionAgent('session-1');
+			expect(agent).toBeUndefined();
+			store.dispose();
+		});
+
+		it('should return undefined for non-existent session', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			const agent = await store.getSessionAgent('missing-session');
+			expect(agent).toBeUndefined();
+			store.dispose();
+		});
+	});
+
+	// ──────────────────────────────────────────────────────────────────────────
 	// Constructor & edge cases
 	// ──────────────────────────────────────────────────────────────────────────
 	describe('constructor and edge cases', () => {
@@ -1474,4 +1888,5 @@ describe('ChatSessionMetadataStore', () => {
 			store.dispose();
 		});
 	});
+
 });

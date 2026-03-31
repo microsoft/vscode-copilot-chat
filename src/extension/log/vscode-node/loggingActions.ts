@@ -199,7 +199,7 @@ User Settings:
 					if (fetcher.fetcher) {
 						const start = Date.now();
 						try {
-							const response = await Promise.race([fetcher.fetcher.fetch(url, { headers: authHeaders }), timeout(timeoutSeconds * 1000)]);
+							const response = await Promise.race([fetcher.fetcher.fetch(url, { headers: authHeaders, callSite: 'diagnostics-fetcher-probe' }), timeout(timeoutSeconds * 1000)]);
 							if (response) {
 								await appendText(editor, `HTTP ${response.status} (${Date.now() - start} ms)\n`);
 							} else {
@@ -228,7 +228,7 @@ User Settings:
 				await appendText(editor, `Connecting to ${url}: `);
 				const start = Date.now();
 				try {
-					const response = await Promise.race([fetcher.fetch(url, { headers: authHeaders }), timeout(timeoutSeconds * 1000)]);
+					const response = await Promise.race([fetcher.fetch(url, { headers: authHeaders, callSite: 'diagnostics-secondary-probe' }), timeout(timeoutSeconds * 1000)]);
 					if (response) {
 						await appendText(editor, `HTTP ${response.status} (${Date.now() - start} ms)\n`);
 					} else {
@@ -243,11 +243,53 @@ User Settings:
 ## Documentation
 
 In corporate networks: [Troubleshooting firewall settings for GitHub Copilot](https://docs.github.com/en/copilot/troubleshooting-github-copilot/troubleshooting-firewall-settings-for-github-copilot).`);
+
+			return document.getText();
 		};
 		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.collectDiagnostics', collectDiagnostics));
 		// Internal command is not declared in package.json so it can be used from the welcome views while the extension is being activated.
 		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.collectDiagnostics.internal', collectDiagnostics));
 		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.showOutputChannel.internal', () => outputChannel.show()));
+		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.showNodeSystemCertificatesErrors', async () => {
+			const result: Record<string, unknown> = {};
+			try {
+				const certs = tls.getCACertificates('system');
+				result.certificateCount = Array.isArray(certs) ? certs.length : 'unavailable';
+			} catch (err: any) {
+				result.certificateCount = `Error: ${err?.message}`;
+			}
+			if (typeof (tls as any).getSystemCACertificatesErrors === 'function') {
+				try {
+					const errors = (tls as any).getSystemCACertificatesErrors();
+					if (errors && typeof errors === 'object') {
+						const counts = new Map<string, { error: string; count: number; code: number | string }>();
+						for (const [category, entries] of Object.entries(errors)) {
+							if (Array.isArray(entries)) {
+								for (const entry of entries as { errorMessage?: string; errorCode?: number }[]) {
+									const code = entry.errorCode ?? 'missing code';
+									const error = `${category}: ${entry.errorMessage ?? 'missing message'}`;
+									const key = `${error} (${code})`;
+									const existing = counts.get(key);
+									if (existing) {
+										existing.count++;
+									} else {
+										counts.set(key, { error, code, count: 1 });
+									}
+								}
+							}
+						}
+						result.errorSummary = [...counts.values()].sort((a, b) => b.count - a.count);
+					}
+					result.errors = errors;
+				} catch (err: any) {
+					result.errors = `Error: ${err?.message}`;
+				}
+			} else {
+				result.errors = 'tls.getSystemCACertificatesErrors is not available';
+			}
+			const document = await vscode.workspace.openTextDocument({ language: 'json', content: JSON.stringify(result, null, 2) });
+			await vscode.window.showTextDocument(document);
+		}));
 		this._context.subscriptions.push(new NetworkStatus(this.fetcherService, this.configurationService, this.experimentationService));
 	}
 
@@ -585,6 +627,7 @@ async function sendRawTelemetry(fetcher: IFetcher, envService: IEnvService, exte
 		method: 'POST',
 		headers,
 		body,
+		callSite: 'diagnostics-telemetry-probe',
 	});
 	await response.text();
 	return response;

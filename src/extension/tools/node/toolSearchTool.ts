@@ -5,7 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
-import { CUSTOM_TOOL_SEARCH_NAME } from '../../../platform/networking/common/anthropic';
+import { CUSTOM_TOOL_SEARCH_NAME, TOOL_SEARCH_SUPPORTED_MODELS } from '../../../platform/networking/common/anthropic';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { ICopilotModelSpecificTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
@@ -57,7 +57,7 @@ ToolRegistry.registerModelSpecificTool(
 	{
 		name: CUSTOM_TOOL_SEARCH_NAME,
 		displayName: 'Search Tools',
-		description: 'Search for relevant tools by describing what you need. Returns tool references for tools matching your query. Use this when you need to find a tool but aren\'t sure of its exact name.',
+		description: 'Search for relevant tools by describing what you need. Returns tool references for tools matching your query. Use this when you need to find a tool but aren\'t sure of its exact name. Check the availableDeferredTools list in your instructions for the full set of deferred tools, and include relevant tool names from that list in your query for more accurate results. Use broad queries to find all related tools in a single call rather than making multiple narrow searches.',
 		tags: [],
 		source: undefined,
 		inputSchema: {
@@ -65,28 +65,12 @@ ToolRegistry.registerModelSpecificTool(
 			properties: {
 				query: {
 					type: 'string',
-					description: 'Natural language description of what tool capability you are looking for.',
-				},
-				limit: {
-					type: 'integer',
-					description: 'Maximum number of tools to return. Defaults to 5.',
+					description: 'Natural language description of what tool capability you are looking for. Use broad queries to cover related tools in one search (e.g., "github" instead of separate searches for issues and PRs).',
 				},
 			},
 			required: ['query'],
 		},
-		// LanguageModelChatSelector uses exact match — list each family explicitly.
-		// Keep in sync with modelSupportsToolSearch() in anthropic.ts.
-		// Include both dot and dash version variants since normalization varies by endpoint source.
-		models: [
-			{ family: 'claude-sonnet-4.6' },
-			{ family: 'claude-sonnet-4-6' },
-			{ family: 'claude-sonnet-4.5' },
-			{ family: 'claude-sonnet-4-5' },
-			{ family: 'claude-opus-4.6' },
-			{ family: 'claude-opus-4-6' },
-			{ family: 'claude-opus-4.5' },
-			{ family: 'claude-opus-4-5' },
-		],
+		models: TOOL_SEARCH_SUPPORTED_MODELS.map(prefix => ({ id: prefix })),
 	},
 	ToolSearchTool,
 );

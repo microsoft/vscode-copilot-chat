@@ -376,11 +376,11 @@ export function clipPreservingRange(
 	return Result.ok(new OffsetRange(linesOffsetStart, linesOffsetEndExcl));
 }
 
-class ClippedDocument {
+export class ClippedDocument {
 	constructor(
 		/** The lines of the document that were kept after clipping. */
 		public readonly lines: string[],
-		/** The range in the original document that corresponds to the kept lines. */
+		/** The line range in the original document that corresponds to the kept lines. */
 		public readonly keptRange: OffsetRange,
 	) { }
 }

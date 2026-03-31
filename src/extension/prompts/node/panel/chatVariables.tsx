@@ -30,7 +30,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { DiagnosticSeverity } from '../../../../util/vs/workbench/api/common/extHostTypes/diagnostic';
 import { ChatReferenceBinaryData, ChatReferenceDiagnostic, LanguageModelToolResult2, Range, Uri } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
-import { ChatVariablesCollection, isPromptFile, isPromptInstruction } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile, isPromptFile, isSessionReference, parseSlashCommand, sessionReferenceAttachmentAttrs } from '../../../prompt/common/chatVariablesCollection';
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { ToolName } from '../../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../../tools/common/toolSchemaNormalizer';
@@ -98,20 +98,44 @@ export interface QueryProps extends BasePromptElementProps {
 }
 
 export class UserQuery extends PromptElement<QueryProps, void> {
+	constructor(
+		props: PromptElementProps<QueryProps>,
+	) {
+		super(props);
+	}
+
 	override render(state: void, sizing: PromptSizing): PromptPiece<any, any> | undefined {
-		const promptFiles = [];
+		const promptFiles: PromptElement[] = [];
 		for (const v of this.props.chatVariables) {
 			if (isPromptFile(v)) {
 				promptFiles.push(<PromptFile variable={v} omitReferences={false} />);
 			}
 		}
+
+		const userMessage = buildSlashCommandUserMessage(this.props.query, this.props.chatVariables);
+
 		return (
 			<>
 				{...promptFiles}
-				{this.props.query}
+				{userMessage}
 			</>
 		);
 	}
+}
+
+/**
+ * Builds the user message for a slash command query. If the query matches a slash command
+ * that corresponds to a prompt file, returns an instruction to follow that prompt file
+ * (with any trailing arguments). Otherwise, returns the original query.
+ */
+export function buildSlashCommandUserMessage(query: string, chatVariables: ChatVariablesCollection): string {
+	const match = parseSlashCommand(query, chatVariables);
+	if (match) {
+		return match.args
+			? `Follow instructions in #${match.promptFile.name} with these arguments: ${match.args}`
+			: `Follow instructions in #${match.promptFile.name}`;
+	}
+	return query;
 }
 
 export interface ChatVariablesAndQueryProps extends BasePromptElementProps, EmbeddedInsideUserMessage {
@@ -180,7 +204,12 @@ export async function renderChatVariables(chatVariables: ChatVariablesCollection
 			: FilePathMode.None;
 	for (const variable of chatVariables) {
 		const { uniqueName: variableName, value: variableValue, reference } = variable;
-		if (isPromptInstruction(variable) || isPromptFile(variable)) { // prompt instructions are handled in the `CustomInstructions` element, prompt file as part of the UserQuery
+		if (isInstructionFile(variable) || isCustomizationsIndex(variable) || isPromptFile(variable)) { // instructions and index are handled in the `CustomInstructions` element, prompt file as part of the UserQuery
+			continue;
+		}
+
+		if (isSessionReference(variable)) {
+			elements.push(<Tag name='attachment' attrs={sessionReferenceAttachmentAttrs(variable)} />);
 			continue;
 		}
 

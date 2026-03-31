@@ -11,13 +11,13 @@ import { IConfigurationService } from '../../configuration/common/configurationS
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService, isScenarioAutomation } from '../../env/common/envService';
-import { BaseOctoKitService, VSCodeTeamId } from '../../github/common/githubService';
+import { BaseOctoKitService } from '../../github/common/githubService';
 import { NullBaseOctoKitService } from '../../github/common/nullOctokitServiceImpl';
 import { ILogService } from '../../log/common/logService';
 import { FetchOptions, IFetcherService, Response, jsonVerboseError } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { CopilotToken, CopilotUserInfo, ErrorEnvelope, ExtendedTokenInfo, StandardErrorEnvelope, TokenEnvelope, TokenInfoOrError, TokenValidationResult, containsInternalOrg, createTestExtendedTokenInfo, isErrorEnvelope, isStandardErrorEnvelope, validateTokenEnvelope } from '../common/copilotToken';
+import { CopilotToken, CopilotUserInfo, ErrorEnvelope, ExtendedTokenInfo, StandardErrorEnvelope, TokenEnvelope, TokenInfoOrError, TokenValidationResult, containsVSCodeOrg, createTestExtendedTokenInfo, isErrorEnvelope, isStandardErrorEnvelope, validateTokenEnvelope } from '../common/copilotToken';
 import { CheckCopilotToken, ICopilotTokenManager, NotGitHubLoginFailed, nowSeconds } from '../common/copilotTokenManager';
 
 /**
@@ -229,11 +229,6 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 
 		// extend the token envelope
 		const login = ghUsername ?? 'unknown';
-		let isVscodeTeamMember = false;
-		// VS Code team members are guaranteed to be a part of an internal org so we can check that first to minimize API calls
-		if (containsInternalOrg(tokenInfo.organization_list ?? []) && 'githubToken' in context) {
-			isVscodeTeamMember = !!(await this._baseOctokitservice.getTeamMembershipWithToken(VSCodeTeamId, context.githubToken, login));
-		}
 		const extendedInfo: ExtendedTokenInfo = {
 			...tokenInfo,
 			copilot_plan: userInfo?.copilot_plan ?? tokenInfo.sku ?? '',
@@ -242,7 +237,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 			codex_agent_enabled: userInfo?.codex_agent_enabled,
 			organization_login_list: userInfo?.organization_login_list ?? [],
 			username: login,
-			isVscodeTeamMember,
+			isVscodeTeamMember: containsVSCodeOrg(tokenInfo.organization_list ?? []),
 		};
 		const telemetryData = TelemetryData.createAndMarkAsIssued(
 			{},
@@ -263,6 +258,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 	//#region Private methods
 	private async fetchCopilotTokenFromGitHubToken(githubToken: string): Promise<FetchTokenResult> {
 		const options: FetchOptions = {
+			callSite: 'copilot-token-github',
 			headers: {
 				Authorization: `token ${githubToken}`,
 				'X-GitHub-Api-Version': '2025-04-01'
@@ -276,6 +272,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 
 	private async fetchCopilotTokenFromDevDeviceId(devDeviceId: string): Promise<FetchTokenResult> {
 		const options: FetchOptions = {
+			callSite: 'copilot-token-device',
 			headers: {
 				'X-GitHub-Api-Version': '2025-04-01',
 				'Editor-Device-Id': `${devDeviceId}`
@@ -346,6 +343,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 
 	private async fetchCopilotUserInfo(githubToken: string): Promise<CopilotUserInfo> {
 		const options: FetchOptions = {
+			callSite: 'copilot-token-user-info',
 			headers: {
 				Authorization: `token ${githubToken}`,
 				'X-GitHub-Api-Version': '2025-04-01',

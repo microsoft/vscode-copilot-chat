@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import { createDecorator as createServiceIdentifier } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ResolvedRepoRemoteInfo } from '../../git/common/gitService';
@@ -32,7 +33,7 @@ export class BasicCodeSearchAuthenticationService implements ICodeSearchAuthenti
 			return;
 		}
 
-		await this._authenticationService.getGitHubSession('any', { createIfNone: true });
+		await this._authenticationService.getGitHubSession('any', { createIfNone: { detail: l10n.t('Sign in to GitHub to use remote code search.') } });
 	}
 
 	async tryReauthenticating(remoteInfo: ResolvedRepoRemoteInfo | undefined): Promise<void> {
@@ -41,7 +42,7 @@ export class BasicCodeSearchAuthenticationService implements ICodeSearchAuthenti
 			return;
 		}
 
-		await this._authenticationService.getGitHubSession('permissive', { createIfNone: true });
+		await this._authenticationService.getGitHubSession('permissive', { createIfNone: { detail: l10n.t('Sign in to GitHub with additional permissions for remote code search.') } });
 	}
 
 	async promptForExpandedLocalIndexing(fileCount: number): Promise<boolean> {

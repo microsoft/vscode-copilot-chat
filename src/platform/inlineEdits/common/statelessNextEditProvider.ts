@@ -39,6 +39,7 @@ export class WithStatelessProviderTelemetry<T> {
 export type EditStreamingWithTelemetry = AsyncGenerator<WithStatelessProviderTelemetry<StreamedEdit>, WithStatelessProviderTelemetry<NoNextEditReason>, void>
 
 export type StreamedEdit = {
+	readonly targetDocument: DocumentId;
 	readonly edit: LineReplacement;
 	readonly isFromCursorJump: boolean;
 	readonly window?: OffsetRange;
@@ -48,7 +49,6 @@ export type StreamedEdit = {
 	 * in either the original location or the jump target location.
 	 */
 	readonly originalWindow?: OffsetRange;
-	readonly targetDocument?: DocumentId;
 }
 
 export type PushEdit = (edit: Result<StreamedEdit, NoNextEditReason>) => void;
@@ -222,6 +222,7 @@ export namespace NoNextEditReason {
 			public readonly documentBeforeEdits: StringText,
 			public readonly window: OffsetRange | undefined,
 			public readonly nextCursorPosition?: Position | undefined,
+			public readonly nextCursorDocumentId?: DocumentId | undefined,
 		) {
 			super();
 		}
@@ -368,6 +369,7 @@ export interface IStatelessNextEditTelemetry {
 		nextCursorLineError: string | undefined;
 		/** nextCursorLineNumber - currentCursorLineNumber */
 		nextCursorLineDistance: number | undefined;
+		isCrossFile: boolean | undefined;
 	};
 
 	/* xtab aggressiveness telemetry (only set when promptingStrategy is aggressiveness-based) */
@@ -398,6 +400,9 @@ export interface IStatelessNextEditTelemetry {
 
 	/* similar files context for telemetry (GhostText-style neighbor code snippets) */
 	readonly similarFilesContext: Promise<string | undefined> | undefined;
+
+	/* JSON-encoded model configuration from the model service */
+	readonly modelConfig: string | undefined;
 }
 
 export type FetchResultWithStats = {
@@ -482,6 +487,7 @@ export class StatelessNextEditTelemetryBuilder {
 			lintErrors: this._lintErrors,
 			terminalOutput: this._terminalOutput,
 			similarFilesContext: this._similarFilesContext,
+			modelConfig: this._modelConfig,
 		};
 	}
 
@@ -611,7 +617,8 @@ export class StatelessNextEditTelemetryBuilder {
 
 	private _nextCursorPrediction: IStatelessNextEditTelemetry['nextCursorPrediction'] = {
 		nextCursorLineError: undefined,
-		nextCursorLineDistance: undefined
+		nextCursorLineDistance: undefined,
+		isCrossFile: undefined
 	};
 
 	public setNextCursorLineError(error: string): this {
@@ -624,6 +631,11 @@ export class StatelessNextEditTelemetryBuilder {
 	 */
 	public setNextCursorLineDistance(distance: number): this {
 		this._nextCursorPrediction.nextCursorLineDistance = distance;
+		return this;
+	}
+
+	public setNextCursorIsCrossFile(isCrossFile: boolean): this {
+		this._nextCursorPrediction.isCrossFile = isCrossFile;
 		return this;
 	}
 
@@ -684,6 +696,12 @@ export class StatelessNextEditTelemetryBuilder {
 	private _similarFilesContext: Promise<string | undefined> | undefined;
 	public setSimilarFilesContext(similarFilesContext: Promise<string | undefined>): this {
 		this._similarFilesContext = similarFilesContext;
+		return this;
+	}
+
+	private _modelConfig: string | undefined;
+	public setModelConfig(modelConfig: string): this {
+		this._modelConfig = modelConfig;
 		return this;
 	}
 }

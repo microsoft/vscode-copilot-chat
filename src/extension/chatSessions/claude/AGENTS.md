@@ -2,6 +2,8 @@
 
 This folder contains the Claude Code integration for VS Code Chat. It enables users to open a new Chat window and interact with a Claude Code instance directly within VS Code. **VS Code provides the UI, Claude Code provides the smarts.**
 
+> 📖 **New to the Claude session target?** See the **[User Guide](./CLAUDE_SESSION_USER_GUIDE.md)** for a comprehensive walkthrough of features, slash commands, permission modes, and best practices.
+
 ## Official Claude Agent SDK Documentation
 
 > **Important:** For the most up-to-date information on the Claude Agent SDK, always refer to the official documentation:

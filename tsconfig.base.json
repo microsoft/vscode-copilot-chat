@@ -1,8 +1,10 @@
 {
 	"compilerOptions": {
-		"module": "commonjs",
+		"module": "preserve",
+		"moduleResolution": "bundler",
+		"noEmit": true,
 		"target": "es2022",
-		"lib": ["ES2022"],
+		"lib": ["es2022"],
 		"sourceMap": true,
 
 		"experimentalDecorators": true,

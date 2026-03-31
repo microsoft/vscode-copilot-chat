@@ -55,7 +55,7 @@ For large repos, link to detailed docs instead of embedding: `See docs/TESTING.m
 
 1. **Minimal by default**: Only what's relevant to *every* task
 2. **Concise and actionable**: Every line should guide behavior
-3. **Link, don't embed**: Reference docs instead of copying
+3. **Link, don't embed**: Reference docs instead of copying content. Search for existing docs (`docs/**/*.md`, `CONTRIBUTING.md`, etc.) and catalog what they cover—only inline agent-critical gotchas not documented elsewhere
 4. **Keep current**: Update when practices change
 
 ## Anti-patterns

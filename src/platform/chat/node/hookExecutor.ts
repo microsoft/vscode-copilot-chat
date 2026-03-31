@@ -146,13 +146,13 @@ export class NodeHookExecutor implements IHookExecutor {
 							this._outputChannel.appendLine(`[HookExecutor] ${message}`);
 						}
 					}
-					resolve({ kind: HookCommandResultKind.Success, result });
+					resolve({ kind: HookCommandResultKind.Success, result, exitCode: code });
 				} else if (code === 2) {
 					// Exit code 2: blocking error shown to model
-					resolve({ kind: HookCommandResultKind.Error, result: stderrStr });
+					resolve({ kind: HookCommandResultKind.Error, result: stderrStr, exitCode: code });
 				} else {
 					// Other non-zero: non-blocking warning shown to user only
-					resolve({ kind: HookCommandResultKind.NonBlockingError, result: stderrStr });
+					resolve({ kind: HookCommandResultKind.NonBlockingError, result: stderrStr, exitCode: code });
 				}
 			});
 

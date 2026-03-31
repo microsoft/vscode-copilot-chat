@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createServiceIdentifier } from '../../../util/common/services';
+import type { Event } from '../../../util/vs/base/common/event';
 import type { OTelConfig } from './otelConfig';
 
 export const IOTelService = createServiceIdentifier<IOTelService>('IOTelService');
@@ -83,6 +84,26 @@ export interface IOTelService {
 	 * Gracefully shut down the OTel SDK.
 	 */
 	shutdown(): Promise<void>;
+
+	/**
+	 * Inject an externally-created completed span into the OTel service's event stream.
+	 * The span will fire `onDidCompleteSpan` (for the debug panel) but will NOT be
+	 * exported via the OTLP exporter (the source system handles its own export).
+	 */
+	injectCompletedSpan(span: ICompletedSpanData): void;
+
+	/**
+	 * Fires when any span ends, providing a serializable snapshot of the span's data.
+	 * Used by the debug panel to react to completed spans without depending on the OTel SDK.
+	 */
+	readonly onDidCompleteSpan: Event<ICompletedSpanData>;
+
+	/**
+	 * Fires synchronously when a span event is emitted via `ISpanHandle.addEvent()`.
+	 * Enables real-time streaming of in-flight span events (e.g., user messages)
+	 * without waiting for the span to complete.
+	 */
+	readonly onDidEmitSpanEvent: Event<ISpanEventData>;
 }
 
 export const enum SpanKind {
@@ -111,6 +132,16 @@ export interface ISpanHandle {
 	setAttributes(attrs: Record<string, string | number | boolean | string[] | undefined>): void;
 	setStatus(code: SpanStatusCode, message?: string): void;
 	recordException(error: unknown): void;
+	/**
+	 * Add a named event to this span with optional attributes.
+	 * This fires `IOTelService.onDidEmitSpanEvent` synchronously.
+	 */
+	addEvent(name: string, attributes?: Record<string, string | number | boolean | string[]>): void;
+	/**
+	 * Get the trace context (traceId + spanId) of this span.
+	 * Used for cross-boundary propagation (e.g., linking subagent spans to their parent tool call).
+	 */
+	getSpanContext(): TraceContext | undefined;
 	end(): void;
 }
 
@@ -121,4 +152,42 @@ export interface ISpanHandle {
 export interface OTelModelOptions {
 	readonly _capturingTokenCorrelationId?: string;
 	readonly _otelTraceContext?: TraceContext | null;
+}
+
+/**
+ * Serializable snapshot of a completed span, fired via `IOTelService.onDidCompleteSpan`.
+ * Contains all in-memory attributes (including content attributes regardless of captureContent).
+ */
+export interface ICompletedSpanData {
+	readonly name: string;
+	readonly spanId: string;
+	readonly traceId: string;
+	readonly parentSpanId?: string;
+	readonly startTime: number; // milliseconds since epoch
+	readonly endTime: number; // milliseconds since epoch
+	readonly status: { readonly code: SpanStatusCode; readonly message?: string };
+	readonly attributes: Readonly<Record<string, string | number | boolean | string[]>>;
+	readonly events: readonly ISpanEventRecord[];
+}
+
+/**
+ * A single event on a span (recorded via `ISpanHandle.addEvent`).
+ */
+export interface ISpanEventRecord {
+	readonly name: string;
+	readonly timestamp: number; // milliseconds since epoch
+	readonly attributes?: Readonly<Record<string, string | number | boolean | string[]>>;
+}
+
+/**
+ * Data emitted via `IOTelService.onDidEmitSpanEvent` when a span event is added.
+ * Enables real-time streaming of in-flight span events to the debug panel.
+ */
+export interface ISpanEventData {
+	readonly spanId: string;
+	readonly traceId: string;
+	readonly parentSpanId?: string;
+	readonly eventName: string;
+	readonly attributes: Readonly<Record<string, string | number | boolean | string[]>>;
+	readonly timestamp: number; // milliseconds since epoch
 }

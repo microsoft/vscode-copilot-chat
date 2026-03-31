@@ -14,6 +14,7 @@ import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService, createDirectoryIfNotExists } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 
@@ -37,6 +38,8 @@ interface IActiveSession {
 	readonly buffer: string[];
 	/** Chain of flush operations to serialize writes. */
 	flushPromise: Promise<void>;
+	/** Running count of lines in the transcript (flushed + buffered). */
+	lineCount: number;
 }
 
 export class SessionTranscriptService implements ISessionTranscriptService {
@@ -88,6 +91,7 @@ export class SessionTranscriptService implements ISessionTranscriptService {
 			lastEntryId: null,
 			buffer: [],
 			flushPromise: Promise.resolve(),
+			lineCount: 0,
 		};
 		this._activeSessions.set(sessionId, session);
 
@@ -101,7 +105,12 @@ export class SessionTranscriptService implements ISessionTranscriptService {
 		}
 
 		if (fileAlreadyExists) {
-			// Session file exists — we're resuming; no need to replay history
+			// Session file exists — we're resuming; count existing lines so getLineCount stays accurate
+			try {
+				const content = await fs.promises.readFile(fileUri.fsPath, 'utf-8');
+				session.lineCount = content.split('\n').filter(l => l.length > 0).length;
+			} catch {
+			}
 			return;
 		}
 
@@ -213,6 +222,18 @@ export class SessionTranscriptService implements ISessionTranscriptService {
 
 	getTranscriptPath(sessionId: string): URI | undefined {
 		return this._activeSessions.get(sessionId)?.uri;
+	}
+
+	getLineCount(sessionId: string): number | undefined {
+		return this._activeSessions.get(sessionId)?.lineCount;
+	}
+
+	isTranscriptUri(uri: URI): boolean {
+		const dir = this._getTranscriptsDir();
+		if (!dir) {
+			return false;
+		}
+		return extUriBiasedIgnorePathCase.isEqualOrParent(uri, dir);
 	}
 
 	async cleanupOldTranscripts(maxRetained: number = DEFAULT_MAX_RETAINED): Promise<void> {
@@ -343,6 +364,7 @@ export class SessionTranscriptService implements ISessionTranscriptService {
 		} as TranscriptEntry;
 
 		session.lastEntryId = id;
+		session.lineCount++;
 		session.buffer.push(JSON.stringify(fullEntry) + '\n');
 	}
 

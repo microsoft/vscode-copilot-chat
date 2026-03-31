@@ -12,12 +12,10 @@ export namespace ResponseProcessor {
 	/**
 	 * Controls when to emit fast cursor line changes.
 	 * - `off`: Never emit fast cursor line changes
-	 * - `always`: Always emit when the cursor line changes (original behavior)
 	 * - `additiveOnly`: Only emit when the edit on the cursor line is additive (only adds text)
 	 */
 	export const enum EmitFastCursorLineChange {
 		Off = 'off',
-		Always = 'always',
 		AdditiveOnly = 'additiveOnly',
 	}
 
@@ -42,7 +40,7 @@ export namespace ResponseProcessor {
 	 */
 	export function mapEmitFastCursorLineChange(value: boolean | EmitFastCursorLineChange): EmitFastCursorLineChange {
 		if (value === true) {
-			return EmitFastCursorLineChange.Always;
+			return EmitFastCursorLineChange.AdditiveOnly;
 		}
 		if (value === false) {
 			return EmitFastCursorLineChange.Off;
@@ -217,7 +215,7 @@ export namespace ResponseProcessor {
 				}
 			}
 
-			if (params.emitFastCursorLineChange === EmitFastCursorLineChange.AdditiveOnly && !isAdditiveEdit(originalLine, newLine)) {
+			if (!isAdditiveEdit(originalLine, newLine)) {
 				return;
 			}
 

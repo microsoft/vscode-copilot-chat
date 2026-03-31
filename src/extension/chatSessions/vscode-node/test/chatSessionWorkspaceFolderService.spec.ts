@@ -6,9 +6,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
+import { RepoContext } from '../../../../platform/git/common/gitService';
 import { MockGitService } from '../../../../platform/ignore/node/test/mockGitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { mock } from '../../../../util/common/test/simpleMock';
+import { constObservable, observableValue } from '../../../../util/vs/base/common/observableInternal';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { IChatSessionMetadataStore, WorkspaceFolderEntry } from '../../common/chatSessionMetadataStore';
 import { ChatSessionWorkspaceFolderService } from '../chatSessionWorkspaceFolderServiceImpl';
 
@@ -98,7 +101,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 		logService = new MockLogService();
 		gitService = new MockGitService();
 		metadataStore = new MockMetadataStore();
-		service = new ChatSessionWorkspaceFolderService(gitService, logService, metadataStore);
+		service = new ChatSessionWorkspaceFolderService(gitService, logService, metadataStore, extensionContext);
 	});
 
 	afterEach(() => {
@@ -498,6 +501,146 @@ describe('ChatSessionWorkspaceFolderService', () => {
 
 			const recent = await service.getRecentFolders();
 			expect(recent.length).toBe(1);
+		});
+
+		describe('getWorkspaceChanges - cache invalidation', () => {
+			let headCommitHash: ReturnType<typeof observableValue<string | undefined>>;
+
+			function makeRepoContext(overrides?: Partial<RepoContext>): RepoContext {
+				headCommitHash = observableValue('test-head-commit', 'abc123');
+				return {
+					rootUri: URI.file('/repo'),
+					kind: 'repository',
+					headBranchName: 'main',
+					headCommitHash: 'abc123',
+					upstreamBranchName: undefined,
+					upstreamRemote: undefined,
+					isRebasing: false,
+					remotes: [],
+					remoteFetchUrls: [],
+					worktrees: [],
+					changes: { mergeChanges: [], indexChanges: [], workingTree: [], untrackedChanges: [] },
+					headBranchNameObs: constObservable('main'),
+					headCommitHashObs: headCommitHash,
+					upstreamBranchNameObs: constObservable(undefined),
+					upstreamRemoteObs: constObservable(undefined),
+					isRebasingObs: constObservable(false),
+					isIgnored: async () => false,
+					...overrides,
+				} as RepoContext;
+			}
+
+			it('should return cached changes on second call', async () => {
+				const repo = makeRepoContext();
+				gitService.getRepository = vi.fn().mockResolvedValue(repo);
+				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
+
+				const folderUri = vscode.Uri.file('/repo');
+
+				const first = await service.getWorkspaceChanges(folderUri);
+				const second = await service.getWorkspaceChanges(folderUri);
+
+				expect(first).toBe(second);
+				// getRepository is called once for the first call, the second uses cache
+				expect(gitService.getRepository).toHaveBeenCalledTimes(1);
+			});
+
+			it('should invalidate cache when clearWorkspaceChanges is called', async () => {
+				const repo = makeRepoContext();
+				gitService.getRepository = vi.fn().mockResolvedValue(repo);
+				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
+
+				const folderUri = vscode.Uri.file('/repo');
+
+				await service.getWorkspaceChanges(folderUri);
+				service.clearWorkspaceChanges(folderUri);
+
+				await service.getWorkspaceChanges(folderUri);
+				expect(gitService.getRepository).toHaveBeenCalledTimes(2);
+			});
+
+			it('should invalidate cache when handleRequestCompleted is called', async () => {
+				const repo = makeRepoContext();
+				gitService.getRepository = vi.fn().mockResolvedValue(repo);
+				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
+
+				const folderUri = vscode.Uri.file('/repo');
+
+				await service.getWorkspaceChanges(folderUri);
+				await service.handleRequestCompleted(folderUri);
+
+				await service.getWorkspaceChanges(folderUri);
+				expect(gitService.getRepository).toHaveBeenCalledTimes(2);
+			});
+
+			it('should return empty array when repository has no changes', async () => {
+				const repo = makeRepoContext({ changes: undefined });
+				gitService.getRepository = vi.fn().mockResolvedValue(repo);
+
+				const result = await service.getWorkspaceChanges(vscode.Uri.file('/repo'));
+				expect(result).toEqual([]);
+			});
+
+			it('should return empty array when no repository is found', async () => {
+				gitService.getRepository = vi.fn().mockResolvedValue(undefined);
+
+				const result = await service.getWorkspaceChanges(vscode.Uri.file('/no-repo'));
+				expect(result).toEqual([]);
+			});
+
+			it('should not re-fetch when cache is valid for a folder', async () => {
+				const repo = makeRepoContext();
+				gitService.getRepository = vi.fn().mockResolvedValue(repo);
+				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
+
+				const folderUri = vscode.Uri.file('/repo');
+
+				// Clear cache between calls to force re-entry into getWorkspaceChanges
+				await service.getWorkspaceChanges(folderUri);
+				service.clearWorkspaceChanges(folderUri);
+				await service.getWorkspaceChanges(folderUri);
+
+				service.clearWorkspaceChanges(folderUri);
+				await service.getWorkspaceChanges(folderUri);
+
+				// All 3 calls should have hit getRepository (cache was manually cleared each time)
+				expect(gitService.getRepository).toHaveBeenCalledTimes(3);
+			});
+
+			it('should track changes per workspace folder independently', async () => {
+				const repo1 = makeRepoContext();
+				const repo2 = makeRepoContext();
+
+				const folder1 = vscode.Uri.file('/repo1');
+				const folder2 = vscode.Uri.file('/repo2');
+
+				gitService.getRepository = vi.fn()
+					.mockImplementation((uri: URI) => {
+						if (uri.fsPath === folder1.fsPath) {
+							return Promise.resolve(repo1);
+						}
+						return Promise.resolve(repo2);
+					});
+				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 0, deletions: 0 });
+
+				await service.getWorkspaceChanges(folder1);
+				await service.getWorkspaceChanges(folder2);
+
+				// Invalidate only folder1's cache
+				service.clearWorkspaceChanges(folder1);
+
+				// folder2 should still use cache
+				await service.getWorkspaceChanges(folder2);
+				// folder1 needs refresh
+				await service.getWorkspaceChanges(folder1);
+
+				// folder1: called twice (initial + after invalidation), folder2: called once (cached)
+				const calls = (gitService.getRepository as ReturnType<typeof vi.fn>).mock.calls;
+				const folder1Calls = calls.filter((c: URI[]) => c[0].fsPath === folder1.fsPath).length;
+				const folder2Calls = calls.filter((c: URI[]) => c[0].fsPath === folder2.fsPath).length;
+				expect(folder1Calls).toBe(2);
+				expect(folder2Calls).toBe(1);
+			});
 		});
 	});
 });

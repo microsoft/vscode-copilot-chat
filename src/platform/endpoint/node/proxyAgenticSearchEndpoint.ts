@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { RequestType } from '@vscode/copilot-api';
+import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
@@ -52,7 +52,7 @@ export class ProxyAgenticSearchEndpoint extends ChatEndpoint {
 				tokenizer: TokenizerType.O200K,
 				supports: { streaming: true, parallel_tool_calls: true, tool_calls: true, vision: false },
 				limits: {
-					max_prompt_tokens: 128000,
+					max_prompt_tokens: 260000,
 					max_output_tokens: 16000,
 				}
 			}
@@ -70,7 +70,7 @@ export class ProxyAgenticSearchEndpoint extends ChatEndpoint {
 		);
 	}
 
-	override get urlOrRequestMetadata() {
+	override get urlOrRequestMetadata(): RequestMetadata {
 		return { type: RequestType.ProxyChatCompletions };
 	}
 }

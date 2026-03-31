@@ -16,7 +16,6 @@ import { ISearchService } from '../../../platform/search/common/searchService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { IRerankerService } from '../../../platform/workspaceChunkSearch/common/rerankerService';
-import { KeywordItem, ResolvedWorkspaceChunkQuery } from '../../../platform/workspaceChunkSearch/common/workspaceChunkSearch';
 import { IWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { raceCancellation } from '../../../util/vs/base/common/async';
@@ -45,7 +44,7 @@ export interface ISearchFeedbackTelemetry {
 	llmSelectedCount?: number;
 	rawLlmRankingResultsCount?: number;
 	parseResult?: string;
-	strategy?: string;
+
 	llmBestInRerank?: number;
 	llmWorstInRerank?: number;
 }
@@ -84,15 +83,6 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 	private async getEndpoint() {
 		this._endpoint = this._endpoint ?? await this._endpointProvider.getChatEndpoint('copilot-fast');
 		return this._endpoint;
-	}
-
-	private getKeywordsForContent(text: string): readonly KeywordItem[] {
-		// extract all identifiers in the selected text
-		const identifiers = new Set<string>();
-		for (const match of text.matchAll(/(-?\d*\.\d\w*)|([^\`\~\!\@\#\%\^\&\*\(\)\-\=\+\[\{\]\}\\\|\;\:\'\"\,\.\<\>\/\?\s]+)/g)) {
-			identifiers.add(match[0]);
-		}
-		return Array.from(identifiers.values(), k => ({ keyword: k, variations: [] }));
 	}
 
 	private resetFeedbackContext() {
@@ -163,16 +153,10 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 				{
 					endpoint: await this.getEndpoint(),
 					tokenBudget: MAX_CHUNK_TOKEN_COUNT,
-					fullWorkspaceTokenBudget: MAX_CHUNK_TOKEN_COUNT,
 					maxResults: MAX_CHUNKS_RESULTS,
 				},
 				{
-					rawQuery: query,
-					resolveQueryAndKeywords: async (): Promise<ResolvedWorkspaceChunkQuery> => ({
-						rephrasedQuery: query,
-						keywords: this.getKeywordsForContent(query),
-					}),
-					resolveQuery: async () => query,
+					queryText: query,
 				},
 				{
 					globPatterns: {
@@ -186,7 +170,6 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 			);
 			SemanticSearchTextSearchProvider.feedBackTelemetry.chunkSearchDuration = Date.now() - chunkSearchDuration;
 			SemanticSearchTextSearchProvider.feedBackTelemetry.chunkCount = result.chunks.length;
-			SemanticSearchTextSearchProvider.feedBackTelemetry.strategy = result.strategy;
 			this.treeSitterAIKeywords(query, progress, result.chunks.map(chunk => chunk.chunk), token);
 
 			const chunkResults = result.chunks.map(c => c.chunk);
@@ -278,16 +261,10 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 						{
 							endpoint: await this.getEndpoint(),
 							tokenBudget: MAX_CHUNK_TOKEN_COUNT,
-							fullWorkspaceTokenBudget: MAX_CHUNK_TOKEN_COUNT,
 							maxResults: MAX_CHUNKS_RESULTS,
 						},
 						{
-							rawQuery: query,
-							resolveQueryAndKeywords: async (): Promise<ResolvedWorkspaceChunkQuery> => ({
-								rephrasedQuery: query,
-								keywords: this.getKeywordsForContent(query),
-							}),
-							resolveQuery: async () => query,
+							queryText: query,
 						},
 						{
 							globPatterns: {
@@ -339,7 +316,6 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 			"llmSelectedCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of chunks selected by LLM from the initial retrieval." },
 			"rawLlmRankingResultsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of raw results returned by the LLM." },
 			"parseResult": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates the result of parsing the LLM response." },
-			"strategy": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates the strategy used for the search." },
 			"llmBestInRerank": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Best rank (lowest index) among LLM-selected chunks in the reranked results." },
 			"llmWorstInRerank": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Worst rank (highest index) among LLM-selected chunks in the reranked results." }
 			}
@@ -347,7 +323,6 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 		this._telemetryService.sendMSFTTelemetryEvent('copilot.search.request', {
 			rankResult: SemanticSearchTextSearchProvider.feedBackTelemetry.rankResult,
 			parseResult: SemanticSearchTextSearchProvider.feedBackTelemetry.parseResult,
-			strategy: SemanticSearchTextSearchProvider.feedBackTelemetry.strategy,
 		}, {
 			chunkCount: SemanticSearchTextSearchProvider.feedBackTelemetry.chunkCount,
 			rankResultsCount: SemanticSearchTextSearchProvider.feedBackTelemetry.rankResultsCount,

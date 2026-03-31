@@ -3,8 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { BasePromptElementProps, Chunk, PromptElement, PromptPiece, PromptPieceChild, PromptSizing, Raw, SystemMessage, TokenLimit, UserMessage } from '@vscode/prompt-tsx';
+import { BasePromptElementProps, Chunk, Document, PromptElement, PromptPiece, PromptPieceChild, PromptSizing, Raw, SystemMessage, TokenLimit, UserMessage } from '@vscode/prompt-tsx';
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
+import { sessionResourceToId } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
@@ -25,7 +26,7 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditedFileEventKind, Position, Range } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
-import { ChatVariablesCollection, isPromptInstructionText } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, extractDebugTargetSessionIds, isCustomizationsIndex } from '../../../prompt/common/chatVariablesCollection';
 import { getGlobalContextCacheKey, GlobalContextMessageMetadata, RenderedUserMessageMetadata, Turn } from '../../../prompt/common/conversation';
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
@@ -114,6 +115,10 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			</SystemMessage>
 		</>;
 		const isAutopilot = this.props.promptContext.request?.permissionLevel === 'autopilot';
+		const sessionResource = this.props.promptContext.request?.sessionResource;
+		const sessionId = sessionResource ? sessionResourceToId(sessionResource) : undefined;
+		const debugTargetSessionIds = extractDebugTargetSessionIds([...this.props.promptContext.chatVariables].map(v => v.reference));
+		const templateVariablesContext = this.promptVariablesService.buildTemplateVariablesContext(sessionId, debugTargetSessionIds);
 		const baseInstructions = <>
 			{!omitBaseAgentInstructions && baseAgentInstructions}
 			{await this.getAgentCustomInstructions()}
@@ -121,6 +126,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				When you have fully completed the task, call the task_complete tool to signal that you are done.<br />
 				IMPORTANT: Before calling task_complete, you MUST provide a brief text summary of what was accomplished in your message. The task is not complete until both the summary and the task_complete call are present.
 			</SystemMessage>}
+			{templateVariablesContext.length > 0 && <SystemMessage>{templateVariablesContext}</SystemMessage>}
 			<UserMessage>
 				{await this.getOrCreateGlobalAgentContext(this.props.endpoint)}
 			</UserMessage>
@@ -212,9 +218,11 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		const isNewChat = this.props.promptContext.history?.length === 0;
 		// TODO:@bhavyau find a better way to extract session resource
 		const sessionResource = (this.props.promptContext.tools?.toolInvocationToken as any)?.sessionResource as string | undefined;
-		return globalContext ?
+		const result = globalContext ?
 			renderedMessageToTsxChildren(globalContext, !!this.props.enableCacheBreakpoints) :
 			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} availableTools={this.props.promptContext.tools?.availableTools} isNewChat={isNewChat} sessionResource={sessionResource} />;
+
+		return result;
 	}
 
 	private async getOrCreateGlobalAgentContextContent(endpoint: IChatEndpoint): Promise<Raw.ChatCompletionContentPart[] | undefined> {
@@ -442,6 +450,8 @@ export function renderedMessageToTsxChildren(message: string | readonly Raw.Chat
 			return part.text;
 		} else if (part.type === Raw.ChatCompletionContentPartKind.Image) {
 			return <HistoricalImage src={part.imageUrl.url} detail={part.imageUrl.detail} mimeType={part.imageUrl.mediaType} />;
+		} else if (part.type === Raw.ChatCompletionContentPartKind.Document) {
+			return <Document data={part.documentData.data} mediaType={part.documentData.mediaType} />;
 		} else if (part.type === Raw.ChatCompletionContentPartKind.CacheBreakpoint) {
 			return enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />;
 		}
@@ -509,7 +519,7 @@ class SkillAdherenceReminder extends PromptElement<SkillAdherenceReminderProps> 
 
 	async render() {
 		// Check if any skills are available from the instruction index
-		const indexVariable = this.props.chatVariables.find(isPromptInstructionText);
+		const indexVariable = this.props.chatVariables.find(isCustomizationsIndex);
 		if (!indexVariable || !isString(indexVariable.value)) {
 			return undefined;
 		}

@@ -22,6 +22,7 @@ export interface IMultiReplaceStringToolParams {
 
 export class MultiReplaceStringTool extends AbstractReplaceStringTool<IMultiReplaceStringToolParams> {
 	public static toolName = ToolName.MultiReplaceString;
+	public static readonly nonDeferred = true;
 
 	protected extractReplaceInputs(input: IMultiReplaceStringToolParams): IAbstractReplaceStringInput[] {
 		return input.replacements.map(r => ({

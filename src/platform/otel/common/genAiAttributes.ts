@@ -9,6 +9,10 @@ export const GenAiOperationName = {
 	INVOKE_AGENT: 'invoke_agent',
 	EXECUTE_TOOL: 'execute_tool',
 	EMBEDDINGS: 'embeddings',
+	/** Extension-specific: standalone markdown content event */
+	CONTENT_EVENT: 'content_event',
+	/** Extension-specific: hook command execution */
+	EXECUTE_HOOK: 'execute_hook',
 } as const;
 
 // gen_ai.provider.name values
@@ -60,6 +64,8 @@ export const GenAiAttr = {
 	USAGE_OUTPUT_TOKENS: 'gen_ai.usage.output_tokens',
 	USAGE_CACHE_READ_INPUT_TOKENS: 'gen_ai.usage.cache_read.input_tokens',
 	USAGE_CACHE_CREATION_INPUT_TOKENS: 'gen_ai.usage.cache_creation.input_tokens',
+	/** Custom: reasoning/thinking token count (not yet standardized in GenAI conventions) */
+	USAGE_REASONING_TOKENS: 'gen_ai.usage.reasoning_tokens',
 
 	// Conversation
 	CONVERSATION_ID: 'gen_ai.conversation.id',
@@ -104,7 +110,47 @@ export const CopilotChatAttr = {
 	ENDPOINT_TYPE: 'copilot_chat.endpoint_type',
 	MAX_PROMPT_TOKENS: 'copilot_chat.request.max_prompt_tokens',
 	TIME_TO_FIRST_TOKEN: 'copilot_chat.time_to_first_token',
+	SESSION_ID: 'copilot_chat.session_id',
+	SERVER_REQUEST_ID: 'copilot_chat.server_request_id',
+	CANCELED: 'copilot_chat.canceled',
+	/** Extended thinking/reasoning content (content-gated) */
+	REASONING_CONTENT: 'copilot_chat.reasoning_content',
+	/** User's actual typed message text, extracted from prompt context */
+	USER_REQUEST: 'copilot_chat.user_request',
+	/** Resolved context section (code snippets, file contents, etc.) */
+	PROMPT_CONTEXT: 'copilot_chat.prompt_context',
+	/** Custom instructions section */
+	PROMPT_INSTRUCTIONS: 'copilot_chat.prompt_instructions',
+	/** VS Code chat session ID from CapturingToken — the definitive session identifier */
+	CHAT_SESSION_ID: 'copilot_chat.chat_session_id',
+	/** Parent chat session ID for linking child sessions (e.g., title, categorization) to their parent */
+	PARENT_CHAT_SESSION_ID: 'copilot_chat.parent_chat_session_id',
+	/** Debug log label for child sessions (e.g., 'title', 'categorization', 'runSubagent') */
+	DEBUG_LOG_LABEL: 'copilot_chat.debug_log_label',
+	/** Markdown content for standalone content events */
+	MARKDOWN_CONTENT: 'copilot_chat.markdown_content',
+	/** Edit source: inline_chat, chat_editing, chat_editing_hunk, apply_patch, replace_string, code_mapper */
+	EDIT_SOURCE: 'copilot_chat.edit.source',
+	/** Edit outcome: accepted, rejected, saved, unknown */
+	EDIT_OUTCOME: 'copilot_chat.edit.outcome',
+	/** Language identifier of the document */
+	LANGUAGE_ID: 'copilot_chat.language_id',
+	/** Time delay in milliseconds between acceptance and measurement */
+	TIME_DELAY_MS: 'copilot_chat.time_delay_ms',
+	/** Whether additional unactioned edits remain */
+	HAS_REMAINING_EDITS: 'copilot_chat.has_remaining_edits',
+	/** Git branch name (HEAD) */
+	REPO_HEAD_BRANCH_NAME: 'copilot_chat.repo.head_branch_name',
+	/** Git commit hash (HEAD) */
+	REPO_HEAD_COMMIT_HASH: 'copilot_chat.repo.head_commit_hash',
+	/** Normalized remote fetch URL */
+	REPO_REMOTE_URL: 'copilot_chat.repo.remote_url',
+	/** File path relative to the repository root */
+	FILE_RELATIVE_PATH: 'copilot_chat.file.relative_path',
 } as const;
+
+export type EditSource = 'inline_chat' | 'chat_editing' | 'chat_editing_hunk' | 'apply_patch' | 'replace_string' | 'code_mapper';
+export type EditOutcome = 'accepted' | 'rejected' | 'saved' | 'unknown';
 
 /**
  * Standard OTel attributes used alongside GenAI attributes.

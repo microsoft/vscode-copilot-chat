@@ -53,6 +53,7 @@ class FetchWebPageTool implements ICopilotTool<IFetchWebPageParams> {
 	}
 
 	public static readonly toolName = ToolName.FetchWebPage;
+	public static readonly nonDeferred = true;
 
 	prepareInvocation(_options: LanguageModelToolInvocationPrepareOptions<IFetchWebPageParams>, _token: CancellationToken): ProviderResult<PreparedToolInvocation> {
 		// The Core version of this tool handles the confirmation message & other messages

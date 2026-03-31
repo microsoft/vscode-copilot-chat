@@ -53,6 +53,7 @@ export type IChatModelCapabilities = {
 		adaptive_thinking?: boolean;
 		max_thinking_budget?: number;
 		min_thinking_budget?: number;
+		reasoning_effort?: string[];
 	};
 };
 

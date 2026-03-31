@@ -52,6 +52,7 @@ export const ICustomInstructionsService = createServiceIdentifier<ICustomInstruc
 export interface IExtensionPromptFile {
 	uri: URI;
 	type: PromptsType;
+	extensionId?: string;
 }
 
 export interface ICustomInstructionsService {
@@ -77,7 +78,7 @@ export interface ICustomInstructionsService {
 	 */
 	refreshExtensionPromptFiles(): Promise<void>;
 	/** Gets skill info for extension-contributed skill files */
-	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined;
+	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI; extensionId?: string } | undefined;
 }
 
 export interface IInstructionIndexFile {
@@ -401,7 +402,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		});
 	}
 
-	public getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {
+	public getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI; extensionId?: string } | undefined {
 		if (!this._extensionPromptFilesCache) {
 			return undefined;
 		}
@@ -410,7 +411,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 				const skillFolderUri = extUriBiasedIgnorePathCase.dirname(file.uri);
 				if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, skillFolderUri)) {
 					const skillName = extUriBiasedIgnorePathCase.basename(skillFolderUri);
-					return { skillName, skillFolderUri };
+					return { skillName, skillFolderUri, extensionId: file.extensionId };
 				}
 			}
 		}
@@ -422,6 +423,9 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 	}
 
 	public async isExternalInstructionsFile(uri: URI): Promise<boolean> {
+		if (uri.scheme === 'vscode-chat-internal') {
+			return true;
+		}
 		if (uri.scheme === Schemas.vscodeUserData && uri.path.endsWith(INSTRUCTION_FILE_EXTENSION)) {
 			return true;
 		}
@@ -445,7 +449,8 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 	}
 
 	public isSkillFile(uri: URI): boolean {
-		return this._matchInstructionLocationsFromSkills.get()(uri) !== undefined;
+		return this._matchInstructionLocationsFromSkills.get()(uri) !== undefined
+			|| this.getChatInternalSkillInfo(uri) !== undefined;
 	}
 
 	public isSkillMdFile(uri: URI): boolean {
@@ -453,7 +458,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 	}
 
 	public getSkillDirectory(uri: URI): URI | undefined {
-		const skillInfo = this._matchInstructionLocationsFromSkills.get()(uri);
+		const skillInfo = this._matchInstructionLocationsFromSkills.get()(uri) || this.getChatInternalSkillInfo(uri);
 		if (!skillInfo) {
 			return undefined;
 		}
@@ -461,7 +466,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 	}
 
 	public getSkillName(uri: URI): string | undefined {
-		const skillInfo = this._matchInstructionLocationsFromSkills.get()(uri);
+		const skillInfo = this._matchInstructionLocationsFromSkills.get()(uri) || this.getChatInternalSkillInfo(uri);
 		if (!skillInfo) {
 			return undefined;
 		}
@@ -469,7 +474,19 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 	}
 
 	public getSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {
-		return this._matchInstructionLocationsFromSkills.get()(uri);
+		return this._matchInstructionLocationsFromSkills.get()(uri) || this.getChatInternalSkillInfo(uri);
+	}
+
+	private getChatInternalSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {
+		if (uri.scheme !== 'vscode-chat-internal') {
+			return undefined;
+		}
+		if (extUriBiasedIgnorePathCase.basename(uri).toLowerCase() !== 'skill.md') {
+			return undefined;
+		}
+		const skillFolderUri = extUriBiasedIgnorePathCase.dirname(uri);
+		const skillName = extUriBiasedIgnorePathCase.basename(skillFolderUri);
+		return { skillName, skillFolderUri };
 	}
 }
 
