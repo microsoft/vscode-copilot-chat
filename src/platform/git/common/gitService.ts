@@ -51,6 +51,7 @@ export interface IGitService extends IDisposable {
 	readonly repositories: Array<RepoContext>;
 	readonly isInitialized: boolean;
 
+	initRepository(uri: URI): Promise<RepoContext | undefined>;
 	getRecentRepositories(): Iterable<RepositoryAccessDetails>;
 	getRepository(uri: URI, forceOpen?: boolean): Promise<RepoContext | undefined>;
 	getRepositoryState(uri: URI, forceOpen?: boolean): Promise<RepositoryState | undefined>;

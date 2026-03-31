@@ -697,6 +697,10 @@ export class TestingGitService implements IGitService {
 		return [];
 	}
 
+	async initRepository(_uri: URI): Promise<RepoContext | undefined> {
+		return Promise.resolve(undefined);
+	}
+
 	async initialize() {
 		return undefined;
 	}

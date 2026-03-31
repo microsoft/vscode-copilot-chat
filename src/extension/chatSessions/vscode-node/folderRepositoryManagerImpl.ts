@@ -109,8 +109,8 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 
 	protected async getFolderRepositoryForNewSession(sessionId: string | undefined, selectedFolder: vscode.Uri | undefined, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<FolderRepositoryInfo> {
 		// Get the selected folder
-		selectedFolder = sessionId ? (this._newSessionFolders.get(sessionId)?.uri
-			?? await this.workspaceFolderService.getSessionWorkspaceFolder(sessionId)) : undefined;
+		selectedFolder = selectedFolder ?? (sessionId ? (this._newSessionFolders.get(sessionId)?.uri
+			?? await this.workspaceFolderService.getSessionWorkspaceFolder(sessionId)) : undefined);
 
 		// If no folder selected and we have a single workspace folder, use active repository
 		let repositoryUri: vscode.Uri | undefined;
@@ -252,7 +252,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 
 		// Check for uncommitted changes and prompt user before creating worktree
 		let uncommittedChangesAction: 'move' | 'copy' | 'skip' | 'cancel' | undefined = undefined;
-		if ((!sessionId || isUntitledSessionId(sessionId)) && !worktreeProperties) {
+		if (!worktreeProperties) {
 			uncommittedChangesAction = await this.promptForUncommittedChangesAction(sessionId, repository, branch, toolInvocationToken, token);
 			if (uncommittedChangesAction === 'cancel') {
 				return { folder, repository, worktree, worktreeProperties, trusted: true, cancelled: true };
@@ -468,6 +468,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		repository: NonNullable<ReturnType<IGitService['activeRepository']['get']>>,
 		token: vscode.CancellationToken
 	): Promise<Array<{ uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number }>> {
+		this.workspaceFolderService.clearWorkspaceChanges(repositoryUri);
 		const workspaceChanges = await this.workspaceFolderService.getWorkspaceChanges(repositoryUri) ?? [];
 		if (workspaceChanges.length > 0) {
 			return workspaceChanges.map(change => this.toModifiedFileConfirmationEntry(change));
@@ -642,16 +643,18 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 		}
 
 		// Check session workspace folder
-		const sessionWorkspaceFolder = await this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
-		if (sessionWorkspaceFolder) {
+		const sessionWorkspaceFolderEntry = await this.workspaceFolderService.getSessionWorkspaceFolderEntry(sessionId);
+		if (sessionWorkspaceFolderEntry) {
 			let trusted: boolean | undefined;
 			if (options) {
-				trusted = await this.verifyTrust(sessionWorkspaceFolder, options.stream);
+				trusted = await this.verifyTrust(vscode.Uri.file(sessionWorkspaceFolderEntry.folderPath), options.stream);
 			}
 
 			return {
-				folder: sessionWorkspaceFolder,
-				repository: undefined,
+				folder: vscode.Uri.file(sessionWorkspaceFolderEntry.folderPath),
+				repository: sessionWorkspaceFolderEntry.repositoryPath
+					? vscode.Uri.file(sessionWorkspaceFolderEntry.repositoryPath)
+					: undefined,
 				worktree: undefined,
 				worktreeProperties: undefined,
 				trusted

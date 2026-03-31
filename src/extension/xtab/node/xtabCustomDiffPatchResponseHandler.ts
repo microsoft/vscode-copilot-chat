@@ -68,7 +68,6 @@ export class XtabCustomDiffPatchResponseHandler {
 		activeDocumentId: DocumentId,
 		workspaceRoot: URI | undefined,
 		window: OffsetRange | undefined,
-		originalWindow?: OffsetRange,
 	): AsyncGenerator<StreamedEdit, NoNextEditReason, void> {
 		const activeDocRelativePath = toUniquePath(activeDocumentId, workspaceRoot?.path);
 		try {

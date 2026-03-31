@@ -11,7 +11,6 @@ import { IRunCommandExecutionService } from '../../../../platform/commands/commo
 import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
-import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { PullRequestSearchItem } from '../../../../platform/github/common/githubAPI';
 import { IOctoKitService } from '../../../../platform/github/common/githubService';
@@ -23,13 +22,13 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { Event } from '../../../../util/vs/base/common/event';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { IAgentSessionsWorkspace } from '../../common/agentSessionsWorkspace';
 import { IChatSessionMetadataStore } from '../../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
 import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../../common/chatSessionWorktreeService';
 import { IFolderRepositoryManager } from '../../common/folderRepositoryManager';
 import { emptyWorkspaceInfo } from '../../common/workspaceInfo';
 import { ICustomSessionTitleService } from '../../copilotcli/common/customSessionTitleService';
-import { ICopilotCLIAgents } from '../../copilotcli/node/copilotCli';
 import { ICopilotCLISession } from '../../copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionService } from '../../copilotcli/node/copilotcliSessionService';
 import { ICopilotCLISessionTracker } from '../../copilotcli/vscode-node/copilotCLISessionTracker';
@@ -54,11 +53,6 @@ beforeAll(() => {
 		}),
 	};
 });
-
-class TestAgentsService extends mock<ICopilotCLIAgents>() {
-	declare readonly _serviceBrand: undefined;
-	override onDidChangeAgents = Event.None;
-}
 
 class TestSessionService extends mock<ICopilotCLISessionService>() {
 	declare readonly _serviceBrand: undefined;
@@ -86,6 +80,7 @@ class TestSessionService extends mock<ICopilotCLISessionService>() {
 	});
 	override forkSession = vi.fn(async () => 'forked-session');
 	override tryGetPartialSesionHistory = vi.fn(async () => undefined);
+	override getChatHistory = vi.fn(async () => []);
 }
 
 class TestWorktreeService extends mock<IChatSessionWorktreeService>() {
@@ -169,12 +164,10 @@ class TestCustomSessionTitleService extends mock<ICustomSessionTitleService>() {
 }
 
 function createProvider() {
-	const agents = new TestAgentsService();
 	const sessionService = new TestSessionService();
 	const worktreeService = new TestWorktreeService();
 	const workspaceService = new NullWorkspaceService([URI.file('/workspace')]);
 	const metadataStore = new class extends mock<IChatSessionMetadataStore>() { };
-	const fileSystem = new class extends mock<IFileSystemService>() { declare readonly _serviceBrand: undefined; }();
 	const gitService = new TestGitService();
 	const folderRepositoryManager = new TestFolderRepositoryManager();
 	const configurationService = new InMemoryConfigurationService(new DefaultsOnlyConfigurationService());
@@ -192,12 +185,10 @@ function createProvider() {
 	}();
 
 	const provider = new CopilotCLIChatSessionContentProvider(
-		agents,
 		sessionService,
 		metadataStore,
 		worktreeService,
 		workspaceService as IWorkspaceService,
-		fileSystem,
 		gitService,
 		folderRepositoryManager,
 		configurationService,
@@ -209,6 +200,7 @@ function createProvider() {
 		workspaceFolderService,
 		octoKitService,
 		logService,
+		new class extends mock<IAgentSessionsWorkspace>() { override get isAgentSessionsWorkspace() { return false; } }
 	);
 
 	return {

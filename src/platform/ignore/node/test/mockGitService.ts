@@ -42,6 +42,10 @@ export class MockGitService implements IGitService {
 		return [];
 	}
 
+	initRepository(_uri: URI): Promise<RepoContext | undefined> {
+		return Promise.resolve(undefined);
+	}
+
 	getRepositoryFetchUrls = vi.fn().mockImplementation((): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined> => {
 		this.getRepositoryFetchUrlsCallCount++;
 		return Promise.resolve(this._repositoryFetchUrls);

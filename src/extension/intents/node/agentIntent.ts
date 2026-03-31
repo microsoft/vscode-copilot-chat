@@ -16,7 +16,8 @@ import { IAutomodeService } from '../../../platform/endpoint/node/automodeServic
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
-import { CUSTOM_TOOL_SEARCH_NAME, isAnthropicCustomToolSearchEnabled } from '../../../platform/networking/common/anthropic';
+import { CUSTOM_TOOL_SEARCH_NAME, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
+import { IToolDeferralService } from '../../../platform/networking/common/toolDeferralService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { modelsWithoutResponsesContextManagement } from '../../../platform/networking/common/openai';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
@@ -363,6 +364,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		@IExperimentationService private readonly expService: IExperimentationService,
 		@IAutomodeService private readonly automodeService: IAutomodeService,
 		@IOTelService override readonly otelService: IOTelService,
+		@IToolDeferralService private readonly toolDeferralService: IToolDeferralService,
 	) {
 		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, otelService);
 	}
@@ -388,7 +390,15 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		}
 
 		const tools = promptContext.tools?.availableTools;
-		const toolTokens = tools?.length ? await this.endpoint.acquireTokenizer().countToolTokens(tools) : 0;
+		// When Anthropic tool search is enabled, deferred tools are sent with
+		// defer_loading: true and don't count against the context window until
+		// the model loads them via tool_search. Only count non-deferred tools
+		// so the budget isn't artificially reduced.
+		const toolSearchEnabled = isAnthropicToolSearchEnabled(this.endpoint, this.configurationService);
+		const effectiveTools = tools && toolSearchEnabled
+			? tools.filter(t => this.toolDeferralService.isNonDeferredTool(t.name))
+			: tools;
+		const toolTokens = effectiveTools?.length ? await this.endpoint.acquireTokenizer().countToolTokens(effectiveTools) : 0;
 
 		const summarizeThresholdOverride = this.configurationService.getConfig<number | undefined>(ConfigKey.Advanced.SummarizeAgentConversationHistoryThreshold);
 		if (typeof summarizeThresholdOverride === 'number' && summarizeThresholdOverride < 100 && summarizeThresholdOverride > 0) {
@@ -414,7 +424,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		const safeBudget = useTruncation ? Number.MAX_SAFE_INTEGER : messageBudget;
 		const endpoint = toolTokens > 0 ? this.endpoint.cloneWithTokenOverride(safeBudget) : this.endpoint;
 
-		this.logService.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}), summarizationEnabled=${summarizationEnabled}`);
+		this.logService.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}${toolSearchEnabled ? `, totalTools: ${tools?.length ?? 0}, nonDeferredTools: ${effectiveTools?.length ?? 0}` : ''}), summarizationEnabled=${summarizationEnabled}`);
 		let result: RenderPromptResult;
 		const props: AgentPromptProps = {
 			endpoint,

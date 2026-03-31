@@ -339,14 +339,18 @@ function reportEditSurvivalEvent(res: EditSurvivalResult, { requestId, speculati
 		headerRequestId: speculationRequestId,
 		completionTextJson: res.currentFileContent,
 		chatRequestModel,
-		requestSource
+		requestSource,
+		headBranchName: res.workspace?.headBranchName,
+		headCommitHash: res.workspace?.headCommitHash,
+		remoteUrl: res.workspace?.remoteUrl,
+		fileRelativePath: res.workspace?.fileRelativePath,
 	}, {
 		timeDelayMs: res.timeDelayMs,
 		survivalRateFourGram: res.fourGram,
 		survivalRateNoRevert: res.noRevert,
 	});
 
-	emitEditSurvivalEvent(otelService, 'code_mapper', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, requestId ?? '');
+	emitEditSurvivalEvent(otelService, 'code_mapper', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, requestId ?? '', res.workspace);
 	GenAiMetrics.recordEditSurvivalFourGram(otelService, 'code_mapper', res.fourGram, res.timeDelayMs);
 	GenAiMetrics.recordEditSurvivalNoRevert(otelService, 'code_mapper', res.noRevert, res.timeDelayMs);
 }
