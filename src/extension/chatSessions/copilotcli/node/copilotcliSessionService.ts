@@ -69,6 +69,7 @@ export type ISessionOptions = {
 	agent?: SweCustomAgent;
 	debugTargetSessionIds?: readonly string[];
 	mcpServerMappings?: McpServerMappings;
+	additionalWorkspaces?: IWorkspaceInfo[];
 }
 export type IGetSessionOptions = ISessionOptions & { sessionId: string };
 export type ICreateSessionOptions = ISessionOptions & { sessionId?: string };
@@ -637,13 +638,21 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		return false;
 	}
 
-	protected async createSessionsOptions(options: { model?: string; workspace: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; agent: SweCustomAgent | undefined; copilotUrl?: string; sessionId?: string; debugTargetSessionIds?: readonly string[]; mcpServerMappings?: McpServerMappings }): Promise<{ readonly sessionOptions: Readonly<SessionOptions>; readonly agentName: string | undefined }> {
+	protected async createSessionsOptions(options: { model?: string; workspace: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; agent: SweCustomAgent | undefined; copilotUrl?: string; sessionId?: string; debugTargetSessionIds?: readonly string[]; mcpServerMappings?: McpServerMappings; additionalWorkspaces?: IWorkspaceInfo[]; }): Promise<{ readonly sessionOptions: Readonly<SessionOptions>; readonly agentName: string | undefined }> {
 		const [customAgents, skillLocations] = await Promise.all([
 			this.agents.getAgents(),
 			this.copilotCLISkills.getSkillsLocations(),
 		]);
 		const variablesContext = this._promptVariablesService.buildTemplateVariablesContext(options.sessionId, options.debugTargetSessionIds);
-		const systemMessage = variablesContext ? { mode: 'append' as const, content: variablesContext } : undefined;
+		let systemMessageContent = variablesContext ?? '';
+
+		// For multi-root sessions, append the list of all folders the model should focus on
+		if (options.additionalWorkspaces && options.additionalWorkspaces.length > 0) {
+			const multiRootContext = this._buildMultiRootSystemMessage(options.workspace, options.additionalWorkspaces);
+			systemMessageContent = systemMessageContent ? `${systemMessageContent}\n\n${multiRootContext}` : multiRootContext;
+		}
+
+		const systemMessage = systemMessageContent ? { mode: 'append' as const, content: systemMessageContent } : undefined;
 
 		const allOptions: SessionOptions = {
 			clientName: 'vscode',
@@ -692,7 +701,16 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		};
 	}
 
-	public async getSession({ sessionId, model, workspace, agent, debugTargetSessionIds, mcpServerMappings }: IGetSessionOptions, token: CancellationToken): Promise<RefCountedSession | undefined> {
+	private _buildMultiRootSystemMessage(primaryWorkspace: IWorkspaceInfo, additionalWorkspaces: IWorkspaceInfo[]): string {
+		const allWorkspaces = [primaryWorkspace, ...additionalWorkspaces];
+		const folders = allWorkspaces
+			.map(ws => getWorkingDirectory(ws))
+			.filter((dir): dir is Uri => !!dir)
+			.map(dir => `- ${dir.fsPath}`);
+		return `Here are the folders you can work on:\n${folders.join('\n')}`;
+	}
+
+	public async getSession({ sessionId, model, workspace, agent, debugTargetSessionIds, mcpServerMappings, additionalWorkspaces }: IGetSessionOptions, token: CancellationToken): Promise<RefCountedSession | undefined> {
 		// https://github.com/microsoft/vscode/issues/276573
 		const lock = this.sessionMutexForGetSession.get(sessionId) ?? new Mutex();
 		this.sessionMutexForGetSession.set(sessionId, lock);
@@ -719,7 +737,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			]);
 			try {
 				const copilotUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl) || undefined;
-				const { agentName, sessionOptions } = await this.createSessionsOptions({ model, agent, workspace: workspace, mcpServers, copilotUrl, sessionId, debugTargetSessionIds, mcpServerMappings });
+				const resolvedAdditionalWorkspaces = additionalWorkspaces ?? await this._chatSessionMetadataStore.getAdditionalWorkspaces(sessionId);
+				const { agentName, sessionOptions } = await this.createSessionsOptions({ model, agent, workspace: workspace, mcpServers, copilotUrl, sessionId, debugTargetSessionIds, mcpServerMappings, additionalWorkspaces: resolvedAdditionalWorkspaces, });
 
 				const sdkSession = await sessionManager.getSession({ ...sessionOptions, sessionId }, true);
 				if (!sdkSession) {
@@ -881,6 +900,11 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				this.createSessionsOptions({ workspace, mcpServers: undefined, copilotUrl, agent: undefined, sessionId: newSessionId }),
 				copySessionFilesForForking(sessionId, newSessionId, workspace, this._chatSessionMetadataStore, token),
 			]);
+			// Copy additional workspaces metadata to the forked session
+			const additionalWorkspaces = await this._chatSessionMetadataStore.getAdditionalWorkspaces(sessionId);
+			if (additionalWorkspaces.length > 0) {
+				await this._chatSessionMetadataStore.setAdditionalWorkspaces(newSessionId, additionalWorkspaces);
+			}
 
 			const session = await sessionManager.getSession({ ...sessionOptions, sessionId: newSessionId }, false);
 			if (!session) {

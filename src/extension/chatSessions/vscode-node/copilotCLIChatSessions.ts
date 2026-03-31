@@ -88,6 +88,7 @@ export interface ICopilotCLIChatSessionItemProvider extends IDisposable {
 }
 
 const REPOSITORY_OPTION_ID = 'repository';
+export const MULTI_ROOT_OPTION_VALUE = 'multi-root';
 const BRANCH_OPTION_ID = 'branch';
 const ISOLATION_OPTION_ID = 'isolation';
 const LAST_USED_ISOLATION_OPTION_KEY = 'github.copilot.cli.lastUsedIsolationOption';
@@ -402,6 +403,13 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				change.statistics.deletions)));
 		}
 
+		// Additional workspace changes
+		const additionalWorkspaces = await this.chatSessionMetadataStore.getAdditionalWorkspaces(session.id);
+		if (additionalWorkspaces.length > 0) {
+			const additionalChanges = await this._getAdditionalWorkspaceChanges(session.id, additionalWorkspaces);
+			changes.push(...additionalChanges);
+		}
+
 		// Status
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
 
@@ -473,6 +481,73 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		item.status = status;
 		item.metadata = metadata;
 		return item;
+	}
+
+	private async _getAdditionalWorkspaceChanges(
+		sessionId: string,
+		additionalWorkspaces: IWorkspaceInfo[]
+	): Promise<vscode.ChatSessionChangedFile2[]> {
+		const allChanges: vscode.ChatSessionChangedFile2[] = [];
+		await Promise.allSettled(additionalWorkspaces.map(async (ws) => {
+			if (isIsolationEnabled(ws) && ws.worktreeProperties) {
+				// Worktree-isolated additional workspace
+				const repositoryPathUri = vscode.Uri.file(ws.worktreeProperties.repositoryPath);
+				if (!await vscode.workspace.isResourceTrusted(repositoryPathUri)) {
+					return;
+				}
+				const worktreeProperties = ws.worktreeProperties;
+				if (worktreeProperties.changes) {
+					for (const change of worktreeProperties.changes) {
+						let originalFileRef: string;
+						let modifiedFileRef: string | undefined;
+						if (worktreeProperties.version === 2) {
+							originalFileRef = vscode.workspace.isAgentSessionsWorkspace
+								? worktreeProperties.baseBranchName
+								: worktreeProperties.baseCommit;
+							modifiedFileRef = vscode.workspace.isAgentSessionsWorkspace
+								? undefined
+								: worktreeProperties.branchName;
+						} else {
+							originalFileRef = worktreeProperties.baseCommit;
+							modifiedFileRef = worktreeProperties.branchName;
+						}
+
+						allChanges.push(new vscode.ChatSessionChangedFile2(
+							vscode.Uri.file(change.filePath),
+							change.originalFilePath
+								? toGitUri(vscode.Uri.file(change.originalFilePath), originalFileRef)
+								: undefined,
+							change.modifiedFilePath
+								? modifiedFileRef
+									? toGitUri(vscode.Uri.file(change.modifiedFilePath), modifiedFileRef)
+									: vscode.Uri.file(change.modifiedFilePath)
+								: undefined,
+							change.statistics.additions,
+							change.statistics.deletions));
+					}
+				}
+			} else {
+				// Workspace-mode additional workspace
+				const workingDir = getWorkingDirectory(ws);
+				if (!workingDir || !await vscode.workspace.isResourceTrusted(workingDir)) {
+					return;
+				}
+				const workspaceChanges = await this.workspaceFolderService.getWorkspaceChanges(workingDir) ?? [];
+				for (const change of workspaceChanges) {
+					allChanges.push(new vscode.ChatSessionChangedFile2(
+						vscode.Uri.file(change.filePath),
+						change.originalFilePath
+							? toGitUri(vscode.Uri.file(change.originalFilePath), 'HEAD')
+							: undefined,
+						change.modifiedFilePath
+							? toGitUri(vscode.Uri.file(change.modifiedFilePath), '')
+							: undefined,
+						change.statistics.additions,
+						change.statistics.deletions));
+				}
+			}
+		}));
+		return allChanges;
 	}
 
 	/**
@@ -838,7 +913,18 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			}
 		}
 
-		return repoItems.sort((a, b) => a.name.localeCompare(b.name));
+		const sorted = repoItems.sort((a, b) => a.name.localeCompare(b.name));
+
+		// In multi-root workspaces with multiple repos/folders, add "Multi-root" at top
+		if (sorted.length > 1) {
+			sorted.unshift({
+				id: MULTI_ROOT_OPTION_VALUE,
+				name: l10n.t('Multi-root'),
+				icon: new vscode.ThemeIcon('root-folder-opened'),
+			});
+		}
+
+		return sorted;
 	}
 	public async trackLastUsedFolderInWelcomeView(folderUri: vscode.Uri) {
 		// Update MRU tracking for untitled workspaces
@@ -1602,7 +1688,8 @@ export function registerCLIChatCommands(
 	fileSystemService: IFileSystemService,
 	sessionTracker: ICopilotCLISessionTracker,
 	terminalIntegration: ICopilotCLITerminalIntegration,
-	logService: ILogService
+	logService: ILogService,
+	chatSessionMetadataStore: IChatSessionMetadataStore
 ): IDisposable {
 	const disposableStore = new DisposableStore();
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
@@ -1637,6 +1724,21 @@ export function registerCLIChatCommands(
 						vscode.window.showErrorMessage(l10n.t('Failed to delete worktree: {0}', error instanceof Error ? error.message : String(error)));
 					}
 				}
+
+				// Delete additional worktrees
+				const additionalWorkspaces = await chatSessionMetadataStore.getAdditionalWorkspaces(id);
+				await Promise.allSettled(additionalWorkspaces.map(async (ws) => {
+					if (ws.worktreeProperties) {
+						try {
+							const repo = await gitService.getRepository(vscode.Uri.file(ws.worktreeProperties.repositoryPath), true);
+							if (repo) {
+								await gitService.deleteWorktree(repo.rootUri, ws.worktreeProperties.worktreePath);
+							}
+						} catch (error) {
+							logService.error(`Failed to delete additional worktree: ${error}`);
+						}
+					}
+				}));
 
 				await contentProvider.refreshSession({ reason: 'delete', sessionId: id });
 			}

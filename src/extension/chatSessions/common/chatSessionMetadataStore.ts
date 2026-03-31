@@ -45,8 +45,11 @@ export interface RequestDetails {
 	/** Mode instructions for this request (excluding toolReferences). */
 	modeInstructions?: StoredModeInstructions;
 
-	/** Checkpoint reference for this request. */
+	/** Checkpoint reference for this request (primary workspace). */
 	checkpointRef?: string;
+
+	/** Checkpoint references for additional workspaces, keyed by folder fsPath. */
+	additionalCheckpointRefs?: { [folderPath: string]: string };
 }
 
 export interface ChatSessionMetadataFile {

@@ -424,6 +424,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			new MockChatSessionMetadataStore(),
 			customSessionTitleService,
 			new (mock<IOctoKitService>())(),
+			new NullWorkspaceService(),
 		);
 	});
 
@@ -776,6 +777,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			new MockChatSessionMetadataStore(),
 			customSessionTitleService,
 			new (mock<IOctoKitService>())(),
+			new NullWorkspaceService(),
 		);
 		const sessionResource = vscode.Uri.from({ scheme: 'copilotcli', path: `/${sessionId}` });
 		const contentToken = disposables.add(new CancellationTokenSource()).token;
@@ -1918,6 +1920,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				new MockChatSessionMetadataStore(),
 				customSessionTitleService,
 				new (mock<IOctoKitService>())(),
+				new NullWorkspaceService(),
 			);
 		}
 
@@ -2050,6 +2053,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				new MockChatSessionMetadataStore(),
 				customSessionTitleService,
 				octoKitService,
+				new NullWorkspaceService(),
 			);
 		});
 
