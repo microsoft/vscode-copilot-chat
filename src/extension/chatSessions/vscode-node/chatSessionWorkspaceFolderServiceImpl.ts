@@ -28,6 +28,8 @@ import { ChatSessionWorktreeFile } from '../common/chatSessionWorktreeService';
 export class ChatSessionWorkspaceFolderService extends Disposable implements IChatSessionWorkspaceFolderService {
 	declare _serviceBrand: undefined;
 
+	private static readonly EMPTY_TREE_OBJECT = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+
 	private readonly workspaceFolderChanges = new ResourceMap<ChatSessionWorktreeFile[]>();
 	private readonly workspaceState = new Map<string, WorkspaceFolderEntry>();
 	private recentFolders: { folder: vscode.Uri; lastAccessTime: number }[] = [];
@@ -70,9 +72,10 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 		await this.metadataStore.deleteSessionMetadata(sessionId);
 	}
 
-	async trackSessionWorkspaceFolder(sessionId: string, workspaceFolderUri: string): Promise<void> {
+	async trackSessionWorkspaceFolder(sessionId: string, workspaceFolderUri: string, repositoryFolderUri?: string): Promise<void> {
 		const entry: WorkspaceFolderEntry = {
 			folderPath: workspaceFolderUri,
+			repositoryPath: repositoryFolderUri,
 			timestamp: Date.now()
 		};
 		this.workspaceState.set(sessionId, entry);
@@ -86,6 +89,14 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 			return vscode.Uri.file(entry.folderPath);
 		}
 		return await this.metadataStore.getSessionWorkspaceFolder(sessionId);
+	}
+
+	async getSessionWorkspaceFolderEntry(sessionId: string): Promise<WorkspaceFolderEntry | undefined> {
+		const entry = this.workspaceState.get(sessionId);
+		if (entry) {
+			return entry;
+		}
+		return await this.metadataStore.getSessionWorkspaceFolderEntry(sessionId);
 	}
 
 	async handleRequestCompleted(workspaceFolderUri: vscode.Uri): Promise<void> {
@@ -165,7 +176,9 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 			await fs.mkdir(path.dirname(diffIndexFile), { recursive: true });
 
 			// Populate temp index from HEAD if it exists, otherwise start from an empty tree.
-			const readTreeArgs = repository.headCommitHash ? ['read-tree', 'HEAD'] : ['read-tree', '--empty'];
+			const readTreeArgs = repository.headCommitHash
+				? ['read-tree', 'HEAD']
+				: ['read-tree', ChatSessionWorkspaceFolderService.EMPTY_TREE_OBJECT];
 			await this.gitService.exec(repository.rootUri, readTreeArgs, { GIT_INDEX_FILE: diffIndexFile });
 
 			// Stage the current working tree into a temp index so we can diff it without

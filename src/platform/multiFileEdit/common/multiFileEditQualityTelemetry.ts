@@ -8,9 +8,11 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { IChatSessionService } from '../../chat/common/chatSessionService';
+import { IGitService } from '../../git/common/gitService';
 import { ILogService } from '../../log/common/logService';
 import { IAlternativeNotebookContentService } from '../../notebook/common/alternativeContent';
 import { INotebookService } from '../../notebook/common/notebookService';
+import { resolveWorkspaceOTelMetadata } from '../../otel/common/workspaceOTelMetadata';
 import { ITelemetryService, multiplexProperties } from '../../telemetry/common/telemetry';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
 
@@ -63,7 +65,8 @@ export class MultiFileEditInternalTelemetryService extends Disposable implements
 		@INotebookService private readonly notebookService: INotebookService,
 		@ILogService private readonly logService: ILogService,
 		@IAlternativeNotebookContentService private readonly alternativeNotebookContent: IAlternativeNotebookContentService,
-		@IChatSessionService private readonly chatSessionService: IChatSessionService
+		@IChatSessionService private readonly chatSessionService: IChatSessionService,
+		@IGitService private readonly gitService: IGitService,
 	) {
 		super();
 		this._register(this.chatSessionService.onDidDisposeChatSession(sessionId => {
@@ -164,6 +167,7 @@ export class MultiFileEditInternalTelemetryService extends Disposable implements
 				}
 			);
 
+			const workspace = resolveWorkspaceOTelMetadata(this.gitService, uri);
 			const gitHubEnhancedTelemetryProperties = multiplexProperties({
 				headerRequestId: edit.speculationRequestId,
 				providerId: edit.mapper,
@@ -173,6 +177,10 @@ export class MultiFileEditInternalTelemetryService extends Disposable implements
 				completionTextJson: documentText, // Note that this is not necessarily the same as the model output because the user may have made manual edits
 				conversationId: edit.chatSessionId,
 				messageId: edit.chatRequestId,
+				headBranchName: workspace.headBranchName,
+				headCommitHash: workspace.headCommitHash,
+				remoteUrl: workspace.remoteUrl,
+				fileRelativePath: workspace.fileRelativePath,
 			});
 			this.telemetryService.sendEnhancedGHTelemetryEvent('fastApply/editOutcome', gitHubEnhancedTelemetryProperties);
 			this.logService.debug(`Sent telemetry for ${uri.toString()} with request ID ${edit.chatRequestId}, SD request ID ${edit.speculationRequestId}, and outcome ${outcome}`);

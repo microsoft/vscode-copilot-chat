@@ -109,7 +109,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			[IPullRequestFileChangesService, new SyncDescriptor(PullRequestFileChangesService)],
 		));
 
-		const useController = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService).getConfig(ConfigKey.Advanced.CLISessionController));
+		const useController = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService).getConfig(vscode.workspace.isAgentSessionsWorkspace ? ConfigKey.Advanced.CLISessionControllerForSessionsApp : ConfigKey.Advanced.CLISessionController));
 		const { sessionMetadata } = useController ? this.registerCopilotCLIServices(instantiationService, delegationSummary, logService) : this.registerCopilotCLIServicesV1(instantiationService, delegationSummary, logService);
 
 		// #region Claude Code Chat Sessions

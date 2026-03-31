@@ -12,7 +12,7 @@ import {
 	ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString
 } from '../../../../../vscodeTypes';
 import {
-	buildChatHistoryFromEvents, createCopilotCLIToolInvocation, extractCdPrefix, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, RequestIdDetails, stripReminders, ToolCall
+	buildChatHistoryFromEvents, createCopilotCLIToolInvocation, enrichToolInvocationWithSubagentMetadata, extractCdPrefix, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, RequestIdDetails, stripReminders, ToolCall
 } from '../copilotCLITools';
 import { IChatDelegationSummaryService } from '../delegationSummaryService';
 
@@ -985,6 +985,149 @@ describe('CopilotCLITools', () => {
 			const mdCount = parts.filter(p => p instanceof ChatResponseMarkdownPart).length;
 			expect(prCount).toBe(1);
 			expect(mdCount).toBe(0);
+		});
+	});
+
+	describe('enrichToolInvocationWithSubagentMetadata', () => {
+		it('enriches task tool invocation with subagent display name and description', () => {
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, ToolCall, string | undefined]>();
+			processToolExecutionStart({
+				type: 'tool.execution_start',
+				data: {
+					toolCallId: 'task-1',
+					toolName: 'task',
+					arguments: { description: 'Review code', agent_type: 'reviewer', prompt: 'Check for bugs' }
+				}
+			} as any, pending);
+
+			enrichToolInvocationWithSubagentMetadata('task-1', 'Code Review Agent', 'Reviews code for bugs', pending);
+
+			const [part] = pending.get('task-1')!;
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			const toolPart = part as ChatToolInvocationPart;
+			const data = toolPart.toolSpecificData as any;
+			expect(data.agentName).toBe('Code Review Agent');
+			expect(data.description).toBe('Reviews code for bugs');
+		});
+
+		it('does not crash when toolCallId is not found in pending invocations', () => {
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, ToolCall, string | undefined]>();
+			// Should not throw
+			enrichToolInvocationWithSubagentMetadata('nonexistent', 'Agent', 'Desc', pending);
+		});
+	});
+
+	describe('buildChatHistoryFromEvents with subagent events', () => {
+		it('enriches task tool with subagent.started metadata during history rebuild', () => {
+			const events: any[] = [
+				{ type: 'user.message', id: 'u1', data: { content: 'Do a review', attachments: [] } },
+				{ type: 'tool.execution_start', data: { toolCallId: 'task-1', toolName: 'task', arguments: { description: 'Review', agent_type: 'reviewer', prompt: 'Check' } } },
+				{ type: 'subagent.started', data: { toolCallId: 'task-1', agentName: 'reviewer', agentDisplayName: 'Code Review Agent', agentDescription: 'Reviews code carefully' } },
+				{ type: 'tool.execution_complete', data: { toolCallId: 'task-1', success: true, result: { content: 'All good' } } },
+				{ type: 'subagent.completed', data: { toolCallId: 'task-1', agentName: 'reviewer', agentDisplayName: 'Code Review Agent' } },
+			];
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
+			const responseTurns = turns.filter(t => t instanceof ChatResponseTurn2) as ChatResponseTurn2[];
+			expect(responseTurns).toHaveLength(1);
+			const parts: any[] = ((responseTurns[0] as any).response.parts ?? (responseTurns[0] as any).response._parts ?? (responseTurns[0] as any).response);
+			const toolParts = parts.filter((p: any) => p instanceof ChatToolInvocationPart);
+			expect(toolParts).toHaveLength(1);
+			const toolPart = toolParts[0] as ChatToolInvocationPart;
+			const data = toolPart.toolSpecificData as any;
+			expect(data.agentName).toBe('Code Review Agent');
+			expect(data.description).toBe('Reviews code carefully');
+		});
+
+		it('sets subAgentInvocationId on nested tool calls within a subagent', () => {
+			const events: any[] = [
+				{ type: 'user.message', id: 'u1', data: { content: 'Review my code', attachments: [] } },
+				// Top-level task tool starts a subagent
+				{ type: 'tool.execution_start', data: { toolCallId: 'task-top', toolName: 'task', arguments: { description: 'Review', agent_type: 'reviewer', prompt: 'Check' } } },
+				{ type: 'subagent.started', data: { toolCallId: 'task-top', agentName: 'reviewer', agentDisplayName: 'Reviewer', agentDescription: 'desc' } },
+				// Child tool inside the subagent
+				{ type: 'tool.execution_start', data: { toolCallId: 'read-1', toolName: 'view', parentToolCallId: 'task-top', arguments: { path: '/tmp/file.ts' } } },
+				{ type: 'tool.execution_complete', data: { toolCallId: 'read-1', success: true, result: { content: 'file content' } } },
+				// Nested task tool (subagent invokes another subagent)
+				{ type: 'tool.execution_start', data: { toolCallId: 'task-nested', toolName: 'task', parentToolCallId: 'task-top', arguments: { description: 'Explore', agent_type: 'explore', prompt: 'Search' } } },
+				{ type: 'subagent.started', data: { toolCallId: 'task-nested', agentName: 'explore', agentDisplayName: 'Explore Agent', agentDescription: 'Explores code' } },
+				{ type: 'tool.execution_complete', data: { toolCallId: 'task-nested', success: true, result: { content: 'found it' } } },
+				{ type: 'subagent.completed', data: { toolCallId: 'task-nested', agentName: 'explore', agentDisplayName: 'Explore Agent' } },
+				{ type: 'tool.execution_complete', data: { toolCallId: 'task-top', success: true, result: { content: 'review done' } } },
+				{ type: 'subagent.completed', data: { toolCallId: 'task-top', agentName: 'reviewer', agentDisplayName: 'Reviewer' } },
+			];
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
+			const responseTurns = turns.filter(t => t instanceof ChatResponseTurn2) as ChatResponseTurn2[];
+			expect(responseTurns).toHaveLength(1);
+			const parts: any[] = ((responseTurns[0] as any).response.parts ?? (responseTurns[0] as any).response._parts ?? (responseTurns[0] as any).response);
+			const toolParts = parts.filter((p: any) => p instanceof ChatToolInvocationPart) as ChatToolInvocationPart[];
+			// Should have 3 tool parts: task-top, read-1, task-nested
+			expect(toolParts).toHaveLength(3);
+
+			// Child read tool should have subAgentInvocationId pointing to root
+			const readPart = toolParts.find(p => p.toolCallId === 'read-1')!;
+			expect(readPart.subAgentInvocationId).toBe('task-top');
+
+			// Nested task tool should also resolve to root, not its immediate parent
+			const nestedTaskPart = toolParts.find(p => p.toolCallId === 'task-nested')!;
+			expect(nestedTaskPart.subAgentInvocationId).toBe('task-top');
+			// Nested task should have ChatSubagentToolInvocationData cleared
+			// so it doesn't create its own subagent container
+			expect(nestedTaskPart.toolSpecificData).toBeUndefined();
+		});
+
+		it('gracefully handles subagent.failed events', () => {
+			const events: any[] = [
+				{ type: 'user.message', id: 'u1', data: { content: 'Do something', attachments: [] } },
+				{ type: 'tool.execution_start', data: { toolCallId: 'task-1', toolName: 'task', arguments: { description: 'Review', agent_type: 'reviewer', prompt: 'Check' } } },
+				{ type: 'subagent.started', data: { toolCallId: 'task-1', agentName: 'reviewer', agentDisplayName: 'Reviewer', agentDescription: 'desc' } },
+				{ type: 'subagent.failed', data: { toolCallId: 'task-1', agentName: 'reviewer', agentDisplayName: 'Reviewer', error: { message: 'timeout' } } },
+				{ type: 'tool.execution_complete', data: { toolCallId: 'task-1', success: false, error: { code: 'timeout', message: 'Agent timed out' } } },
+			];
+			// Should not throw
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
+			expect(turns).toHaveLength(2); // request + response
+		});
+
+		it('resolves deeply nested tools to the root ancestor subagent', () => {
+			const events: any[] = [
+				{ type: 'user.message', id: 'u1', data: { content: 'Go', attachments: [] } },
+				// Level 0: top-level task
+				{ type: 'tool.execution_start', data: { toolCallId: 'L0', toolName: 'task', arguments: { description: 'Top', agent_type: 'top', prompt: 'p' } } },
+				// Level 1: nested task inside L0
+				{ type: 'tool.execution_start', data: { toolCallId: 'L1', toolName: 'task', parentToolCallId: 'L0', arguments: { description: 'Mid', agent_type: 'mid', prompt: 'p' } } },
+				// Level 2: nested task inside L1
+				{ type: 'tool.execution_start', data: { toolCallId: 'L2', toolName: 'task', parentToolCallId: 'L1', arguments: { description: 'Deep', agent_type: 'deep', prompt: 'p' } } },
+				// Level 3: regular tool inside L2
+				{ type: 'tool.execution_start', data: { toolCallId: 'grep-1', toolName: 'grep', parentToolCallId: 'L2', arguments: { pattern: 'foo' } } },
+				{ type: 'tool.execution_complete', data: { toolCallId: 'grep-1', success: true, result: { content: 'found' } } },
+				{ type: 'tool.execution_complete', data: { toolCallId: 'L2', success: true, result: { content: 'done' } } },
+				{ type: 'tool.execution_complete', data: { toolCallId: 'L1', success: true, result: { content: 'done' } } },
+				{ type: 'tool.execution_complete', data: { toolCallId: 'L0', success: true, result: { content: 'done' } } },
+			];
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
+			const responseTurns = turns.filter(t => t instanceof ChatResponseTurn2) as ChatResponseTurn2[];
+			const parts: any[] = ((responseTurns[0] as any).response.parts ?? (responseTurns[0] as any).response._parts ?? (responseTurns[0] as any).response);
+			const toolParts = parts.filter((p: any) => p instanceof ChatToolInvocationPart) as ChatToolInvocationPart[];
+
+			// Top-level task has no subAgentInvocationId (it IS the parent container)
+			const l0 = toolParts.find(p => p.toolCallId === 'L0')!;
+			expect(l0.subAgentInvocationId).toBeUndefined();
+			// Top-level task keeps its ChatSubagentToolInvocationData
+			expect(l0.toolSpecificData).toBeDefined();
+
+			// L1 nested task resolves to root L0
+			const l1 = toolParts.find(p => p.toolCallId === 'L1')!;
+			expect(l1.subAgentInvocationId).toBe('L0');
+			expect(l1.toolSpecificData).toBeUndefined();
+
+			// L2 nested task also resolves to root L0 (not L1)
+			const l2 = toolParts.find(p => p.toolCallId === 'L2')!;
+			expect(l2.subAgentInvocationId).toBe('L0');
+			expect(l2.toolSpecificData).toBeUndefined();
+
+			// grep tool at level 3 also resolves to root L0
+			const grep = toolParts.find(p => p.toolCallId === 'grep-1')!;
+			expect(grep.subAgentInvocationId).toBe('L0');
 		});
 	});
 });

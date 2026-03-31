@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Attachment } from '@github/copilot/sdk';
+import type { Attachment } from '@github/copilot/sdk';
 import { afterEach, beforeEach, expect, suite, test, vi } from 'vitest';
 import { IFileSystemService } from '../../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../../platform/filesystem/common/fileTypes';

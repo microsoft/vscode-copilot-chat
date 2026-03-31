@@ -643,16 +643,18 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 		}
 
 		// Check session workspace folder
-		const sessionWorkspaceFolder = await this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
-		if (sessionWorkspaceFolder) {
+		const sessionWorkspaceFolderEntry = await this.workspaceFolderService.getSessionWorkspaceFolderEntry(sessionId);
+		if (sessionWorkspaceFolderEntry) {
 			let trusted: boolean | undefined;
 			if (options) {
-				trusted = await this.verifyTrust(sessionWorkspaceFolder, options.stream);
+				trusted = await this.verifyTrust(vscode.Uri.file(sessionWorkspaceFolderEntry.folderPath), options.stream);
 			}
 
 			return {
-				folder: sessionWorkspaceFolder,
-				repository: undefined,
+				folder: vscode.Uri.file(sessionWorkspaceFolderEntry.folderPath),
+				repository: sessionWorkspaceFolderEntry.repositoryPath
+					? vscode.Uri.file(sessionWorkspaceFolderEntry.repositoryPath)
+					: undefined,
 				worktree: undefined,
 				worktreeProperties: undefined,
 				trusted

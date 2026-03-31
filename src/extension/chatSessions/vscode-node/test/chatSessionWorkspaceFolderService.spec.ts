@@ -604,8 +604,8 @@ describe('ChatSessionWorkspaceFolderService', () => {
 						untrackedChanges: [{
 							status: 7,
 							uri: URI.file('/repo/file.txt'),
-							originalUri: undefined,
-							renameUri: URI.file('/repo/file.txt')
+							originalUri: URI.file('/repo/file.txt'),
+							renameUri: undefined
 						}]
 					}
 				});
@@ -692,7 +692,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 						untrackedChanges: [{
 							status: 7,
 							uri: URI.file('/repo/file.txt'),
-							originalUri: undefined,
+							originalUri: URI.file('/repo/file.txt'),
 							renameUri: undefined
 						}]
 					}
@@ -708,7 +708,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				expect(gitService.exec).toHaveBeenNthCalledWith(
 					1,
 					repo.rootUri,
-					['read-tree', '--empty'],
+					['read-tree', '4b825dc642cb6eb9a060e54bf8d69288fbee4904'],
 					expect.objectContaining({ GIT_INDEX_FILE: expect.any(String) })
 				);
 			});

@@ -3,6 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+// NOTE: When a handle.done or handle.firstEvent promise is expected to reject,
+// attach .catch(() => {}) BEFORE the action that triggers the rejection.
+// Otherwise Vitest reports an unhandled rejection even if the test later
+// uses `await expect(...).rejects.toThrow()`.
+
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
@@ -72,7 +77,7 @@ describe('ChatWebSocketManager', () => {
 			{ getConfig: () => undefined } as unknown as IConfigurationService,
 		);
 		disposables.add(manager);
-		const connection = manager.getOrCreateConnection('conv-1', 'turn-1', headers);
+		const connection = manager.getOrCreateConnection('conv-1', headers);
 		const connectPromise = connection.connect();
 		// Defer open event to allow connect() to attach listeners first
 		await Promise.resolve();
@@ -83,13 +88,44 @@ describe('ChatWebSocketManager', () => {
 
 	const completedEvent = JSON.stringify({ type: 'response.completed', response: { id: 'resp-1' } });
 
+	describe('cross-turn connection reuse', () => {
+		it('reuses an open connection across different turns', async () => {
+			const connection = await getConnection();
+
+			// Request a connection for a new turn — should return the same object
+			const connection2 = manager.getOrCreateConnection('conv-1', {});
+			expect(connection2).toBe(connection);
+			expect(manager.hasActiveConnection('conv-1')).toBe(true);
+		});
+
+		it('creates a new connection when the previous one is closed', async () => {
+			const connection = await getConnection();
+			connection.dispose();
+
+			// Same manager, new getOrCreateConnection call should replace the disposed one
+			const connection2 = manager.getOrCreateConnection('conv-1', {});
+			expect(connection2).not.toBe(connection);
+		});
+
+		it('hasActiveConnection returns true regardless of current turnId', async () => {
+			await getConnection(); // connected on turn-1
+			expect(manager.hasActiveConnection('conv-1')).toBe(true);
+		});
+
+		it('hasActiveConnection returns false after connection is disposed', async () => {
+			const connection = await getConnection();
+			connection.dispose();
+			expect(manager.hasActiveConnection('conv-1')).toBe(false);
+		});
+	});
+
 	describe('initiator field on response.create message', () => {
 		it('sets initiator to "user" when userInitiated is true', async () => {
 			const connection = await getConnection();
 			const cts = disposables.add(new CancellationTokenSource());
 			const handle = connection.sendRequest(
 				{ model: 'test-model', messages: [], stream: true },
-				{ userInitiated: true },
+				{ userInitiated: true, turnId: 'turn-1' },
 				cts.token,
 			);
 
@@ -107,7 +143,7 @@ describe('ChatWebSocketManager', () => {
 			const cts = disposables.add(new CancellationTokenSource());
 			const handle = connection.sendRequest(
 				{ model: 'test-model', messages: [], stream: true },
-				{ userInitiated: false },
+				{ userInitiated: false, turnId: 'turn-1' },
 				cts.token,
 			);
 
@@ -124,7 +160,7 @@ describe('ChatWebSocketManager', () => {
 			const cts = disposables.add(new CancellationTokenSource());
 			const handle = connection.sendRequest(
 				{ model: 'test-model', messages: [], stream: true },
-				{ userInitiated: true },
+				{ userInitiated: true, turnId: 'turn-1' },
 				cts.token,
 			);
 
@@ -143,7 +179,7 @@ describe('ChatWebSocketManager', () => {
 			const cts = disposables.add(new CancellationTokenSource());
 			const handle = connection.sendRequest(
 				{ model: 'test-model', messages: [], stream: true },
-				{ userInitiated: true },
+				{ userInitiated: true, turnId: 'turn-1' },
 				cts.token,
 			);
 
@@ -163,7 +199,7 @@ describe('ChatWebSocketManager', () => {
 			const cts = disposables.add(new CancellationTokenSource());
 			const handle = connection.sendRequest(
 				{ model: 'test-model', messages: [], stream: true },
-				{ userInitiated: true },
+				{ userInitiated: true, turnId: 'turn-1' },
 				cts.token,
 			);
 
@@ -184,11 +220,12 @@ describe('ChatWebSocketManager', () => {
 			const cts = disposables.add(new CancellationTokenSource());
 			const handle = connection.sendRequest(
 				{ model: 'test-model', messages: [], stream: true },
-				{ userInitiated: true },
+				{ userInitiated: true, turnId: 'turn-1' },
 				cts.token,
 			);
 
 			handle.firstEvent.catch(() => { });
+			handle.done.catch(() => { });
 			ws.dispatchEvent(Object.assign(new Event('close'), { code: 1006, reason: '', wasClean: false }));
 
 			await expect(handle.firstEvent).rejects.toThrow();
@@ -202,7 +239,7 @@ describe('ChatWebSocketManager', () => {
 			const cts = disposables.add(new CancellationTokenSource());
 			const handle = connection.sendRequest(
 				{ model: 'test-model', messages: [], stream: true },
-				{ userInitiated: true },
+				{ userInitiated: true, turnId: 'turn-1' },
 				cts.token,
 			);
 
@@ -225,7 +262,7 @@ describe('ChatWebSocketManager', () => {
 			const cts = disposables.add(new CancellationTokenSource());
 			const handle = connection.sendRequest(
 				{ model: 'test-model', messages: [], stream: true },
-				{ userInitiated: true },
+				{ userInitiated: true, turnId: 'turn-1' },
 				cts.token,
 			);
 
@@ -245,7 +282,7 @@ describe('ChatWebSocketManager', () => {
 			const cts = disposables.add(new CancellationTokenSource());
 			const handle = connection.sendRequest(
 				{ model: 'test-model', messages: [], stream: true },
-				{ userInitiated: true },
+				{ userInitiated: true, turnId: 'turn-1' },
 				cts.token,
 			);
 
@@ -282,7 +319,7 @@ describe('ChatWebSocketManager', () => {
 			const cts = disposables.add(new CancellationTokenSource());
 			const handle = connection.sendRequest(
 				{ model: 'test-model', messages: [], stream: true },
-				{ userInitiated: true },
+				{ userInitiated: true, turnId: 'turn-1' },
 				cts.token,
 			);
 
@@ -297,7 +334,7 @@ describe('ChatWebSocketManager', () => {
 			const cts = disposables.add(new CancellationTokenSource());
 			const handle = connection.sendRequest(
 				{ model: 'test-model', messages: [], stream: true },
-				{ userInitiated: true },
+				{ userInitiated: true, turnId: 'turn-1' },
 				cts.token,
 			);
 
@@ -308,6 +345,63 @@ describe('ChatWebSocketManager', () => {
 			expect(connection.statefulMarker).toBeUndefined();
 			await expect(handle.done).rejects.toThrow();
 			await donePromise;
+		});
+	});
+
+	describe('active request lifecycle', () => {
+		it('supersedes an active request when a new one starts', async () => {
+			const connection = await getConnection();
+			const cts1 = disposables.add(new CancellationTokenSource());
+			const handle1 = connection.sendRequest(
+				{ model: 'test-model', messages: [], stream: true },
+				{ userInitiated: true, turnId: 'turn-1' },
+				cts1.token,
+			);
+
+			// Start a second request before the first completes
+			handle1.done.catch(() => { });
+			handle1.firstEvent.catch(() => { });
+			const cts2 = disposables.add(new CancellationTokenSource());
+			const handle2 = connection.sendRequest(
+				{ model: 'test-model', messages: [], stream: true },
+				{ userInitiated: false, turnId: 'turn-2' },
+				cts2.token,
+			);
+
+			// First request should be superseded
+			await expect(handle1.done).rejects.toThrow('superseded');
+
+			// Second request completes normally
+			ws.simulateMessage(completedEvent);
+			await handle2.done;
+		});
+
+		it('does not supersede a completed request when a new one starts', async () => {
+			const connection = await getConnection();
+			const cts1 = disposables.add(new CancellationTokenSource());
+			const handle1 = connection.sendRequest(
+				{ model: 'test-model', messages: [], stream: true },
+				{ userInitiated: true, turnId: 'turn-1' },
+				cts1.token,
+			);
+
+			// Complete the first request
+			ws.simulateMessage(completedEvent);
+			await handle1.done;
+
+			// Start a second request — first was already done, so no supersede
+			const cts2 = disposables.add(new CancellationTokenSource());
+			const handle2 = connection.sendRequest(
+				{ model: 'test-model', messages: [], stream: true },
+				{ userInitiated: false, turnId: 'turn-2' },
+				cts2.token,
+			);
+
+			const completedEvent2 = JSON.stringify({ type: 'response.completed', response: { id: 'resp-2' } });
+			ws.simulateMessage(completedEvent2);
+			await handle2.done;
+
+			expect(connection.statefulMarker).toBe('resp-2');
 		});
 	});
 

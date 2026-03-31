@@ -12,6 +12,7 @@ import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
+import { IToolDeferralService } from '../../../platform/networking/common/toolDeferralService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { getCellId } from '../../../platform/notebook/common/helpers';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
@@ -107,8 +108,9 @@ export class NotebookEditorIntentInvocation extends EditCode2IntentInvocation {
 		@IExperimentationService expService: IExperimentationService,
 		@IAutomodeService automodeService: IAutomodeService,
 		@IOTelService otelService: IOTelService,
+		@IToolDeferralService toolDeferralService: IToolDeferralService,
 	) {
-		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService, expService, automodeService, otelService);
+		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService, expService, automodeService, otelService, toolDeferralService);
 	}
 
 	protected override prompt = NotebookInlinePrompt;

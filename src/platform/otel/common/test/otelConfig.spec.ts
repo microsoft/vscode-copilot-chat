@@ -161,4 +161,73 @@ describe('resolveOTelConfig', () => {
 		expect(Object.isFrozen(enabled)).toBe(true);
 		expect(Object.isFrozen(disabled)).toBe(true);
 	});
+
+	describe('enabledVia', () => {
+
+		it('returns disabled when OTel is off', () => {
+			const config = resolveOTelConfig(makeInput());
+			expect(config.enabledVia).toBe('disabled');
+		});
+
+		it('returns envVar when COPILOT_OTEL_ENABLED is set', () => {
+			const config = resolveOTelConfig(makeInput({
+				env: { 'COPILOT_OTEL_ENABLED': 'true' },
+			}));
+			expect(config.enabledVia).toBe('envVar');
+		});
+
+		it('returns disabled when COPILOT_OTEL_ENABLED=false overrides setting', () => {
+			const config = resolveOTelConfig(makeInput({
+				env: { 'COPILOT_OTEL_ENABLED': 'false' },
+				settingEnabled: true,
+			}));
+			expect(config.enabledVia).toBe('disabled');
+		});
+
+		it('returns dbSpanExporterOnly when COPILOT_OTEL_ENABLED=false but dbSpanExporter is on', () => {
+			const config = resolveOTelConfig(makeInput({
+				env: { 'COPILOT_OTEL_ENABLED': 'false' },
+				settingDbSpanExporter: true,
+			}));
+			// env var disabled OTel export, but dbSpanExporter keeps SDK loaded
+			expect(config.enabledVia).toBe('dbSpanExporterOnly');
+		});
+
+		it('returns setting when enabled via VS Code setting', () => {
+			const config = resolveOTelConfig(makeInput({
+				settingEnabled: true,
+			}));
+			expect(config.enabledVia).toBe('setting');
+		});
+
+		it('returns otlpEndpointEnvVar when enabled via OTEL_EXPORTER_OTLP_ENDPOINT', () => {
+			const config = resolveOTelConfig(makeInput({
+				env: { 'OTEL_EXPORTER_OTLP_ENDPOINT': 'http://collector:4318' },
+			}));
+			expect(config.enabledVia).toBe('otlpEndpointEnvVar');
+		});
+
+		it('returns dbSpanExporterOnly when only dbSpanExporter is on', () => {
+			const config = resolveOTelConfig(makeInput({
+				settingDbSpanExporter: true,
+			}));
+			expect(config.enabledVia).toBe('dbSpanExporterOnly');
+		});
+
+		it('returns setting when both dbSpanExporter and setting are on', () => {
+			const config = resolveOTelConfig(makeInput({
+				settingEnabled: true,
+				settingDbSpanExporter: true,
+			}));
+			expect(config.enabledVia).toBe('setting');
+		});
+
+		it('returns envVar when env var takes precedence over dbSpanExporter', () => {
+			const config = resolveOTelConfig(makeInput({
+				env: { 'COPILOT_OTEL_ENABLED': 'true' },
+				settingDbSpanExporter: true,
+			}));
+			expect(config.enabledVia).toBe('envVar');
+		});
+	});
 });

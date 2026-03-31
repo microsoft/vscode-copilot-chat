@@ -691,6 +691,20 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 				}
 				break;
 			}
+			case 'subagent.started': {
+				enrichToolInvocationWithSubagentMetadata(
+					event.data.toolCallId,
+					event.data.agentDisplayName,
+					event.data.agentDescription,
+					pendingToolInvocations
+				);
+				break;
+			}
+			case 'subagent.completed':
+			case 'subagent.failed': {
+				// Completion is already handled by tool.execution_complete for the task tool
+				break;
+			}
 			case 'tool.execution_complete': {
 				const [responsePart, toolCall] = processToolExecutionComplete(event, pendingToolInvocations, logger, workingDirectory) ?? [undefined, undefined];
 				if (responsePart && toolCall && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
@@ -819,16 +833,77 @@ function convertMcpContentToToolInvocationData(result: ToolExecutionCompleteEven
 	return output;
 }
 
+/**
+ * Enriches an existing pending tool invocation with subagent metadata from a `subagent.started` event.
+ * The `subagent.started` event carries richer metadata (display name, description) than the `task`
+ * tool's arguments, so we use it to update the `ChatSubagentToolInvocationData` on the tool invocation.
+ */
+export function enrichToolInvocationWithSubagentMetadata(
+	toolCallId: string,
+	agentDisplayName: string,
+	agentDescription: string | undefined,
+	pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>
+): void {
+	const invocation = pendingToolInvocations.get(toolCallId);
+	if (!invocation) {
+		return;
+	}
+	const [part] = invocation;
+	if (!(part instanceof ChatToolInvocationPart)) {
+		return;
+	}
+
+	if (part.toolSpecificData instanceof ChatSubagentToolInvocationData) {
+		part.toolSpecificData.agentName = agentDisplayName;
+		if (agentDescription) {
+			part.toolSpecificData.description = agentDescription;
+		}
+	}
+}
+
 export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart | undefined {
 	const toolInvocation = createCopilotCLIToolInvocation(event.data as ToolCall, undefined, workingDirectory);
 	if (toolInvocation) {
 		if (toolInvocation instanceof ChatToolInvocationPart && event.data.parentToolCallId) {
-			toolInvocation.subAgentInvocationId = event.data.parentToolCallId;
+			// Resolve to the root ancestor so all descendants are grouped under the
+			// top-level subagent container instead of creating intermediate containers.
+			toolInvocation.subAgentInvocationId = resolveRootSubagentId(event.data.parentToolCallId, pendingToolInvocations);
+
+			// Nested task tools should not create their own subagent container —
+			// clear ChatSubagentToolInvocationData so the widget treats them as
+			// regular child tool invocations within the parent container.
+			if (toolInvocation.toolSpecificData instanceof ChatSubagentToolInvocationData) {
+				toolInvocation.toolSpecificData = undefined;
+			}
 		}
 		// Store pending invocation to update with result later
 		pendingToolInvocations.set(event.data.toolCallId, [toolInvocation, event.data as ToolCall, event.data.parentToolCallId]);
 	}
 	return toolInvocation;
+}
+
+/**
+ * Walks the parentToolCallId chain to find the root (top-level) subagent toolCallId.
+ * This ensures all nested tools are grouped under the outermost subagent container.
+ */
+function resolveRootSubagentId(
+	parentToolCallId: string,
+	pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>
+): string {
+	let currentId = parentToolCallId;
+	const visited = new Set<string>();
+	while (true) {
+		if (visited.has(currentId)) {
+			break; // Prevent infinite loops
+		}
+		visited.add(currentId);
+		const parent = pendingToolInvocations.get(currentId);
+		if (!parent || !parent[2]) {
+			break; // No further parent — currentId is the root
+		}
+		currentId = parent[2];
+	}
+	return currentId;
 }
 
 export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>, logger: ILogger, workingDirectory?: URI): [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined] | undefined {

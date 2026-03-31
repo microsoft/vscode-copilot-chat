@@ -101,4 +101,16 @@ another_file.js:
 			-Old line 2"
 		`);
 	});
+
+	it('no-op diff', async () => {
+		const patchText = `myFile.ts:42
+-Old line 1
++Old line 1`;
+		const patches = await collectPatches(patchText);
+		expect(patches).toMatchInlineSnapshot(`
+			"myFile.ts:42
+			-Old line 1
+			+Old line 1"
+		`);
+	});
 });

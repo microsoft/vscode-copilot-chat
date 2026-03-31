@@ -15,6 +15,7 @@ import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStor
 import { packageJson } from '../../env/common/packagejson';
 import { ImportChanges } from '../../inlineEdits/common/dataTypes/importFilteringOptions';
 import { JointCompletionsProviderStrategy, JointCompletionsProviderTriggerChangeStrategy } from '../../inlineEdits/common/dataTypes/jointCompletionsProviderOptions';
+import { NextCursorLinePredictionCursorPlacement } from '../../inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as triggerOptions from '../../inlineEdits/common/dataTypes/triggerOptions';
 import * as xtabHistoryOptions from '../../inlineEdits/common/dataTypes/xtabHistoryOptions';
 import * as xtabPromptOptions from '../../inlineEdits/common/dataTypes/xtabPromptOptions';
@@ -615,6 +616,7 @@ export namespace ConfigKey {
 		export const CLIIsolationOption = defineSetting<boolean>('chat.cli.isolationOption.enabled', ConfigType.Simple, true);
 		export const CLIAutoCommitEnabled = defineSetting<boolean>('chat.cli.autoCommit.enabled', ConfigType.Simple, true);
 		export const CLISessionController = defineSetting<boolean>('chat.cli.sessionController.enabled', ConfigType.Simple, false);
+		export const CLISessionControllerForSessionsApp = defineSetting<boolean>('chat.cli.sessionControllerForSessionsApp.enabled', ConfigType.Simple, false);
 		export const CLITerminalLinks = defineSetting<boolean>('chat.cli.terminalLinks.enabled', ConfigType.Simple, true);
 		export const RequestLoggerMaxEntries = defineAndMigrateSetting<number>('chat.advanced.debug.requestLogger.maxEntries', 'chat.debug.requestLogger.maxEntries', 100);
 
@@ -689,6 +691,7 @@ export namespace ConfigKey {
 		export const AgentDebugLogEnabled = defineAndMigrateExpSetting<boolean>('agentDebugLog.enabled', 'chat.agentDebugLog.enabled', false);
 		export const ChatDebugFileLogging = defineAndMigrateExpSetting<boolean>('chat.chatDebug.fileLogging.enabled', 'chat.agentDebugLog.fileLogging.enabled', false);
 		export const ChatDebugFileLoggingFlushInterval = defineAndMigrateSetting<number>('chat.chatDebug.fileLogging.flushIntervalMs', 'chat.agentDebugLog.fileLogging.flushIntervalMs', 4000);
+		export const ChatDebugFileLoggingMaxRetainedSessionLogs = defineSetting<number>('chat.agentDebugLog.fileLogging.maxRetainedSessionLogs', ConfigType.ExperimentBased, 50);
 
 		// OTel settings
 		export const OTelEnabled = defineSetting<boolean>('chat.otel.enabled', ConfigType.Simple, false);
@@ -784,6 +787,7 @@ export namespace ConfigKey {
 		export const InlineEditsXtabRecentlyViewedDocumentsMaxTokens = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.xtabProvider.recentlyViewedDocuments.maxTokens', ConfigType.ExperimentBased, xtabPromptOptions.DEFAULT_OPTIONS.recentlyViewedDocuments.maxTokens);
 		export const InlineEditsXtabRecentlyViewedIncludeLineNumbers = defineTeamInternalSetting<xtabPromptOptions.IncludeLineNumbersOption>('chat.advanced.inlineEdits.xtabProvider.recentlyViewedDocuments.includeLineNumbers', ConfigType.ExperimentBased, xtabPromptOptions.DEFAULT_OPTIONS.recentlyViewedDocuments.includeLineNumbers);
 		export const InlineEditsNextCursorPredictionRecentSnippetsIncludeLineNumbers = defineTeamInternalSetting<xtabPromptOptions.IncludeLineNumbersOption>('chat.advanced.inlineEdits.nextCursorPrediction.recentSnippets.includeLineNumbers', ConfigType.ExperimentBased, xtabPromptOptions.IncludeLineNumbersOption.None);
+		export const InlineEditsNextCursorPredictionCursorPlacement = defineTeamInternalSetting<NextCursorLinePredictionCursorPlacement>('chat.advanced.inlineEdits.nextCursorPrediction.cursorPlacement', ConfigType.ExperimentBased, NextCursorLinePredictionCursorPlacement.AfterLine, NextCursorLinePredictionCursorPlacement.VALIDATOR);
 		export const InlineEditsXtabDiffNEntries = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.xtabProvider.diffNEntries', ConfigType.ExperimentBased, xtabPromptOptions.DEFAULT_OPTIONS.diffHistory.nEntries);
 		export const InlineEditsXtabDiffMaxTokens = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.xtabProvider.diffMaxTokens', ConfigType.ExperimentBased, xtabPromptOptions.DEFAULT_OPTIONS.diffHistory.maxTokens);
 		export const InlineEditsXtabDiffMergeStrategy = defineTeamInternalSetting<xtabHistoryOptions.DiffHistoryMergeStrategy>('chat.advanced.inlineEdits.xtabProvider.diffMergeStrategy', ConfigType.ExperimentBased, xtabHistoryOptions.DiffHistoryMergeStrategy.SameStartLine, xtabHistoryOptions.DiffHistoryMergeStrategy.VALIDATOR);
@@ -841,6 +845,10 @@ export namespace ConfigKey {
 		/** Enable WebSocket transport for Responses API requests. When enabled, uses a persistent WebSocket connection per conversation instead of individual HTTP requests. */
 		export const ResponsesApiWebSocketEnabled = defineTeamInternalSetting<boolean>('chat.advanced.responsesApi.webSocket.enabled', ConfigType.ExperimentBased, false);
 		export const DebugSimulateWebSocketResponse = defineTeamInternalSetting<string>('chat.advanced.debug.simulateWebSocketResponse', ConfigType.Simple, '');
+		/** Internal: configure reasoning effort for Responses API. Used by evals. */
+		export const ResponsesApiReasoningEffort = defineTeamInternalSetting<'low' | 'medium' | 'high' | 'xhigh' | undefined>('chat.advanced.responsesApiReasoningEffort', ConfigType.Simple, undefined);
+		/** Internal: configure reasoning effort for Anthropic thinking. Used by evals. */
+		export const AnthropicThinkingEffort = defineTeamInternalSetting<'low' | 'medium' | 'high' | undefined>('chat.advanced.anthropicThinkingEffort', ConfigType.Simple, undefined);
 	}
 
 	/**
