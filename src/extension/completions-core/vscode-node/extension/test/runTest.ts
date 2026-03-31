@@ -45,8 +45,6 @@ async function main() {
 				},
 			})
 			.parse();
-		const version = argv.stable ? 'stable' : 'insiders';
-
 		const extensionTestsEnv: typeof process.env = {};
 		// Pass arguments to mocha by environment variables
 		if (argv.grep) { extensionTestsEnv.MOCHA_GREP = argv.grep; }
@@ -59,14 +57,21 @@ async function main() {
 		//@dbaeumer This can be removed as soon as we have the cache handle CORETEST
 		extensionTestsEnv.VITEST = 'true';
 
-		// Download VS Code, unzip it and run the integration test
-		exitCode = await runTests({
-			version,
+		const testOptions: Parameters<typeof runTests>[0] = {
 			extensionDevelopmentPath,
 			extensionTestsPath,
 			launchArgs,
 			extensionTestsEnv,
-		});
+		};
+
+		if (process.env.VSCODE_UNDER_TEST) {
+			testOptions.vscodeExecutablePath = process.env.VSCODE_UNDER_TEST;
+		} else {
+			testOptions.version = argv.stable ? 'stable' : 'insiders';
+		}
+
+		// Download VS Code, unzip it and run the integration test
+		exitCode = await runTests(testOptions);
 	} catch (err) {
 		console.error('Failed to run tests', err);
 		exitCode = 1;
