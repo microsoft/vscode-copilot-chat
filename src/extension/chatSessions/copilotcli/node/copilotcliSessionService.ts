@@ -548,7 +548,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			}
 			this.logService.trace(`[CopilotCLISession] Created new CopilotCLI session ${sdkSession.sessionId}.`);
 
-			const session = await this.createCopilotSession(sdkSession, workspaceInfo, agentName, sessionManager);
+			const session = this.createCopilotSession(sdkSession, workspaceInfo, agentName, sessionManager);
 			session.object.add(mcpGateway);
 			return session;
 		}
@@ -640,7 +640,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	protected async createSessionsOptions(options: { model?: string; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; agent: SweCustomAgent | undefined; copilotUrl?: string; sessionId?: string; debugTargetSessionIds?: readonly string[]; mcpServerMappings?: McpServerMappings }, readonly?: boolean): Promise<{ readonly sessionOptions: Readonly<SessionOptions>; readonly agentName: string | undefined }> {
 		const [customAgents, skillLocations] = await Promise.all([
-			this.agents.getAgents(),
+			readonly ? Promise.resolve<Readonly<SweCustomAgent>[]>([]) : this.agents.getAgents(),
 			readonly ? Promise.resolve<Uri[]>([]) : this.copilotCLISkills.getSkillsLocations(),
 		]);
 		const variablesContext = this._promptVariablesService.buildTemplateVariablesContext(options.sessionId, options.debugTargetSessionIds);
@@ -718,7 +718,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 			const [sessionManager, { mcpConfig: mcpServers, disposable: mcpGateway }] = await Promise.all([
 				raceCancellationError(this.getSessionManager(), token),
-				this.mcpHandler.loadMcpConfig(),
+				readonly ? Promise.resolve({ mcpConfig: undefined, disposable: Disposable.None }) : this.mcpHandler.loadMcpConfig(),
 			]);
 			try {
 				const copilotUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl) || undefined;
@@ -730,7 +730,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					return undefined;
 				}
 
-				const session = await this.createCopilotSession(sdkSession, workspaceInfo, agentName, sessionManager, readonly);
+				const session = this.createCopilotSession(sdkSession, workspaceInfo, agentName, sessionManager, readonly);
 				session.object.add(mcpGateway);
 				return session;
 			}

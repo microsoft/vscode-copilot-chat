@@ -29,6 +29,7 @@ import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference } from '../../../util/vs/base/common/lifecycle';
 import { relative } from '../../../util/vs/base/common/path';
 import { basename, dirname, extUri, isEqual } from '../../../util/vs/base/common/resources';
+import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../util/vs/base/common/uri';
 import { EXTENSION_ID } from '../../common/constants';
 import { ChatVariablesCollection, extractDebugTargetSessionIds, isPromptFile } from '../../prompt/common/chatVariablesCollection';
@@ -468,6 +469,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ICustomSessionTitleService private readonly customSessionTitleService: ICustomSessionTitleService,
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
+		@ILogService private readonly logService: ILogService,
 	) {
 		super();
 		const originalRepos = this.getRepositoryOptionItems().length;
@@ -514,12 +516,17 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	}
 
 	async provideChatSessionContent(resource: Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
-		const copilotcliSessionId = SessionIdForCLI.parse(resource);
-		const isUntitled = this.sessionItemProvider.isNewSession(copilotcliSessionId);
-		if (isUntitled) {
-			return this.provideChatSessionContentForUntitledSession(resource, token);
-		} else {
-			return this.provideChatSessionContentForExistingSession(resource, token);
+		const stopwatch = new StopWatch();
+		try {
+			const copilotcliSessionId = SessionIdForCLI.parse(resource);
+			const isUntitled = this.sessionItemProvider.isNewSession(copilotcliSessionId);
+			if (isUntitled) {
+				return await this.provideChatSessionContentForUntitledSession(resource, token);
+			} else {
+				return await this.provideChatSessionContentForExistingSession(resource, token);
+			}
+		} finally {
+			this.logService.info(`[CopilotCLIChatSessionContentProvider] provideChatSessionContent for ${resource.toString()} took ${stopwatch.elapsed()}ms`);
 		}
 	}
 
@@ -609,23 +616,15 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		void this.sessionItemProvider.detectPullRequestOnSessionOpen(copilotcliSessionId);
 
 		const folderRepo = await this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token);
-		const [history, title] = await Promise.all([
+		const [history, title, folderInfo, worktreeProperties] = await Promise.all([
 			this.getSessionHistory(copilotcliSessionId, folderRepo, token),
 			this.customSessionTitleService.getCustomSessionTitle(copilotcliSessionId),
+			this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token),
+			this.copilotCLIWorktreeManagerService.getWorktreeProperties(copilotcliSessionId)
 		]);
-		const repositories = this.isUntitledWorkspace() ? folderMRUToChatProviderOptions(await this.folderRepositoryManager.getFolderMRU()) : this.getRepositoryOptionItems();
 
 		const options: Record<string, string | vscode.ChatSessionProviderOptionItem> = {};
-
-		const folderInfo = await this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token);
-		const folderOrRepoId = folderInfo.repository?.fsPath ?? folderInfo.folder?.fsPath;
-		const existingItem = folderOrRepoId ? repositories.find(repo => repo.id === folderOrRepoId) : undefined;
-		if (existingItem) {
-			options[REPOSITORY_OPTION_ID] = {
-				...existingItem,
-				locked: true
-			};
-		} else if (folderInfo.repository) {
+		if (folderInfo.repository) {
 			options[REPOSITORY_OPTION_ID] = {
 				...toRepositoryOptionItem(folderInfo.repository),
 				locked: true
@@ -649,7 +648,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				locked: true
 			};
 		}
-		const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(copilotcliSessionId);
 		if (worktreeProperties?.repositoryPath) {
 			const branchName = worktreeProperties.branchName;
 			const repoUri = vscode.Uri.file(worktreeProperties.repositoryPath);

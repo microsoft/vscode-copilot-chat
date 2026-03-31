@@ -28,6 +28,7 @@ import { Disposable, DisposableStore, IDisposable, IReference } from '../../../u
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { relative } from '../../../util/vs/base/common/path';
 import { basename, dirname, extUri } from '../../../util/vs/base/common/resources';
+import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../util/vs/base/common/uri';
 import { EXTENSION_ID } from '../../common/constants';
 import { ChatVariablesCollection, extractDebugTargetSessionIds, isPromptFile } from '../../prompt/common/chatVariablesCollection';
@@ -511,27 +512,32 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	}
 
 	async provideChatSessionContent(resource: Uri, token: vscode.CancellationToken, _context?: { readonly inputState: vscode.ChatSessionInputState; readonly sessionOptions: ReadonlyArray<{ optionId: string; value: string | vscode.ChatSessionProviderOptionItem }> }): Promise<vscode.ChatSession> {
-		const copilotcliSessionId = SessionIdForCLI.parse(resource);
-		if (copilotcliSessionId.startsWith('untitled:') || copilotcliSessionId.startsWith('untitled-')) {
-			return {
-				history: [],
-				requestHandler: undefined,
-			};
-		}
-		if (this.sessionService.isNewSessionId(copilotcliSessionId)) {
-			const session = this.newSessions.get(resource);
-			if (!session) {
-				throw new Error('Session not found');
+		const stopwatch = new StopWatch();
+		try {
+			const copilotcliSessionId = SessionIdForCLI.parse(resource);
+			if (copilotcliSessionId.startsWith('untitled:') || copilotcliSessionId.startsWith('untitled-')) {
+				return {
+					history: [],
+					requestHandler: undefined,
+				};
 			}
-			return {
-				history: [],
-				requestHandler: undefined,
-				title: session.label,
-				activeResponseCallback: undefined,
-				options: {},
-			};
-		} else {
-			return this.provideChatSessionContentForExistingSession(resource, token);
+			if (this.sessionService.isNewSessionId(copilotcliSessionId)) {
+				const session = this.newSessions.get(resource);
+				if (!session) {
+					throw new Error('Session not found');
+				}
+				return {
+					history: [],
+					requestHandler: undefined,
+					title: session.label,
+					activeResponseCallback: undefined,
+					options: {},
+				};
+			} else {
+				return await this.provideChatSessionContentForExistingSession(resource, token);
+			}
+		} finally {
+			this.logService.info(`[CopilotCLIChatSessionContentProvider] provideChatSessionContent for ${resource.toString()} took ${stopwatch.elapsed()}ms`);
 		}
 	}
 

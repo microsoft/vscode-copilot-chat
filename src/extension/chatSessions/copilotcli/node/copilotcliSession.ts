@@ -802,9 +802,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 	public async getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]> {
 		const events = this._sdkSession.getEvents();
-		const [storedDetails, agentId] = await Promise.all([
+		const [storedDetails, agentId, modelId] = await Promise.all([
 			this._chatSessionMetadataStore.getRequestDetails(this.sessionId),
-			this._chatSessionMetadataStore.getSessionAgent(this.sessionId)
+			this._chatSessionMetadataStore.getSessionAgent(this.sessionId),
+			this.getSelectedModelId()
 		]);
 		const customAgentLookup = this.createCustomAgentLookup();
 		const defaultModeInstructions = agentId ? this.resolveAgentModeInstructions(agentId, customAgentLookup) : undefined;
@@ -833,11 +834,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 			return mapping;
 		};
-		const modelId = await this.getSelectedModelId();
 		const chatHistory = buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, getWorkingDirectory(this.workspace), defaultModeInstructions);
 
 		if (legacyMappings.length > 0) {
-			await this._chatSessionMetadataStore.updateRequestDetails(this.sessionId, legacyMappings).catch(error => {
+			void this._chatSessionMetadataStore.updateRequestDetails(this.sessionId, legacyMappings).catch(error => {
 				this.logService.error(`[CopilotCLISession] Failed to update chat session metadata store with legacy mappings for session ${this.sessionId}`, error);
 			});
 		}
