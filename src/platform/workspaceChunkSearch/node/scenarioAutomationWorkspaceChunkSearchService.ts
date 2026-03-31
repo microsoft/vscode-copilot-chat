@@ -78,7 +78,7 @@ export class ScenarioAutomationWorkspaceChunkSearchService implements IWorkspace
 
 		const repo = this._gitService.repositories[0];
 		const repoInfo = repo ? getGitHubRepoInfoFromContext(repo) : undefined;
-		const nwo = repoInfo ? toGithubNwo(repoInfo.id) : '';
+		const nwo = repoInfo ? toGithubNwo(repoInfo.id) : (process.env.SWEBENCH_REPO ?? '');
 
 		const resolvedQuery = await query.resolveQuery(token);
 		const maxResults = sizing.maxResults ?? 20;
@@ -91,18 +91,26 @@ export class ScenarioAutomationWorkspaceChunkSearchService implements IWorkspace
 
 		this._logService.trace(`ScenarioAutomationWorkspaceChunkSearchService: searching ${overrideUrl} for "${resolvedQuery}" in repo ${nwo}`);
 
+		if (!nwo) {
+			this._logService.error('ScenarioAutomationWorkspaceChunkSearchService: no repo NWO available (git has no remotes and SWEBENCH_REPO is unset)');
+			return { chunks: [], isFullWorkspace: false };
+		}
+
+		const requestBody = {
+			scoping_query: `repo:${nwo}`,
+			prompt: truncateToMaxUtf8Length(resolvedQuery, 7800),
+			include_embeddings: false,
+			limit: maxResults,
+			embedding_model: EmbeddingType.metis_1024_I16_Binary.id,
+		};
+		this._logService.trace(`ScenarioAutomationWorkspaceChunkSearchService: request body: ${JSON.stringify(requestBody)}`);
+
 		let response;
 		try {
 			response = await this._fetcherService.fetch(overrideUrl, {
 				method: 'POST',
 				headers,
-				body: JSON.stringify({
-					scoping_query: nwo ? `repo:${nwo}` : '',
-					prompt: truncateToMaxUtf8Length(resolvedQuery, 7800),
-					include_embeddings: false,
-					limit: maxResults,
-					embedding_model: EmbeddingType.metis_1024_I16_Binary.id,
-				}),
+				body: JSON.stringify(requestBody),
 			});
 		} catch (e) {
 			this._logService.error(`ScenarioAutomationWorkspaceChunkSearchService: fetch failed: ${e instanceof Error ? e.message : e}`);
@@ -110,7 +118,8 @@ export class ScenarioAutomationWorkspaceChunkSearchService implements IWorkspace
 		}
 
 		if (!response.ok) {
-			this._logService.error(`ScenarioAutomationWorkspaceChunkSearchService: search failed with status ${response.status}`);
+			const errorBody = await response.text().catch(() => '<unable to read body>');
+			this._logService.error(`ScenarioAutomationWorkspaceChunkSearchService: search failed with status ${response.status}, body: ${errorBody}`);
 			return { chunks: [], isFullWorkspace: false };
 		}
 
