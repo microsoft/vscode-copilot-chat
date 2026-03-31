@@ -5,13 +5,9 @@
 import { BasePromptElementProps, PromptElement, Raw } from '@vscode/prompt-tsx';
 import { CustomDataPartMimeTypes } from './endpointTypes';
 
-export interface IPhaseData {
-	phase: string;
-	responseOutputMessageId?: string;
-}
-
-interface IPhaseDataOpaque extends IPhaseData {
+interface IPhaseDataOpaque {
 	type: typeof CustomDataPartMimeTypes.PhaseData;
+	phase: string;
 }
 
 export interface IPhaseDataContainerProps extends BasePromptElementProps {
@@ -31,9 +27,9 @@ export class PhaseDataContainer extends PromptElement<IPhaseDataContainerProps> 
 }
 
 /**
- * Attempts to parse a Raw opaque content part into phase metadata, if the type matches.
+ * Attempts to parse a Raw opaque content part into a phase string, if the type matches.
  */
-export function rawPartAsPhaseData(part: Raw.ChatCompletionContentPartOpaque): IPhaseData | undefined {
+export function rawPartAsPhaseData(part: Raw.ChatCompletionContentPartOpaque): string | undefined {
 	const value = part.value as unknown;
 	if (!value || typeof value !== 'object') {
 		return;
@@ -41,31 +37,7 @@ export function rawPartAsPhaseData(part: Raw.ChatCompletionContentPartOpaque): I
 
 	const data = value as IPhaseDataOpaque;
 	if (data.type === CustomDataPartMimeTypes.PhaseData && typeof data.phase === 'string') {
-		return {
-			phase: data.phase,
-			responseOutputMessageId: typeof data.responseOutputMessageId === 'string' ? data.responseOutputMessageId : undefined,
-		};
+		return data.phase;
 	}
 	return;
-}
-
-export function encodePhaseData(phaseData: IPhaseData): Uint8Array {
-	return new TextEncoder().encode(JSON.stringify(phaseData));
-}
-
-export function decodePhaseData(data: Uint8Array): IPhaseData {
-	const decoded = new TextDecoder().decode(data);
-	try {
-		const parsed = JSON.parse(decoded) as Partial<IPhaseData>;
-		if (typeof parsed.phase === 'string') {
-			return {
-				phase: parsed.phase,
-				responseOutputMessageId: typeof parsed.responseOutputMessageId === 'string' ? parsed.responseOutputMessageId : undefined,
-			};
-		}
-	} catch {
-		// Backward compatibility with older data parts that encoded only the phase string.
-	}
-
-	return { phase: decoded };
 }
