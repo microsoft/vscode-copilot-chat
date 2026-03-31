@@ -5,6 +5,7 @@
 
 import { CopilotToken, FetchOptions, IDomainChangeResponse, RequestMetadata } from '@vscode/copilot-api';
 import assert from 'assert';
+import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { IConfigurationService } from '../../configuration/common/configurationService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IEnvService } from '../../env/common/envService';
@@ -14,7 +15,6 @@ import { ITelemetryUserConfig } from '../../telemetry/common/telemetry';
 import { APP_INSIGHTS_KEY_ENHANCED, APP_INSIGHTS_KEY_STANDARD, setupGHTelemetry } from '../../telemetry/node/azureInsights';
 import { ITestingServicesAccessor, TestingServiceCollection } from './services';
 import { startFakeTelemetryServerIfNecessary } from './telemetryFake';
-import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 
 export type EventData = {
 	baseType: 'EventData';
@@ -79,7 +79,7 @@ export type CapturedTelemetry<Event> = {
 
 export async function collectCapturedTelemetry(capiClientService: ICAPIClientService, fetcherService: IFetcherService): Promise<CapturedTelemetry<EventData | ExceptionData>[]> {
 	const url = capiClientService.copilotTelemetryURL;
-	const response = await fetcherService.fetch(url, {});
+	const response = await fetcherService.fetch(url, { callSite: 'test-telemetry-capture' });
 	const messages = ((await response.json()).messages as CapturedTelemetry<EventData | ExceptionData>[]) ?? [];
 
 	for (const message of messages) {

@@ -9,9 +9,8 @@ import { IIgnoreService } from '../../src/platform/ignore/common/ignoreService';
 import { ILogService } from '../../src/platform/log/common/logService';
 import { GithubCodeSearchRepoInfo, IGithubCodeSearchService, parseGithubCodeSearchResponse } from '../../src/platform/remoteCodeSearch/common/githubCodeSearchService';
 import { CodeSearchResult, RemoteCodeSearchError, RemoteCodeSearchIndexState, RemoteCodeSearchIndexStatus } from '../../src/platform/remoteCodeSearch/common/remoteCodeSearch';
-import { StrategySearchSizing, WorkspaceChunkQuery, WorkspaceChunkSearchOptions } from '../../src/platform/workspaceChunkSearch/common/workspaceChunkSearch';
+import { WorkspaceChunkQuery, WorkspaceChunkSearchOptions } from '../../src/platform/workspaceChunkSearch/common/workspaceChunkSearch';
 import { BuildIndexTriggerReason, TriggerIndexingError } from '../../src/platform/workspaceChunkSearch/node/codeSearch/codeSearchRepo';
-import { FullWorkspaceChunkSearch } from '../../src/platform/workspaceChunkSearch/node/fullWorkspaceChunkSearch';
 import { IWorkspaceChunkSearchService, WorkspaceChunkSearchResult, WorkspaceChunkSearchSizing, WorkspaceIndexState } from '../../src/platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { Result } from '../../src/util/common/result';
 import { TelemetryCorrelationId } from '../../src/util/common/telemetryCorrelationId';
@@ -75,7 +74,6 @@ class SimulationGithubCodeSearchService extends Disposable implements IGithubCod
 export class SimulationCodeSearchChunkSearchService extends Disposable implements IWorkspaceChunkSearchService {
 	declare readonly _serviceBrand: undefined;
 
-	private readonly _fullworkspaceChunkSearch: FullWorkspaceChunkSearch;
 	private readonly _githubCodeSearchService: IGithubCodeSearchService;
 
 	constructor(
@@ -83,7 +81,6 @@ export class SimulationCodeSearchChunkSearchService extends Disposable implement
 	) {
 		super();
 
-		this._fullworkspaceChunkSearch = instantiationService.createInstance(FullWorkspaceChunkSearch);
 		this._githubCodeSearchService = instantiationService.createInstance(SimulationGithubCodeSearchService);
 	}
 
@@ -93,34 +90,20 @@ export class SimulationCodeSearchChunkSearchService extends Disposable implement
 		throw new Error('Method not implemented.');
 	}
 
-	async hasFastSearch(_sizing: StrategySearchSizing): Promise<boolean> {
+	async isAvailable(): Promise<boolean> {
 		return true;
 	}
 
 	async searchFileChunks(sizing: WorkspaceChunkSearchSizing, query: WorkspaceChunkQuery, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, progress: Progress<ChatResponsePart> | undefined, token: CancellationToken): Promise<WorkspaceChunkSearchResult> {
-		const fullResults = await this._fullworkspaceChunkSearch.searchWorkspace({
-			endpoint: sizing.endpoint,
-			tokenBudget: sizing.tokenBudget,
-			fullWorkspaceTokenBudget: sizing.fullWorkspaceTokenBudget,
-			maxResultCountHint: sizing.maxResults ?? 128
-		}, query, options, telemetryInfo, token);
-		if (fullResults) {
-			return {
-				chunks: fullResults.chunks,
-				isFullWorkspace: true
-			};
-		}
-
 		const repo = new GithubRepoId('test-org', 'test-repo');
 		try {
 			const results = await this._githubCodeSearchService.searchRepo({ silent: true }, EmbeddingType.text3small_512, {
 				githubRepoId: repo,
 				indexedCommit: undefined,
 				localRepoRoot: undefined,
-			}, await query.resolveQuery(token), sizing.maxResults ?? 128, options, telemetryInfo, token);
+			}, query.queryText, sizing.maxResults ?? 128, options, telemetryInfo, token);
 			return {
 				chunks: results.chunks,
-				isFullWorkspace: false
 			};
 		} catch (error) {
 			console.error('Error searching repo:', error);
@@ -128,12 +111,7 @@ export class SimulationCodeSearchChunkSearchService extends Disposable implement
 
 		return {
 			chunks: [],
-			isFullWorkspace: false
 		};
-	}
-
-	triggerLocalIndexing(trigger: BuildIndexTriggerReason): Promise<Result<true, TriggerIndexingError>> {
-		throw new Error('Method not implemented.');
 	}
 
 	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, _onProgress?: (message: string) => void, _telemetryInfo?: TelemetryCorrelationId, _token?: CancellationToken): Promise<Result<true, TriggerIndexingError>> {

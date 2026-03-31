@@ -21,6 +21,11 @@ interface IVSCodeCmdToolToolInput {
 	skipCheck?: boolean;
 }
 
+/** Commands that are read-only / have no side effects and can run without user confirmation. */
+const noConfirmationCommands = new Set([
+	'github.copilot.debug.collectDiagnostics',
+]);
+
 class VSCodeCmdTool implements vscode.LanguageModelTool<IVSCodeCmdToolToolInput> {
 
 	public static readonly toolName = ToolName.RunVscodeCmd;
@@ -79,17 +84,24 @@ class VSCodeCmdTool implements vscode.LanguageModelTool<IVSCodeCmdToolToolInput>
 			throw new Error('Command ID undefined');
 		}
 
+		const invocationMessage = l10n.t`Running command \`${options.input.name}\``;
+
+		if (noConfirmationCommands.has(commandId)) {
+			return { invocationMessage };
+		}
+
 		const quickOpenCommand = 'workbench.action.quickOpen';
 		// Populate the Quick Open box with command ID rather than command name to avoid issues where Copilot didn't use the precise name,
 		// or when the Copilot response language (Spanish, French, etc.) might be different here than the UI one.
 		const commandStr = commandUri(quickOpenCommand, ['>' + commandId]);
-		const markdownString = new MarkdownString(l10n.t(`Copilot will execute the [{0}]({1}) command.`, options.input.name, commandStr));
+		const markdownString = new MarkdownString(l10n.t(`Copilot will execute the [{0}]({1}) (\`{2}\`) command.`, options.input.name, commandStr, options.input.commandId));
 		markdownString.isTrusted = { enabledCommands: [quickOpenCommand] };
 		return {
-			invocationMessage: l10n.t`Running command \`${options.input.name}\``,
+			invocationMessage,
 			confirmationMessages: {
-				title: l10n.t`Run Command \`${options.input.name}\`?`,
+				title: l10n.t`Run Command \`${options.input.name}\` (\`${options.input.commandId}\`)?`,
 				message: markdownString,
+				approveCombination: options.input.args ? l10n.t`Allow running command \`${options.input.commandId}\` with specific arguments` : l10n.t`Allow running command \`${options.input.commandId}\` without arguments`,
 			},
 		};
 	}

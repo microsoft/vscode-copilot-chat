@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import MarkdownIt from 'markdown-it';
+import MarkdownIt = require('markdown-it');
 import { Lazy } from '../vs/base/common/lazy';
 import { extname } from '../vs/base/common/resources';
 import { escapeRegExpCharacters } from '../vs/base/common/strings';

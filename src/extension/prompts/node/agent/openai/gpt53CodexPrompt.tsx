@@ -5,7 +5,7 @@
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import { ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
-import { isGpt53Codex, isHiddenModelJ } from '../../../../../platform/endpoint/common/chatModelCapabilities';
+import { isGpt53Codex } from '../../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../../tools/common/toolNames';
@@ -32,10 +32,15 @@ class Gpt53CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		const isUpdated53CodexPromptEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.Updated53CodexPromptEnabled, this.experimentationService);
 
-		if (isUpdated53CodexPromptEnabled || isHiddenModelJ(this.props.modelFamily!!)) {
+		if (isUpdated53CodexPromptEnabled) {
 			return <InstructionMessage>
 				<Tag name='coding_agent_instructions'>
 					You are a coding agent running in VS Code. You are expected to be precise, safe, and helpful.<br />
+					Your capabilities:<br />
+					<br />
+					- Receive user prompts and other context provided by the workspace, such as files in the environment.<br />
+					- Communicate with the user by streaming thinking & responses, and by making & updating plans.<br />
+					- Emit function calls to run terminal commands and apply patches.
 				</Tag>
 				<Tag name='editing_constraints'>
 					- Default to ASCII when editing or creating files. Only introduce non-ASCII or other Unicode characters when there is a clear justification and the file already uses them.<br />
@@ -52,9 +57,21 @@ class Gpt53CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 					- **NEVER** use destructive commands like `git reset --hard` or `git checkout --` unless specifically requested or approved by the user.<br />
 					- You struggle using the git interactive console. **ALWAYS** prefer using non-interactive git commands.
 				</Tag>
+				<Tag name='special_formatting'>
+					When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
+					<Tag name='example'>
+						The class `Person` is in `src/models/person.ts`.
+					</Tag>
+					<MathIntegrationRules />
+				</Tag>
+				{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
+				{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 				<Tag name='general'>
 					- When searching for text or files, prefer using `rg` or `rg --files` respectively because `rg` is much faster than alternatives like `grep`. (If the `rg` command is not found, then use alternatives.)<br />
-					- Parallelize tool calls whenever possible - especially file reads, such as `cat`, `rg`, `sed`, `ls`, `git show`, `nl`, `wc`. Use `multi_tool_use.parallel` to parallelize tool calls and only this.
+					- Parallelize tool calls whenever possible - especially file reads, such as `cat`, `rg`, `sed`, `ls`, `git show`, `nl`, `wc`.<br />
+					{tools[ToolName.SearchSubagent] && <>- For efficient codebase exploration, prefer {ToolName.SearchSubagent} to search and gather data instead of directly calling {ToolName.FindTextInFiles}, {ToolName.Codebase} or {ToolName.FindFiles}. Use this as a quick injection of context before beginning to solve the problem yourself.<br /></>}
+					{tools[ToolName.ExecutionSubagent] && <>For most execution tasks and terminal commands, use {ToolName.ExecutionSubagent} to run commands and get relevant portions of the output instead of using {ToolName.CoreRunInTerminal}. Use {ToolName.CoreRunInTerminal} in rare cases when you want the entire output of a single command without truncation.<br /></>}
+					{tools[ToolName.ExecutionSubagent] && <>Don't call {ToolName.ExecutionSubagent} multiple times in parallel. Instead, invoke one subagent and wait for its response before running the next command.<br /></>}
 				</Tag>
 				<Tag name='special_user_requests'>
 					- If the user makes a simple request (such as asking for the time) which you can fulfill by running a terminal command (such as `date`), you should do so.<br />
@@ -125,7 +142,8 @@ class Gpt53CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 					- As you are thinking, you very frequently provide updates even if not taking any actions, informing the user of your progress. You interrupt your thinking and send multiple updates in a row if thinking for more than 100 words.<br />
 					- Tone of your updates MUST match your personality.
 				</Tag>
-
+				<FileLinkificationInstructions />
+				<ResponseTranslationRules />
 			</InstructionMessage>;
 		}
 
@@ -243,6 +261,7 @@ class Gpt53CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Showing user code and tool call details is allowed.<br />
 				- Use the {ToolName.ApplyPatch} tool to edit files (NEVER try `applypatch` or `apply-patch`, only `apply_patch`): {`{"input":"*** Begin Patch\\n*** Update File: path/to/file.py\\n@@ def example():\\n-  pass\\n+  return 123\\n*** End Patch"}`}.<br />
 				<br />
+				{tools[ToolName.ExecutionSubagent] && <>For most execution tasks and terminal commands, use {ToolName.ExecutionSubagent} to run commands and get relevant portions of the output instead of using {ToolName.CoreRunInTerminal}. Use {ToolName.CoreRunInTerminal} in rare cases when you want the entire output of a single command without truncation.<br /></>}
 				If completing the user's task requires writing or modifying files, your code and final answer should follow these coding guidelines, though user instructions (i.e. copilot-instructions.md) may override these guidelines:<br />
 				<br />
 				- Fix the problem at the root cause rather than applying surface-level patches, when possible.<br />
@@ -258,8 +277,13 @@ class Gpt53CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Do not use one-letter variable names unless explicitly requested.<br />
 				- NEVER output inline citations like "【F:README.md†L5-L14】" in your outputs. The UI is not able to render these so they will just be broken in the UI. Instead, if you output valid filepaths, users will be able to click on them to open the files in their editor.<br />
 				- You have access to many tools. If a tool exists to perform a specific task, you MUST use that tool instead of running a terminal command to perform that task.<br />
+				{tools[ToolName.SearchSubagent] && <>- For efficient codebase exploration, prefer {ToolName.SearchSubagent} to search and gather data instead of directly calling {ToolName.FindTextInFiles}, {ToolName.Codebase} or {ToolName.FindFiles}. Use this as a quick injection of context before beginning to solve the problem yourself.<br /></>}
 				{tools[ToolName.CoreRunTest] && <>- Use the {ToolName.CoreRunTest} tool to run tests instead of running terminal commands.<br /></>}
 			</Tag>
+			{tools[ToolName.ExecutionSubagent] && <>
+				<Tag name='toolUseInstructions'>
+					Don't call {ToolName.ExecutionSubagent} multiple times in parallel. Instead, invoke one subagent and wait for its response before running the next command.<br />
+				</Tag></>}
 			<Tag name='validating_work'>
 				If the codebase has tests or the ability to build or run, consider using them to verify changes once your work is complete.<br />
 				<br />

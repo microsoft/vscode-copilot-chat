@@ -197,7 +197,7 @@ export function createFormattedToolInvocation(
 	toolUse: Anthropic.Beta.Messages.BetaToolUseBlock,
 	complete?: boolean
 ): ChatToolInvocationPart | undefined {
-	const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false as unknown as string);
+	const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id);
 	if (complete !== undefined) {
 		invocation.isConfirmed = complete;
 		invocation.isComplete = complete;

@@ -8,15 +8,18 @@ import { PromptElement, PromptReference, TokenLimit } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { IWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
+import { raceTimeoutAndCancellationError } from '../../../util/common/racePromise';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { isLocation, isUri } from '../../../util/common/types';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { basename } from '../../../util/vs/base/common/path';
+import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, MarkdownString } from '../../../vscodeTypes';
-import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { getUniqueReferences } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { CodebaseToolCallingLoop } from '../../prompt/node/codebaseToolCalling';
@@ -31,17 +34,19 @@ export interface ICodebaseToolParams {
 	query: string;
 
 	// Internal parameter only.
-	includeFileStructure?: boolean;
 	scopedDirectories?: string[]; // Allows to scope the search to a specific set of directories.
 }
 
 export class CodebaseTool implements vscode.LanguageModelTool<ICodebaseToolParams> {
 	public static readonly toolName = ToolName.Codebase;
+	public static readonly nonDeferred = true;
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
+		@IWorkspaceChunkSearchService private readonly workspaceChunkSearchService: IWorkspaceChunkSearchService,
+		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ICodebaseToolParams>, token: CancellationToken) {
@@ -55,39 +60,64 @@ export class CodebaseTool implements vscode.LanguageModelTool<ICodebaseToolParam
 			throw new Error('Invalid input');
 		}
 
+		const query = options.input.query.replace(/^\s*#codebase\s+/, '').trim();
+
+		const hasSemanticSearch = await this.workspaceChunkSearchService.isAvailable();
+		// If workspace chunk search is not available, return an empty result with this info
+		if (!hasSemanticSearch) {
+			const result = new ExtendedLanguageModelToolResult([]);
+			result.toolResultMessage = new MarkdownString(l10n.t`Semantic workspace search is not currently available`);
+			return result;
+		}
+
 		checkCancellation(token);
 
 		let references: PromptReference[] = [];
 		const id = generateUuid();
-		const promptTsxResult = await renderPromptElementJSON(this.instantiationService, WorkspaceContextWrapper, {
-			telemetryInfo: new TelemetryCorrelationId('codebaseTool', id),
-			promptContext: {
-				requestId: id,
-				chatVariables: new ChatVariablesCollection([]),
-				query: options.input.query,
-				history: [],
-			},
-			maxResults: 32,
-			include: {
-				workspaceChunks: true,
-				workspaceStructure: options.input.includeFileStructure ?? false
-			},
-			scopedDirectories: options.input.scopedDirectories?.map(dir => URI.file(dir)),
-			referencesOut: references,
-			isToolCall: true,
-			lines1Indexed: true,
-			absolutePaths: true,
-			priority: 100,
-		}, undefined, token);
+		const sw = StopWatch.create();
+		const promptTsxResult = await raceTimeoutAndCancellationError(
+			searchToken => renderPromptElementJSON(this.instantiationService, WorkspaceContextWrapper, {
+				telemetryInfo: new TelemetryCorrelationId('codebaseTool', id),
+				query,
+				maxResults: 32,
+				scopedDirectories: options.input.scopedDirectories?.map(dir => URI.file(dir)),
+				referencesOut: references,
+				isToolCall: true,
+				lines1Indexed: true,
+				absolutePaths: true,
+				priority: 100,
+			}, undefined, searchToken),
+			token,
+			20_000,
+			'Codebase search timed out, try a different search tool',
+		);
+		const durationMs = sw.elapsed();
+
 		const result = new ExtendedLanguageModelToolResult([
 			new LanguageModelPromptTsxPart(promptTsxResult)
 		]);
 		references = getUniqueReferences(references);
+
+		/* __GDPR__
+			"codebaseToolInvoked" : {
+				"owner": "roblourens",
+				"comment": "Tracks the timing and result count of codebase tool invocations",
+				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn." },
+				"resultCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of results returned", "isMeasurement": true },
+				"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Duration of the codebase search in milliseconds", "isMeasurement": true }
+			}
+		*/
+		this.telemetryService.sendMSFTTelemetryEvent('codebaseToolInvoked', {
+			requestId: options.chatRequestId,
+		}, {
+			resultCount: references.length,
+			durationMs,
+		});
 		result.toolResultMessage = references.length === 0 ?
-			new MarkdownString(l10n.t`Searched ${this.getDisplaySearchTarget(options.input)} for "${options.input.query}", no results`) :
+			new MarkdownString(l10n.t`Searched ${this.getDisplaySearchTarget(options.input)} for "${query}", no results`) :
 			references.length === 1 ?
-				new MarkdownString(l10n.t`Searched ${this.getDisplaySearchTarget(options.input)} for "${options.input.query}", 1 result`) :
-				new MarkdownString(l10n.t`Searched ${this.getDisplaySearchTarget(options.input)} for "${options.input.query}", ${references.length} results`);
+				new MarkdownString(l10n.t`Searched ${this.getDisplaySearchTarget(options.input)} for "${query}", 1 result`) :
+				new MarkdownString(l10n.t`Searched ${this.getDisplaySearchTarget(options.input)} for "${query}", ${references.length} results`);
 		result.toolResultDetails = references
 			.map(r => r.anchor)
 			.filter(r => isUri(r) || isLocation(r));

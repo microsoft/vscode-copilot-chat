@@ -26,6 +26,7 @@ import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { getVerbosityForModelSync } from '../common/chatModelCapabilities';
 import { rawPartAsCompactionData } from '../common/compactionDataContainer';
 import { rawPartAsPhaseData } from '../common/phaseDataContainer';
+import { rawPartAsResponseOutputMessageId } from '../common/responseOutputMessageIdContainer';
 import { getStatefulMarkerAndIndex } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
 
@@ -71,10 +72,10 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	body.truncation = configService.getConfig(ConfigKey.Advanced.UseResponsesApiTruncation) ?
 		'auto' :
 		'disabled';
-	const effortConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningEffort, expService);
 	const summaryConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningSummary, expService);
 	const shouldDisableReasoningSummary = endpoint.family === 'gpt-5.3-codex-spark-preview';
-	const effort = effortConfig === 'default' ? 'medium' : effortConfig;
+	const effortFromSetting = configService.getConfig(ConfigKey.TeamInternal.ResponsesApiReasoningEffort);
+	const effort = effortFromSetting || options.reasoningEffort || 'medium';
 	const summary = summaryConfig === 'off' || shouldDisableReasoningSummary ? undefined : summaryConfig;
 	if (effort || summary) {
 		body.reasoning = {
@@ -84,6 +85,11 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	}
 
 	body.include = ['reasoning.encrypted_content'];
+
+	const promptCacheKeyEnabled = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiPromptCacheKeyEnabled, expService);
+	if (promptCacheKeyEnabled && options.conversationId) {
+		body.prompt_cache_key = `${options.conversationId}:${endpoint.family}`;
+	}
 
 	return body;
 }
@@ -121,8 +127,7 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 						const assistantMessage: ResponseOutputMessageWithPhase = {
 							role: 'assistant',
 							content: asstContent,
-							// I don't think this needs to be round-tripped.
-							id: 'msg_123',
+							id: extractResponseOutputMessageId(message.content) ?? generateUuid(),
 							status: 'completed',
 							type: 'message',
 							phase: extractPhaseData(message.content),
@@ -225,9 +230,21 @@ function extractThinkingData(content: Raw.ChatCompletionContentPart[]): OpenAI.R
 function extractPhaseData(content: Raw.ChatCompletionContentPart[]): string | undefined {
 	for (const part of content) {
 		if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
-			const phase = rawPartAsPhaseData(part);
-			if (phase) {
-				return phase;
+			const phaseData = rawPartAsPhaseData(part);
+			if (phaseData) {
+				return phaseData.phase;
+			}
+		}
+	}
+	return undefined;
+}
+
+function extractResponseOutputMessageId(content: Raw.ChatCompletionContentPart[]): string | undefined {
+	for (const part of content) {
+		if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
+			const id = rawPartAsResponseOutputMessageId(part);
+			if (id) {
+				return id;
 			}
 		}
 	}
@@ -558,9 +575,11 @@ export class OpenAIResponsesProcessor {
 						} : undefined
 					});
 				} else if (chunk.item.type === 'message') {
+					const phase = (chunk.item as ResponseOutputItemWithPhase).phase;
 					onProgress({
 						text: '',
-						phase: (chunk.item as ResponseOutputItemWithPhase).phase
+						responseOutputMessageId: chunk.item.id,
+						phase,
 					});
 				}
 				return;

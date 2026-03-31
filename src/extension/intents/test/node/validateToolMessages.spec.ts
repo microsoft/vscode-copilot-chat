@@ -244,4 +244,19 @@ describe('validateToolMessagesCore', () => {
 		expect(filterReasons).toHaveLength(0);
 		expect(strippedToolCallCount).toBe(1);
 	});
+
+	it('correctly matches tool results with empty-string toolCallId', () => {
+		// Edge case: empty string is a valid tool call ID and should not be treated as falsy
+		const messages: Raw.ChatMessage[] = [
+			assistantMsg('calling', [tc('', 'readFile')]),
+			toolMsg('', 'result'),
+		];
+
+		const { messages: result, strippedToolCallCount } = ToolCallingLoop.validateToolMessagesCore(messages, geminiOpts);
+		expect(result).toHaveLength(2);
+		const asstMsg = result[0] as Raw.AssistantChatMessage;
+		expect(asstMsg.toolCalls).toHaveLength(1);
+		expect(asstMsg.toolCalls![0].id).toBe('');
+		expect(strippedToolCallCount).toBe(0);
+	});
 });

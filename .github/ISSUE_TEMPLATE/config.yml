@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Copilot Chat Issues
-    url: https://github.com/microsoft/vscode/issues/new?labels=chat-oss-issue
+    url: https://github.com/microsoft/vscode/issues/new?template=copilot_bug_report.md
     about: Please file issues related to Copilot Chat in the VS Code repository.
   - name: Responsible AI Service response blocking
     url: https://github.com/microsoft/vscode/issues/253130

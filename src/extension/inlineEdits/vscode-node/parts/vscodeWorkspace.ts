@@ -142,6 +142,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 				coalesce(e.selections.map(s => doc.toOffsetRange(e.textEditor.document, s))) :
 				this.getNotebookSelections(doc.notebook, e.textEditor);
 			doc.selection.set(selections, undefined);
+			doc.primarySelectionLine.set(e.selections[0]?.start.line, undefined);
 		}));
 
 		this._store.add(window.onDidChangeTextEditorVisibleRanges(e => {
@@ -209,6 +210,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 			const visibleRanges = coalesce((openedTextEditor?.visibleRanges || []).map(r => document.toOffsetRange(doc, r)));
 			transaction(tx => {
 				document.selection.set(selections, tx);
+				document.primarySelectionLine.set(openedTextEditor?.selections[0]?.start.line, tx);
 				document.visibleRanges.set(visibleRanges, tx);
 				document.diagnostics.set(this._createTextDocumentDiagnosticData(document), tx);
 			});
@@ -422,6 +424,7 @@ abstract class AbstractVSCodeObservableDocument {
 	public readonly value: ISettableObservable<StringText, StringEditWithReason>;
 	public readonly version: ISettableObservable<number>;
 	public readonly selection: ISettableObservable<readonly OffsetRange[]>;
+	public readonly primarySelectionLine: ISettableObservable<number | undefined>;
 	public readonly visibleRanges: ISettableObservable<readonly OffsetRange[]>;
 	public readonly languageId: ISettableObservable<LanguageId>;
 	public readonly diagnostics: ISettableObservable<readonly DiagnosticData[]>;
@@ -438,6 +441,7 @@ abstract class AbstractVSCodeObservableDocument {
 		this.value = observableValue(this, value);
 		this.version = observableValue(this, versionId);
 		this.selection = observableValue(this, selection);
+		this.primarySelectionLine = observableValue(this, undefined);
 		this.visibleRanges = observableValue(this, visibleRanges);
 		this.languageId = observableValue(this, languageId);
 		this.diagnostics = observableValue(this, diagnostics);

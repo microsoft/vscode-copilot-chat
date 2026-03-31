@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
@@ -236,7 +237,7 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 		if (!repoId || repoId.length === 0) {
 			return;
 		}
-		const pullRequests = await this._octoKitService.getOpenPullRequestsForUser(repoId[0].org, repoId[0].repo, { createIfNone: true });
+		const pullRequests = await this._octoKitService.getOpenPullRequestsForUser(repoId[0].org, repoId[0].repo, { createIfNone: { detail: l10n.t('Sign in to GitHub to access Copilot cloud sessions.') } });
 		const pullRequest = pullRequests.find(pr => pr.id === prId);
 		if (!pullRequest) {
 			return;
@@ -284,8 +285,10 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 	private _normalizeGitUri(uri: string): string {
 		return uri.toLowerCase()
 			.replace(/\.git$/, '')
-			.replace(/^git@github\.com:/, 'https://github.com/')
-			.replace(/^https:\/\/github\.com\//, '')
+			// Normalize SSH shorthand to HTTPS for both github.com and ghe.com
+			.replace(/^[\w\-]+@([\w.\-]+):/, 'https://$1/')
+			// Strip the host prefix for github.com and ghe.com to get just owner/repo
+			.replace(/^https:\/\/(?:[\w\-]+\.)*(?:github\.com|ghe\.com)\//, '')
 			.replace(/\/$/, '');
 	}
 }

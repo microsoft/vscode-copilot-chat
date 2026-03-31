@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { AuthenticationGetSessionOptions } from 'vscode';
+import * as l10n from '@vscode/l10n';
 import { GlobIncludeOptions, shouldInclude } from '../../../util/common/glob';
 import { CallTracker, TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { coalesce } from '../../../util/vs/base/common/arrays';
@@ -171,7 +171,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 			return;
 		}
 
-		const authToken = await this.tryGetAuthToken({ createIfNone: false });
+		const authToken = (await this._authService.getGitHubSession('any', { silent: true }))?.accessToken;
 		if (authToken) {
 			await this.getChunksAndEmbeddings(authToken, file, new ComputeBatchInfo(), EmbeddingsComputeQos.Batch, telemetryInfo.callTracker.add('WorkspaceChunkEmbeddingsIndex::triggerIndexingOfFile'), token);
 		}
@@ -351,7 +351,9 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 
 		// Telemetry event name kept as 'getAllWorkspaceEmbeddings' for dashboard backward compatibility
 		return logExecTime(this._logService, 'WorkspaceChunkEmbeddingIndex.indexAllWorkspaceFiles', async () => {
-			const authToken = await this.tryGetAuthToken({ createIfNone: true, silent: trigger === 'auto' });
+			const authToken = trigger === 'auto'
+				? (await this._authService.getGitHubSession('any', { silent: true }))?.accessToken
+				: (await this._authService.getGitHubSession('any', { createIfNone: { detail: l10n.t('Sign in to GitHub to index workspace files.') } }))?.accessToken;
 			if (!authToken) {
 				throw new Error('Unable to get auth token');
 			}
@@ -504,7 +506,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 		return this._chunkingEndpointClient.computeChunks(authToken, this._embeddingType, file, batchInfo, qos, cachedChunks, telemetryInfo, token);
 	}
 
-	private async tryGetAuthToken(options: AuthenticationGetSessionOptions = { createIfNone: true }): Promise<string | undefined> {
-		return (await this._authService.getGitHubSession('any', options))?.accessToken;
+	private async tryGetAuthToken(): Promise<string | undefined> {
+		return (await this._authService.getGitHubSession('any', { createIfNone: { detail: l10n.t('Sign in to GitHub to index workspace files.') } }))?.accessToken;
 	}
 }

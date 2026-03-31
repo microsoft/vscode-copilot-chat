@@ -25,6 +25,17 @@ describe('XtabCustomDiffPatchResponseHandler', () => {
 		expect(patches).toEqual(patchText);
 	});
 
+	it('should parse a simple patch correctly despite trailing newline', async () => {
+		const patchText = `file1.txt:10
+-Old line 1
+-Old line 2
++New line 1
++New line 2
+`;
+		const patches = await collectPatches(patchText);
+		expect(patches).toEqual(patchText.trim());
+	});
+
 	it('should parse a simple patch correctly', async () => {
 		const patchText = `/absolutePath/to/my_file.ts:1
 -Old line 1
@@ -88,6 +99,18 @@ another_file.js:
 			"myFile.ts:42
 			-Old line 1
 			-Old line 2"
+		`);
+	});
+
+	it('no-op diff', async () => {
+		const patchText = `myFile.ts:42
+-Old line 1
++Old line 1`;
+		const patches = await collectPatches(patchText);
+		expect(patches).toMatchInlineSnapshot(`
+			"myFile.ts:42
+			-Old line 1
+			+Old line 1"
 		`);
 	});
 });

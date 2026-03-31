@@ -5,6 +5,7 @@
 import { Disposable, QuickPick, QuickPickItem, QuickPickItemKind, commands, l10n, window } from 'vscode';
 import { isWeb } from '../../../../../util/vs/base/common/platform';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ICompletionsModelManagerService } from '../../lib/src/openai/model';
 import { isCompletionEnabled, isInlineSuggestEnabled } from './config';
 import { CMDCollectDiagnosticsChat, CMDDisableCompletionsChat, CMDEnableCompletionsChat, CMDOpenDocumentationClient, CMDOpenLogsClient, CMDOpenModelPickerClient, CMDOpenPanelClient } from './constants';
 import { ICompletionsExtensionStatus } from './extensionStatus';
@@ -15,6 +16,7 @@ export class CopilotStatusBarPickMenu {
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ICompletionsExtensionStatus private readonly extensionStatusService: ICompletionsExtensionStatus,
+		@ICompletionsModelManagerService private readonly modelManagerService: ICompletionsModelManagerService,
 	) { }
 
 	showStatusMenu() {
@@ -67,8 +69,7 @@ export class CopilotStatusBarPickMenu {
 
 		const editor = window.activeTextEditor;
 		if (!isWeb && editor) { items.push(this.newPanelItem()); }
-		// Always show the model picker even if only one model is available
-		if (!isWeb) { items.push(this.newChangeModelItem()); }
+		if (!isWeb && this.hasMultipleModels()) { items.push(this.newChangeModelItem()); }
 		if (editor) { items.push(...this.newEnableLanguageItem()); }
 		if (items.length) { items.push(this.newSeparator()); }
 
@@ -77,6 +78,10 @@ export class CopilotStatusBarPickMenu {
 
 	private hasActiveStatus() {
 		return ['Normal'].includes(this.extensionStatusService.kind);
+	}
+
+	private hasMultipleModels() {
+		return this.modelManagerService.getGenericCompletionModels().length > 1;
 	}
 
 	private isCompletionEnabled() {

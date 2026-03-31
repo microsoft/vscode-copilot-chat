@@ -19,6 +19,9 @@ import { IAlternativeNotebookContentService } from '../../../platform/notebook/c
 import { IAlternativeNotebookContentEditGenerator, NotebookEditGenerationTelemtryOptions, NotebookEditGenrationSource } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { getDefaultLanguage } from '../../../platform/notebook/common/helpers';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { emitEditSurvivalEvent } from '../../../platform/otel/common/genAiEvents';
+import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITelemetryService, multiplexProperties } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -46,7 +49,7 @@ import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { formatUriForFileWidget } from '../common/toolUtils';
 import { PATCH_PREFIX, PATCH_SUFFIX } from './applyPatch/parseApplyPatch';
-import { ActionType, Commit, DiffError, FileChange, identify_files_added, identify_files_needed, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
+import { ActionType, Commit, DiffError, FileChange, identify_files_added, identify_files_affected, identify_files_needed, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
 import { canExistingFileBeEdited, createEditConfirmation, formatDiffAsUnified, getDisallowedEditUriError, logEditToolResult, openDocumentAndSnapshot } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
@@ -63,6 +66,7 @@ export const applyPatch5Description = 'Use the `apply_patch` tool to edit files.
 
 export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 	public static toolName = ToolName.ApplyPatch;
+	public static readonly nonDeferred = true;
 
 	private _promptContext: IBuildPromptContext | undefined;
 
@@ -84,6 +88,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IEditToolLearningService private readonly editToolLearningService: IEditToolLearningService,
 		@ILogService private readonly logService: ILogService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) { }
 
 	private getTrailingDocumentEmptyLineCount(document: TextDocumentSnapshot): number {
@@ -458,13 +463,21 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 						res.telemetryService.sendGHTelemetryEvent('applyPatch/trackEditSurvival', {
 							headerRequestId: this._promptContext?.requestId,
 							requestSource: 'agent',
-							mapper: 'applyPatchTool'
+							mapper: 'applyPatchTool',
+							headBranchName: res.workspace?.headBranchName,
+							headCommitHash: res.workspace?.headCommitHash,
+							remoteUrl: res.workspace?.remoteUrl,
+							fileRelativePath: res.workspace?.fileRelativePath,
 						}, {
 							survivalRateFourGram: res.fourGram,
 							survivalRateNoRevert: res.noRevert,
 							timeDelayMs: res.timeDelayMs,
 							didBranchChange: res.didBranchChange ? 1 : 0,
 						});
+
+						emitEditSurvivalEvent(this._otelService, 'apply_patch', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, this._promptContext?.requestId ?? '', res.workspace);
+						GenAiMetrics.recordEditSurvivalFourGram(this._otelService, 'apply_patch', res.fourGram, res.timeDelayMs);
+						GenAiMetrics.recordEditSurvivalNoRevert(this._otelService, 'apply_patch', res.noRevert, res.timeDelayMs);
 					});
 				}
 			});
@@ -652,7 +665,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 	}
 
 	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IApplyPatchToolParams>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
-		const uris = [...identify_files_needed(options.input.input), ...identify_files_added(options.input.input)].map(f => URI.file(f));
+		const uris = [...identify_files_affected(options.input.input)].map(f => URI.file(f));
 
 		return this.instantiationService.invokeFunction(
 			createEditConfirmation,
@@ -696,16 +709,27 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		const diffResults = await Promise.all(
 			Object.entries(commit.changes).map(async ([file, changes]) => {
 				const uri = resolveToolInputPath(file, promptPathRepresentationService);
-				if (!urisNeedingConfirmationSet.has(uri)) {
+				const moveTo = changes.movePath ? resolveToolInputPath(changes.movePath, promptPathRepresentationService) : undefined;
+				if (!urisNeedingConfirmationSet.has(uri) && !(moveTo && urisNeedingConfirmationSet.has(moveTo))) {
 					return;
 				}
 
-				return await instantiationService.invokeFunction(
+				if (changes.type === ActionType.DELETE) {
+					return l10n.t`Delete ${formatUriForFileWidget(uri)}`;
+				}
+
+				let diff = await instantiationService.invokeFunction(
 					formatDiffAsUnified,
 					uri,
 					changes.oldContent || '',
 					changes.newContent || ''
 				);
+
+				if (moveTo) {
+					diff = l10n.t`Move from ${formatUriForFileWidget(uri)} to ${formatUriForFileWidget(moveTo)}\n\n` + diff;
+				}
+
+				return diff;
 			})
 		);
 

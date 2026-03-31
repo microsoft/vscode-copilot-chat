@@ -17,9 +17,8 @@ import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
 import { getGitHubRepoInfoFromContext, IGitService, toGithubNwo } from '../../git/common/gitService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
-import { WorkspaceChunkQuery, WorkspaceChunkSearchOptions, StrategySearchSizing } from '../common/workspaceChunkSearch';
-import { TriggerIndexingError } from './codeSearch/codeSearchRepo';
-import { LocalEmbeddingsIndexStatus } from './embeddingsChunkSearch';
+import { WorkspaceChunkQuery, WorkspaceChunkSearchOptions } from '../common/workspaceChunkSearch';
+import { BuildIndexTriggerReason, TriggerIndexingError } from './codeSearch/codeSearchRepo';
 import {
 	IWorkspaceChunkSearchService,
 	WorkspaceChunkSearchResult,
@@ -51,15 +50,11 @@ export class ScenarioAutomationWorkspaceChunkSearchService implements IWorkspace
 	async getIndexState(): Promise<WorkspaceIndexState> {
 		return {
 			remoteIndexState: { status: 'loaded', repos: [] },
-			localIndexState: {
-				status: LocalEmbeddingsIndexStatus.Disabled,
-				getState: async () => undefined,
-			},
 		};
 	}
 
-	async hasFastSearch(_sizing: StrategySearchSizing): Promise<boolean> {
-		return true;
+	async isAvailable(): Promise<boolean> {
+		return !!this._configService.getConfig(ConfigKey.Advanced.DebugOverrideEmbeddingsUrl);
 	}
 
 	async searchFileChunks(
@@ -68,19 +63,19 @@ export class ScenarioAutomationWorkspaceChunkSearchService implements IWorkspace
 		_options: WorkspaceChunkSearchOptions,
 		_telemetryInfo: TelemetryCorrelationId,
 		_progress: vscode.Progress<vscode.ChatResponsePart> | undefined,
-		token: CancellationToken,
+		_token: CancellationToken,
 	): Promise<WorkspaceChunkSearchResult> {
 		const overrideUrl = this._configService.getConfig(ConfigKey.Advanced.DebugOverrideEmbeddingsUrl);
 		if (!overrideUrl) {
 			this._logService.trace('ScenarioAutomationWorkspaceChunkSearchService: no override URL configured');
-			return { chunks: [], isFullWorkspace: false };
+			return { chunks: [] };
 		}
 
 		const repo = this._gitService.repositories[0];
 		const repoInfo = repo ? getGitHubRepoInfoFromContext(repo) : undefined;
 		const nwo = repoInfo ? toGithubNwo(repoInfo.id) : (process.env.SWEBENCH_REPO ?? '');
 
-		const resolvedQuery = await query.resolveQuery(token);
+		const queryText = query.queryText;
 		const maxResults = sizing.maxResults ?? 20;
 
 		const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -89,16 +84,16 @@ export class ScenarioAutomationWorkspaceChunkSearchService implements IWorkspace
 			headers['Authorization'] = `Bearer ${authToken}`;
 		}
 
-		this._logService.trace(`ScenarioAutomationWorkspaceChunkSearchService: searching ${overrideUrl} for "${resolvedQuery}" in repo ${nwo}`);
+		this._logService.trace(`ScenarioAutomationWorkspaceChunkSearchService: searching ${overrideUrl} for "${queryText}" in repo ${nwo}`);
 
 		if (!nwo) {
 			this._logService.error('ScenarioAutomationWorkspaceChunkSearchService: no repo NWO available (git has no remotes and SWEBENCH_REPO is unset)');
-			return { chunks: [], isFullWorkspace: false };
+			return { chunks: [] };
 		}
 
 		const requestBody = {
 			scoping_query: `repo:${nwo}`,
-			prompt: truncateToMaxUtf8Length(resolvedQuery, 7800),
+			prompt: truncateToMaxUtf8Length(queryText, 7800),
 			include_embeddings: false,
 			limit: maxResults,
 			embedding_model: EmbeddingType.metis_1024_I16_Binary.id,
@@ -108,25 +103,26 @@ export class ScenarioAutomationWorkspaceChunkSearchService implements IWorkspace
 		let response;
 		try {
 			response = await this._fetcherService.fetch(overrideUrl, {
+				callSite: 'ScenarioAutomationWorkspaceChunkSearchService.searchFileChunks',
 				method: 'POST',
 				headers,
 				body: JSON.stringify(requestBody),
 			});
 		} catch (e) {
 			this._logService.error(`ScenarioAutomationWorkspaceChunkSearchService: fetch failed: ${e instanceof Error ? e.message : e}`);
-			return { chunks: [], isFullWorkspace: false };
+			return { chunks: [] };
 		}
 
 		if (!response.ok) {
 			const errorBody = await response.text().catch(() => '<unable to read body>');
 			this._logService.error(`ScenarioAutomationWorkspaceChunkSearchService: search failed with status ${response.status}, body: ${errorBody}`);
-			return { chunks: [], isFullWorkspace: false };
+			return { chunks: [] };
 		}
 
 		const body = await response.json();
 		if (!Array.isArray(body.results)) {
 			this._logService.error('ScenarioAutomationWorkspaceChunkSearchService: unexpected response shape');
-			return { chunks: [], isFullWorkspace: false };
+			return { chunks: [] };
 		}
 
 		const embeddingType = new EmbeddingType(body.embedding_model ?? EmbeddingType.metis_1024_I16_Binary.id);
@@ -151,14 +147,10 @@ export class ScenarioAutomationWorkspaceChunkSearchService implements IWorkspace
 		}
 
 		this._logService.trace(`ScenarioAutomationWorkspaceChunkSearchService: got ${chunks.length} chunks`);
-		return { chunks, isFullWorkspace: false, strategy: 'scenarioAutomation' };
+		return { chunks };
 	}
 
-	async triggerLocalIndexing(): Promise<Result<true, TriggerIndexingError>> {
-		return Result.ok(true);
-	}
-
-	async triggerRemoteIndexing(): Promise<Result<true, TriggerIndexingError>> {
+	async triggerRemoteIndexing(_trigger: BuildIndexTriggerReason, _onProgress: (message: string) => void, _telemetryInfo: TelemetryCorrelationId, _token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
 		return Result.ok(true);
 	}
 

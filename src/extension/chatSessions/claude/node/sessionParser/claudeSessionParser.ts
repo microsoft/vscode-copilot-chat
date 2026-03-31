@@ -6,16 +6,15 @@
 /**
  * Claude Code Session Parser
  *
- * Parses JSONL session files using a 3-layer architecture:
- *
- * **Layer 1** — `extractSessionMetadata` / `extractSessionMetadataStreaming`
- * Lightweight metadata extraction for listing sessions. No chain building.
+ * Parses JSONL session files for subagent transcripts. The main session
+ * metadata and messages are now loaded via the `@anthropic-ai/claude-agent-sdk`
+ * session APIs (see `sdkSessionAdapter.ts`).
  *
  * **Layer 2** — `parseSessionFileContent`
  * Builds a linked list from JSONL. Every UUID-bearing entry becomes a ChainNode
  * in a single map. No classification into buckets — just chain metadata + raw JSON.
  *
- * **Layer 3** — `buildSessions`
+ * **Layer 3** — `buildSubagentSession`
  * Walks the linked list from leaf to root, validates visible entries, and
  * produces StoredMessage[] for display.
  */
@@ -24,17 +23,13 @@ import {
 	AssistantMessageEntry,
 	ChainNode,
 	CustomTitleEntry,
-	IClaudeCodeSession,
-	IClaudeCodeSessionInfo,
 	ISubagentSession,
-	isUserRequest,
 	StoredMessage,
 	SummaryEntry,
 	UserMessageEntry,
 	vAssistantMessageEntry,
 	vChainNodeFields,
 	vCustomTitleEntry,
-	vMessageEntry,
 	vSummaryEntry,
 	vUserMessageEntry,
 } from './claudeSessionSchema';
@@ -44,7 +39,7 @@ import {
 /**
  * Detailed error for failed parsing.
  */
-export interface ParseError {
+interface ParseError {
 	lineNumber: number;
 	message: string;
 	line: string;
@@ -70,7 +65,7 @@ export interface LinkedListParseResult {
 /**
  * Statistics from parsing a session file.
  */
-export interface ParseStats {
+interface ParseStats {
 	readonly totalLines: number;
 	readonly chainNodes: number;
 	readonly summaries: number;
@@ -78,14 +73,6 @@ export interface ParseStats {
 	readonly queueOperations: number;
 	readonly errors: number;
 	readonly skippedEmpty: number;
-}
-
-/**
- * Result of building sessions from the linked list (Layer 3 output).
- */
-export interface SessionBuildResult {
-	readonly sessions: readonly IClaudeCodeSession[];
-	readonly errors: readonly string[];
 }
 
 // #endregion
@@ -281,162 +268,6 @@ function validateAndReviveNode(node: ChainNode): StoredMessage | null {
 	return null;
 }
 
-/**
- * Build sessions from the linked list (Layer 3).
- *
- * This walks the linked list from leaf nodes to root, validates visible entries,
- * and produces StoredMessage[] for each session.
- *
- * Leaf detection: A node is a leaf if no other node's parentUuid points to it.
- * Since all entries are in one map, progress entries at the end of a chain become
- * additional leaves. Deduplication by sessionId keeps the longest visible chain,
- * so these extra leaves don't cause problems.
- */
-export function buildSessions(
-	parseResult: LinkedListParseResult
-): SessionBuildResult {
-	const { nodes, summaries, customTitle } = parseResult;
-	const errors: string[] = [];
-
-	// Build referencedAsParent from ALL nodes
-	const referencedAsParent = new Set<string>();
-	for (const node of nodes.values()) {
-		if (node.parentUuid !== null) {
-			referencedAsParent.add(node.parentUuid);
-		}
-	}
-
-	// Find leaf nodes
-	const leafNodes: string[] = [];
-	for (const uuid of nodes.keys()) {
-		if (!referencedAsParent.has(uuid)) {
-			leafNodes.push(uuid);
-		}
-	}
-
-	// Build sessions from leaf nodes
-	const sessions: IClaudeCodeSession[] = [];
-	for (const leafUuid of leafNodes) {
-		const result = buildSessionFromLeaf(leafUuid, nodes, summaries, customTitle);
-		if (result.success) {
-			sessions.push(result.session);
-		} else {
-			errors.push(result.error);
-		}
-	}
-
-	// Deduplicate sessions by ID, keeping the one with most messages
-	const deduplicatedSessions = deduplicateSessions(sessions);
-
-	return {
-		sessions: deduplicatedSessions,
-		errors,
-	};
-}
-
-/**
- * Build a single session by walking the linked list from a leaf node.
- */
-function buildSessionFromLeaf(
-	leafUuid: string,
-	nodes: ReadonlyMap<string, ChainNode>,
-	summaries: ReadonlyMap<string, SummaryEntry>,
-	customTitle: CustomTitleEntry | undefined
-): { success: true; session: IClaudeCodeSession } | { success: false; error: string } {
-	const messageChain: StoredMessage[] = [];
-	const visited = new Set<string>();
-	let currentUuid: string | null = leafUuid;
-	let summaryEntry: SummaryEntry | undefined;
-	let sessionId: string | undefined;
-
-	// Walk from leaf to root, collecting visible messages
-	while (currentUuid !== null) {
-		if (visited.has(currentUuid)) {
-			break; // Cycle detection
-		}
-		visited.add(currentUuid);
-
-		// Check for summary at this point
-		const summary = summaries.get(currentUuid);
-		if (summary !== undefined) {
-			summaryEntry = summary;
-		}
-
-		const node = nodes.get(currentUuid);
-		if (node === undefined) {
-			break; // Dead end
-		}
-
-		// Only validate and include visible message nodes
-		if (isVisibleNode(node.raw)) {
-			const storedMessage = validateAndReviveNode(node);
-			if (storedMessage !== null) {
-				messageChain.unshift(storedMessage);
-				if (sessionId === undefined) {
-					sessionId = storedMessage.sessionId;
-				}
-			}
-		}
-
-		currentUuid = node.parentUuid;
-	}
-
-	if (messageChain.length === 0 || sessionId === undefined) {
-		return {
-			success: false,
-			error: `No visible messages found for leaf UUID: ${leafUuid}`,
-		};
-	}
-
-	// Collect parallel tool result siblings that branched off the main chain.
-	// When parallel tool calls occur, each tool_use assistant message is chained
-	// linearly, but results come back pointing to their respective tool_use message.
-	// Only the last result is in the main chain; the others are orphaned siblings.
-	const chainUuids = new Set(messageChain.map(m => m.uuid));
-	const siblings: StoredMessage[] = [];
-	for (const node of nodes.values()) {
-		if (chainUuids.has(node.uuid)) {
-			continue; // Already in chain
-		}
-		if (node.parentUuid === null || !chainUuids.has(node.parentUuid)) {
-			continue; // Parent not in chain
-		}
-		if (!isVisibleNode(node.raw)) {
-			continue;
-		}
-		// Only collect user messages whose parent is an assistant message
-		const storedMessage = validateAndReviveNode(node);
-		if (storedMessage === null || storedMessage.type !== 'user') {
-			continue;
-		}
-		const parentMessage = messageChain.find(m => m.uuid === node.parentUuid);
-		if (parentMessage !== undefined && parentMessage.type === 'assistant') {
-			siblings.push(storedMessage);
-		}
-	}
-
-	// Insert siblings into the chain right after their parent
-	for (const sibling of siblings) {
-		const parentIndex = messageChain.findIndex(m => m.uuid === sibling.parentUuid);
-		if (parentIndex !== -1) {
-			messageChain.splice(parentIndex + 1, 0, sibling);
-			chainUuids.add(sibling.uuid);
-		}
-	}
-
-	const session: IClaudeCodeSession = {
-		id: sessionId,
-		label: generateSessionLabel(customTitle, summaryEntry, messageChain),
-		messages: messageChain,
-		created: messageChain[0].timestamp.getTime(),
-		lastRequestStarted: findLastRequestStartedTimestamp(messageChain),
-		lastRequestEnded: messageChain[messageChain.length - 1].timestamp.getTime(),
-		subagents: [],
-	};
-
-	return { success: true, session };
-}
-
 // #endregion
 
 // #region Message Revival
@@ -516,132 +347,6 @@ function reviveSystemMessage(node: ChainNode): StoredMessage | null {
 
 // #endregion
 
-// #region Session Helpers
-
-/**
- * Generate a display label for a session.
- * Priority: custom title > summary > first user message > fallback.
- */
-function generateSessionLabel(
-	customTitle: CustomTitleEntry | undefined,
-	summaryEntry: SummaryEntry | undefined,
-	messages: readonly StoredMessage[]
-): string {
-	if (customTitle && customTitle.customTitle.length > 0) {
-		return customTitle.customTitle;
-	}
-
-	if (summaryEntry && summaryEntry.summary.length > 0) {
-		return summaryEntry.summary;
-	}
-
-	for (const message of messages) {
-		if (message.type !== 'user') {
-			continue;
-		}
-
-		const userMessage = message.message;
-		if (userMessage.role !== 'user') {
-			continue;
-		}
-
-		const content = userMessage.content;
-		let text: string | undefined;
-
-		if (typeof content === 'string') {
-			text = stripSystemReminders(content);
-		} else if (Array.isArray(content)) {
-			for (const block of content) {
-				if (block.type === 'text' && 'text' in block) {
-					text = stripSystemReminders(block.text);
-					if (text.length > 0) {
-						break;
-					}
-				}
-			}
-		}
-
-		if (text !== undefined && text.length > 0) {
-			const firstLine = getFirstNonEmptyLine(text);
-			return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
-		}
-	}
-
-	return 'Claude Session';
-}
-
-/**
- * Strip <system-reminder> tags from text content.
- */
-function stripSystemReminders(text: string): string {
-	const openTag = '<system-reminder>';
-	const closeTag = '</system-reminder>';
-	let result = text;
-	let startIdx: number;
-
-	while ((startIdx = result.indexOf(openTag)) !== -1) {
-		const endIdx = result.indexOf(closeTag, startIdx + openTag.length);
-		if (endIdx === -1) {
-			break;
-		}
-		let removeEnd = endIdx + closeTag.length;
-		while (removeEnd < result.length && (result[removeEnd] === ' ' || result[removeEnd] === '\n' || result[removeEnd] === '\r' || result[removeEnd] === '\t')) {
-			removeEnd++;
-		}
-		result = result.substring(0, startIdx) + result.substring(removeEnd);
-	}
-
-	return result.trim();
-}
-
-/**
- * Get the first non-empty line from text without allocating an array for all lines.
- */
-function getFirstNonEmptyLine(text: string): string {
-	let start = 0;
-	while (start < text.length) {
-		const end = text.indexOf('\n', start);
-		const lineEnd = end === -1 ? text.length : end;
-		const line = text.substring(start, lineEnd);
-		if (line.trim().length > 0) {
-			return line;
-		}
-		start = lineEnd + 1;
-	}
-	return '';
-}
-
-/**
- * Find the timestamp of the last genuine user request in a message chain.
- */
-function findLastRequestStartedTimestamp(messages: readonly StoredMessage[]): number | undefined {
-	for (let i = messages.length - 1; i >= 0; i--) {
-		const msg = messages[i];
-		if (msg.type === 'user' && msg.message.role === 'user' && isUserRequest(msg.message.content)) {
-			return msg.timestamp.getTime();
-		}
-	}
-	return undefined;
-}
-
-/**
- * Deduplicate sessions by ID, keeping the one with the most messages.
- */
-function deduplicateSessions(sessions: readonly IClaudeCodeSession[]): readonly IClaudeCodeSession[] {
-	const sessionById = new Map<string, IClaudeCodeSession>();
-
-	for (const session of sessions) {
-		const existing = sessionById.get(session.id);
-		if (existing === undefined || session.messages.length > existing.messages.length) {
-			sessionById.set(session.id, session);
-		}
-	}
-
-	return Array.from(sessionById.values());
-}
-
-// #endregion
-
 // #region Subagent Building
 
 /**
@@ -716,297 +421,6 @@ export function buildSubagentSession(
 		messages: bestChain,
 		timestamp: bestChain[bestChain.length - 1].timestamp,
 	};
-}
-
-// #endregion
-
-// #region Lightweight Metadata Extraction (Layer 1)
-
-/**
- * Extract only metadata from a session file without full parsing.
- * This is faster than parseSessionFileContent because it:
- * - Only looks for summary entries and first message timestamp
- * - Doesn't build message chains or store full content
- * - Stops early once all needed data is found
- *
- * Uses validators for type safety while keeping string pre-filtering
- * for fast rejection of irrelevant lines.
- *
- * @param content The raw UTF-8 content of a .jsonl session file
- * @param sessionId Session ID (from filename)
- * @param fileMtime File modification time as fallback timestamp
- * @returns Lightweight session metadata
- */
-export function extractSessionMetadata(
-	content: string,
-	sessionId: string,
-	fileMtime: Date
-): IClaudeCodeSessionInfo | null {
-	const state = {
-		summary: undefined as string | undefined,
-		customTitle: undefined as string | undefined,
-		created: undefined as number | undefined,
-		lastRequestEnded: undefined as number | undefined,
-		lastRequestStartedTimestamp: undefined as number | undefined,
-		firstUserMessageContent: undefined as string | undefined,
-		foundSessionId: false,
-	};
-
-	const lines = content.split('\n');
-
-	for (const line of lines) {
-		const trimmed = line.trim();
-		const { shouldContinue } = processLineForMetadata(trimmed, state);
-		if (!shouldContinue) {
-			break;
-		}
-	}
-
-	return buildMetadataResult(sessionId, fileMtime, state);
-}
-
-/**
- * State object for metadata extraction.
- */
-interface MetadataExtractionState {
-	summary: string | undefined;
-	customTitle: string | undefined;
-	created: number | undefined;
-	lastRequestEnded: number | undefined;
-	lastRequestStartedTimestamp: number | undefined;
-	firstUserMessageContent: string | undefined;
-	foundSessionId: boolean;
-}
-
-/**
- * Process a single line for metadata extraction.
- * Uses validators for type safety while keeping string pre-filtering for performance.
- *
- * @returns Whether to continue processing more lines
- */
-function processLineForMetadata(
-	trimmed: string,
-	state: MetadataExtractionState
-): { shouldContinue: boolean } {
-	if (trimmed.length === 0) {
-		return { shouldContinue: true };
-	}
-
-	// Fast string check before JSON.parse - skip lines that can't match
-	const mightBeSummary = trimmed.includes('"type":"summary"') || trimmed.includes('"type": "summary"');
-	const mightBeCustomTitle = trimmed.includes('"type":"custom-title"') || trimmed.includes('"type": "custom-title"');
-	const mightBeMessage = (
-		trimmed.includes('"type":"user"') || trimmed.includes('"type": "user"') ||
-		trimmed.includes('"type":"assistant"') || trimmed.includes('"type": "assistant"')
-	);
-
-	if (!mightBeSummary && !mightBeMessage && !mightBeCustomTitle) {
-		return { shouldContinue: true };
-	}
-
-	// Parse JSON and validate with schema validators
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(trimmed);
-	} catch {
-		return { shouldContinue: true };
-	}
-
-	// Try custom title validation
-	if (mightBeCustomTitle) {
-		const customTitleResult = vCustomTitleEntry.validate(parsed);
-		if (!customTitleResult.error) {
-			state.customTitle = customTitleResult.content.customTitle;
-		}
-		return { shouldContinue: true };
-	}
-
-	// Try summary validation
-	if (mightBeSummary) {
-		const summaryResult = vSummaryEntry.validate(parsed);
-		if (!summaryResult.error) {
-			const summaryText = summaryResult.content.summary.toLowerCase();
-			if (!summaryText.startsWith('api error:') && !summaryText.startsWith('invalid api key')) {
-				state.summary = summaryResult.content.summary;
-			}
-		}
-		return { shouldContinue: true };
-	}
-
-	// Try message validation - always process to track both first and last timestamps
-	if (mightBeMessage) {
-		const messageResult = vMessageEntry.validate(parsed);
-		if (!messageResult.error) {
-			const entry = messageResult.content;
-			const messageTimestamp = new Date(entry.timestamp).getTime();
-
-			// Track first message timestamp and content
-			if (state.created === undefined) {
-				state.foundSessionId = true;
-				state.created = messageTimestamp;
-
-				// Extract user message content for label fallback
-				if (entry.type === 'user') {
-					const msgContent = entry.message.content;
-					if (typeof msgContent === 'string') {
-						state.firstUserMessageContent = msgContent;
-					} else if (Array.isArray(msgContent)) {
-						const textParts: string[] = [];
-						for (const block of msgContent) {
-							if (block.type === 'text' && 'text' in block) {
-								textParts.push(block.text);
-							}
-						}
-						state.firstUserMessageContent = textParts.join('\n');
-					}
-				}
-			}
-
-			// Track last genuine user request timestamp
-			if (entry.type === 'user' && isUserRequest(entry.message.content)) {
-				state.lastRequestStartedTimestamp = messageTimestamp;
-			}
-
-			// Always update last message timestamp (messages are chronological in file)
-			state.lastRequestEnded = messageTimestamp;
-		}
-	}
-
-	// No early termination - we need to read all messages to get lastRequestEnded
-	return { shouldContinue: true };
-}
-
-/**
- * Build final metadata result from extraction state.
- */
-function buildMetadataResult(
-	sessionId: string,
-	_fileMtime: Date,
-	state: MetadataExtractionState
-): IClaudeCodeSessionInfo | null {
-	// Require at least one message for a valid session
-	if (state.created === undefined || state.lastRequestEnded === undefined) {
-		return null;
-	}
-
-	// Generate label — custom title takes highest priority
-	let label = state.customTitle ?? state.summary;
-	if (label === undefined && state.firstUserMessageContent !== undefined) {
-		const stripped = stripSystemReminders(state.firstUserMessageContent);
-		const firstLine = getFirstNonEmptyLine(stripped);
-		label = firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
-	}
-	if (!label) {
-		label = 'Claude Session';
-	}
-
-	return {
-		id: sessionId,
-		label,
-		created: state.created,
-		lastRequestStarted: state.lastRequestStartedTimestamp,
-		lastRequestEnded: state.lastRequestEnded,
-	};
-}
-
-/**
- * Extract metadata from a session file using streaming to minimize memory usage.
- *
- * This is optimized for listing many sessions where we only need basic metadata.
- * It reads the file line-by-line to extract timestamps and labels without
- * loading entire large session files into memory.
- *
- * @param filePath The filesystem path to the .jsonl session file
- * @param sessionId Session ID (from filename)
- * @param fileMtime File modification time as fallback timestamp
- * @param signal Optional AbortSignal to cancel the operation
- * @returns Promise resolving to lightweight session metadata, or null if invalid
- */
-export async function extractSessionMetadataStreaming(
-	filePath: string,
-	sessionId: string,
-	fileMtime: Date,
-	signal?: AbortSignal
-): Promise<IClaudeCodeSessionInfo | null> {
-	const fs = await import('fs');
-	const readline = await import('readline');
-
-	const state: MetadataExtractionState = {
-		summary: undefined,
-		customTitle: undefined,
-		created: undefined,
-		lastRequestEnded: undefined,
-		lastRequestStartedTimestamp: undefined,
-		firstUserMessageContent: undefined,
-		foundSessionId: false,
-	};
-
-	return new Promise((resolve, reject) => {
-		// Check for pre-aborted signal before opening any file handles
-		if (signal?.aborted) {
-			reject(new Error('Operation cancelled'));
-			return;
-		}
-
-		const stream = fs.createReadStream(filePath, { encoding: 'utf8' });
-		const rl = readline.createInterface({
-			input: stream,
-			crlfDelay: Infinity,
-		});
-
-		let aborted = false;
-		let earlyTerminationResult: IClaudeCodeSessionInfo | null | undefined;
-
-		const cleanup = () => {
-			rl.close();
-			stream.destroy();
-		};
-
-		const onAbort = () => {
-			aborted = true;
-			cleanup();
-			reject(new Error('Operation cancelled'));
-		};
-
-		if (signal) {
-			signal.addEventListener('abort', onAbort, { once: true });
-		}
-
-		rl.on('line', (line) => {
-			if (aborted) {
-				return;
-			}
-
-			const trimmed = line.trim();
-			const { shouldContinue } = processLineForMetadata(trimmed, state);
-
-			if (!shouldContinue) {
-				earlyTerminationResult = buildMetadataResult(sessionId, fileMtime, state);
-				cleanup();
-			}
-		});
-
-		rl.on('close', () => {
-			if (aborted) {
-				return;
-			}
-			signal?.removeEventListener('abort', onAbort);
-			const result = earlyTerminationResult !== undefined
-				? earlyTerminationResult
-				: buildMetadataResult(sessionId, fileMtime, state);
-			resolve(result);
-		});
-
-		rl.on('error', (err) => {
-			signal?.removeEventListener('abort', onAbort);
-			reject(err);
-		});
-
-		stream.on('error', (err) => {
-			signal?.removeEventListener('abort', onAbort);
-			reject(err);
-		});
-	});
 }
 
 // #endregion

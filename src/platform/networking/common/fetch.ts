@@ -154,6 +154,8 @@ export interface IResponseDelta {
 	thinking?: ThinkingDelta | EncryptedThinkingDelta;
 	phase?: string;
 	retryReason?: FilterReason | 'network_error' | 'server_error';
+	/** Output-message ID for assistant history round-tripping with the Responses API */
+	responseOutputMessageId?: string;
 	/** Marker for the current response, which should be presented in `IMakeChatRequestOptions` on the next call */
 	statefulMarker?: string;
 	/** Context management information from Anthropic Messages API */

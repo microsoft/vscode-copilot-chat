@@ -86,7 +86,7 @@ describe('NextEditProvider Caching', () => {
 					]
 				);
 				for (const edit of lineEdit.replacements) {
-					yield new WithStatelessProviderTelemetry({ edit, isFromCursorJump: false }, telemetryBuilder.build(Result.ok(undefined)));
+					yield new WithStatelessProviderTelemetry({ targetDocument: request.getActiveDocument().id, edit, isFromCursorJump: false }, telemetryBuilder.build(Result.ok(undefined)));
 				}
 				const noSuggestions = new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, undefined);
 				return new WithStatelessProviderTelemetry(noSuggestions, telemetryBuilder.build(Result.error(noSuggestions)));

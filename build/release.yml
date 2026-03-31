@@ -242,3 +242,4 @@ extends:
     generateNotice: ${{ parameters.generateNotice }}
 
     publishExtension: ${{ parameters.publishExtension }}
+    ghReleasePublishVSIX: true

@@ -116,6 +116,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 				body: options.body,
 				signal: fetchAbortCtl.signal,
 				method: 'POST',
+				callSite: 'nes-completions',
 			};
 
 			const response = await this.fetcherService.fetch(url, request);

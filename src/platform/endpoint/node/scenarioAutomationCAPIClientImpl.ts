@@ -3,10 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { FetchOptions, RequestMetadata, RequestType } from '@vscode/copilot-api';
+import { FetchOptions as CAPIFetchOptions, RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
-import { IFetcherService } from '../../networking/common/fetcherService';
+import { FetchOptions, IFetcherService } from '../../networking/common/fetcherService';
 import { CAPIClientImpl } from './capiClientImpl';
 
 export class ScenarioAutomationCAPIClientImpl extends CAPIClientImpl {
@@ -19,7 +19,7 @@ export class ScenarioAutomationCAPIClientImpl extends CAPIClientImpl {
 		super(_fetcher, envService);
 	}
 
-	override async makeRequest<T>(request: FetchOptions, requestMetadata: RequestMetadata): Promise<T> {
+	override async makeRequest<T>(request: CAPIFetchOptions, requestMetadata: RequestMetadata): Promise<T> {
 		const overrideUrl = this._configurationService.getConfig(ConfigKey.Advanced.DebugOverrideEmbeddingsUrl);
 		if (overrideUrl && requestMetadata.type === RequestType.EmbeddingsCodeSearch) {
 			const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -28,11 +28,11 @@ export class ScenarioAutomationCAPIClientImpl extends CAPIClientImpl {
 				headers['Authorization'] = `Bearer ${authToken}`;
 			}
 			const localRequest: FetchOptions = {
-				method: request.method ?? 'POST',
+				callSite: 'ScenarioAutomationCAPIClient.makeRequest',
+				method: (request.method ?? 'POST') as 'GET' | 'POST' | 'PUT',
 				headers,
 				body: JSON.stringify(request.json),
 				timeout: request.timeout,
-				signal: request.signal,
 			};
 			try {
 				return await this._fetcher.fetch(overrideUrl, localRequest) as unknown as T;

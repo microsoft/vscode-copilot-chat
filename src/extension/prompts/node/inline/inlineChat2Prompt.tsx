@@ -77,10 +77,10 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 						You are an AI coding assistant that is used for quick, inline code changes. Changes are scoped to a single file or to some selected code in that file. You can ONLY edit that file and must use a tool to make these edits.<br />
 						The user is interested in code changes grounded in the user's prompt. So, focus on coding, no wordy explanations, and do not ask back for clarifications.<br />
 						Make all changes in a single invocation of the edit-tool (there is no tool calling loop).<br />
-						Do not make code changes that are not directly and logically related to the user's prompt, instead invoke the {this.props.exitToolName} tool which can handle this.<br />
 						{isLargeFile && readToolName && <>
 							The file is large and only a portion is shown below. If you need to see more of the file to make the requested change, use the {readToolName} tool to read additional parts of this file before editing. Do NOT use it to read other files.<br />
 						</>}
+						Do not make code changes that are not directly and logically related to the user's prompt. When you cannot make a code change, reply with just a few words.<br />
 					</Tag>
 					<cacheBreakpoint type={CacheType} />
 				</SystemMessage>

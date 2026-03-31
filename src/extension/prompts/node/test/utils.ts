@@ -244,7 +244,7 @@ export function getExprText(arrowFn: () => any): string {
 	return expr.trim();
 }
 
-declare module globalThis {
+declare namespace globalThis {
 	export let playground: SummarizeDocumentPlayground | undefined;
 	export let summarizedDoc: IProjectedDocumentDebugInfo | undefined;
 }

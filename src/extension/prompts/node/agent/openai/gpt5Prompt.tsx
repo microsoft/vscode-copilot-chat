@@ -131,6 +131,7 @@ class DefaultGpt5AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Analyzing code for vulnerabilities is allowed.<br />
 				- Showing user code and tool call details is allowed.<br />
 				{tools[ToolName.SearchSubagent] && <>For codebase exploration, prefer {ToolName.SearchSubagent} to search and gather data instead of directly calling {ToolName.FindTextInFiles}, {ToolName.Codebase} or {ToolName.FindFiles}.<br /></>}
+				{tools[ToolName.ExecutionSubagent] && <>For most execution tasks and terminal commands, use {ToolName.ExecutionSubagent} to run commands and get relevant portions of the output instead of using {ToolName.CoreRunInTerminal}. Use {ToolName.CoreRunInTerminal} in rare cases when you want the entire output of a single command without truncation.<br /></>}
 				{tools[ToolName.ApplyPatch] && <>- Use the apply_patch tool to edit files (NEVER try `applypatch` or `apply-patch`, only `apply_patch`): {`{"command":["apply_patch","*** Begin Patch\\n*** Update File: path/to/file.py\\n@@ def example():\\n-  pass\\n+  return 123\\n*** End Patch"]}`}.<br /></>}
 				{!tools[ToolName.ApplyPatch] && tools[ToolName.ReplaceString] && <>- Use the replace_string_in_file tool to edit files precisely.<br /></>}
 				<br />
@@ -144,6 +145,10 @@ class DefaultGpt5AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Do not add inline comments within code unless explicitly requested.<br />
 				- Do not use one-letter variable names unless explicitly requested.<br />
 			</Tag>
+			{tools[ToolName.ExecutionSubagent] && <>
+				<Tag name='toolUseInstructions'>
+					Don't call {ToolName.ExecutionSubagent} multiple times in parallel. Instead, invoke one subagent and wait for its response before running the next command.<br />
+				</Tag></>}
 			<Tag name='testing'>
 				If the codebase has tests or the ability to build or run, you should use them to verify that your work is complete. Generally, your testing philosophy should be to start as specific as possible to the code you changed so that you can catch issues efficiently, then make your way to broader tests as you build confidence.<br />
 				Once you're confident in correctness, use formatting commands to ensure that your code is well formatted. These commands can take time so you should run them on as precise a target as possible.<br />

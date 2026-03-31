@@ -23,6 +23,7 @@ export class ReleaseNotesService implements IReleaseNotesService {
 		}
 		const releaseNotes = await this.fetcherService.fetch(url, {
 			method: 'GET',
+			callSite: 'release-notes',
 		});
 		const releaseNotesText = await releaseNotes.text();
 		return releaseNotesText;
@@ -35,6 +36,7 @@ export class ReleaseNotesService implements IReleaseNotesService {
 		}
 		const releaseNotes = await this.fetcherService.fetch(url, {
 			method: 'GET',
+			callSite: 'release-notes-version',
 		});
 		const releaseNotesText = await releaseNotes.text();
 		return releaseNotesText;

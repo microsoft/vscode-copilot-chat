@@ -14,19 +14,30 @@ import { IAuthenticationService } from '../../authentication/common/authenticati
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
-import { IFetcherService } from '../../networking/common/fetcherService';
+import { isAbortError } from '../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../networking/common/networking';
+import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
 import { AutoChatEndpoint } from './autoChatEndpoint';
-import { RouterDecisionFetcher } from './routerDecisionFetcher';
+import { RouterDecisionFetcher, RoutingContextSignals } from './routerDecisionFetcher';
 
 interface AutoModeAPIResponse {
 	available_models: string[];
 	expires_at: number;
 	discounted_costs?: { [key: string]: number };
 	session_token: string;
+}
+
+interface AutoModelCacheEntry {
+	endpoint: AutoChatEndpoint;
+	tokenBank: AutoModeTokenBank;
+	lastSessionToken?: string;
+	lastRoutedPrompt?: string;
+	routerFallbackReason?: string;
+	turnCount: number;
+	needsReEval: boolean;
 }
 
 class AutoModeTokenBank extends Disposable {
@@ -141,11 +152,18 @@ export interface IAutomodeService {
 	readonly _serviceBrand: undefined;
 
 	resolveAutoModeEndpoint(chatRequest: ChatRequest | undefined, knownEndpoints: IChatEndpoint[]): Promise<IChatEndpoint>;
+
+	/**
+	 * Marks the router cache for this conversation as needing re-evaluation.
+	 * The next call to {@link resolveAutoModeEndpoint} will re-run the router
+	 * instead of returning the cached endpoint.
+	 */
+	invalidateRouterCache(chatRequest: ChatRequest): void;
 }
 
 export class AutomodeService extends Disposable implements IAutomodeService {
 	readonly _serviceBrand: undefined;
-	private readonly _autoModelCache: Map<string, { endpoints: AutoChatEndpoint[]; tokenBank: AutoModeTokenBank; lastSessionToken?: string; lastRoutedPrompt?: string }> = new Map();
+	private readonly _autoModelCache: Map<string, AutoModelCacheEntry> = new Map();
 	private _reserveTokens: DisposableMap<ChatLocation, AutoModeTokenBank> = new DisposableMap();
 	private readonly _routerDecisionFetcher: RouterDecisionFetcher;
 
@@ -155,10 +173,10 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
-		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IEnvService private readonly _envService: IEnvService,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 	) {
 		super();
 		this._register(this._authService.onDidAuthenticationChange(() => {
@@ -173,7 +191,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			}
 		}));
 		this._serviceBrand = undefined;
-		this._routerDecisionFetcher = this._register(new RouterDecisionFetcher(this._fetcherService, this._logService, this._configurationService, this._expService, this._telemetryService, this._authService));
+		this._routerDecisionFetcher = new RouterDecisionFetcher(this._capiClientService, this._authService, this._logService, this._telemetryService, this._requestLogger);
 	}
 
 	override dispose(): void {
@@ -186,168 +204,166 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 	}
 
 	/**
-	 * Resolve an auto mode endpoint using a double-buffer strategy and a global reserve token.
+	 * Resolve an auto mode endpoint
+	 * Optionally uses a router model to select the best endpoint based on the prompt.
 	 */
+	invalidateRouterCache(chatRequest: ChatRequest): void {
+		const conversationId = chatRequest.sessionResource?.toString() ?? chatRequest.sessionId ?? 'unknown';
+		const entry = this._autoModelCache.get(conversationId);
+		if (entry) {
+			entry.needsReEval = true;
+			this._logService.trace(`[AutomodeService] Router cache invalidated for conversation ${conversationId}`);
+		}
+	}
+
 	async resolveAutoModeEndpoint(chatRequest: ChatRequest | undefined, knownEndpoints: IChatEndpoint[]): Promise<IChatEndpoint> {
 		if (!knownEndpoints.length) {
 			throw new Error('No auto mode endpoints provided.');
 		}
 
-		// Only use router model for panel chat to avoid latency penalty in inline chat
-		const isPanelChat = !chatRequest?.location || chatRequest?.location === ChatLocation.Panel;
-		const usingRouterModel = isPanelChat && this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AutoModeRouterUrl, this._expService) !== undefined;
-		if (usingRouterModel) {
-			return this._resolveWithRouterModel(chatRequest, knownEndpoints);
-		}
-		return this._resolveWithoutRouterModel(chatRequest, knownEndpoints);
-	}
-
-	/**
-	 * Router model path: Uses the router decision fetcher to select the best model based on the prompt.
-	 * This is an experimental feature that can be removed once the experiment is complete.
-	 */
-	private async _resolveWithRouterModel(chatRequest: ChatRequest | undefined, knownEndpoints: IChatEndpoint[]): Promise<IChatEndpoint> {
-		const conversationId = getConversationId(chatRequest);
+		const conversationId = chatRequest?.sessionResource?.toString() ?? chatRequest?.sessionId ?? 'unknown';
 		const entry = this._autoModelCache.get(conversationId);
-		const location = chatRequest?.location ?? ChatLocation.Panel;
-		const reserveTokenBank = this._reserveTokens.get(location) || new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService, this._envService);
-		this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService, this._envService));
+		const tokenBank = this._acquireTokenBank(entry, chatRequest?.location, conversationId);
+		const token = await tokenBank.getToken();
 
-		// Update the debug name so logs are properly associating this token with the right conversation id now
-		reserveTokenBank.debugName = conversationId;
-
-		const reserveToken = await reserveTokenBank.getToken();
-
-		let selectedModel: IChatEndpoint | undefined = undefined;
-		const availableModels = reserveToken.available_models;
-		const cachedModels = entry?.endpoints.map(e => e.model) || [];
-		// preferredModels is an ordered list used to express routing preference:
-		//  - the first available model is always first
-		//  - followed by any cached models in their original order, without duplicates
-		const firstAvailable = this._findFirstAvailableModel(availableModels, knownEndpoints);
-		const preferredModels = firstAvailable ? [firstAvailable.model] : [];
-		for (const cachedModel of cachedModels) {
-			if (!preferredModels.includes(cachedModel)) {
-				preferredModels.push(cachedModel);
-			}
+		// After the first turn, skip the router unless explicitly invalidated
+		// (e.g. after conversation compaction/summarization). Token refresh and
+		// default model selection still run so available-model changes are respected.
+		const skipRouter = entry !== undefined && entry.turnCount > 0 && !entry.needsReEval;
+		if (entry?.needsReEval) {
+			entry.needsReEval = false;
 		}
 
-		// Only call the router if the prompt has changed since the last routing decision.
-		// This ensures routing happens once per turn (user message), not on every iteration
-		// during tool calling where the prompt remains the same.
-		const prompt = chatRequest?.prompt?.trim();
-		const shouldRoute = prompt?.length && (!entry || entry.lastRoutedPrompt !== prompt);
-		let routerModelErrorMessage = '';
-		if (shouldRoute) {
-			try {
-				const routedModel = await this._routerDecisionFetcher.getRoutedModel(prompt, availableModels, preferredModels);
-				selectedModel = knownEndpoints.find(e => e.model === routedModel);
-			} catch (e) {
-				routerModelErrorMessage = (e as Error).message;
-				this._logService.error(`Failed to get routed model for conversation ${conversationId}: `, (e as Error).message);
-			}
-		}
+		const routerResult = skipRouter
+			? { lastRoutedPrompt: chatRequest?.prompt?.trim() ?? entry?.lastRoutedPrompt }
+			: await this._tryRouterSelection(chatRequest, conversationId, entry, token, knownEndpoints);
+		let selectedModel = routerResult.selectedModel;
+		const lastRoutedPrompt = routerResult.lastRoutedPrompt;
+		const routerFallbackReason = routerResult.fallbackReason;
+
+		// Default model selection when router was skipped or failed
 		if (!selectedModel) {
-			// When refreshing (cached entry exists), prefer a model from the same provider
-			if (entry?.endpoints.length) {
-				const currentProvider = entry.endpoints[0].modelProvider;
-				selectedModel = this._findSameProviderModel(currentProvider, availableModels, knownEndpoints);
+			if (routerFallbackReason) {
+				/* __GDPR__
+					"automode.routerFallback" : {
+						"owner": "lramos15",
+						"comment": "Reports when the auto mode router is skipped or fails and falls back to default model selection",
+						"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The reason the router was skipped or failed (hasImage, noMatchingEndpoint, routerError, routerTimeout)" }
+					}
+				*/
+				this._telemetryService.sendMSFTTelemetryEvent('automode.routerFallback', {
+					reason: routerFallbackReason,
+				});
 			}
-			if (!selectedModel) {
-				selectedModel = firstAvailable;
-			}
-			if (!selectedModel) {
-				const errorMsg = 'Auto mode failed: no available model found in known endpoints.';
-				this._logService.error(errorMsg);
-				throw new Error(errorMsg);
-			}
-			if (shouldRoute) {
-				// If routing was attempted but failed, emit event that we are falling back to the reserved model
-				{
-					/* __GDPR__
-						"automode.routerDecisionFallback" : {
-							"owner": "tyleonha",
-							"comment": "Reports a fallback event when the router fails to return a valid model and we have to fall back to the reserved model.",
-							"availableModels": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Comma-separated list of available models for this request" },
-							"preferredModels": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Comma-separated list of preferred models for this request, ordered by preference with the reserved model first" },
-							"chosenModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The fallback model used when router fails" },
-							"errorMessage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The error message from the router failure" }
-						}
-					*/
-					this._telemetryService.sendMSFTTelemetryEvent('automode.routerDecisionFallback', {
-						'availableModels': availableModels.join(','),
-						'preferredModels': preferredModels.join(','),
-						'chosenModel': selectedModel.model,
-						'errorMessage': routerModelErrorMessage
-					});
-				}
-			}
+			selectedModel = this._selectDefaultModel(entry?.endpoint?.modelProvider, token.available_models, knownEndpoints);
 		}
-		selectedModel = this._applyVisionFallback(chatRequest, selectedModel, reserveToken.available_models, knownEndpoints);
 
-		// If the session token changed, invalidate all cached endpoints so they get recreated with the new token
-		const existingEndpoints = (entry && entry.lastSessionToken === reserveToken.session_token) ? entry.endpoints : [];
-		let autoEndpoint = existingEndpoints.find(e => e.model === selectedModel.model);
-		if (!autoEndpoint) {
-			autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, reserveToken.session_token, reserveToken.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(reserveToken.discounted_costs));
-			existingEndpoints.push(autoEndpoint);
-		}
-		this._autoModelCache.set(conversationId, { endpoints: existingEndpoints, tokenBank: reserveTokenBank, lastSessionToken: reserveToken.session_token, lastRoutedPrompt: prompt });
+		selectedModel = this._applyVisionFallback(chatRequest, selectedModel, token.available_models, knownEndpoints);
+
+		// Reuse the cached endpoint if the session token and model haven't changed
+		const autoEndpoint = (entry?.endpoint && entry.lastSessionToken === token.session_token && entry.endpoint.model === selectedModel.model)
+			? entry.endpoint
+			: this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, token.session_token, token.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(token.discounted_costs));
+
+		const isNewTurn = !entry || lastRoutedPrompt !== entry.lastRoutedPrompt;
+		this._autoModelCache.set(conversationId, {
+			endpoint: autoEndpoint,
+			tokenBank,
+			lastSessionToken: token.session_token,
+			lastRoutedPrompt,
+			routerFallbackReason,
+			turnCount: (entry?.turnCount ?? 0) + (isNewTurn ? 1 : 0),
+			needsReEval: false,
+		});
 		return autoEndpoint;
 	}
 
-	/**
-	 * Non-router model path: Uses the cached endpoint if available, or falls back to the reserved token's selected model.
-	 */
-	private async _resolveWithoutRouterModel(chatRequest: ChatRequest | undefined, knownEndpoints: IChatEndpoint[]): Promise<IChatEndpoint> {
-		const conversationId = getConversationId(chatRequest);
-		const entry = this._autoModelCache.get(conversationId);
-
-		// If we have a cached entry, use it (refreshing if the model changed)
+	private _acquireTokenBank(entry: AutoModelCacheEntry | undefined, location: ChatLocation | undefined, conversationId: string): AutoModeTokenBank {
 		if (entry) {
-			const entryToken = await entry.tokenBank.getToken();
-			if (entry.endpoints.length && entry.lastSessionToken !== entryToken.session_token) {
-				// Session token changed during a token refresh -> pick a model from the same provider
-				const currentProvider = entry.endpoints[0].modelProvider;
-				const newModel = this._findSameProviderModel(currentProvider, entryToken.available_models, knownEndpoints)
-					?? this._findFirstAvailableModel(entryToken.available_models, knownEndpoints);
-				if (!newModel) {
-					const errorMsg = `Auto mode failed: no model with provider '${currentProvider}' or any available model found in known endpoints.`;
-					this._logService.error(errorMsg);
-					throw new Error(errorMsg);
-				}
-				entry.endpoints = [this._instantiationService.createInstance(AutoChatEndpoint, newModel, entryToken.session_token, entryToken.discounted_costs?.[newModel.model] || 0, this._calculateDiscountRange(entryToken.discounted_costs))];
-				entry.lastSessionToken = entryToken.session_token;
-			}
-			// Apply vision fallback even on cached entries, since the cached model may not support images
-			const cachedEndpoint = entry.endpoints[0];
-			const fallbackEndpoint = this._applyVisionFallback(chatRequest, cachedEndpoint, entryToken.available_models, knownEndpoints);
-			if (fallbackEndpoint !== cachedEndpoint) {
-				const autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, fallbackEndpoint, entryToken.session_token, entryToken.discounted_costs?.[fallbackEndpoint.model] || 0, this._calculateDiscountRange(entryToken.discounted_costs));
-				entry.endpoints[0] = autoEndpoint;
-				return autoEndpoint;
-			}
-			return cachedEndpoint;
+			return entry.tokenBank;
+		}
+		const loc = location ?? ChatLocation.Panel;
+		const tokenBank = this._reserveTokens.deleteAndLeak(loc) || new AutoModeTokenBank('reserve', loc, this._capiClientService, this._authService, this._logService, this._expService, this._envService);
+		this._reserveTokens.set(loc, new AutoModeTokenBank('reserve', loc, this._capiClientService, this._authService, this._logService, this._expService, this._envService));
+		tokenBank.debugName = conversationId;
+		return tokenBank;
+	}
+
+	private async _tryRouterSelection(
+		chatRequest: ChatRequest | undefined,
+		conversationId: string,
+		entry: AutoModelCacheEntry | undefined,
+		token: AutoModeAPIResponse,
+		knownEndpoints: IChatEndpoint[],
+	): Promise<{ selectedModel?: IChatEndpoint; lastRoutedPrompt?: string; fallbackReason?: string }> {
+		const prompt = chatRequest?.prompt?.trim();
+		const lastRoutedPrompt = entry?.lastRoutedPrompt ?? prompt;
+
+		if (hasImage(chatRequest)) {
+			return { lastRoutedPrompt, fallbackReason: 'hasImage' };
 		}
 
-		// No cached entry, use the reserve token
-		const location = chatRequest?.location ?? ChatLocation.Panel;
-		const reserveTokenBank = this._reserveTokens.get(location) || new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService, this._envService);
-		this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService, this._envService));
-		reserveTokenBank.debugName = conversationId;
+		if (!this._isRouterEnabled(chatRequest) || conversationId === 'unknown') {
+			return { lastRoutedPrompt };
+		}
 
-		const reserveToken = await reserveTokenBank.getToken();
-		let selectedModel = this._findFirstAvailableModel(reserveToken.available_models, knownEndpoints);
+		if (!prompt?.length) {
+			return { lastRoutedPrompt, fallbackReason: 'emptyPrompt' };
+		}
+
+		// Prompt hasn't changed since last decision — skip router but allow endpoint refresh
+		if (entry && entry.lastRoutedPrompt === prompt) {
+			return { lastRoutedPrompt };
+		}
+
+		try {
+			const contextSignals: RoutingContextSignals = {
+				session_id: conversationId !== 'unknown' ? conversationId : undefined,
+				reference_count: chatRequest?.references?.length,
+				prompt_char_count: prompt.length,
+				previous_model: entry?.endpoint?.model,
+				turn_number: (entry?.turnCount ?? 0) + 1,
+			};
+			const result = await this._routerDecisionFetcher.getRouterDecision(prompt, token.session_token, token.available_models, undefined, contextSignals);
+
+			if (!result.candidate_models.length) {
+				return { lastRoutedPrompt: prompt, fallbackReason: 'emptyCandidateList' };
+			}
+
+			// Prefer same-provider model, then fall back to the router's top candidate
+			const selectedModel = (entry?.endpoint && this._findSameProviderModel(entry.endpoint.modelProvider, result.candidate_models, knownEndpoints))
+				?? knownEndpoints.find(e => e.model === result.candidate_models[0]);
+
+			if (!selectedModel) {
+				return { lastRoutedPrompt: prompt, fallbackReason: 'noMatchingEndpoint' };
+			}
+
+			if (result.sticky_override) {
+				this._logService.trace(`[AutomodeService] Sticky routing override: confidence=${(result.confidence * 100).toFixed(1)}%, label=${result.predicted_label}, router_model=${result.candidate_models[0]}, actual_model=${selectedModel.model}`);
+			}
+			return { selectedModel, lastRoutedPrompt: prompt };
+		} catch (e) {
+			const isTimeout = isAbortError(e);
+			const fallbackReason = isTimeout ? 'routerTimeout' : 'routerError';
+			this._logService.error(`Failed to get routed model for conversation ${conversationId} (${fallbackReason}):`, (e as Error).message);
+			return { lastRoutedPrompt: prompt, fallbackReason };
+		}
+	}
+
+	private _selectDefaultModel(currentModelProvider: string | undefined, availableModels: string[], knownEndpoints: IChatEndpoint[]): IChatEndpoint {
+		const selectedModel = (currentModelProvider && this._findSameProviderModel(currentModelProvider, availableModels, knownEndpoints))
+			?? this._findFirstAvailableModel(availableModels, knownEndpoints);
 		if (!selectedModel) {
 			const errorMsg = 'Auto mode failed: no available model found in known endpoints.';
 			this._logService.error(errorMsg);
 			throw new Error(errorMsg);
 		}
-		selectedModel = this._applyVisionFallback(chatRequest, selectedModel, reserveToken.available_models, knownEndpoints);
-		const autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, reserveToken.session_token, reserveToken.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(reserveToken.discounted_costs));
+		return selectedModel;
+	}
 
-		this._autoModelCache.set(conversationId, { endpoints: [autoEndpoint], tokenBank: reserveTokenBank, lastSessionToken: reserveToken.session_token });
-		return autoEndpoint;
+	private _isRouterEnabled(chatRequest: ChatRequest | undefined): boolean {
+		const isPanelChat = !chatRequest?.location || chatRequest?.location === ChatLocation.Panel;
+		return isPanelChat && this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.UseAutoModeRouting, this._expService);
 	}
 
 	/**
@@ -415,18 +431,6 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		}
 		return hasValues ? { low, high } : { low: 0, high: 0 };
 	}
-}
-
-/**
- * Get the conversation ID from the chat request. This is representative of a single chat thread
- * @param chatRequest The chat request object.
- * @returns The conversation ID or 'unknown' if not available.
- */
-function getConversationId(chatRequest: ChatRequest | undefined): string {
-	if (!chatRequest) {
-		return 'unknown';
-	}
-	return chatRequest?.sessionId || 'unknown';
 }
 
 function hasImage(chatRequest: ChatRequest | undefined): boolean {

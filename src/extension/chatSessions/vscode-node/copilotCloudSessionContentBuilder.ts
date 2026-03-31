@@ -128,6 +128,7 @@ export class ChatSessionContentBuilder {
 					[], // toolReferences
 					[],
 					undefined,
+					undefined,
 					undefined
 				));
 
@@ -221,13 +222,14 @@ export class ChatSessionContentBuilder {
 	): string {
 		let currentResponseContent = '';
 		if (delta.role === 'assistant') {
+			const toolCalls = Array.isArray(delta.tool_calls) ? delta.tool_calls : undefined;
 			// Handle special case for run_custom_setup_step
 			if (
 				choice.finish_reason === 'tool_calls' &&
-				delta.tool_calls?.length &&
-				(delta.tool_calls[0].function.name === 'run_custom_setup_step' || delta.tool_calls[0].function.name === 'run_setup')
+				toolCalls?.length &&
+				(toolCalls[0].function.name === 'run_custom_setup_step' || toolCalls[0].function.name === 'run_setup')
 			) {
-				const toolCall = delta.tool_calls[0];
+				const toolCall = toolCalls[0];
 				let args: { name?: string } = {};
 				try {
 					args = JSON.parse(toolCall.function.arguments);
@@ -253,14 +255,14 @@ export class ChatSessionContentBuilder {
 				}
 
 				const isError = delta.content?.startsWith('<error>');
-				if (delta.tool_calls) {
+				if (toolCalls) {
 					// Add any accumulated content as markdown first
 					if (currentResponseContent.trim()) {
 						responseParts.push(new ChatResponseMarkdownPart(currentResponseContent.trim()));
 						currentResponseContent = '';
 					}
 
-					for (const toolCall of delta.tool_calls) {
+					for (const toolCall of toolCalls) {
 						const toolPart = this.createToolInvocationPart(pullRequest, toolCall, delta.content || '');
 						if (toolPart) {
 							responseParts.push(toolPart);

@@ -323,7 +323,7 @@ Error: ${error}`);
 	public static async validatePackageRegistry(args: { type: PackageType; name: string }, logService: ILogService, fetcherService: IFetcherService): Promise<ValidatePackageResult> {
 		try {
 			if (args.type === 'npm') {
-				const response = await fetcherService.fetch(`https://registry.npmjs.org/${encodeURIComponent(args.name)}`, { method: 'GET' });
+				const response = await fetcherService.fetch(`https://registry.npmjs.org/${encodeURIComponent(args.name)}`, { method: 'GET', callSite: 'mcp-npm-registry' });
 				if (!response.ok) {
 					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: vscode.l10n.t("Package {0} not found in npm registry", args.name) };
 				}
@@ -337,7 +337,7 @@ Error: ${error}`);
 					readme: data.readme,
 				};
 			} else if (args.type === 'pip') {
-				const response = await fetcherService.fetch(`https://pypi.org/pypi/${encodeURIComponent(args.name)}/json`, { method: 'GET' });
+				const response = await fetcherService.fetch(`https://pypi.org/pypi/${encodeURIComponent(args.name)}/json`, { method: 'GET', callSite: 'mcp-pypi-registry' });
 				if (!response.ok) {
 					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: vscode.l10n.t("Package {0} not found in PyPI registry", args.name) };
 				}
@@ -362,7 +362,7 @@ Error: ${error}`);
 					? args.name.split('/', 2)
 					: ['library', args.name];
 
-				const response = await fetcherService.fetch(`https://hub.docker.com/v2/repositories/${encodeURIComponent(namespace)}/${encodeURIComponent(repository)}`, { method: 'GET' });
+				const response = await fetcherService.fetch(`https://hub.docker.com/v2/repositories/${encodeURIComponent(namespace)}/${encodeURIComponent(repository)}`, { method: 'GET', callSite: 'mcp-docker-registry' });
 				if (!response.ok) {
 					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: vscode.l10n.t("Docker image {0} not found in Docker Hub registry", args.name) };
 				}

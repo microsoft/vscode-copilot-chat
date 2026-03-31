@@ -8,9 +8,13 @@ import { Event } from '../../../util/vs/base/common/event';
 
 export const IFetcherService = createServiceIdentifier<IFetcherService>('IFetcherService');
 
+/** Use as the callSite value to suppress fetch telemetry for a request (e.g. from the telemetry service itself). */
+export const NO_FETCH_TELEMETRY = 'NO_FETCH_TELEMETRY';
+
 export interface IFetcherService {
 	readonly _serviceBrand: undefined;
 	readonly onDidFetch: Event<FetchEvent>;
+	readonly onDidCompleteFetch: Event<FetchTelemetryEvent>;
 	getUserAgentLibrary(): string;
 	fetch(url: string, options: FetchOptions): Promise<Response>;
 	createWebSocket(url: string, options?: WebSocketConnectOptions): WebSocketConnection;
@@ -60,6 +64,14 @@ export type FetchEvent = {
 };
 
 export type ReportFetchEvent = (outcome: FetchEvent) => void;
+
+export interface FetchTelemetryEvent {
+	callSite: string;
+	hostname: string;
+	latencyMs: number;
+	statusCode: number | undefined;
+	success: boolean;
+}
 
 /** A basic version of http://developer.mozilla.org/en-US/docs/Web/API/Response */
 export class Response {
@@ -141,6 +153,8 @@ export type FetcherId = 'electron-fetch' | 'node-fetch' | 'node-http' | 'test-st
 
 /** These are the options we currently use, for ease of reference. */
 export interface FetchOptions {
+	/** Identifies the call site for telemetry tracking. Use {@link NO_FETCH_TELEMETRY} to suppress. */
+	callSite: string;
 	headers?: { [name: string]: string };
 	body?: string;
 	timeout?: number;
@@ -171,6 +185,8 @@ export interface WebSocketConnectOptions {
 export interface WebSocketConnection {
 	readonly webSocket: WebSocket;
 	readonly responseHeaders: IHeaders;
+	readonly responseStatusCode: number | undefined;
+	readonly responseStatusText: string | undefined;
 }
 
 export interface IAbortSignal {

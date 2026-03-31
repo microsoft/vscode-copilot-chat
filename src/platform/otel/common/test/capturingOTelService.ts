@@ -3,8 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Emitter, type Event } from '../../../../util/vs/base/common/event';
 import { resolveOTelConfig, type OTelConfig } from '../otelConfig';
-import { SpanStatusCode, type IOTelService, type ISpanHandle, type SpanOptions, type TraceContext } from '../otelService';
+import { SpanStatusCode, type ICompletedSpanData, type IOTelService, type ISpanEventData, type ISpanEventRecord, type ISpanHandle, type SpanOptions, type TraceContext } from '../otelService';
 
 /**
  * Captured span record for test assertions.
@@ -18,6 +19,7 @@ export interface CapturedSpan {
 	exceptions: unknown[];
 	ended: boolean;
 	parentTraceContext?: TraceContext;
+	events: ISpanEventRecord[];
 }
 
 /**
@@ -51,6 +53,14 @@ export class CapturingOTelService implements IOTelService {
 	readonly counters: CapturedMetric[] = [];
 	readonly logRecords: CapturedLogRecord[] = [];
 	private readonly _traceContextStore = new Map<string, TraceContext>();
+	private readonly _onDidCompleteSpan = new Emitter<ICompletedSpanData>();
+	readonly onDidCompleteSpan: Event<ICompletedSpanData> = this._onDidCompleteSpan.event;
+	private readonly _onDidEmitSpanEvent = new Emitter<ISpanEventData>();
+	readonly onDidEmitSpanEvent: Event<ISpanEventData> = this._onDidEmitSpanEvent.event;
+
+	injectCompletedSpan(span: ICompletedSpanData): void {
+		this._onDidCompleteSpan.fire(span);
+	}
 
 	constructor(config?: Partial<OTelConfig>) {
 		this.config = {
@@ -67,9 +77,10 @@ export class CapturingOTelService implements IOTelService {
 			exceptions: [],
 			ended: false,
 			parentTraceContext: options?.parentTraceContext,
+			events: [],
 		};
 		this.spans.push(captured);
-		return new CapturingSpanHandle(captured);
+		return new CapturingSpanHandle(captured, this._onDidCompleteSpan, this._onDidEmitSpanEvent);
 	}
 
 	async startActiveSpan<T>(name: string, options: SpanOptions, fn: (span: ISpanHandle) => Promise<T>): Promise<T> {
@@ -131,7 +142,16 @@ export class CapturingOTelService implements IOTelService {
 }
 
 class CapturingSpanHandle implements ISpanHandle {
-	constructor(private readonly _captured: CapturedSpan) { }
+	private static _nextSpanId = 1;
+	private readonly _spanId: string;
+
+	constructor(
+		private readonly _captured: CapturedSpan,
+		private readonly _onDidCompleteSpan: Emitter<ICompletedSpanData>,
+		private readonly _onDidEmitSpanEvent: Emitter<ISpanEventData>,
+	) {
+		this._spanId = String(CapturingSpanHandle._nextSpanId++).padStart(16, '0');
+	}
 
 	setAttribute(key: string, value: string | number | boolean | string[]): void {
 		this._captured.attributes[key] = value;
@@ -154,7 +174,40 @@ class CapturingSpanHandle implements ISpanHandle {
 		this._captured.exceptions.push(error);
 	}
 
+	addEvent(name: string, attributes?: Record<string, string | number | boolean | string[]>): void {
+		const timestamp = Date.now();
+		const record: ISpanEventRecord = { name, timestamp, attributes };
+		this._captured.events.push(record);
+		this._onDidEmitSpanEvent.fire({
+			spanId: this._spanId,
+			traceId: '00000000000000000000000000000000',
+			eventName: name,
+			attributes: attributes ?? {},
+			timestamp,
+		});
+	}
+
+	getSpanContext(): TraceContext | undefined {
+		return { spanId: this._spanId, traceId: '00000000000000000000000000000000' };
+	}
+
 	end(): void {
 		this._captured.ended = true;
+		const attrs: Record<string, string | number | boolean | string[]> = {};
+		for (const [k, v] of Object.entries(this._captured.attributes)) {
+			if (v !== undefined) {
+				attrs[k] = v;
+			}
+		}
+		this._onDidCompleteSpan.fire({
+			name: this._captured.name,
+			spanId: this._spanId,
+			traceId: '00000000000000000000000000000000',
+			startTime: Date.now(),
+			endTime: Date.now(),
+			status: { code: this._captured.statusCode ?? SpanStatusCode.UNSET, message: this._captured.statusMessage },
+			attributes: attrs,
+			events: [...this._captured.events],
+		});
 	}
 }

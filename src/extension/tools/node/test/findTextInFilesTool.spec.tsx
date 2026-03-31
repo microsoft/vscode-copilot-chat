@@ -18,6 +18,7 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
+import { CopilotToolMode } from '../../common/toolsRegistry';
 import { FindTextInFilesTool } from '../findTextInFilesTool';
 import { createMockEndpointProvider, mockLanguageModelChat } from './searchToolTestUtils';
 
@@ -154,6 +155,86 @@ suite('FindTextInFiles', () => {
 	});
 });
 
+suite('FindTextInFiles - absolute workspace folder path', () => {
+	let accessor: ITestingServicesAccessor;
+	let collection: TestingServiceCollection;
+
+	const folder1 = isWindows ? 'c:\\test\\workspace1' : '/test/workspace1';
+	const folder2 = isWindows ? 'c:\\test\\workspace2' : '/test/workspace2';
+
+	beforeEach(() => {
+		collection = createExtensionUnitTestingServices();
+		collection.define(IWorkspaceService, new SyncDescriptor(TestWorkspaceService, [[URI.file(folder1), URI.file(folder2)]]));
+	});
+
+	afterEach(() => {
+		accessor.dispose();
+	});
+
+	function setup() {
+		const searchService = new RecordingSearchService();
+		collection.define(ISearchService, searchService);
+		accessor = collection.createTestingAccessor();
+		return searchService;
+	}
+
+	test('scopes search to workspace folder when absolute path used as includePattern', async () => {
+		const searchService = setup();
+
+		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+		await tool.invoke({ input: { query: 'hello', includePattern: folder1 }, toolInvocationToken: null! }, CancellationToken.None);
+
+		expect(searchService.lastInclude).toHaveLength(1);
+		expect(searchService.lastInclude![0]).toMatchObject({ pattern: '' });
+		expect((searchService.lastInclude![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
+	});
+
+	test('scopes search with glob suffix when includePattern is absolute path with pattern', async () => {
+		const searchService = setup();
+
+		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+		await tool.invoke({ input: { query: 'hello', includePattern: `${folder1}/**/*.ts` }, toolInvocationToken: null! }, CancellationToken.None);
+
+		expect(searchService.lastInclude).toHaveLength(1);
+		expect(searchService.lastInclude![0]).toMatchObject({ pattern: '**/*.ts' });
+		expect((searchService.lastInclude![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
+	});
+
+	test('absolute path survives resolveInput without corruption', async () => {
+		const searchService = setup();
+		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+
+		// Simulate the full pipeline: resolveInput then invoke
+		const resolved = await tool.resolveInput({ query: 'hello', includePattern: folder1 }, null!, CopilotToolMode.PartialContext);
+		await tool.invoke({ input: resolved, toolInvocationToken: null! }, CancellationToken.None);
+
+		expect(searchService.lastInclude).toHaveLength(1);
+		expect(searchService.lastInclude![0]).toMatchObject({ pattern: '' });
+		expect((searchService.lastInclude![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
+	});
+
+	test('absolute path with glob survives resolveInput without corruption', async () => {
+		const searchService = setup();
+		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+
+		const resolved = await tool.resolveInput({ query: 'hello', includePattern: `${folder1}/src/**/*.ts` }, null!, CopilotToolMode.PartialContext);
+		await tool.invoke({ input: resolved, toolInvocationToken: null! }, CancellationToken.None);
+
+		expect(searchService.lastInclude).toHaveLength(1);
+		expect(searchService.lastInclude![0]).toMatchObject({ pattern: 'src/**/*.ts' });
+		expect((searchService.lastInclude![0] as RelativePattern).baseUri.path).toBe(URI.file(folder1).path);
+	});
+
+	test('passes caseInsensitive option to findTextInFiles2', async () => {
+		const searchService = setup();
+
+		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+		await tool.invoke({ input: { query: 'hello', includePattern: '*.ts' }, toolInvocationToken: null! }, CancellationToken.None);
+
+		expect(searchService.lastOptions?.caseInsensitive).toBe(true);
+	});
+});
+
 interface IRecordedSearchCall {
 	readonly pattern: string;
 	readonly isRegExp: boolean | undefined;
@@ -179,11 +260,46 @@ class TestSearchService extends AbstractSearchService {
 	}
 
 	override findTextInFiles2(query: vscode.TextSearchQuery2, options?: vscode.FindTextInFilesOptions2, token?: vscode.CancellationToken): vscode.FindTextInFilesResponse {
-		expect(options?.include).toEqual(this.expectedIncludePattern);
+		if (this.expectedIncludePattern.length > 0) {
+			const actual = options?.include ?? [];
+			expect(actual.length).toBe(this.expectedIncludePattern.length);
+			for (let i = 0; i < this.expectedIncludePattern.length; i++) {
+				if (typeof this.expectedIncludePattern[i] === 'string') {
+					expect(actual[i]).toBe(this.expectedIncludePattern[i]);
+				} else {
+					const exp = this.expectedIncludePattern[i] as RelativePattern;
+					const act = actual[i] as RelativePattern;
+					expect(act.pattern).toBe(exp.pattern);
+					expect(act.baseUri.path).toBe(exp.baseUri.path);
+				}
+			}
+		}
 		this.recordedCalls.push({
 			pattern: query.pattern,
 			isRegExp: query.isRegExp,
 		});
+		return {
+			complete: Promise.resolve({}),
+			results: (async function* () { })()
+		};
+	}
+
+	override async findFiles(filePattern: vscode.GlobPattern, options?: vscode.FindFiles2Options | undefined, token?: vscode.CancellationToken | undefined): Promise<vscode.Uri[]> {
+		throw new Error('Method not implemented.');
+	}
+}
+
+class RecordingSearchService extends AbstractSearchService {
+	public lastInclude: vscode.GlobPattern[] | undefined;
+	public lastOptions: vscode.FindTextInFilesOptions2 | undefined;
+
+	override async findTextInFiles(query: vscode.TextSearchQuery, options: vscode.FindTextInFilesOptions, progress: vscode.Progress<vscode.TextSearchResult>, token: vscode.CancellationToken): Promise<vscode.TextSearchComplete> {
+		throw new Error('Method not implemented.');
+	}
+
+	override findTextInFiles2(query: vscode.TextSearchQuery2, options?: vscode.FindTextInFilesOptions2, token?: vscode.CancellationToken): vscode.FindTextInFilesResponse {
+		this.lastInclude = options?.include ? [...options.include] : undefined;
+		this.lastOptions = options;
 		return {
 			complete: Promise.resolve({}),
 			results: (async function* () { })()

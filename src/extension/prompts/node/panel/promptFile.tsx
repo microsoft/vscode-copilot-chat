@@ -72,7 +72,9 @@ export class PromptFile extends PromptElement<PromptFileProps, void> {
 					bodyOffset = match.index! + match[0].length;
 				}
 			}
-			return content.substring(bodyOffset);
+			const bodyContent = content.substring(bodyOffset);
+
+			return bodyContent;
 		} catch (e) {
 			this.logService.debug(`Prompt file not found: ${fileUri.toString()}`);
 			return undefined;

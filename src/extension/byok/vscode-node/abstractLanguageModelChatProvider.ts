@@ -127,7 +127,8 @@ export abstract class AbstractOpenAICompatibleLMProvider<T extends LanguageModel
 			const modelsEndpoint = this.getModelsDiscoveryUrl(endpoint);
 			const response = await this._fetcherService.fetch(modelsEndpoint, {
 				method: 'GET',
-				headers
+				headers,
+				callSite: 'byok-models-discovery',
 			});
 			const data = await response.json();
 			const modelList: BYOKKnownModels = {};

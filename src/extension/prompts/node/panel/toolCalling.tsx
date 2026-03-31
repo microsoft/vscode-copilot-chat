@@ -15,12 +15,14 @@ import { CompactionDataContainer } from '../../../../platform/endpoint/common/co
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { PhaseDataContainer } from '../../../../platform/endpoint/common/phaseDataContainer';
+import { ResponseOutputMessageIdContainer } from '../../../../platform/endpoint/common/responseOutputMessageIdContainer';
 import { StatefulMarkerContainer } from '../../../../platform/endpoint/common/statefulMarkerContainer';
 import { ThinkingDataContainer } from '../../../../platform/endpoint/common/thinkingDataContainer';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { IImageService } from '../../../../platform/image/common/imageService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IOTelService } from '../../../../platform/otel/common/otelService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { toErrorMessage } from '../../../../util/common/errorMessage';
@@ -117,12 +119,14 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 		// Don't include this when rendering and triggering summarization
 		const statefulMarker = round.statefulMarker && <StatefulMarkerContainer statefulMarker={{ modelId: this.promptEndpoint.model, marker: round.statefulMarker }} />;
 		const thinking = (!this.props.isHistorical) && round.thinking && <ThinkingDataContainer thinking={round.thinking} />;
+		const responseOutputMessageId = round.responseOutputMessageId && <ResponseOutputMessageIdContainer responseOutputMessageId={round.responseOutputMessageId} />;
 		const phase = (round.phase && round.phaseModelId === this.promptEndpoint.model) ? <PhaseDataContainer phase={round.phase} /> : undefined;
 		const compaction = round.compaction && <CompactionDataContainer compaction={round.compaction} />;
 		children.push(
 			<AssistantMessage toolCalls={assistantToolCalls}>
 				{statefulMarker}
 				{thinking}
+				{responseOutputMessageId}
 				{phase}
 				{compaction}
 				{round.response}
@@ -195,6 +199,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	const promptContext: IBuildPromptContext = accessor.get(IBuildPromptContext);
 	const sessionTranscriptService = accessor.get(ISessionTranscriptService);
 	const chatHookService = accessor.get(IChatHookService);
+	const otelService = accessor.get(IOTelService);
 	const tool = toolsService.getTool(props.toolCall.name);
 
 	async function getToolResult(sizing: PromptSizing) {
@@ -254,6 +259,10 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 					}
 
 					const subAgentInvocationId = promptContext.request?.subAgentInvocationId;
+					// Capture the active trace context (from the invoke_agent span) so that
+					// the execute_tool span is properly parented even when async context
+					// propagation doesn't carry the active span.
+					const parentTraceContext = otelService.getActiveTraceContext();
 					const invocationOptions: LanguageModelToolInvocationOptions<unknown> = {
 						input: inputObj,
 						toolInvocationToken: props.toolInvocationToken,
@@ -269,6 +278,8 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 							updatedInput: hookResult.updatedInput,
 						} : undefined,
 					};
+					// Attach trace context for span parenting (not in the VS Code API type)
+					(invocationOptions as { parentTraceContext?: { traceId: string; spanId: string } }).parentTraceContext = parentTraceContext;
 
 					const transcriptSessionId = promptContext.conversation?.sessionId;
 					if (transcriptSessionId) {
@@ -447,12 +458,25 @@ enum ToolInvocationOutcome {
 
 export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToken?: string, urlOrRequestMetadata?: string | RequestMetadata, logService?: ILogService, imageService?: IImageService) {
 	if (isImageDataPart(part)) {
-		const base64 = Buffer.from(part.data).toString('base64');
-		let imageSource = `data:${part.mimeType};base64,${base64}`;
+		let imageData: Uint8Array = part.data;
+		let mimeType = part.mimeType;
+
+		if (imageService) {
+			try {
+				const resized = await imageService.resizeImage(imageData, mimeType);
+				imageData = resized.data;
+				mimeType = resized.mimeType;
+			} catch (error) {
+				logService?.warn(`Image resize failed, using original: ${error}`);
+			}
+		}
+
+		const base64 = Buffer.from(imageData).toString('base64');
+		let imageSource = `data:${mimeType};base64,${base64}`;
 		const isChatRequest = typeof urlOrRequestMetadata !== 'string' && (urlOrRequestMetadata?.type === RequestType.ChatCompletions || urlOrRequestMetadata?.type === RequestType.ChatMessages);
 		if (githubToken && isChatRequest && imageService) {
 			try {
-				const uri = await imageService.uploadChatImageAttachment(part.data, 'tool-result-image', part.mimeType ?? 'image/png', githubToken);
+				const uri = await imageService.uploadChatImageAttachment(imageData, 'tool-result-image', mimeType ?? 'image/png', githubToken);
 				if (uri) {
 					imageSource = uri.toString();
 				}
@@ -463,7 +487,7 @@ export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToke
 			}
 		}
 
-		return <Image src={imageSource} mimeType={part.mimeType} />;
+		return <Image src={imageSource} mimeType={mimeType} />;
 	}
 }
 
@@ -579,7 +603,18 @@ class McpLinkedResourceToolResult extends PromptElement<{ resourceUri: URI; mime
 			return <Tag name='resource' attrs={{ uri: this.props.resourceUri.toString() }} />;
 		}
 
-		const contents = await this.fileSystemService.readFile(this.props.resourceUri);
+		let contents: Uint8Array;
+		try {
+			contents = await this.fileSystemService.readFile(this.props.resourceUri);
+		} catch (e) {
+			const isNotFound = e instanceof Error && ('code' in e && (e.code === 'FileNotFound' || e.code === 'EntryNotFound'));
+			const message = isNotFound
+				? 'resource not found - the file may have been deleted or become inaccessible'
+				: `failed to read resource - ${toErrorMessage(e)}`;
+			return <Tag name='resource' attrs={{ uri: this.props.resourceUri.toString() }}>
+				{message}
+			</Tag>;
+		}
 		const lines = new TextDecoder().decode(contents).split(/\r?\n/g);
 		const maxLines = McpLinkedResourceToolResult.MAX_PREVIEW_LINES;
 
@@ -630,7 +665,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 						} else if (part instanceof LanguageModelPromptTsxPart) {
 							return await this.onTSX(part.value as JSONTree.PromptElementJSON);
 						} else if (isImageDataPart(part)) {
-							return await this.onImage(part);
+							return await this.onImage(part, this.props.content.indexOf(part));
 						} else if (part instanceof LanguageModelDataPart) {
 							return await this.onData(part);
 						}
@@ -659,7 +694,11 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 		}
 	}
 
-	protected async onImage(part: LanguageModelDataPart) {
+	protected async onImage(part: LanguageModelDataPart, _imageIndex?: number) {
+		if (!this.endpoint.supportsVision) {
+			return '[Image content is not available because vision is not supported by the current model or is disabled by your organization.]';
+		}
+
 		const githubToken = (await this.authService.getGitHubSession('any', { silent: true }))?.accessToken;
 		const uploadsEnabled = this.configurationService && this.experimentationService
 			? this.configurationService.getExperimentBasedConfig(ConfigKey.EnableChatImageUpload, this.experimentationService)
@@ -741,13 +780,24 @@ export class ToolResult extends PrimitiveToolResult<IToolResultProps> {
 		return super.onTSX(part);
 	}
 
+	protected override async onImage(part: LanguageModelDataPart, imageIndex?: number): Promise<PromptPiece | undefined> {
+		const image = await super.onImage(part, imageIndex);
+		if (!image || imageIndex === undefined || !this.props.toolCallId || !this.props.sessionId) {
+			return image;
+		}
+		const coreToolCallId = this.props.toolCallId.split('__vscode')[0];
+		const ext = part.mimeType === 'image/png' ? '.png' : part.mimeType === 'image/jpeg' ? '.jpg' : part.mimeType === 'image/gif' ? '.gif' : part.mimeType === 'image/webp' ? '.webp' : '.bin';
+		const uri = buildToolImageResourceUri(this.props.sessionId, coreToolCallId, imageIndex, ext);
+		return <>{image}{`\n[Image URI: ${uri}]`}</>;
+	}
+
 	protected override async onText(content: string): Promise<string> {
 		const isDiskCachingEnabled = this._configurationService.getExperimentBasedConfig(
 			ConfigKey.Advanced.LargeToolResultsToDiskEnabled,
 			this._experimentationService
 		);
-		// Exempt the search subagent from disk caching as its results are often ignored if not written directly to the conversation
-		if (isDiskCachingEnabled && this.diskSessionResources && this.props.toolCallId && this.props.sessionId && this.props.toolName !== ToolName.SearchSubagent) {
+		// Exempt the search and execution subagents and memory tool from disk caching as their results are often ignored if not written directly to the conversation
+		if (isDiskCachingEnabled && this.diskSessionResources && this.props.toolCallId && this.props.sessionId && this.props.toolName !== ToolName.SearchSubagent && this.props.toolName !== ToolName.ExecutionSubagent && this.props.toolName !== ToolName.Memory) {
 			const thresholdBytes = this._configurationService.getExperimentBasedConfig(
 				ConfigKey.Advanced.LargeToolResultsToDiskThreshold,
 				this._experimentationService
@@ -932,4 +982,10 @@ function sendNotebookEditToolValidationTelemetry(invokeOutcome: ToolInvocationOu
 			inputParsed,
 		}
 	);
+}
+
+export function buildToolImageResourceUri(sessionId: string, coreToolCallId: string, imageIndex: number, ext: string): string {
+	const sessionResource = `vscode-chat-session://local/${Buffer.from(sessionId).toString('base64url')}`;
+	const authority = Buffer.from(sessionResource).toString('hex');
+	return `vscode-chat-response-resource://${authority}/tool/${coreToolCallId}/${imageIndex}/file${ext}`;
 }

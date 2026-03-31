@@ -7,7 +7,7 @@ import { OutputMode, Raw } from '@vscode/prompt-tsx';
 import { LanguageModelChat, LanguageModelChatTool } from 'vscode';
 import { ITokenizer } from '../../../util/common/tokenizer';
 import { assertNever } from '../../../util/vs/base/common/assert';
-import { calculateImageTokenCost } from '../../tokenizer/node/tokenizer';
+import { calculateImageTokenCost, estimateDocumentTokenCost } from '../../tokenizer/node/tokenizer';
 import { convertToApiChatMessage } from './extChatEndpoint';
 
 /**
@@ -49,6 +49,8 @@ export class ExtensionContributedChatTokenizer implements ITokenizer {
 				return this._textTokenLength(text.imageUrl.url);
 			case Raw.ChatCompletionContentPartKind.CacheBreakpoint:
 				return 0;
+			case Raw.ChatCompletionContentPartKind.Document:
+				return estimateDocumentTokenCost(text.documentData.data);
 			default:
 				assertNever(text, `unknown content part (${JSON.stringify(text)})`);
 		}

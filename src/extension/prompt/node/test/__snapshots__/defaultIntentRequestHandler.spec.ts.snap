@@ -3,6 +3,7 @@
 exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns only has tool results from current turn 1`] = `
 {
   "codeBlocks": [],
+  "resolvedModel": "",
   "toolCallResults": {
     "tool_call_id_0__vscode-0": LanguageModelToolResult {
       "content": [
@@ -26,6 +27,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "phase": undefined,
       "phaseModelId": undefined,
       "response": "response number 0",
+      "responseOutputMessageId": undefined,
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
@@ -45,6 +47,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "phase": undefined,
       "phaseModelId": undefined,
       "response": "response number 1",
+      "responseOutputMessageId": undefined,
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
@@ -64,6 +67,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "phase": undefined,
       "phaseModelId": undefined,
       "response": "response number 2",
+      "responseOutputMessageId": undefined,
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
@@ -78,6 +82,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
 exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns only has tool results from current turn 2`] = `
 {
   "codeBlocks": [],
+  "resolvedModel": "",
   "toolCallResults": {
     "tool_call_id_2__vscode-2": LanguageModelToolResult {
       "content": [
@@ -101,6 +106,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "phase": undefined,
       "phaseModelId": undefined,
       "response": "response number 3",
+      "responseOutputMessageId": undefined,
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
@@ -120,6 +126,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "phase": undefined,
       "phaseModelId": undefined,
       "response": "response number 4",
+      "responseOutputMessageId": undefined,
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
@@ -139,6 +146,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "phase": undefined,
       "phaseModelId": undefined,
       "response": "response number 5",
+      "responseOutputMessageId": undefined,
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
@@ -182,6 +190,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
   "metadata": {
     "codeBlocks": [],
     "maxToolCallsExceeded": true,
+    "resolvedModel": "",
     "toolCallResults": {
       "tool_call_id_0__vscode-0": LanguageModelToolResult {
         "content": [
@@ -219,6 +228,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "phase": undefined,
         "phaseModelId": undefined,
         "response": "response number 0",
+        "responseOutputMessageId": undefined,
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
@@ -238,6 +248,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "phase": undefined,
         "phaseModelId": undefined,
         "response": "response number 1",
+        "responseOutputMessageId": undefined,
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
@@ -257,6 +268,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "phase": undefined,
         "phaseModelId": undefined,
         "response": "response number 2",
+        "responseOutputMessageId": undefined,
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
@@ -276,6 +288,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "phase": undefined,
         "phaseModelId": undefined,
         "response": "response number 3",
+        "responseOutputMessageId": undefined,
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
@@ -299,6 +312,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
   "metadata": {
     "codeBlocks": [],
     "maxToolCallsExceeded": true,
+    "resolvedModel": "",
     "toolCallResults": {
       "tool_call_id_4__vscode-4": LanguageModelToolResult {
         "content": [
@@ -336,6 +350,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "phase": undefined,
         "phaseModelId": undefined,
         "response": "response number 4",
+        "responseOutputMessageId": undefined,
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
@@ -355,6 +370,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "phase": undefined,
         "phaseModelId": undefined,
         "response": "response number 5",
+        "responseOutputMessageId": undefined,
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
@@ -374,6 +390,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "phase": undefined,
         "phaseModelId": undefined,
         "response": "response number 6",
+        "responseOutputMessageId": undefined,
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
@@ -393,6 +410,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "phase": undefined,
         "phaseModelId": undefined,
         "response": "response number 7",
+        "responseOutputMessageId": undefined,
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
@@ -674,6 +692,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
         "vscodeRequestId": "some-uuid",
       },
@@ -914,6 +933,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
         "vscodeRequestId": "some-uuid",
       },
@@ -1154,6 +1174,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
         "vscodeRequestId": "some-uuid",
       },
@@ -1394,6 +1415,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
         "vscodeRequestId": "some-uuid",
       },
@@ -1684,6 +1706,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
         "vscodeRequestId": "some-uuid",
       },
@@ -1924,6 +1947,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
         "vscodeRequestId": "some-uuid",
       },
@@ -2164,6 +2188,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
         "vscodeRequestId": "some-uuid",
       },
@@ -2404,6 +2429,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
         "vscodeRequestId": "some-uuid",
       },
@@ -2518,6 +2544,7 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
 {
   "metadata": {
     "codeBlocks": [],
+    "resolvedModel": "",
     "toolCallResults": undefined,
     "toolCallRounds": [
       ToolCallRound {
@@ -2526,6 +2553,7 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "phase": undefined,
         "phaseModelId": undefined,
         "response": "some response here :)",
+        "responseOutputMessageId": undefined,
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
@@ -2726,6 +2754,7 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{}",
         "vscodeRequestId": "some-uuid",
       },
@@ -2840,6 +2869,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
 {
   "metadata": {
     "codeBlocks": [],
+    "resolvedModel": "",
     "toolCallResults": {
       "tool_call_id__vscode-0": LanguageModelToolResult {
         "content": [
@@ -2856,6 +2886,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
         "phase": undefined,
         "phaseModelId": undefined,
         "response": "some response here :)",
+        "responseOutputMessageId": undefined,
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
@@ -2875,6 +2906,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
         "phase": undefined,
         "phaseModelId": undefined,
         "response": "response to tool call",
+        "responseOutputMessageId": undefined,
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
@@ -3075,6 +3107,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{"my_func":1}",
         "vscodeRequestId": "some-uuid",
       },
@@ -3315,6 +3348,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
         "responseType": "success",
+        "slashCommand": "",
         "toolCounts": "{}",
         "vscodeRequestId": "some-uuid",
       },

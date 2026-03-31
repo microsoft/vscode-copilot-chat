@@ -68,7 +68,11 @@ export class CompletionsFetcher implements ICompletionsFetcherService {
 
 	fetch(url: string, options: FetchOptions): Promise<Response> {
 		const useFetcher = this.configurationService.getExperimentBasedConfig(ConfigKey.CompletionsFetcher, this.experimentationService) || undefined;
-		return this.fetcherService.fetch(url, useFetcher ? { ...options, useFetcher } : options);
+		const baseOptions = useFetcher ? { ...options, useFetcher } : options;
+		return this.fetcherService.fetch(url, {
+			...baseOptions,
+			callSite: baseOptions.callSite ?? 'completions-core',
+		});
 	}
 	disconnectAll(): Promise<unknown> {
 		return this.fetcherService.disconnectAll();
@@ -128,6 +132,7 @@ export function postRequest(
 	}
 
 	const request: FetchOptions = {
+		callSite: 'completions-core-post',
 		method: 'POST',
 		headers: headers,
 		json: body,

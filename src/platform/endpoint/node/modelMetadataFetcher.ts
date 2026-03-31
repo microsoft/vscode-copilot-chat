@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { RequestType } from '@vscode/copilot-api';
+import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import type { LanguageModelChat } from 'vscode';
 import { TaskSingler } from '../../../util/common/taskSingler';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -233,7 +233,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 
 		const copilotToken = (await this._authService.getCopilotToken()).token;
 		const requestId = generateUuid();
-		const requestMetadata = { type: RequestType.Models, isModelLab: this._isModelLab };
+		const requestMetadata: RequestMetadata = { type: RequestType.Models, isModelLab: this._isModelLab };
 
 		try {
 			const response = await this._instantiationService.invokeFunction(getRequest, {

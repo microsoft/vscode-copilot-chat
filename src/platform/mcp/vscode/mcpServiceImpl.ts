@@ -3,12 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { McpGateway, Uri, lm } from 'vscode';
+import { McpGateway, McpGatewayServer, lm, type Event } from 'vscode';
 import { IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { URI } from '../../../util/vs/base/common/uri';
-import { AbstractMcpService } from '../common/mcpService';
 import { ILogService } from '../../log/common/logService';
+import { AbstractMcpService } from '../common/mcpService';
 
 class TrackedMcpGateway implements McpGateway {
 	constructor(
@@ -16,8 +16,12 @@ class TrackedMcpGateway implements McpGateway {
 		private readonly _onDispose: () => void
 	) { }
 
-	get address(): Uri {
-		return this._gateway.address;
+	get servers(): readonly McpGatewayServer[] {
+		return this._gateway.servers;
+	}
+
+	get onDidChangeServers(): Event<readonly McpGatewayServer[]> {
+		return this._gateway.onDidChangeServers;
 	}
 
 	dispose(): void {

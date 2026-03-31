@@ -17,6 +17,8 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 
 	readonly onDidChangeMcpServerDefinitions: Event<void>;
 
+	private _askedForAuth = false;
+
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
@@ -135,15 +137,26 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 	}
 
 	async resolveMcpServerDefinition(server: McpHttpServerDefinition, token: CancellationToken): Promise<McpHttpServerDefinition> {
-		const session = await this.authenticationService.getGitHubSession('permissive', {
-			createIfNone: {
-				detail: l10n.t('Additional permissions are required to use GitHub MCP Server'),
-			},
-		});
-		if (!session) {
-			throw new Error('Authentication required');
+		const accessToken = this.authenticationService.permissiveGitHubSession?.accessToken;
+		if (accessToken) {
+			server.headers['Authorization'] = `Bearer ${accessToken}`;
+			return server;
 		}
-		server.headers['Authorization'] = `Bearer ${session.accessToken}`;
-		return server;
+
+		if (this._askedForAuth) {
+			throw new Error('User denied authentication. Cannot connect to GitHub MCP Server.');
+		}
+
+		try {
+			const session = await this.authenticationService.getGitHubSession('permissive', {
+				createIfNone: {
+					detail: l10n.t('Additional permissions are required to use GitHub MCP Server'),
+				},
+			});
+			server.headers['Authorization'] = `Bearer ${session.accessToken}`;
+			return server;
+		} finally {
+			this._askedForAuth = true;
+		}
 	}
 }
