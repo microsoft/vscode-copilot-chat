@@ -4610,6 +4610,14 @@
 							"advanced"
 						]
 					},
+					"github.copilot.chat.cli.sessionControllerForSessionsApp.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.sessionControllerForSessionsApp.enabled%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.cli.terminalLinks.enabled": {
 						"type": "boolean",
 						"default": true,
