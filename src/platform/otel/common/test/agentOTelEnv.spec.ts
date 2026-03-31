@@ -11,6 +11,7 @@ function makeConfig(overrides: Partial<OTelConfig> = {}): OTelConfig {
 	return {
 		enabled: true,
 		enabledExplicitly: true,
+		enabledVia: 'setting',
 		exporterType: 'otlp-http',
 		otlpEndpoint: 'http://localhost:4318',
 		otlpProtocol: 'http',
