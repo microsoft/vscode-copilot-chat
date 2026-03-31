@@ -276,6 +276,7 @@ export class CodeSearchChunkSearch extends Disposable {
 	async isAvailable(searchTelemetryInfo?: TelemetryCorrelationId, canPrompt = false, token = CancellationToken.None): Promise<boolean> {
 		const sw = new StopWatch();
 		const codeSearchCheckResult = await this.isCodeSearchAvailable(canPrompt, token);
+		const hasExternalIngest = !!this.isExternalIngestEnabled();
 
 		// Track where indexed repos are located related to the workspace
 		const indexedRepoLocation = {
@@ -306,9 +307,10 @@ export class CodeSearchChunkSearch extends Disposable {
 				"comment": "Metadata about the code search availability check",
 				"workspaceSearchSource": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Caller of the search" },
 				"workspaceSearchCorrelationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Correlation id for the search" },
-				"unavailableReason": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Correlation id for the search" },
+				"codeSearchUnavailableReason": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Reason why code search is unavailable" },
 				"repoStatues": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Detailed info about the statues of the repos in the workspace" },
 				"execTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How long the check too to complete" },
+				"hasExternalIngest": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether external ingest is enabled" },
 				"indexedRepoCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of indexed repositories" },
 				"notYetIndexedRepoCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of repositories that have not yet been indexed" },
 
@@ -321,10 +323,11 @@ export class CodeSearchChunkSearch extends Disposable {
 		this._telemetryService.sendMSFTTelemetryEvent('codeSearchChunkSearch.isAvailable', {
 			workspaceSearchSource: searchTelemetryInfo?.callTracker,
 			workspaceSearchCorrelationId: searchTelemetryInfo?.correlationId,
-			unavailableReason: codeSearchCheckResult.isError() ? codeSearchCheckResult.err.unavailableReason : undefined,
+			codeSearchUnavailableReason: codeSearchCheckResult.isError() ? codeSearchCheckResult.err.unavailableReason : undefined,
 			repoStatues: JSON.stringify(codeSearchCheckResult.isOk() ? codeSearchCheckResult.val.repoStatuses : codeSearchCheckResult.err.repoStatuses),
 		}, {
 			execTime: sw.elapsed(),
+			hasExternalIngest: hasExternalIngest ? 1 : 0,
 			indexedRepoCount: codeSearchCheckResult.isOk() ? codeSearchCheckResult.val.indexedRepos.length : 0,
 			notYetIndexedRepoCount: codeSearchCheckResult.isOk() ? codeSearchCheckResult.val.notYetIndexedRepos.length : 0,
 			'indexedRepoLocation.workspace': indexedRepoLocation.workspaceFolder,
@@ -342,7 +345,6 @@ export class CodeSearchChunkSearch extends Disposable {
 			return true;
 		}
 
-		const hasExternalIngest = !!this.isExternalIngestEnabled();
 		if (hasExternalIngest) {
 			this._logService.debug(`CodeSearchChunkSearch.isAvailable: true since external ingest is enabled`);
 		} else {
