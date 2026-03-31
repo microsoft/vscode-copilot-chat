@@ -486,5 +486,6 @@
 	"github.copilot.session.providerDescription.background": "Delegate tasks to a background agent running locally on your machine. The agent iterates via chat and works asynchronously in a Git worktree to implement changes isolated from your main workspace using the GitHub Copilot CLI.",
 	"github.copilot.command.sessions.commitChanges": "Commit",
 	"github.copilot.command.sessions.discardChanges": "Discard Changes",
-	"github.copilot.command.sessions.refreshChanges": "Refresh"
+	"github.copilot.command.sessions.refreshChanges": "Refresh",
+	"github.copilot.command.sessions.initializeRepository": "Initialize Repository"
 }

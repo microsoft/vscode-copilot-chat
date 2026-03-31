@@ -28,6 +28,8 @@ import { ChatSessionWorktreeFile } from '../common/chatSessionWorktreeService';
 export class ChatSessionWorkspaceFolderService extends Disposable implements IChatSessionWorkspaceFolderService {
 	declare _serviceBrand: undefined;
 
+	private static readonly EMPTY_TREE_OBJECT = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+
 	private readonly workspaceFolderChanges = new ResourceMap<ChatSessionWorktreeFile[]>();
 	private readonly workspaceState = new Map<string, WorkspaceFolderEntry>();
 	private recentFolders: { folder: vscode.Uri; lastAccessTime: number }[] = [];
@@ -124,8 +126,13 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 					// Create temp index file directory
 					await fs.mkdir(path.dirname(diffIndexFile), { recursive: true });
 
-					// Populate temp index from HEAD
-					await this.gitService.exec(repository.rootUri, ['read-tree', 'HEAD'], { GIT_INDEX_FILE: diffIndexFile });
+					try {
+						// Populate temp index from HEAD, fall back to empty tree if no commits exist
+						await this.gitService.exec(repository.rootUri, ['read-tree', 'HEAD'], { GIT_INDEX_FILE: diffIndexFile });
+					} catch {
+						// Fall back to empty tree for repositories with no commits
+						await this.gitService.exec(repository.rootUri, ['read-tree', ChatSessionWorkspaceFolderService.EMPTY_TREE_OBJECT], { GIT_INDEX_FILE: diffIndexFile });
+					}
 
 					// Stage entire working directory into temp index
 					await this.gitService.exec(repository.rootUri, ['add', '-A', '--', '.'], { GIT_INDEX_FILE: diffIndexFile });

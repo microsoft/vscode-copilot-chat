@@ -2350,6 +2350,32 @@ export function registerCLIChatCommands(
 		copilotcliSessionItemProvider.notifySessionsChange();
 	}));
 
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.sessions.initializeRepository', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
+		const resource = sessionItemOrResource instanceof vscode.Uri
+			? sessionItemOrResource
+			: sessionItemOrResource?.resource;
+
+		if (!resource) {
+			return;
+		}
+
+		const sessionId = SessionIdForCLI.parse(resource);
+		const workspaceFolder = await copilotCliWorkspaceSession.getSessionWorkspaceFolder(sessionId);
+		if (!workspaceFolder) {
+			return;
+		}
+
+		const repository = await gitService.initRepository(workspaceFolder);
+		if (!repository) {
+			return;
+		}
+
+		copilotCliWorkspaceSession.trackSessionWorkspaceFolder(sessionId, workspaceFolder.fsPath, repository.rootUri.fsPath);
+		copilotCliWorkspaceSession.clearWorkspaceChanges(workspaceFolder);
+
+		copilotcliSessionItemProvider.notifySessionsChange();
+	}));
+
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.sessions.commitChanges', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
 		const resource = sessionItemOrResource instanceof vscode.Uri
 			? sessionItemOrResource

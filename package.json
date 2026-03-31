@@ -2916,6 +2916,13 @@
 				"title": "%github.copilot.command.sessions.refreshChanges%",
 				"icon": "$(refresh)",
 				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.sessions.initializeRepository",
+				"title": "%github.copilot.command.sessions.initializeRepository%",
+				"enablement": "!chatSessionRequestInProgress",
+				"icon": "$(repo)",
+				"category": "GitHub Copilot"
 			}
 		],
 		"configuration": [
@@ -4884,6 +4891,11 @@
 			],
 			"chat/input/editing/sessionApplyActions": [
 				{
+					"command": "github.copilot.sessions.initializeRepository",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && !sessions.hasGitRepository",
+					"group": "init@1"
+				},
+				{
 					"command": "github.copilot.sessions.commitChanges",
 					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && sessions.hasGitRepository",
 					"group": "commit@1"
@@ -5270,6 +5282,10 @@
 				},
 				{
 					"command": "github.copilot.sessions.refreshChanges",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.sessions.initializeRepository",
 					"when": "false"
 				}
 			],
