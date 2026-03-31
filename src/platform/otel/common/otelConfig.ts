@@ -5,10 +5,17 @@
 
 export type OTelExporterType = 'otlp-grpc' | 'otlp-http' | 'console' | 'file';
 
+export type OTelEnabledVia = 'envVar' | 'setting' | 'otlpEndpointEnvVar' | 'dbSpanExporterOnly' | 'disabled';
+
+/** Default OTLP endpoint used when no env var or setting overrides it. */
+export const DEFAULT_OTLP_ENDPOINT = 'http://localhost:4318';
+
 export interface OTelConfig {
 	readonly enabled: boolean;
 	/** True when OTel was enabled via setting/env var, not just implied by dbSpanExporter. */
 	readonly enabledExplicitly: boolean;
+	/** How OTel was enabled — used for telemetry to track adoption channels. */
+	readonly enabledVia: OTelEnabledVia;
 	readonly exporterType: OTelExporterType;
 	readonly otlpEndpoint: string;
 	readonly otlpProtocol: 'grpc' | 'http';
@@ -109,6 +116,18 @@ export function resolveOTelConfig(input: OTelConfigInput): OTelConfig {
 		return createDisabledConfig(input);
 	}
 
+	// Determine how OTel was enabled for telemetry tracking
+	let enabledVia: OTelEnabledVia;
+	if (envBool(env['COPILOT_OTEL_ENABLED']) === true) {
+		enabledVia = 'envVar';
+	} else if (input.settingEnabled === true) {
+		enabledVia = 'setting';
+	} else if (!!env['OTEL_EXPORTER_OTLP_ENDPOINT']) {
+		enabledVia = 'otlpEndpointEnvVar';
+	} else {
+		enabledVia = 'dbSpanExporterOnly';
+	}
+
 	// Protocol: env > inferred from exporter type > default
 	const rawProtocol = env['OTEL_EXPORTER_OTLP_PROTOCOL'] ?? env['COPILOT_OTEL_PROTOCOL'];
 	const protocol: 'grpc' | 'http' = rawProtocol === 'grpc' ? 'grpc' : 'http';
@@ -117,8 +136,8 @@ export function resolveOTelConfig(input: OTelConfigInput): OTelConfig {
 	const rawEndpoint = env['COPILOT_OTEL_ENDPOINT']
 		?? env['OTEL_EXPORTER_OTLP_ENDPOINT']
 		?? input.settingOtlpEndpoint
-		?? 'http://localhost:4318';
-	const otlpEndpoint = parseOtlpEndpoint(rawEndpoint, protocol) ?? 'http://localhost:4318';
+		?? DEFAULT_OTLP_ENDPOINT;
+	const otlpEndpoint = parseOtlpEndpoint(rawEndpoint, protocol) ?? DEFAULT_OTLP_ENDPOINT;
 
 	// File exporter path
 	const fileExporterPath = env['COPILOT_OTEL_FILE_EXPORTER_PATH'] ?? input.settingOutfile;
@@ -157,6 +176,7 @@ export function resolveOTelConfig(input: OTelConfigInput): OTelConfig {
 	return Object.freeze({
 		enabled: true,
 		enabledExplicitly,
+		enabledVia,
 		exporterType,
 		otlpEndpoint,
 		otlpProtocol: protocol,
@@ -176,6 +196,7 @@ function createDisabledConfig(input: OTelConfigInput): OTelConfig {
 	return Object.freeze({
 		enabled: false,
 		enabledExplicitly: false,
+		enabledVia: 'disabled' as const,
 		exporterType: 'otlp-http' as const,
 		otlpEndpoint: '',
 		otlpProtocol: 'http' as const,

@@ -8,6 +8,7 @@ export { emitAgentTurnEvent, emitInferenceDetailsEvent, emitSessionStartEvent, e
 export { GenAiMetrics } from './genAiMetrics';
 export { toInputMessages, toOutputMessages, toSystemInstructions, toToolDefinitions, truncateForOTel } from './messageFormatters';
 export { NoopOTelService } from './noopOtelService';
-export { resolveOTelConfig, type OTelConfig, type OTelConfigInput } from './otelConfig';
+export { resolveOTelConfig, DEFAULT_OTLP_ENDPOINT, type OTelConfig, type OTelConfigInput } from './otelConfig';
 export { IOTelService, SpanKind, SpanStatusCode, type ICompletedSpanData, type ISpanEventData, type ISpanEventRecord, type ISpanHandle, type OTelModelOptions, type SpanOptions, type TraceContext } from './otelService';
+export { resolveWorkspaceOTelMetadata, workspaceMetadataToOTelAttributes, type WorkspaceOTelMetadata } from './workspaceOTelMetadata';
 

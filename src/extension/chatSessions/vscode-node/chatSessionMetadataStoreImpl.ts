@@ -237,6 +237,14 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		return metadata.workspaceFolder?.folderPath ? Uri.file(metadata.workspaceFolder.folderPath) : undefined;
 	}
 
+	async getSessionWorkspaceFolderEntry(sessionId: string): Promise<WorkspaceFolderEntry | undefined> {
+		const metadata = await this.getSessionMetadata(sessionId);
+		if (!metadata) {
+			return undefined;
+		}
+		return metadata.workspaceFolder;
+	}
+
 	async getUsedWorkspaceFolders(): Promise<WorkspaceFolderEntry[]> {
 		await this._intialize.value;
 		const entries = new ResourceMap<number>();

@@ -16,7 +16,7 @@ import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/docum
 import { Edits } from '../../../platform/inlineEdits/common/dataTypes/edit';
 import { LanguageContextEntry, LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
 import { LanguageId } from '../../../platform/inlineEdits/common/dataTypes/languageId';
-import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
+import { NextCursorLinePrediction, NextCursorLinePredictionCursorPlacement } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { AggressivenessSetting, isAggressivenessStrategy, LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
@@ -641,10 +641,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		while (!r.done) {
 			const edit = r.value.edit;
-			const filteredEdits = this.filterEdit(request.getActiveDocument(), [edit]);
+			const [filteredEdits, filterNames] = this.filterEdit(request.getActiveDocument(), [edit]);
 			const isFilteredOut = filteredEdits.length === 0;
 			if (isFilteredOut) {
-				tracer.trace(`Filtered out an edit: ${edit.toString()}`);
+				tracer.trace(`Filtered out an edit: ${edit.toString()} using ${filterNames.join(', ')} filter(s)`);
 			} else {
 				tracer.trace(`Yielding an edit: ${edit.toString()}`);
 				yield r.value;
@@ -1081,7 +1081,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const nextCursorLineOneBased = nextCursorLineZeroBased + 1;
 		const nextCursorLine = promptPieces.activeDoc.documentAfterEditsLines.at(nextCursorLineZeroBased);
-		const nextCursorColumn = (nextCursorLine?.length ?? 0) + 1;
+
+		const cursorPlacement = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionCursorPlacement, this.expService);
+		const nextCursorColumn = XtabProvider.getNextCursorColumn(nextCursorLine, cursorPlacement);
 
 		switch (nextCursorLinePrediction) {
 			case NextCursorLinePrediction.Jump: {
@@ -1392,17 +1394,17 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	}
 
 
-	private filterEdit(activeDoc: StatelessNextEditDocument, edits: readonly LineReplacement[]): readonly LineReplacement[] {
-		type EditFilter = (edits: readonly LineReplacement[]) => readonly LineReplacement[];
+	private filterEdit(activeDoc: StatelessNextEditDocument, edits: readonly LineReplacement[]): [filteredEdits: readonly LineReplacement[], filterNames: string[]] {
+		type EditFilter = (edits: readonly LineReplacement[]) => { filterName: string; filteredEdits: readonly LineReplacement[] };
 
 		const allowImportChanges = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAllowImportChanges, this.expService);
 		const filters: EditFilter[] = [
-			(edits) => IgnoreImportChangesAspect.filterEdit(activeDoc, edits, allowImportChanges),
-			(edits) => IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges.filterEdit(activeDoc, edits),
+			(edits) => ({ filterName: 'IgnoreImportChangesAspect', filteredEdits: IgnoreImportChangesAspect.filterEdit(activeDoc, edits, allowImportChanges) }),
+			(edits) => ({ filterName: 'IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges', filteredEdits: IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges.filterEdit(activeDoc, edits) }),
 		];
 
 		if (!this.configService.getExperimentBasedConfig(ConfigKey.InlineEditsAllowWhitespaceOnlyChanges, this.expService)) {
-			filters.push((edits) => IgnoreWhitespaceOnlyChanges.filterEdit(activeDoc, edits));
+			filters.push((edits) => ({ filterName: 'IgnoreWhitespaceOnlyChanges', filteredEdits: IgnoreWhitespaceOnlyChanges.filterEdit(activeDoc, edits) }));
 		}
 
 		const undoInsertionFiltering = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsUndoInsertionFiltering, this.expService);
@@ -1418,7 +1420,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				default:
 					assertNever(undoInsertionFiltering);
 			}
-			filters.push((edits) => filter(activeDoc, new LineEdit(edits)) ? [] : edits);
+			filters.push((edits) => ({ filterName: `UndoInsertionFiltering:${undoInsertionFiltering}`, filteredEdits: filter(activeDoc, new LineEdit(edits)) ? [] : edits }));
 		}
 
 		const substringsToFilterOut = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsFilterOutEditsWithSubstrings, this.expService);
@@ -1427,12 +1429,32 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				.split(',')
 				.map(s => s.trim())
 				.filter(s => s.length > 0);
-			filters.push((edits) => filterOutEditsWithSubstrings(edits, substrings));
+			filters.push((edits) => ({ filterName: 'FilterOutEditsWithSubstrings', filteredEdits: filterOutEditsWithSubstrings(edits, substrings) }));
 		}
 
-		return filters.reduce((acc, filter) => filter(acc), edits);
+		return filters.reduce<[readonly LineReplacement[], string[]]>(([filteredEdits, filterNames], filter) => {
+			const result = filter(filteredEdits);
+			if (result.filteredEdits.length === filteredEdits.length) {
+				return [filteredEdits, filterNames];
+			}
+			return [result.filteredEdits, [...filterNames, result.filterName]];
+		}, [edits, []]);
 	}
 
+	public static getNextCursorColumn(nextCursorLine: string | undefined, cursorPlacement: NextCursorLinePredictionCursorPlacement): number {
+		let nextCursorColumn: number;
+		switch (cursorPlacement) {
+			case NextCursorLinePredictionCursorPlacement.BeforeLine:
+				nextCursorColumn = (nextCursorLine?.match(/^(\s*)/)?.at(1)?.length ?? 0) + 1;
+				break;
+			case NextCursorLinePredictionCursorPlacement.AfterLine:
+				nextCursorColumn = (nextCursorLine?.length ?? 0) + 1;
+				break;
+			default:
+				assertNever(cursorPlacement);
+		}
+		return nextCursorColumn;
+	}
 }
 
 export function filterOutEditsWithSubstrings(edits: readonly LineReplacement[], substringsToFilterOut: string[]): readonly LineReplacement[] {

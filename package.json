@@ -2950,6 +2950,13 @@
 				"title": "%github.copilot.command.sessions.refreshChanges%",
 				"icon": "$(refresh)",
 				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.sessions.initializeRepository",
+				"title": "%github.copilot.command.sessions.initializeRepository%",
+				"enablement": "!chatSessionRequestInProgress",
+				"icon": "$(repo)",
+				"category": "GitHub Copilot"
 			}
 		],
 		"configuration": [
@@ -4637,6 +4644,14 @@
 							"advanced"
 						]
 					},
+					"github.copilot.chat.cli.sessionControllerForSessionsApp.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.sessionControllerForSessionsApp.enabled%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.cli.terminalLinks.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -4917,6 +4932,11 @@
 				}
 			],
 			"chat/input/editing/sessionApplyActions": [
+				{
+					"command": "github.copilot.sessions.initializeRepository",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && !sessions.hasGitRepository",
+					"group": "init@1"
+				},
 				{
 					"command": "github.copilot.sessions.commitChanges",
 					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && sessions.hasGitRepository",
@@ -5305,6 +5325,10 @@
 				{
 					"command": "github.copilot.sessions.refreshChanges",
 					"when": "false"
+				},
+				{
+					"command": "github.copilot.sessions.initializeRepository",
+					"when": "false"
 				}
 			],
 			"view/title": [
@@ -5684,7 +5708,7 @@
 			"chat/input/editing/sessionChangeToolbar": [
 				{
 					"command": "github.copilot.sessions.discardChanges",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.changesVersionMode == branchChanges",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.hasGitRepository && sessions.changesVersionMode == branchChanges",
 					"group": "navigation@1"
 				}
 			]
@@ -6393,7 +6417,7 @@
 		"@anthropic-ai/claude-agent-sdk": "^0.2.81",
 		"@anthropic-ai/sdk": "^0.80.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
-		"@github/copilot": "^1.0.11",
+		"@github/copilot": "^1.0.12",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",

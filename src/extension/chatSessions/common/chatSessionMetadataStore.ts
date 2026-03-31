@@ -11,6 +11,7 @@ import type { IWorkspaceInfo } from './workspaceInfo';
 
 export interface WorkspaceFolderEntry {
 	readonly folderPath: string;
+	readonly repositoryPath?: string;
 	readonly timestamp: number;
 }
 
@@ -78,6 +79,7 @@ export interface IChatSessionMetadataStore {
 	getWorktreeProperties(sessionId: string): Promise<ChatSessionWorktreeProperties | undefined>;
 	getWorktreeProperties(folder: Uri): Promise<ChatSessionWorktreeProperties | undefined>;
 	getSessionWorkspaceFolder(sessionId: string): Promise<vscode.Uri | undefined>;
+	getSessionWorkspaceFolderEntry(sessionId: string): Promise<WorkspaceFolderEntry | undefined>;
 	getUsedWorkspaceFolders(): Promise<WorkspaceFolderEntry[]>;
 	getAdditionalWorkspaces(sessionId: string): Promise<IWorkspaceInfo[]>;
 	setAdditionalWorkspaces(sessionId: string, workspaces: IWorkspaceInfo[]): Promise<void>;

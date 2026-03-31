@@ -79,6 +79,7 @@ suite('RepoInfoTelemetry', () => {
 			onDidFinishInitialization: Event.None,
 			repositories: [],
 			isInitialized: true,
+			initRepository: vi.fn(),
 			getRepository: vi.fn(),
 			getRepositoryState: vi.fn(),
 			getRecentRepositories: vi.fn(),

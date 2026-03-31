@@ -22,6 +22,7 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { Event } from '../../../../util/vs/base/common/event';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { IAgentSessionsWorkspace } from '../../common/agentSessionsWorkspace';
 import { IChatSessionMetadataStore } from '../../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
 import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../../common/chatSessionWorktreeService';
@@ -33,7 +34,6 @@ import { ICopilotCLISessionService } from '../../copilotcli/node/copilotcliSessi
 import { ICopilotCLISessionTracker } from '../../copilotcli/vscode-node/copilotCLISessionTracker';
 import { CopilotCLIChatSessionContentProvider } from '../copilotCLIChatSessions';
 import { ICopilotCLITerminalIntegration } from '../copilotCLITerminalIntegration';
-import { IAgentSessionsWorkspace } from '../../common/agentSessionsWorkspace';
 vi.mock('../copilotCLIShim.ps1', () => ({ default: '# mock powershell script' }));
 
 beforeAll(() => {
@@ -80,6 +80,7 @@ class TestSessionService extends mock<ICopilotCLISessionService>() {
 	});
 	override forkSession = vi.fn(async () => 'forked-session');
 	override tryGetPartialSesionHistory = vi.fn(async () => undefined);
+	override getChatHistory = vi.fn(async () => []);
 }
 
 class TestWorktreeService extends mock<IChatSessionWorktreeService>() {
