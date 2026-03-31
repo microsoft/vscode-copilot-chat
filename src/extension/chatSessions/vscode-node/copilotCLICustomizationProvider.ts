@@ -58,43 +58,57 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 	async provideChatSessionCustomizations(_token: vscode.CancellationToken): Promise<vscode.ChatSessionCustomizationItem[]> {
 		const items: vscode.ChatSessionCustomizationItem[] = [];
 
-		// Build a lookup from agent name → SDK agent for enriching with descriptions
-		const sdkAgents = await this.copilotCLIAgents.getAgents();
-		const agentLookup = new Map(sdkAgents.map(a => [a.name.toLowerCase(), a]));
-
-		// Agents (.agent.md) are Copilot-specific — include all of them
+		// Build a file URI lookup from prompt file agents for cross-referencing
+		const fileAgentLookup = new Map<string, URI>();
 		for (const agent of this.chatPromptFileService.customAgents) {
 			const name = deriveNameFromUri(agent.uri, AGENT_FILE_EXTENSION);
-			const sdkAgent = agentLookup.get(name.toLowerCase());
-			items.push({
-				uri: agent.uri,
-				type: vscode.ChatSessionCustomizationType.Agent,
-				name: sdkAgent?.displayName || name,
-				description: sdkAgent?.description,
-			});
+			fileAgentLookup.set(name.toLowerCase(), agent.uri);
 		}
 
+		// Agents: use ICopilotCLIAgents as the primary source (includes SDK + prompt file agents).
+		// Cross-reference with chatPromptFileService.customAgents for file URIs when available.
+		const cliAgents = await this.copilotCLIAgents.getAgents();
+		const agentItems: vscode.ChatSessionCustomizationItem[] = [];
+		for (const agent of cliAgents) {
+			const fileUri = fileAgentLookup.get(agent.name.toLowerCase());
+			agentItems.push({
+				uri: fileUri ?? URI.from({ scheme: 'copilotcli', path: `/agents/${agent.name}` }),
+				type: vscode.ChatSessionCustomizationType.Agent,
+				name: agent.displayName || agent.name,
+				description: agent.description,
+				groupKey: fileUri ? undefined : 'Built-in',
+			});
+		}
+		items.push(...agentItems);
+		this.logService.debug(`[CopilotCLICustomizationProvider] agents (${agentItems.length}): ${agentItems.map(a => a.name).join(', ') || '(none)'}`);
+
+		const instructionItems: vscode.ChatSessionCustomizationItem[] = [];
 		for (const instruction of this.chatPromptFileService.instructions) {
 			if (this.isCLIPath(instruction.uri)) {
-				items.push({
+				instructionItems.push({
 					uri: instruction.uri,
 					type: vscode.ChatSessionCustomizationType.Instructions,
 					name: deriveNameFromUri(instruction.uri, INSTRUCTION_FILE_EXTENSION),
 				});
 			}
 		}
+		items.push(...instructionItems);
+		this.logService.debug(`[CopilotCLICustomizationProvider] instructions (${instructionItems.length}): ${instructionItems.map(i => i.name).join(', ') || '(none)'}`);
 
+		const skillItems: vscode.ChatSessionCustomizationItem[] = [];
 		for (const skill of this.chatPromptFileService.skills) {
 			if (this.isCLIPath(skill.uri)) {
-				items.push({
+				skillItems.push({
 					uri: skill.uri,
 					type: vscode.ChatSessionCustomizationType.Skill,
 					name: deriveNameFromUri(skill.uri, SKILL_FILENAME),
 				});
 			}
 		}
+		items.push(...skillItems);
+		this.logService.debug(`[CopilotCLICustomizationProvider] skills (${skillItems.length}): ${skillItems.map(s => s.name).join(', ') || '(none)'}`);
 
-		this.logService.trace(`[CopilotCLICustomizationProvider] Provided ${items.length} customization items`);
+		this.logService.debug(`[CopilotCLICustomizationProvider] total: ${items.length} items`);
 		return items;
 	}
 

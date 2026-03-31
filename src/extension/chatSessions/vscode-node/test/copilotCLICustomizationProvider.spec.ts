@@ -26,10 +26,10 @@ class FakeChatSessionCustomizationType {
 	constructor(readonly id: string) { }
 }
 
-function makeSweAgent(name: string, description = ''): Readonly<SweCustomAgent> {
+function makeSweAgent(name: string, description = '', displayName?: string): Readonly<SweCustomAgent> {
 	return {
 		name,
-		displayName: name,
+		displayName: displayName ?? name,
 		description,
 		tools: null,
 		prompt: () => Promise.resolve(''),
@@ -91,6 +91,7 @@ class MockEnvService extends mock<INativeEnvService>() {
 
 class TestLogService extends mock<ILogService>() {
 	override trace() { }
+	override debug() { }
 }
 
 const WORKSPACE = URI.file('/workspace');
@@ -102,7 +103,10 @@ describe('CopilotCLICustomizationProvider', () => {
 	let mockWorkspaceService: MockWorkspaceService;
 	let provider: CopilotCLICustomizationProvider;
 
+	let originalChatSessionCustomizationType: unknown;
+
 	beforeEach(() => {
+		originalChatSessionCustomizationType = (vscode as Record<string, unknown>).ChatSessionCustomizationType;
 		(vscode as Record<string, unknown>).ChatSessionCustomizationType = FakeChatSessionCustomizationType;
 		disposables = new DisposableStore();
 		mockPromptFileService = disposables.add(new MockChatPromptFileService());
@@ -120,6 +124,7 @@ describe('CopilotCLICustomizationProvider', () => {
 
 	afterEach(() => {
 		disposables.dispose();
+		(vscode as Record<string, unknown>).ChatSessionCustomizationType = originalChatSessionCustomizationType;
 	});
 
 	describe('metadata', () => {
@@ -143,39 +148,44 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(items).toEqual([]);
 		});
 
-		it('returns all agents regardless of path', async () => {
-			mockPromptFileService.setCustomAgents([
-				{ uri: URI.file('/workspace/.github/my-agent.agent.md') },
-				{ uri: URI.file('/workspace/root-agent.agent.md') },
-				{ uri: URI.file('/other/path/agent.agent.md') },
-			]);
-
-			const items = await provider.provideChatSessionCustomizations(undefined!);
-			expect(items).toHaveLength(3);
-			expect(items.every((i: vscode.ChatSessionCustomizationItem) => i.type === FakeChatSessionCustomizationType.Agent)).toBe(true);
-		});
-
-		it('enriches agents with description from ICopilotCLIAgents', async () => {
-			mockPromptFileService.setCustomAgents([
-				{ uri: URI.file('/workspace/.github/explore.agent.md') },
-			]);
+		it('returns agents from ICopilotCLIAgents as primary source', async () => {
 			mockCopilotCLIAgents.setAgents([
 				makeSweAgent('explore', 'Fast code exploration'),
+				makeSweAgent('task', 'Multi-step tasks'),
 			]);
 
 			const items = await provider.provideChatSessionCustomizations(undefined!);
-			expect(items).toHaveLength(1);
-			expect(items[0].description).toBe('Fast code exploration');
-			expect(items[0].name).toBe('explore');
+			const agentItems = items.filter((i: vscode.ChatSessionCustomizationItem) => i.type === FakeChatSessionCustomizationType.Agent);
+			expect(agentItems).toHaveLength(2);
+			expect(agentItems[0].name).toBe('explore');
+			expect(agentItems[0].description).toBe('Fast code exploration');
+		});
+
+		it('uses file URI when agent has matching .agent.md file', async () => {
+			const fileUri = URI.file('/workspace/.github/explore.agent.md');
+			mockPromptFileService.setCustomAgents([{ uri: fileUri }]);
+			mockCopilotCLIAgents.setAgents([makeSweAgent('explore', 'Explore agent')]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const agentItems = items.filter((i: vscode.ChatSessionCustomizationItem) => i.type === FakeChatSessionCustomizationType.Agent);
+			expect(agentItems).toHaveLength(1);
+			expect(agentItems[0].uri).toEqual(fileUri);
+			expect(agentItems[0].groupKey).toBeUndefined();
+		});
+
+		it('uses virtual URI for SDK-only agents without .agent.md files', async () => {
+			mockCopilotCLIAgents.setAgents([makeSweAgent('task', 'Task agent')]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const agentItems = items.filter((i: vscode.ChatSessionCustomizationItem) => i.type === FakeChatSessionCustomizationType.Agent);
+			expect(agentItems).toHaveLength(1);
+			expect(agentItems[0].uri.scheme).toBe('copilotcli');
+			expect(agentItems[0].uri.path).toBe('/agents/task');
+			expect(agentItems[0].groupKey).toBe('Built-in');
 		});
 
 		it('uses displayName from SDK agents when available', async () => {
-			mockPromptFileService.setCustomAgents([
-				{ uri: URI.file('/workspace/.github/code-review.agent.md') },
-			]);
-			const agent = makeSweAgent('code-review', 'Reviews code');
-			(agent as any).displayName = 'Code Review';
-			mockCopilotCLIAgents.setAgents([agent]);
+			mockCopilotCLIAgents.setAgents([makeSweAgent('code-review', 'Reviews code', 'Code Review')]);
 
 			const items = await provider.provideChatSessionCustomizations(undefined!);
 			expect(items[0].name).toBe('Code Review');
@@ -277,7 +287,7 @@ describe('CopilotCLICustomizationProvider', () => {
 		});
 
 		it('returns all matching types combined', async () => {
-			mockPromptFileService.setCustomAgents([{ uri: URI.file('/workspace/a.agent.md') }]);
+			mockCopilotCLIAgents.setAgents([makeSweAgent('explore', 'Explore')]);
 			mockPromptFileService.setInstructions([{ uri: URI.file('/workspace/.github/b.instructions.md') }]);
 			mockPromptFileService.setSkills([{ uri: URI.file('/workspace/.github/skills/c/SKILL.md') }]);
 

@@ -480,8 +480,9 @@ export class ClaudeCodeSession extends Disposable {
 			options
 		});
 
-		// Cache runtime data (agents, etc.) for the customization provider
-		await this.runtimeDataService.update(this._queryGenerator);
+		// Cache runtime data (agents, etc.) for the customization provider.
+		// Fire-and-forget to avoid blocking session startup — error handling is inside the service.
+		void this.runtimeDataService.update(this._queryGenerator);
 
 		// Take a snapshot of settings files so we can detect changes
 		await this._settingsChangeTracker.takeSnapshot();

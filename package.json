@@ -5670,6 +5670,23 @@
 					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.hasGitRepository && sessions.changesVersionMode == branchChanges",
 					"group": "navigation@1"
 				}
+			],
+			"chat/customizations/create": [
+				{
+					"command": "copilot.claude.agents",
+					"when": "aiCustomizationManagementHarness == claude-code && aiCustomizationManagementSection == agents",
+					"group": "navigation@1"
+				},
+				{
+					"command": "copilot.claude.hooks",
+					"when": "aiCustomizationManagementHarness == claude-code && aiCustomizationManagementSection == hooks",
+					"group": "navigation@1"
+				},
+				{
+					"command": "copilot.claude.memory",
+					"when": "aiCustomizationManagementHarness == claude-code && aiCustomizationManagementSection == instructions",
+					"group": "navigation@1"
+				}
 			]
 		},
 		"icons": {

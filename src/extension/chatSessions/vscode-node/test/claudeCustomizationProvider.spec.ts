@@ -46,9 +46,15 @@ class MockChatPromptFileService extends mock<IChatPromptFileService>() {
 	private readonly _onDidChangeSkills = new Emitter<void>();
 	override readonly onDidChangeSkills = this._onDidChangeSkills.event;
 
+	private _customAgents: vscode.ChatResource[] = [];
 	private _skills: vscode.ChatResource[] = [];
+
+	override get customAgents(): readonly vscode.ChatResource[] { return this._customAgents; }
 	override get skills(): readonly vscode.ChatResource[] { return this._skills; }
+
+	setCustomAgents(agents: vscode.ChatResource[]) { this._customAgents = agents; }
 	setSkills(skills: vscode.ChatResource[]) { this._skills = skills; }
+	fireCustomAgentsChanged() { this._onDidChangeCustomAgents.fire(); }
 	fireSkillsChanged() { this._onDidChangeSkills.fire(); }
 
 	override dispose() {
@@ -72,6 +78,12 @@ class MockFileSystemService extends mock<IFileSystemService>() {
 	setFile(uri: URI, content: string) {
 		this._files.set(uri.toString(), new TextEncoder().encode(content));
 	}
+	override async stat(uri: URI): Promise<{ type: number; ctime: number; mtime: number; size: number }> {
+		if (!this._files.has(uri.toString())) {
+			throw new Error(`File not found: ${uri.toString()}`);
+		}
+		return { type: 1 /* File */, ctime: 0, mtime: 0, size: this._files.get(uri.toString())!.length };
+	}
 	override async readFile(uri: URI): Promise<Uint8Array> {
 		const content = this._files.get(uri.toString());
 		if (!content) {
@@ -87,6 +99,7 @@ class MockEnvService extends mock<INativeEnvService>() {
 
 class TestLogService extends mock<ILogService>() {
 	override trace() { }
+	override debug() { }
 }
 
 describe('ClaudeCustomizationProvider', () => {
@@ -97,7 +110,10 @@ describe('ClaudeCustomizationProvider', () => {
 	let mockFileSystemService: MockFileSystemService;
 	let provider: ClaudeCustomizationProvider;
 
+	let originalChatSessionCustomizationType: unknown;
+
 	beforeEach(() => {
+		originalChatSessionCustomizationType = (vscode as Record<string, unknown>).ChatSessionCustomizationType;
 		(vscode as Record<string, unknown>).ChatSessionCustomizationType = FakeChatSessionCustomizationType;
 		disposables = new DisposableStore();
 		mockRuntimeDataService = disposables.add(new MockRuntimeDataService());
@@ -116,6 +132,7 @@ describe('ClaudeCustomizationProvider', () => {
 
 	afterEach(() => {
 		disposables.dispose();
+		(vscode as Record<string, unknown>).ChatSessionCustomizationType = originalChatSessionCustomizationType;
 	});
 
 	describe('metadata', () => {
@@ -133,7 +150,7 @@ describe('ClaudeCustomizationProvider', () => {
 	});
 
 	describe('agents from SDK', () => {
-		it('returns empty when no session has initialized', async () => {
+		it('returns empty when no session has initialized and no file agents', async () => {
 			const items = await provider.provideChatSessionCustomizations(undefined!);
 			expect(items).toEqual([]);
 		});
@@ -153,6 +170,47 @@ describe('ClaudeCustomizationProvider', () => {
 			expect(agentItems[0].uri.scheme).toBe('claude-code');
 			expect(agentItems[0].uri.path).toBe('/agents/Explore');
 			expect(agentItems[1].name).toBe('Review');
+		});
+
+		it('shows file-based agents from .claude/ paths before session starts', async () => {
+			mockWorkspaceService.setFolders([URI.file('/workspace')]);
+			mockPromptFileService.setCustomAgents([
+				{ uri: URI.file('/workspace/.claude/agents/my-agent.agent.md') },
+			]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const agentItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Agent);
+			expect(agentItems).toHaveLength(1);
+			expect(agentItems[0].name).toBe('my-agent');
+			expect(agentItems[0].uri.scheme).toBe('file');
+		});
+
+		it('deduplicates file agents when SDK provides the same agent', async () => {
+			mockWorkspaceService.setFolders([URI.file('/workspace')]);
+			mockRuntimeDataService.setAgents([
+				{ name: 'my-agent', description: 'SDK version' },
+			]);
+			mockPromptFileService.setCustomAgents([
+				{ uri: URI.file('/workspace/.claude/agents/my-agent.agent.md') },
+			]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const agentItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Agent);
+			expect(agentItems).toHaveLength(1);
+			expect(agentItems[0].description).toBe('SDK version');
+			expect(agentItems[0].groupKey).toBe('Built-in');
+		});
+
+		it('filters out file agents not under .claude/', async () => {
+			mockWorkspaceService.setFolders([URI.file('/workspace')]);
+			mockPromptFileService.setCustomAgents([
+				{ uri: URI.file('/workspace/.github/my-agent.agent.md') },
+				{ uri: URI.file('/workspace/root.agent.md') },
+			]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const agentItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Agent);
+			expect(agentItems).toHaveLength(0);
 		});
 	});
 
@@ -375,6 +433,14 @@ describe('ClaudeCustomizationProvider', () => {
 			disposables.add(provider.onDidChange(() => { fired = true; }));
 
 			mockRuntimeDataService.fireChanged();
+			expect(fired).toBe(true);
+		});
+
+		it('fires when custom agents change', () => {
+			let fired = false;
+			disposables.add(provider.onDidChange(() => { fired = true; }));
+
+			mockPromptFileService.fireCustomAgentsChanged();
 			expect(fired).toBe(true);
 		});
 
