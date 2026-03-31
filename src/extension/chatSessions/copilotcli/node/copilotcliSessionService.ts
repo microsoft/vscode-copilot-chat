@@ -59,7 +59,6 @@ export interface ICopilotCLISessionItem {
 	readonly timing: ChatSessionItem['timing'];
 	readonly status?: ChatSessionStatus;
 	readonly workingDirectory?: Uri;
-	readonly repositoryDirectory?: Uri;
 }
 
 export type ExtendedChatRequest = ChatRequest & { prompt: string };
@@ -392,7 +391,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			const diskSessions: ICopilotCLISessionItem[] = coalesce(await Promise.all(
 				sessionMetadataList.map(async (metadata): Promise<ICopilotCLISessionItem | undefined> => {
 					const workingDirectory = metadata.context?.cwd ? URI.file(metadata.context.cwd) : undefined;
-					const repositoryDirectory = metadata.context?.gitRoot ? URI.file(metadata.context.gitRoot) : undefined;
 					this._sessionWorkingDirectories.set(metadata.sessionId, workingDirectory);
 					if (!await this.shouldShowSession(metadata.sessionId, metadata.context)) {
 						return;
@@ -409,8 +407,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 							id,
 							label,
 							timing: { created: startTime, startTime, endTime },
-							workingDirectory,
-							repositoryDirectory
+							workingDirectory
 						};
 					}
 
@@ -425,8 +422,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 							id,
 							label,
 							timing: { created: startTime, startTime, endTime },
-							workingDirectory,
-							repositoryDirectory
+							workingDirectory
 						};
 					} catch (error) {
 						this.logService.warn(`Failed to load session ${metadata.sessionId}: ${error}`);
@@ -452,7 +448,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						label,
 						status: session.object.status,
 						timing: { created: createTime, startTime: createTime },
-						repositoryDirectory: session.object.workspace.repository,
 					};
 				})));
 
@@ -491,13 +486,11 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			label,
 			status: session.object.status,
 			timing: this._cachedSessionItems.get(session.object.sessionId)?.timing ?? { created: createTime, startTime: createTime },
-			repositoryDirectory: session.object.workspace.repository,
 		};
 	}
 
 	private async constructSessionItemImpl(metadata: LocalSessionMetadata, token: CancellationToken): Promise<ICopilotCLISessionItem | undefined> {
 		const workingDirectory = metadata.context?.cwd ? URI.file(metadata.context.cwd) : undefined;
-		const repositoryDirectory = metadata.context?.gitRoot ? URI.file(metadata.context.gitRoot) : undefined;
 		this._sessionWorkingDirectories.set(metadata.sessionId, workingDirectory);
 		const shouldShowSession = await this.shouldShowSession(metadata.sessionId, metadata.context);
 		if (!shouldShowSession) {
@@ -515,7 +508,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				label,
 				timing: { created: startTime, startTime, endTime },
 				workingDirectory,
-				repositoryDirectory,
 				status: this._sessionWrappers.get(id)?.object?.status
 			};
 		}
@@ -832,8 +824,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				id: newSessionId,
 				label: customTitle,
 				timing: { created: Date.now(), startTime: Date.now() },
-				workingDirectory: getWorkingDirectory(workspaceInfo),
-				repositoryDirectory: workspaceInfo.repository
+				workingDirectory: getWorkingDirectory(workspaceInfo)
 			});
 			return newSessionId;
 		}
