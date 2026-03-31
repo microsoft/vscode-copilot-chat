@@ -755,7 +755,7 @@ suite('ReadFile', () => {
 
 			const input: IReadFileParamsV2 = { filePath: skillUri.fsPath };
 			await readFileTool.invoke({ input, toolInvocationToken: null as never }, CancellationToken.None);
-			await new Promise(resolve => queueMicrotask(resolve)); // flush deferred telemetry
+			await new Promise<void>(resolve => queueMicrotask(() => resolve())); // flush deferred telemetry
 
 			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
 			expect(event).toBeDefined();
@@ -800,7 +800,7 @@ suite('ReadFile', () => {
 
 			const input: IReadFileParamsV2 = { filePath: skillUri.fsPath };
 			await readFileTool.invoke({ input, toolInvocationToken: null as never }, CancellationToken.None);
-			await new Promise(resolve => queueMicrotask(resolve)); // flush deferred telemetry
+			await new Promise<void>(resolve => queueMicrotask(() => resolve())); // flush deferred telemetry
 
 			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
 			expect(event).toBeDefined();
@@ -845,7 +845,7 @@ suite('ReadFile', () => {
 
 			const input: IReadFileParamsV2 = { filePath: skillUri.fsPath };
 			await readFileTool.invoke({ input, toolInvocationToken: null as never }, CancellationToken.None);
-			await new Promise(resolve => queueMicrotask(resolve)); // flush deferred telemetry
+			await new Promise<void>(resolve => queueMicrotask(() => resolve())); // flush deferred telemetry
 
 			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
 			expect(event).toBeDefined();
@@ -888,7 +888,7 @@ suite('ReadFile', () => {
 
 			const input: IReadFileParamsV2 = { filePath: skillUri.toString() };
 			await readFileTool.invoke({ input, toolInvocationToken: null as never }, CancellationToken.None);
-			await new Promise(resolve => queueMicrotask(resolve)); // flush deferred telemetry
+			await new Promise<void>(resolve => queueMicrotask(() => resolve())); // flush deferred telemetry
 
 			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
 			expect(event).toBeDefined();
@@ -913,7 +913,7 @@ suite('ReadFile', () => {
 
 			const input: IReadFileParamsV2 = { filePath: '/workspace/file.ts' };
 			await readFileTool.invoke({ input, toolInvocationToken: null as never }, CancellationToken.None);
-			await new Promise(resolve => queueMicrotask(resolve)); // flush deferred telemetry
+			await new Promise<void>(resolve => queueMicrotask(() => resolve())); // flush deferred telemetry
 
 			const skillEvent = telemetry.events.find(e => e.eventName === 'skillContentRead');
 			expect(skillEvent).toBeUndefined();

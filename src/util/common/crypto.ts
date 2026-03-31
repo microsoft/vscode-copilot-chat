@@ -55,7 +55,7 @@ export function getCachedSha256Hash(text: string): string {
 }
 
 
-function createSha256HashSyncInsecure(data: string): string {
+export function createSha256HashSyncInsecure(data: string): string {
 	const sha256 = new StringSHA256Insecure();
 	sha256.update(data);
 	return sha256.digest();

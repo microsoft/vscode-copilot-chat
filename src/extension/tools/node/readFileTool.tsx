@@ -21,7 +21,7 @@ import { IPromptPathRepresentationService } from '../../../platform/prompts/comm
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
-import { getCachedSha256Hash } from '../../../util/common/crypto';
+import { createSha256HashSyncInsecure, getCachedSha256Hash } from '../../../util/common/crypto';
 import { clamp } from '../../../util/vs/base/common/numbers';
 import { dirname, extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -388,23 +388,27 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 	// TODO: Add pluginNameHash and pluginVersion properties once vscode core's
 	// extensionPromptFileProvider command exposes IAgentPluginService metadata.
 	private sendSkillContentReadTelemetry(uri: URI, documentSnapshot: TextDocumentSnapshot | NotebookDocumentSnapshot) {
-		// Capture content synchronously from the snapshot before deferring,
-		// since the snapshot reference may not be valid in a later microtask.
+		// Check if this is a skill file before doing any work — avoids materializing
+		// document text and computing hashes for the vast majority of read_file calls.
+		const extensionSkillInfo = this.customInstructionsService.getExtensionSkillInfo(uri);
+		const skillInfo = extensionSkillInfo || this.customInstructionsService.getSkillInfo(uri);
+		if (!skillInfo) {
+			return;
+		}
+
+		// Only capture text now that we know this is a skill file.
 		const content = documentSnapshot instanceof TextDocumentSnapshot ? documentSnapshot.getText() : '';
 
-		// Defer all hashing, lookups, and telemetry sends off the read_file critical path.
+		// Defer hashing and telemetry sends off the read_file critical path.
 		queueMicrotask(() => {
-			const extensionSkillInfo = this.customInstructionsService.getExtensionSkillInfo(uri);
-			const skillInfo = extensionSkillInfo || this.customInstructionsService.getSkillInfo(uri);
-			if (!skillInfo) {
-				return;
-			}
-
 			const skillStorage = this.getSkillStorage(uri, extensionSkillInfo);
 			const extensionId = extensionSkillInfo?.extensionId;
 			const extensionIdHash = extensionId ? getCachedSha256Hash(extensionId) : '';
 			const extensionVersion = extensionId ? this.extensionsService.getExtension(extensionId)?.packageJSON?.version ?? '' : '';
-			const contentHash = content ? getCachedSha256Hash(content) : '';
+			// Use non-caching hash for content to avoid retaining full file text in the
+			// global hash cache indefinitely. Skill names and extension IDs are small and
+			// repeat often, so getCachedSha256Hash is appropriate for those.
+			const contentHash = content ? createSha256HashSyncInsecure(content) : '';
 			const skillNameHash = getCachedSha256Hash(skillInfo.skillName);
 
 			this.telemetryService.sendGHTelemetryEvent('skillContentRead',
