@@ -25,7 +25,7 @@ export interface IChatSessionWorkspaceFolderService {
 	/**
 	 * Track workspace folder selection for a session (for folders without git repos in multi-root workspaces)
 	 */
-	trackSessionWorkspaceFolder(sessionId: string, workspaceFolderUri: string): Promise<void>;
+	trackSessionWorkspaceFolder(sessionId: string, workspaceFolderUri: string, repositoryFolderUri?: string): Promise<void>;
 
 	/**
 	 * Get the workspace folder associated with a session (if a workspace folder without git repo was selected)

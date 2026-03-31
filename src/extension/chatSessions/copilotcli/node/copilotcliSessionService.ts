@@ -1182,7 +1182,7 @@ async function copySessionFilesForForking(sessionId: string, targetSessionId: st
 				if (workspaceInfo.worktreeProperties) {
 					await _chatSessionMetadataStore.storeWorktreeInfo(targetSessionId, workspaceInfo.worktreeProperties);
 				} else if (workspaceInfo.folder) {
-					await _chatSessionMetadataStore.storeWorkspaceFolderInfo(targetSessionId, { folderPath: workspaceInfo.folder.fsPath, timestamp: Date.now() });
+					await _chatSessionMetadataStore.storeWorkspaceFolderInfo(targetSessionId, { folderPath: workspaceInfo.folder.fsPath, repositoryPath: workspaceInfo.repository?.fsPath, timestamp: Date.now() });
 				}
 			})(),
 		]), token);
