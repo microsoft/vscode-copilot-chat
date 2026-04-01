@@ -952,7 +952,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			expect(worktreeService.createWorktree).toHaveBeenCalledWith(
 				expect.anything(),
 				expect.anything(),
-				'feature-branch'
+				'feature-branch',
+				undefined,
 			);
 		});
 
@@ -982,6 +983,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			expect(worktreeService.createWorktree).toHaveBeenCalledWith(
 				expect.anything(),
 				expect.anything(),
+				undefined,
 				undefined
 			);
 		});
