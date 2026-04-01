@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { Position } from '../../../../util/vs/editor/common/core/position';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
 import { ensureDependenciesAreSet } from '../../../../util/vs/editor/common/core/text/positionToOffset';
-import { isInlineSuggestionFromTextAfterCursor, isInlineSuggestionPosition } from '../../common/inlineSuggestion';
+import { determineIsInlineSuggestionPosition, isInlineSuggestionFromTextAfterCursor } from '../../common/inlineSuggestion';
 import { CurrentDocument } from '../../common/xtabCurrentDocument';
 
 describe('isInlineSuggestionFromTextAfterCursor', () => {
@@ -100,73 +100,73 @@ describe('isInlineSuggestion', () => {
 	describe('end of line positions', () => {
 		it('should return false when cursor is at end of line', () => {
 			const document = createDocument(['const x = 1;', 'const y = 2;'], 1, 13);
-			expect(isInlineSuggestionPosition(document)).toBe(false);
+			expect(determineIsInlineSuggestionPosition(document)).toBe(false);
 		});
 
 		it('should return false when only whitespace after cursor', () => {
 			const document = createDocument(['const x = 1   ', 'const y = 2;'], 1, 12);
-			expect(isInlineSuggestionPosition(document)).toBe(false);
+			expect(determineIsInlineSuggestionPosition(document)).toBe(false);
 		});
 	});
 
 	describe('valid middle of line positions', () => {
 		it('should return true when cursor is before closing paren', () => {
 			const document = createDocument(['foo(bar)', 'next line'], 1, 8);
-			expect(isInlineSuggestionPosition(document)).toBe(true);
+			expect(determineIsInlineSuggestionPosition(document)).toBe(true);
 		});
 
 		it('should return true when cursor is before closing bracket', () => {
 			const document = createDocument(['arr[0]', 'next line'], 1, 6);
-			expect(isInlineSuggestionPosition(document)).toBe(true);
+			expect(determineIsInlineSuggestionPosition(document)).toBe(true);
 		});
 
 		it('should return true when cursor is before semicolon', () => {
 			const document = createDocument(['const x = 1;', 'next line'], 1, 12);
-			expect(isInlineSuggestionPosition(document)).toBe(true);
+			expect(determineIsInlineSuggestionPosition(document)).toBe(true);
 		});
 
 		it('should return true when cursor is before complex ending', () => {
 			const document = createDocument(['});', 'next line'], 1, 1);
-			expect(isInlineSuggestionPosition(document)).toBe(true);
+			expect(determineIsInlineSuggestionPosition(document)).toBe(true);
 		});
 	});
 
 	describe('invalid middle of line positions', () => {
 		it('should return undefined when cursor is before identifier', () => {
 			const document = createDocument(['hello world', 'next line'], 1, 6);
-			expect(isInlineSuggestionPosition(document)).toBeUndefined();
+			expect(determineIsInlineSuggestionPosition(document)).toBeUndefined();
 		});
 
 		it('should return undefined when cursor is before operator and code', () => {
 			const document = createDocument(['x = 1 + 2', 'next line'], 1, 6);
-			expect(isInlineSuggestionPosition(document)).toBeUndefined();
+			expect(determineIsInlineSuggestionPosition(document)).toBeUndefined();
 		});
 
 		it('should return undefined when cursor is before function call', () => {
 			const document = createDocument(['x.method()', 'next line'], 1, 2);
-			expect(isInlineSuggestionPosition(document)).toBeUndefined();
+			expect(determineIsInlineSuggestionPosition(document)).toBeUndefined();
 		});
 	});
 
 	describe('edge cases', () => {
 		it('should handle cursor at first character of line', () => {
 			const document = createDocument(['hello', 'world'], 1, 1);
-			expect(isInlineSuggestionPosition(document)).toBeUndefined();
+			expect(determineIsInlineSuggestionPosition(document)).toBeUndefined();
 		});
 
 		it('should handle single character line', () => {
 			const document = createDocument([';'], 1, 1);
-			expect(isInlineSuggestionPosition(document)).toBe(true);
+			expect(determineIsInlineSuggestionPosition(document)).toBe(true);
 		});
 
 		it('should handle empty line', () => {
 			const document = createDocument(['', 'next line'], 1, 1);
-			expect(isInlineSuggestionPosition(document)).toBe(false);
+			expect(determineIsInlineSuggestionPosition(document)).toBe(false);
 		});
 
 		it('should handle cursor beyond line length gracefully', () => {
 			const document = createDocument(['short'], 1, 100);
-			expect(isInlineSuggestionPosition(document)).toBe(false);
+			expect(determineIsInlineSuggestionPosition(document)).toBe(false);
 		});
 
 		it('should handle multi-line document with cursor on different lines', () => {
@@ -174,11 +174,11 @@ describe('isInlineSuggestion', () => {
 
 			// Before `;` in "const x = 1;"
 			const doc1 = createDocument(lines, 2, 14);
-			expect(isInlineSuggestionPosition(doc1)).toBe(true); // before `;`
+			expect(determineIsInlineSuggestionPosition(doc1)).toBe(true); // before `;`
 
 			// End of line
 			const doc2 = createDocument(lines, 2, 15);
-			expect(isInlineSuggestionPosition(doc2)).toBe(false);
+			expect(determineIsInlineSuggestionPosition(doc2)).toBe(false);
 		});
 	});
 });

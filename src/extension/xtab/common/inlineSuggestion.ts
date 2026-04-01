@@ -27,7 +27,7 @@ export function isInlineSuggestionFromTextAfterCursor(textAfterCursor: string): 
  * Checks if the cursor position is valid inline suggestion position (middle of the line).
  * Returns `undefined` if it's a position where ghost text shouldn't be displayed.
  */
-export function isInlineSuggestionPosition(document: CurrentDocument): boolean | undefined {
+export function determineIsInlineSuggestionPosition(document: CurrentDocument): boolean | undefined {
 	const textAfterCursor = document.textAfterCursor();
 	return isInlineSuggestionFromTextAfterCursor(textAfterCursor);
 }

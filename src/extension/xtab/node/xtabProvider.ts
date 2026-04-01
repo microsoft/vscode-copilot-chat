@@ -56,6 +56,7 @@ import { DelaySession } from '../../inlineEdits/common/delay';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { UserInteractionMonitor } from '../../inlineEdits/common/userInteractionMonitor';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
+import { determineIsInlineSuggestionPosition } from '../common/inlineSuggestion';
 import { LintErrors } from '../common/lintErrors';
 import { ClippedDocument, constructTaggedFile, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
 import { countTokensForLines, toUniquePath } from '../common/promptCraftingUtils';
@@ -413,7 +414,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		telemetry.setIsCursorAtLineEnd(isCursorAtEndOfLine);
 
 		// Apply extra debounce based on cursor position - only one applies
-		const isInlineSuggestionPosition = isInlineSuggestionPosition(currentDocument);
+		const isInlineSuggestionPosition = determineIsInlineSuggestionPosition(currentDocument);
 		telemetry.setIsInlineSuggestion(!!isInlineSuggestionPosition);
 
 		if (request.isSpeculative) {
