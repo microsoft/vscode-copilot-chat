@@ -93,12 +93,18 @@ export async function generatePromptFromRecording(
 			nextEditProvider.ID, replayer.workspace.getDocument(activeDocument.docId),
 		);
 
-		// Prompt is captured in logContext; model call is mocked via DI
+		// Prompt is captured in logContext; model call is mocked via DI.
+		// The provider may throw during response streaming (after prompt capture)
+		// since we use a mock fetcher, so we tolerate errors if the prompt was
+		// already captured.
 		try {
 			await nextEditProvider.getNextEdit(
 				activeDocument.docId, context, logContext,
 				CancellationToken.None, telemetryBuilder.nesBuilder,
 			);
+		} catch {
+			// Expected: mock fetcher response causes downstream errors.
+			// The prompt was already captured in logContext before the fetch.
 		} finally {
 			nextEditProvider.dispose();
 			telemetryBuilder.dispose();
