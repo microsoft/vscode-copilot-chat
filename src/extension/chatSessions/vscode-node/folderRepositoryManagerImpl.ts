@@ -315,7 +315,6 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 				folder: uri,
 				repository: undefined,
 				lastAccessed: lastAccessTime,
-				isUntitledSessionSelection: true
 			});
 		}
 
@@ -329,22 +328,6 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 				folder: repo.rootUri,
 				repository: repo.rootUri,
 				lastAccessed: repo.lastAccessTime,
-				isUntitledSessionSelection: false
-			});
-		}
-
-		// Add recent workspace folders
-		const folders = await this.workspaceFolderService.getRecentFolders();
-		for (const folder of folders) {
-			if (seenUris.has(folder.folder)) {
-				continue;
-			}
-			seenUris.add(folder.folder);
-			latestReposAndFolders.push({
-				folder: folder.folder,
-				repository: undefined,
-				lastAccessed: folder.lastAccessTime,
-				isUntitledSessionSelection: false
 			});
 		}
 
@@ -353,18 +336,6 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 
 		return latestReposAndFolders;
 	}
-
-	async deleteMRUEntry(folder: vscode.Uri): Promise<void> {
-		// Remove from untitled session folders if present
-		for (const [sessionId, entry] of this._newSessionFolders.entries()) {
-			if (isEqual(entry.uri, folder)) {
-				this._newSessionFolders.delete(sessionId);
-			}
-		}
-
-		await this.workspaceFolderService.deleteRecentFolder(folder);
-	}
-
 
 	/**
 	 * Check for uncommitted changes and prompt user for action.

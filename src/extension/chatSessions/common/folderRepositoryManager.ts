@@ -78,11 +78,6 @@ export interface FolderRepositoryMRUEntry {
 	 * Timestamp of last access (milliseconds since epoch).
 	 */
 	readonly lastAccessed: number;
-
-	/**
-	 * Whether this entry was used in an untitled session.
-	 */
-	readonly isUntitledSessionSelection: boolean;
 }
 
 export const IFolderRepositoryManager = createServiceIdentifier<IFolderRepositoryManager>('IFolderRepositoryManager');
@@ -152,6 +147,7 @@ export interface IFolderRepositoryManager {
 	): Promise<{ repository: vscode.Uri | undefined; headBranchName: string | undefined }>;
 
 	/**
+	 * @deprecated
 	 * Get list of most recently used folders and repositories.
 	 *
 	 * This is used for empty workspaces to show a list of previously used
@@ -161,9 +157,4 @@ export interface IFolderRepositoryManager {
 	 *          limited to 10 items, with non-existent paths filtered out
 	 */
 	getFolderMRU(): Promise<FolderRepositoryMRUEntry[]>;
-
-	/**
-	 * Delete an entry from the MRU list.
-	 */
-	deleteMRUEntry(folder: vscode.Uri): Promise<void>;
 }

@@ -10,12 +10,10 @@ import { IGitService } from '../../../platform/git/common/gitService';
 import { parseGitChangesRaw } from '../../../platform/git/vscode-node/utils';
 import { DiffChange } from '../../../platform/git/vscode/git';
 import { ILogService } from '../../../platform/log/common/logService';
-import { coalesce } from '../../../util/vs/base/common/arrays';
 import { SequencerByKey } from '../../../util/vs/base/common/async';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
+import { ResourceMap } from '../../../util/vs/base/common/map';
 import * as path from '../../../util/vs/base/common/path';
-import { isEqual } from '../../../util/vs/base/common/resources';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IChatSessionMetadataStore, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
@@ -32,8 +30,6 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 
 	private readonly workspaceFolderChanges = new ResourceMap<ChatSessionWorktreeFile[]>();
 	private readonly workspaceState = new Map<string, WorkspaceFolderEntry>();
-	private recentFolders: { folder: vscode.Uri; lastAccessTime: number }[] = [];
-	private readonly deletedFolders = new ResourceSet();
 	private readonly workspaceChangesSequencer = new SequencerByKey<string>();
 
 	constructor(
@@ -45,28 +41,6 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 		super();
 	}
 
-	public async deleteRecentFolder(folder: vscode.Uri): Promise<void> {
-		this.recentFolders = this.recentFolders.filter(entry => !isEqual(entry.folder, folder));
-		this.deletedFolders.add(folder);
-	}
-
-	public async getRecentFolders(): Promise<{ folder: vscode.Uri; lastAccessTime: number }[]> {
-		const items = await this.metadataStore.getUsedWorkspaceFolders();
-		this.recentFolders = coalesce(items.map(item => {
-			if (!item.folderPath) {
-				return;
-			}
-			const folder = vscode.Uri.file(item.folderPath);
-			if (this.deletedFolders.has(folder)) {
-				return;
-			}
-			return {
-				folder,
-				lastAccessTime: item.timestamp
-			};
-		})).sort((a, b) => b.lastAccessTime - a.lastAccessTime);
-		return this.recentFolders;
-	}
 	async deleteTrackedWorkspaceFolder(sessionId: string): Promise<void> {
 		this.workspaceState.delete(sessionId);
 		await this.metadataStore.deleteSessionMetadata(sessionId);

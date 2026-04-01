@@ -115,7 +115,6 @@ class TestFolderRepositoryManager extends mock<IFolderRepositoryManager>() {
 	}));
 	override getRepositoryInfo = vi.fn(async () => ({ repository: undefined, headBranchName: undefined }));
 	override getFolderMRU = vi.fn(async () => []);
-	override deleteMRUEntry = vi.fn(async () => { });
 }
 
 class TestGitService extends mock<IGitService>() {

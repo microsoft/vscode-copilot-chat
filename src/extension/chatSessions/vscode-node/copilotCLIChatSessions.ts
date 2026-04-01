@@ -48,6 +48,7 @@ import { builtinSlashSCommands, CopilotCLICommand, copilotCLICommands, ICopilotC
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
 import { buildMcpServerMappings } from '../copilotcli/node/mcpHandler';
 import { ICopilotCLISessionTracker } from '../copilotcli/vscode-node/copilotCLISessionTracker';
+import { ICopilotCLIFolderMruService } from './copilotCLIFolderMru';
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
 import { ICopilotCLITerminalIntegration, TerminalOpenLocation } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
@@ -62,6 +63,7 @@ const COPILOT_WORKTREE_PATTERN = 'copilot-worktree-';
  * 4. Remove this._currentSessionId
  * 5. Remove isWorktreeIsolationSelected and update to account for dropdown.
  * 6. Is chatSessionContext?.initialSessionOptions still valid with new API
+ * 7. Validated selected MRU item
  *
  * Cases to cover:
  * 1. Hook up the dropdowns for empty workspace folders as well
@@ -236,6 +238,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
 		@ILogService private readonly logService: ILogService,
 		@IAgentSessionsWorkspace private readonly _agentSessionsWorkspace: IAgentSessionsWorkspace,
+		@ICopilotCLIFolderMruService private readonly copilotCLIFolderMruService: ICopilotCLIFolderMruService,
 	) {
 		super();
 
@@ -610,7 +613,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			let items: vscode.ChatSessionProviderOptionItem[] = [];
 
 			// For untitled workspaces, show last used repositories and "Open Repository..." command
-			const repositories = await this.folderRepositoryManager.getFolderMRU();
+			const repositories = await this.copilotCLIFolderMruService.getRecentlyUsedFolders(CancellationToken.None);
 			items = folderMRUToChatProviderOptions(repositories);
 			items.splice(MAX_MRU_ENTRIES); // Limit to max entries
 			if (this._lastUsedFolderIdInUntitledWorkspace) {
@@ -622,7 +625,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					const lastUsedEntry = folderMRUToChatProviderOptions([{
 						folder,
 						repository: isRepo ? folder : undefined,
-						isUntitledSessionSelection: true,
 						lastAccessed
 					}])[0];
 					items.unshift(lastUsedEntry);
@@ -686,7 +688,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		const copilotcliSessionId = SessionIdForCLI.parse(resource);
 		const optionGroups: vscode.ChatSessionProviderOptionGroup[] = [];
 		const folderInfo = await this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token);
-		const repositories = isWelcomeView(this.workspaceService) ? folderMRUToChatProviderOptions(await this.folderRepositoryManager.getFolderMRU()) : this.getRepositoryOptionItems();
+		const repositories = isWelcomeView(this.workspaceService) ? folderMRUToChatProviderOptions(await this.copilotCLIFolderMruService.getRecentlyUsedFolders(token)) : this.getRepositoryOptionItems();
 		const folderOrRepoId = folderInfo.repository?.fsPath ?? folderInfo.folder?.fsPath;
 		const existingItem = folderOrRepoId ? repositories.find(repo => repo.id === folderOrRepoId) : undefined;
 		const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(copilotcliSessionId);
@@ -1595,6 +1597,7 @@ export function registerCLIChatCommands(
 	copilotCliWorkspaceSession: IChatSessionWorkspaceFolderService,
 	contentProvider: CopilotCLIChatSessionContentProvider,
 	folderRepositoryManager: IFolderRepositoryManager,
+	copilotCLIFolderMruService: ICopilotCLIFolderMruService,
 	envService: INativeEnvService,
 	fileSystemService: IFileSystemService,
 	sessionTracker: ICopilotCLISessionTracker,
@@ -1806,14 +1809,13 @@ export function registerCLIChatCommands(
 		}
 
 		let selectedFolderUri: Uri | undefined = undefined;
-		const mruItems = await folderRepositoryManager.getFolderMRU();
+		const mruItems = await copilotCLIFolderMruService.getRecentlyUsedFolders(CancellationToken.None);
 
 		if (mruItems.length === 0) {
 			selectedFolderUri = await selectFolder();
 		} else {
 			type RecentFolderQuickPickItem = vscode.QuickPickItem & ({ folderUri: vscode.Uri; openFolder: false } | { folderUri: undefined; openFolder: true });
 			const items: RecentFolderQuickPickItem[] = mruItems
-				.filter(item => !item.isUntitledSessionSelection)
 				.map(item => {
 					const optionItem = item.repository
 						? toRepositoryOptionItem(item.folder)
@@ -1891,6 +1893,7 @@ export function registerCLIChatCommands(
 			return;
 		}
 		if (!(await checkPathExists(selectedFolderUri, fileSystemService))) {
+			await copilotCLIFolderMruService.deleteRecentlyUsedFolder(selectedFolderUri);
 			const message = l10n.t('The path \'{0}\' does not exist on this computer.', selectedFolderUri.fsPath);
 			vscode.window.showErrorMessage(l10n.t('Path does not exist'), { modal: true, detail: message });
 			return;
