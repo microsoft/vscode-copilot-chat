@@ -4786,17 +4786,17 @@
 			"editor/context": [
 				{
 					"command": "github.copilot.chat.fix",
-					"when": "!github.copilot.interactiveSession.disabled && !editorReadonly && editorSelectionHasDiagnostics",
+					"when": "!github.copilot.interactiveSession.disabled && chatSetupCompleted && !editorReadonly && editorSelectionHasDiagnostics",
 					"group": "1_chat@4"
 				},
 				{
 					"command": "github.copilot.chat.explain",
-					"when": "!github.copilot.interactiveSession.disabled",
+					"when": "!github.copilot.interactiveSession.disabled && chatSetupCompleted",
 					"group": "1_chat@5"
 				},
 				{
 					"command": "github.copilot.chat.review",
-					"when": "config.github.copilot.chat.reviewSelection.enabled && !github.copilot.interactiveSession.disabled && resourceScheme != 'vscode-chat-code-block'",
+					"when": "config.github.copilot.chat.reviewSelection.enabled && !github.copilot.interactiveSession.disabled && chatSetupCompleted && resourceScheme != 'vscode-chat-code-block'",
 					"group": "1_chat@6"
 				},
 				{
@@ -5461,7 +5461,7 @@
 			"scm/inputBox": [
 				{
 					"command": "github.copilot.git.generateCommitMessage",
-					"when": "scmProvider == git"
+					"when": "scmProvider == git && chatSetupCompleted"
 				}
 			],
 			"testing/message/context": [
@@ -5534,7 +5534,7 @@
 				{
 					"command": "github.copilot.git.resolveMergeConflicts",
 					"group": "z_chat@1",
-					"when": "config.git.enabled && !git.missing && !isInDiffEditor && !isMergeEditor && resource in git.mergeChanges && git.activeResourceHasMergeConflicts"
+					"when": "config.git.enabled && !git.missing && !isInDiffEditor && !isMergeEditor && resource in git.mergeChanges && git.activeResourceHasMergeConflicts && chatSetupCompleted"
 				}
 			],
 			"multiDiffEditor/content": [
