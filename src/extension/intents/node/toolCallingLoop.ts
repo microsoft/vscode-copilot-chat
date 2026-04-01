@@ -696,9 +696,15 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<IToolCallLoopResult> {
-		const agentName = (this.options.request as { subAgentName?: string }).subAgentName
+		let agentName = (this.options.request as { subAgentName?: string }).subAgentName
 			?? (this.options.request as { participant?: string }).participant
 			?? 'GitHub Copilot Chat';
+
+		// Append custom mode name so debug logs can distinguish mode switches (e.g., Agent vs Plan)
+		const modeInstructions = (this.options.request as { modeInstructions2?: { name?: string; isBuiltin?: boolean } }).modeInstructions2;
+		if (modeInstructions?.name && !modeInstructions.isBuiltin) {
+			agentName += `[${modeInstructions.name}]`;
+		}
 
 		// If this is a subagent request, look up the parent trace context stored by the parent agent's execute_tool span
 		// Try subAgentInvocationId first (unique per subagent, supports parallel), then request-level key
@@ -833,6 +839,18 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let lastRequestMessagesStartingIndexForRun: number | undefined;
 		let stopHookActive = false;
 		const sessionId = this.options.conversation.sessionId;
+
+		// Emit tool definitions early so the debug logger can write tools_*.json
+		// before the first CHAT span completes inside runOne()
+		if (agentSpan) {
+			const initialTools = await this.getAvailableTools(outputStream, token);
+			if (initialTools.length > 0) {
+				agentSpan.addEvent('tools_available', {
+					toolDefinitions: JSON.stringify(initialTools.map(t => ({ type: 'function', name: t.name, description: t.description }))),
+					...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}),
+				});
+			}
+		}
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {

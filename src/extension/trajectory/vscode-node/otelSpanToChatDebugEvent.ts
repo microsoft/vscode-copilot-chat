@@ -423,7 +423,7 @@ function spanToHookExecutionEvent(span: ICompletedSpanData): vscode.ChatDebugGen
 	evt.parentEventId = span.parentSpanId;
 	const prefix = hookCommand ? `${hookCommand} ` : '';
 	evt.details = `${prefix}(${durationMs}ms, ${resultKind ?? 'unknown'})`;
-	evt.category = 'hook';
+	evt.category = 'discovery';
 	return evt;
 }
 
@@ -440,7 +440,7 @@ function spanToSdkHookEvent(span: ICompletedSpanData): vscode.ChatDebugGenericEv
 	evt.id = span.spanId;
 	evt.parentEventId = span.parentSpanId;
 	evt.details = `${span.name} (${durationMs}ms, ${isError ? 'error' : 'success'})`;
-	evt.category = 'hook';
+	evt.category = 'discovery';
 	return evt;
 }
 
