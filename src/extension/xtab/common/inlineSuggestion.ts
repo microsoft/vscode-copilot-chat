@@ -24,10 +24,10 @@ export function isInlineSuggestionFromTextAfterCursor(textAfterCursor: string): 
 }
 
 /**
- * Checks if the position is valid inline suggestion position (middle of the line).
- * Returns `undefined` if it's position where ghost text shouldn't be displayed.
+ * Checks if the cursor position is valid inline suggestion position (middle of the line).
+ * Returns `undefined` if it's a position where ghost text shouldn't be displayed.
  */
-export function isInlineSuggestion(document: CurrentDocument): boolean | undefined {
+export function isInlineSuggestionPosition(document: CurrentDocument): boolean | undefined {
 	const textAfterCursor = document.textAfterCursor();
 	return isInlineSuggestionFromTextAfterCursor(textAfterCursor);
 }
