@@ -100,6 +100,7 @@ export class StatelessNextEditRequest<TFirstEdit = any> {
 	constructor(
 		public readonly headerRequestId: string,
 		public readonly opportunityId: string,
+		/** this's the active document current contents (not sure "before" which edits this's named after -- maybe NES edits) */
 		public readonly documentBeforeEdits: StringText,
 		public readonly documents: readonly StatelessNextEditDocument[],
 		public readonly activeDocumentIdx: number,
