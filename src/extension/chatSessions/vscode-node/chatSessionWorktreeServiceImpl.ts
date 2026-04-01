@@ -133,7 +133,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			// Else suffix the preferred name with a random string to avoid conflicts.
 			const refs = await this.gitService.getRefs(repository.rootUri, { pattern: `refs/heads/${branchName}` });
 			if (refs.some(ref => ref.name === branchName)) {
-				branchName = `${branchName}-${generateUuid().substring(0, 8).replaceAll('-', '').toLowerCase()}`;
+				branchName = `${branchName}-${generateUuid().replaceAll('-', '').substring(0, 8).toLowerCase()}`;
 			}
 
 			return branchName;
