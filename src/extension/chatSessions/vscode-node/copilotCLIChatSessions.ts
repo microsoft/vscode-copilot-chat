@@ -511,8 +511,11 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				|| worktreeProperties.pullRequestState === 'merged'
 				|| !worktreeProperties.branchName
 				|| !worktreeProperties.repositoryPath) {
+				this.logService.debug(`[CopilotCLIChatSessionItemProvider] Skipping PR detection on session open for ${sessionId}: version=${worktreeProperties?.version}, prState=${worktreeProperties?.version === 2 ? worktreeProperties.pullRequestState : 'n/a'}, branch=${!!worktreeProperties?.branchName}, repoPath=${!!worktreeProperties?.repositoryPath}`);
 				return;
 			}
+
+			this.logService.debug(`[CopilotCLIChatSessionItemProvider] Detecting PR on session open for ${sessionId}, branch=${worktreeProperties.branchName}, existingPrUrl=${worktreeProperties.pullRequestUrl ?? 'none'}`);
 
 			const prResult = await detectPullRequestFromGitHubAPI(
 				worktreeProperties.branchName,
@@ -526,6 +529,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				const currentProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
 				if (currentProperties?.version === 2
 					&& (currentProperties.pullRequestUrl !== prResult.url || currentProperties.pullRequestState !== prResult.state)) {
+					this.logService.debug(`[CopilotCLIChatSessionItemProvider] Updating PR metadata for ${sessionId}: url=${prResult.url}, state=${prResult.state} (was url=${currentProperties.pullRequestUrl ?? 'none'}, state=${currentProperties.pullRequestState ?? 'none'})`);
 					await this.copilotCLIWorktreeManagerService.setWorktreeProperties(sessionId, {
 						...currentProperties,
 						pullRequestUrl: prResult.url,
@@ -533,7 +537,11 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 						changes: undefined,
 					});
 					await this.refreshSession({ reason: 'update', sessionId });
+				} else {
+					this.logService.debug(`[CopilotCLIChatSessionItemProvider] PR metadata unchanged for ${sessionId}, skipping update`);
 				}
+			} else {
+				this.logService.debug(`[CopilotCLIChatSessionItemProvider] No PR found via GitHub API for ${sessionId}`);
 			}
 		} catch (error) {
 			this.logService.trace(`[CopilotCLIChatSessionItemProvider] Failed to detect pull request on session open for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
@@ -1259,6 +1267,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		let prUrl = session.createdPullRequestUrl;
 		let prState = 'open';
 
+		this.logService.debug(`[CopilotCLIChatSessionParticipant] handlePullRequestCreated for ${sessionId}: createdPullRequestUrl=${prUrl ?? 'none'}`);
+
 		const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
 		if (!worktreeProperties || worktreeProperties.version !== 2) {
 			return;
@@ -1269,13 +1279,17 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// with branch info — v1 worktrees can't store PR URLs, and sessions
 			// without worktree properties have nothing to look up.
 			if (worktreeProperties.branchName && worktreeProperties.repositoryPath) {
+				this.logService.debug(`[CopilotCLIChatSessionParticipant] No PR URL from session, attempting retry detection for ${sessionId}, branch=${worktreeProperties.branchName}`);
 				const prResult = await this.detectPullRequestWithRetry(sessionId);
 				prUrl = prResult?.url;
 				prState = prResult?.state ?? 'open';
+			} else {
+				this.logService.debug(`[CopilotCLIChatSessionParticipant] Skipping retry detection for ${sessionId}: branch=${worktreeProperties.branchName ?? 'none'}, repoPath=${!!worktreeProperties.repositoryPath}`);
 			}
 		}
 
 		if (!prUrl) {
+			this.logService.debug(`[CopilotCLIChatSessionParticipant] No PR detected for ${sessionId} after all attempts`);
 			return;
 		}
 
@@ -1304,14 +1318,17 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 		for (let attempt = 0; attempt < maxRetries; attempt++) {
 			const delay = initialDelay * Math.pow(2, attempt);
+			this.logService.debug(`[CopilotCLIChatSessionParticipant] PR detection retry for ${sessionId}: attempt ${attempt + 1}/${maxRetries}, waiting ${delay}ms`);
 			await new Promise<void>(resolve => setTimeout(resolve, delay));
 
 			const prResult = await this.detectPullRequestForSession(sessionId);
 			if (prResult) {
+				this.logService.debug(`[CopilotCLIChatSessionParticipant] PR detected on attempt ${attempt + 1} for ${sessionId}: url=${prResult.url}, state=${prResult.state}`);
 				return prResult;
 			}
 		}
 
+		this.logService.debug(`[CopilotCLIChatSessionParticipant] PR detection exhausted all ${maxRetries} retries for ${sessionId}`);
 		return undefined;
 	}
 
@@ -1325,6 +1342,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		try {
 			const worktreeProperties = await this.copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
 			if (!worktreeProperties?.branchName || !worktreeProperties.repositoryPath) {
+				this.logService.debug(`[CopilotCLIChatSessionParticipant] detectPullRequestForSession: missing worktree info for ${sessionId}, branch=${worktreeProperties?.branchName ?? 'none'}, repoPath=${!!worktreeProperties?.repositoryPath}`);
 				return undefined;
 			}
 
@@ -2427,13 +2445,17 @@ async function detectPullRequestFromGitHubAPI(
 ): Promise<{ url: string; state: string } | undefined> {
 	const repoContext = await gitService.getRepository(URI.file(repositoryPath));
 	if (!repoContext) {
+		logService.debug(`[detectPullRequestFromGitHubAPI] No git repository found for path: ${repositoryPath}`);
 		return undefined;
 	}
 
 	const repoInfo = getGitHubRepoInfoFromContext(repoContext);
 	if (!repoInfo) {
+		logService.debug(`[detectPullRequestFromGitHubAPI] Could not extract GitHub repo info from repository at: ${repositoryPath}`);
 		return undefined;
 	}
+
+	logService.debug(`[detectPullRequestFromGitHubAPI] Querying GitHub API for PR on ${repoInfo.id.org}/${repoInfo.id.repo}, branch=${branchName}`);
 
 	const pr = await octoKitService.findPullRequestByHeadBranch(
 		repoInfo.id.org,
@@ -2448,5 +2470,6 @@ async function detectPullRequestFromGitHubAPI(
 		return { url: pr.url, state: prState };
 	}
 
+	logService.debug(`[detectPullRequestFromGitHubAPI] No PR found for ${repoInfo.id.org}/${repoInfo.id.repo}, branch=${branchName}`);
 	return undefined;
 }
