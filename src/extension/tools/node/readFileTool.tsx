@@ -22,6 +22,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { getCachedSha256Hash } from '../../../util/common/crypto';
+import { hash } from '../../../util/vs/base/common/hash';
 import { clamp } from '../../../util/vs/base/common/numbers';
 import { dirname, extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -382,7 +383,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 			const content = documentSnapshot instanceof TextDocumentSnapshot ? documentSnapshot.getText() : '';
 			const extensionId = extensionSkillInfo?.extensionId ?? '';
 			const extensionVersion = extensionId ? this.extensionsService.getExtension(extensionId)?.packageJSON?.version ?? '' : '';
-			const contentHash = content ? getCachedSha256Hash(content) : '';
+			const contentHash = content ? String(hash(content)) : '';
 
 			// Plaintext properties shared by enhanced GH and internal MSFT events
 			const plaintextProps = {
@@ -396,8 +397,8 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 
 			this.telemetryService.sendGHTelemetryEvent('skillContentRead',
 				{
-					skillNameHash: getCachedSha256Hash(skillInfo.skillName),
-					extensionIdHash: extensionId ? getCachedSha256Hash(extensionId) : '',
+					skillNameHash: String(hash(skillInfo.skillName)),
+					extensionIdHash: extensionId ? String(hash(extensionId)) : '',
 					extensionVersion: plaintextProps.extensionVersion,
 					skillStorage: plaintextProps.skillStorage,
 					contentHash,
