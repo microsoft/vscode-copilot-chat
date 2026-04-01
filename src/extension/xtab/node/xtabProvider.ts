@@ -22,7 +22,7 @@ import { AggressivenessSetting, isAggressivenessStrategy, LanguageContextLanguag
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
-import { EditStreaming, EditStreamingWithTelemetry, IStatelessNextEditProvider, NoNextEditReason, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { EditStreaming, EditStreamingWithTelemetry, IStatelessNextEditProvider, NoNextEditReason, RequestEditWindow, RequestEditWindowWithCursorJump, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { editWouldDeleteWhatWasJustInserted, editWouldDeleteWhatWasJustInserted2, IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges, IgnoreWhitespaceOnlyChanges } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
 import { ILanguageContextProviderService, ProviderTarget } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
@@ -56,7 +56,7 @@ import { DelaySession } from '../../inlineEdits/common/delay';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { UserInteractionMonitor } from '../../inlineEdits/common/userInteractionMonitor';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
-import { isInlineSuggestion } from '../common/inlineSuggestion';
+import { determineIsInlineSuggestionPosition } from '../common/inlineSuggestion';
 import { LintErrors } from '../common/lintErrors';
 import { ClippedDocument, constructTaggedFile, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
 import { countTokensForLines, toUniquePath } from '../common/promptCraftingUtils';
@@ -225,42 +225,13 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		telemetryBuilder.setModelConfig(JSON.stringify(modelServiceConfig));
 
-		const endpoint = this.getEndpoint(promptOptions.modelName);
-		logContext.setEndpointInfo(typeof endpoint.urlOrRequestMetadata === 'string' ? endpoint.urlOrRequestMetadata : JSON.stringify(endpoint.urlOrRequestMetadata.type), endpoint.model);
-		telemetryBuilder.setModelName(endpoint.model);
+		const endpoint = this.getEndpointWithLogging(promptOptions.modelName, logContext, telemetryBuilder);
 
 		const cursorPosition = new Position(selection.endLineNumber, selection.endColumn);
 
 		const currentDocument = new CurrentDocument(activeDocument.documentAfterEdits, cursorPosition);
 
-		const cursorLine = currentDocument.lines[currentDocument.cursorLineOffset];
-		// check if there's any non-whitespace character after the cursor in the line
-		const isCursorAtEndOfLine = cursorLine.substring(cursorPosition.column - 1).match(/^\s*$/) !== null;
-		telemetryBuilder.setIsCursorAtLineEnd(isCursorAtEndOfLine);
-
-		// Apply extra debounce based on cursor position - only one applies
-		const isInlineSuggestionPosition = isInlineSuggestion(currentDocument, cursorPosition);
-		telemetryBuilder.setIsInlineSuggestion(!!isInlineSuggestionPosition);
-
-		if (request.isSpeculative) {
-			tracer.trace('No extra debounce applied for speculative request');
-		} else {
-			const inlineSuggestionDebounce = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceInlineSuggestion, this.expService);
-			if (isInlineSuggestionPosition && inlineSuggestionDebounce > 0) {
-				tracer.trace('Debouncing for inline suggestion position');
-				delaySession.setExtraDebounce(inlineSuggestionDebounce);
-			} else if (isCursorAtEndOfLine) {
-				tracer.trace('Debouncing for cursor at end of line');
-				delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceEndOfLine, this.expService));
-			} else {
-				tracer.trace('No extra debounce applied');
-			}
-		}
-
-		// Adjust debounce based on user aggressiveness setting for non-aggressiveness models
-		if (!isAggressivenessStrategy(promptOptions.promptingStrategy)) {
-			this._applyAggressivenessSettings(delaySession, tracer);
-		}
+		this._configureDebounceTimings(request, currentDocument, promptOptions, telemetryBuilder, delaySession, tracer);
 
 		const areaAroundEditWindowLinesRange = computeAreaAroundEditWindowLinesRange(currentDocument);
 
@@ -269,6 +240,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const cursorOriginalLinesOffset = Math.max(0, currentDocument.cursorLineOffset - editWindowLinesRange.start);
 		const editWindowLastLineLength = currentDocument.transformer.getLineLength(editWindowLinesRange.endExclusive);
 		const editWindow = currentDocument.transformer.getOffsetRange(new Range(editWindowLinesRange.start + 1, 1, editWindowLinesRange.endExclusive, editWindowLastLineLength + 1));
+
+		request.requestEditWindow = originalEditWindow
+			? new RequestEditWindowWithCursorJump(editWindow, originalEditWindow)
+			: new RequestEditWindow(editWindow);
 
 		const editWindowLines = currentDocument.lines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
 
@@ -428,6 +403,43 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			cancellationToken,
 			originalEditWindow,
 		);
+	}
+
+	private _configureDebounceTimings(
+		request: StatelessNextEditRequest,
+		currentDocument: CurrentDocument,
+		promptOptions: ModelConfig,
+		telemetry: StatelessNextEditTelemetryBuilder,
+		delaySession: DelaySession,
+		tracer: ILogger,
+	) {
+
+		const isCursorAtEndOfLine = currentDocument.isCursorAtEndOfLine();
+		telemetry.setIsCursorAtLineEnd(isCursorAtEndOfLine);
+
+		// Apply extra debounce based on cursor position - only one applies
+		const isInlineSuggestionPosition = determineIsInlineSuggestionPosition(currentDocument);
+		telemetry.setIsInlineSuggestion(!!isInlineSuggestionPosition);
+
+		if (request.isSpeculative) {
+			tracer.trace('No extra debounce applied for speculative request');
+		} else {
+			const inlineSuggestionDebounce = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceInlineSuggestion, this.expService);
+			if (isInlineSuggestionPosition && inlineSuggestionDebounce > 0) {
+				tracer.trace('Debouncing for inline suggestion position');
+				delaySession.setExtraDebounce(inlineSuggestionDebounce);
+			} else if (isCursorAtEndOfLine) {
+				tracer.trace('Debouncing for cursor at end of line');
+				delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceEndOfLine, this.expService));
+			} else {
+				tracer.trace('No extra debounce applied');
+			}
+		}
+
+		// Adjust debounce based on user aggressiveness setting for non-aggressiveness models
+		if (!isAggressivenessStrategy(promptOptions.promptingStrategy)) {
+			this._applyAggressivenessSettings(delaySession, tracer);
+		}
 	}
 
 	private _applyAggressivenessSettings(delaySession: DelaySession, tracer: ILogger): void {
@@ -1334,6 +1346,13 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptOptions: overrideModelConfig(sourcedModelConfig, modelConfig),
 			modelServiceConfig: modelConfig
 		};
+	}
+
+	private getEndpointWithLogging(configuredModelName: string | undefined, logContext: InlineEditRequestLogContext, telemetry: StatelessNextEditTelemetryBuilder): ChatEndpoint {
+		const endpoint = this.getEndpoint(configuredModelName);
+		logContext.setEndpointInfo(typeof endpoint.urlOrRequestMetadata === 'string' ? endpoint.urlOrRequestMetadata : JSON.stringify(endpoint.urlOrRequestMetadata.type), endpoint.model);
+		telemetry.setModelName(endpoint.model);
+		return endpoint;
 	}
 
 	private getEndpoint(configuredModelName: string | undefined): ChatEndpoint {
