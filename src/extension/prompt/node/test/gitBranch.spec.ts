@@ -73,7 +73,7 @@ suite('normalizeBranchName', () => {
 	});
 
 	test('handles quoted branch names', () => {
-		// normalizeBranchName itself does not strip quotes — that happens in generateBranchName
+		// normalizeBranchName strips quotes via the character filter; generateBranchName also strips paired quotes
 		assert.strictEqual(normalizeBranchName('"my-branch"'), 'my-branch');
 	});
 
