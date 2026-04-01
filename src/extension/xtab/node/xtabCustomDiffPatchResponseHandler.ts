@@ -70,11 +70,16 @@ export class XtabCustomDiffPatchResponseHandler {
 		workspaceRoot: URI | undefined,
 		window: OffsetRange | undefined,
 		parentTracer: ILogger,
+		getFetchFailure?: () => NoNextEditReason | undefined,
 	): AsyncGenerator<StreamedEdit, NoNextEditReason, void> {
 		const tracer = parentTracer.createSubLogger(['XtabCustomDiffPatchResponseHandler', 'handleResponse']);
 		const activeDocRelativePath = toUniquePath(activeDocumentId, workspaceRoot?.path);
 		try {
 			for await (const edit of XtabCustomDiffPatchResponseHandler.extractEdits(linesStream)) {
+				const fetchFailure = getFetchFailure?.();
+				if (fetchFailure) {
+					return fetchFailure;
+				}
 				const targetDocument = edit.filePath === activeDocRelativePath
 					? activeDocumentId
 					: XtabCustomDiffPatchResponseHandler.resolveTargetDocument(edit.filePath, workspaceRoot);
