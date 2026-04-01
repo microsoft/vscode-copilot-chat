@@ -718,6 +718,7 @@ suite('ReadFile', () => {
 		class CapturingTelemetryService extends NullTelemetryService {
 			readonly events: { eventName: string; properties?: TelemetryEventProperties; measurements?: TelemetryEventMeasurements }[] = [];
 			readonly enhancedEvents: { eventName: string; properties?: TelemetryEventProperties }[] = [];
+			readonly internalEvents: { eventName: string; properties?: TelemetryEventProperties }[] = [];
 
 			override sendGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void {
 				this.events.push({ eventName, properties, measurements });
@@ -725,6 +726,10 @@ suite('ReadFile', () => {
 
 			override sendEnhancedGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties): void {
 				this.enhancedEvents.push({ eventName, properties });
+			}
+
+			override sendInternalMSFTTelemetryEvent(eventName: string, properties?: TelemetryEventProperties): void {
+				this.internalEvents.push({ eventName, properties });
 			}
 
 			override sendMSFTTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void {
@@ -755,7 +760,6 @@ suite('ReadFile', () => {
 
 			const input: IReadFileParamsV2 = { filePath: skillUri.fsPath };
 			await readFileTool.invoke({ input, toolInvocationToken: null as never }, CancellationToken.None);
-			await new Promise<void>(resolve => queueMicrotask(() => resolve())); // flush deferred telemetry
 
 			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
 			expect(event).toBeDefined();
@@ -772,6 +776,15 @@ suite('ReadFile', () => {
 			expect(enhanced!.properties!.extensionId).toBe('');
 			expect(enhanced!.properties!.extensionVersion).toBe('');
 			expect(enhanced!.properties!.skillStorage).toBe('local');
+			expect(enhanced!.properties!.contentHash).not.toBe('');
+
+			const internal = telemetry.internalEvents.find(e => e.eventName === 'skillContentRead');
+			expect(internal).toBeDefined();
+			expect(internal!.properties!.skillName).toBe('my-skill');
+			expect(internal!.properties!.skillPath).toBe(skillUri.toString());
+			expect(internal!.properties!.extensionId).toBe('');
+			expect(internal!.properties!.skillStorage).toBe('local');
+			expect(internal!.properties!.contentHash).not.toBe('');
 
 			testAccessor.dispose();
 		});
@@ -800,7 +813,6 @@ suite('ReadFile', () => {
 
 			const input: IReadFileParamsV2 = { filePath: skillUri.fsPath };
 			await readFileTool.invoke({ input, toolInvocationToken: null as never }, CancellationToken.None);
-			await new Promise<void>(resolve => queueMicrotask(() => resolve())); // flush deferred telemetry
 
 			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
 			expect(event).toBeDefined();
@@ -845,7 +857,6 @@ suite('ReadFile', () => {
 
 			const input: IReadFileParamsV2 = { filePath: skillUri.fsPath };
 			await readFileTool.invoke({ input, toolInvocationToken: null as never }, CancellationToken.None);
-			await new Promise<void>(resolve => queueMicrotask(() => resolve())); // flush deferred telemetry
 
 			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
 			expect(event).toBeDefined();
@@ -861,6 +872,15 @@ suite('ReadFile', () => {
 			expect(enhanced!.properties!.extensionId).toBe('publisher.my-ext');
 			expect(enhanced!.properties!.extensionVersion).toBe('1.2.3');
 			expect(enhanced!.properties!.skillStorage).toBe('extension');
+			expect(enhanced!.properties!.contentHash).not.toBe('');
+
+			const internal = telemetry.internalEvents.find(e => e.eventName === 'skillContentRead');
+			expect(internal).toBeDefined();
+			expect(internal!.properties!.skillName).toBe('ext-skill');
+			expect(internal!.properties!.extensionId).toBe('publisher.my-ext');
+			expect(internal!.properties!.extensionVersion).toBe('1.2.3');
+			expect(internal!.properties!.skillStorage).toBe('extension');
+			expect(internal!.properties!.contentHash).not.toBe('');
 
 			testAccessor.dispose();
 		});
@@ -888,7 +908,6 @@ suite('ReadFile', () => {
 
 			const input: IReadFileParamsV2 = { filePath: skillUri.toString() };
 			await readFileTool.invoke({ input, toolInvocationToken: null as never }, CancellationToken.None);
-			await new Promise<void>(resolve => queueMicrotask(() => resolve())); // flush deferred telemetry
 
 			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
 			expect(event).toBeDefined();
@@ -913,13 +932,15 @@ suite('ReadFile', () => {
 
 			const input: IReadFileParamsV2 = { filePath: '/workspace/file.ts' };
 			await readFileTool.invoke({ input, toolInvocationToken: null as never }, CancellationToken.None);
-			await new Promise<void>(resolve => queueMicrotask(() => resolve())); // flush deferred telemetry
 
 			const skillEvent = telemetry.events.find(e => e.eventName === 'skillContentRead');
 			expect(skillEvent).toBeUndefined();
 
 			const enhancedSkillEvent = telemetry.enhancedEvents.find(e => e.eventName === 'skillContentRead');
 			expect(enhancedSkillEvent).toBeUndefined();
+
+			const internalSkillEvent = telemetry.internalEvents.find(e => e.eventName === 'skillContentRead');
+			expect(internalSkillEvent).toBeUndefined();
 
 			// readFileToolInvoked should still fire
 			const readEvent = telemetry.events.find(e => e.eventName === 'readFileToolInvoked');
