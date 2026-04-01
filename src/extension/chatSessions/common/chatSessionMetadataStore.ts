@@ -16,7 +16,7 @@ export interface WorkspaceFolderEntry {
 
 export interface RepositoryProperties {
 	readonly repositoryPath: string;
-	readonly branchName: string;
+	readonly branchName?: string;
 	readonly baseBranchName?: string;
 }
 
