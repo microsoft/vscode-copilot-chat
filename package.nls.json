@@ -391,7 +391,7 @@
 	"github.copilot.config.summarizeAgentConversationHistoryThreshold": "Threshold for compacting agent conversation history.",
 	"github.copilot.config.agentHistorySummarizationMode": "Mode for agent history summarization.",
 	"github.copilot.config.backgroundCompaction": "Enable background compaction of conversation history.",
-	"github.copilot.config.agentHistorySummarizationWithPromptCache": "Use prompt caching for agent history summarization.",
+	"github.copilot.config.agentHistorySummarizationCacheFriendly": "Use a cache-friendly summarization prompt that shares the agent prefix for prompt cache hits.",
 
 	"github.copilot.config.useResponsesApiTruncation": "Use Responses API for truncation.",
 	"github.copilot.config.enableReadFileV2": "Enable version 2 of the read file tool.",
