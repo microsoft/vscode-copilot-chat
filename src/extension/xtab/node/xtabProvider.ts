@@ -231,9 +231,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const currentDocument = new CurrentDocument(activeDocument.documentAfterEdits, cursorPosition);
 
-		const cursorLine = currentDocument.lines[currentDocument.cursorLineOffset];
-		// check if there's any non-whitespace character after the cursor in the line
-		const isCursorAtEndOfLine = cursorLine.substring(cursorPosition.column - 1).match(/^\s*$/) !== null;
+		const isCursorAtEndOfLine = currentDocument.isCursorAtEndOfLine();
 		telemetryBuilder.setIsCursorAtLineEnd(isCursorAtEndOfLine);
 
 		// Apply extra debounce based on cursor position - only one applies

@@ -21,11 +21,28 @@ export class CurrentDocument {
 
 	constructor(
 		public readonly content: StringText,
+		/** Note that `cursorPosition`'s line and column numbers are 1-based. */
 		public readonly cursorPosition: Position,
 	) {
 		this.lines = content.getLines();
 		this.transformer = content.getTransformer();
 		this.cursorOffset = this.transformer.getOffset(cursorPosition);
 		this.cursorLineOffset = this.cursorPosition.lineNumber - 1;
+	}
+
+	/** Returns the full text of the line containing the cursor. */
+	lineWithCursor(): string {
+		return this.lines[this.cursorLineOffset];
+	}
+
+	/**
+	 * Determines if the cursor is at the end of the line.
+	 */
+	isCursorAtEndOfLine(): boolean {
+		// checks if there's any non-whitespace character after the cursor in the line
+		const cursorLine = this.lineWithCursor();
+		const afterCursor = cursorLine.substring(this.cursorPosition.column - 1);
+		const isAtEndOfLine = afterCursor.match(/^\s*$/) !== null;
+		return isAtEndOfLine;
 	}
 }
