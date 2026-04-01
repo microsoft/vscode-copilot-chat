@@ -378,7 +378,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			endpoint,
 			modelServiceConfig,
 			messages,
-			currentDocument,
 			clippedTaggedCurrentDoc,
 			editWindow,
 			editWindowLines,
@@ -596,7 +595,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		endpoint: IChatEndpoint,
 		modelServiceConfig: xtabPromptOptions.ModelConfiguration,
 		messages: Raw.ChatMessage[],
-		currentDocument: CurrentDocument,
 		clippedTaggedCurrentDoc: ClippedDocument,
 		editWindow: OffsetRange,
 		editWindowLines: string[],
@@ -625,7 +623,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			endpoint,
 			modelServiceConfig,
 			messages,
-			currentDocument,
 			clippedTaggedCurrentDoc,
 			editWindow,
 			editWindowLines,
@@ -674,7 +671,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		endpoint: IChatEndpoint,
 		modelServiceConfig: xtabPromptOptions.ModelConfiguration,
 		messages: Raw.ChatMessage[],
-		currentDocument: CurrentDocument,
 		clippedTaggedCurrentDoc: ClippedDocument,
 		editWindow: OffsetRange,
 		editWindowLines: string[],
@@ -847,6 +843,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			cleanedLinesStream = remainingLinesStream;
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.CustomDiffPatch) {
 			const activeDoc = request.getActiveDocument();
+			const currentDocument = promptPieces.currentDocument;
 			const lastLine = currentDocument.lines[clippedTaggedCurrentDoc.keptRange.endExclusive - 1];
 			const lastLineLength = lastLine.length;
 			const pseudoEditWindow = currentDocument.transformer.getOffsetRange(new Range(clippedTaggedCurrentDoc.keptRange.start + 1, 1, clippedTaggedCurrentDoc.keptRange.endExclusive, lastLineLength + 1));
