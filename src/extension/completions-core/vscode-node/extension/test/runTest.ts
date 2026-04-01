@@ -56,6 +56,7 @@ async function main() {
 		extensionTestsEnv.CORETEST = 'true';
 		//@dbaeumer This can be removed as soon as we have the cache handle CORETEST
 		extensionTestsEnv.VITEST = 'true';
+		extensionTestsEnv.TSX_TSCONFIG_PATH = path.resolve(__dirname, '../../../../../../tsconfig.json');
 
 		const testOptions: Parameters<typeof runTests>[0] = {
 			extensionDevelopmentPath,
