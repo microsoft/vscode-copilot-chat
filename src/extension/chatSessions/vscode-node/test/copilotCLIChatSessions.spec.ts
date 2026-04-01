@@ -181,6 +181,7 @@ function createProvider() {
 	const logService = new class extends mock<ILogService>() {
 		declare readonly _serviceBrand: undefined;
 		override trace = vi.fn();
+		override debug = vi.fn();
 		override error = vi.fn();
 	}();
 
