@@ -62,8 +62,6 @@ class NullAgentSessionsWorkspace implements IAgentSessionsWorkspace {
 }
 
 class NullChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFolderService>() {
-	override getRecentFolders = vi.fn(async () => []);
-	override deleteRecentFolder = vi.fn(async () => { });
 	override deleteTrackedWorkspaceFolder = vi.fn(async () => { });
 	override trackSessionWorkspaceFolder = vi.fn(async () => { });
 	override getSessionWorkspaceFolder = vi.fn(async () => undefined);
