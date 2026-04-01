@@ -432,19 +432,17 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 
 		// Resolve transcript path and flush to disk so the model can read the up-to-date file
 		let transcriptPath: string | undefined;
-		if (transcriptLookupEnabled) {
+		const sessionId = this.props.promptContext.conversation?.sessionId;
+		if (transcriptLookupEnabled && sessionId) {
 			// Lazily start the transcript session now (before summarization) so it
 			// captures the full pre-compaction conversation. startSession is
 			// idempotent — if hooks already started it, this is a no-op.
 			await this.ensureTranscriptSession();
 
-			const sessionId = this.props.promptContext.conversation?.sessionId;
-			if (sessionId) {
-				const transcriptUri = this.sessionTranscriptService.getTranscriptPath(sessionId);
-				if (transcriptUri) {
-					await this.sessionTranscriptService.flush(sessionId);
-					transcriptPath = transcriptUri.fsPath;
-				}
+			const transcriptUri = this.sessionTranscriptService.getTranscriptPath(sessionId);
+			if (transcriptUri) {
+				await this.sessionTranscriptService.flush(sessionId);
+				transcriptPath = transcriptUri.fsPath;
 			}
 		}
 
@@ -458,8 +456,7 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 				// (preserving Anthropic prompt cache stability).
 				let summary = summResult.summary;
 				if (transcriptPath) {
-					const sessionId = this.props.promptContext.conversation?.sessionId;
-					const lineCount = sessionId ? this.sessionTranscriptService.getLineCount(sessionId) : undefined;
+					const lineCount = this.sessionTranscriptService.getLineCount(sessionId!);
 					summary += `\nIf you need specific details from before compaction (such as exact code snippets, error messages, tool results, or content you previously generated), use the ${ToolName.ReadFile} tool to look up the full uncompacted conversation transcript at: "${transcriptPath}"`;
 					if (lineCount !== undefined) {
 						summary += `\nAt the time of this request, the transcript has ${lineCount} lines.`;
