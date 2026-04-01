@@ -225,9 +225,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		telemetryBuilder.setModelConfig(JSON.stringify(modelServiceConfig));
 
-		const endpoint = this.getEndpoint(promptOptions.modelName);
-		logContext.setEndpointInfo(typeof endpoint.urlOrRequestMetadata === 'string' ? endpoint.urlOrRequestMetadata : JSON.stringify(endpoint.urlOrRequestMetadata.type), endpoint.model);
-		telemetryBuilder.setModelName(endpoint.model);
+		const endpoint = this.getEndpointWithLogging(promptOptions.modelName, logContext, telemetryBuilder);
 
 		const cursorPosition = new Position(selection.endLineNumber, selection.endColumn);
 
@@ -1334,6 +1332,13 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptOptions: overrideModelConfig(sourcedModelConfig, modelConfig),
 			modelServiceConfig: modelConfig
 		};
+	}
+
+	private getEndpointWithLogging(configuredModelName: string | undefined, logContext: InlineEditRequestLogContext, telemetry: StatelessNextEditTelemetryBuilder): ChatEndpoint {
+		const endpoint = this.getEndpoint(configuredModelName);
+		logContext.setEndpointInfo(typeof endpoint.urlOrRequestMetadata === 'string' ? endpoint.urlOrRequestMetadata : JSON.stringify(endpoint.urlOrRequestMetadata.type), endpoint.model);
+		telemetry.setModelName(endpoint.model);
+		return endpoint;
 	}
 
 	private getEndpoint(configuredModelName: string | undefined): ChatEndpoint {
