@@ -67,13 +67,19 @@ declare module 'vscode' {
 		/**
 		 * When `true`, the "Generate with AI" sparkle button is replaced
 		 * with a plain "New" button for manual file creation.
+		 *
+		 * Use this when the provider's backend does not support
+		 * AI-generated customization scaffolding.
 		 */
 		readonly hideGenerateButton?: boolean;
 
 		/**
 		 * Workspace sub-paths that this provider recognizes for file creation.
 		 * When set, the directory picker for new customization files only
-		 * offers workspace directories under these sub-paths.
+		 * offers workspace directories under these sub-paths
+		 * (e.g. `['.claude']` for Claude, `['.github', '.copilot']` for CLI).
+		 *
+		 * When omitted, all workspace directories are available.
 		 */
 		readonly workspaceSubpaths?: readonly string[];
 	}
@@ -129,15 +135,36 @@ declare module 'vscode' {
 	 * could not be loaded (e.g. invalid format, missing required fields).
 	 */
 	export interface ChatSessionCustomizationSkippedFile {
+		/**
+		 * URI of the file that was skipped.
+		 */
 		readonly uri: Uri;
+
+		/**
+		 * Human-readable reason why this file was skipped
+		 * (e.g. `'missing "name" property'`, `'invalid YAML front-matter'`).
+		 */
 		readonly reason: string;
 	}
 
 	/**
 	 * Diagnostic information about the customization discovery process.
+	 *
+	 * Returned alongside the customization items from
+	 * {@link ChatSessionCustomizationProvider.provideChatSessionCustomizations}
+	 * to aid debugging when customizations are not discovered as expected.
 	 */
 	export interface ChatSessionCustomizationDiagnostics {
+		/**
+		 * Directories that were scanned for customization files.
+		 * Includes paths that did not yield any customizations.
+		 */
 		readonly scannedPaths?: readonly Uri[];
+
+		/**
+		 * Files that were found but skipped due to invalid
+		 * properties, format, or other issues.
+		 */
 		readonly skippedFiles?: readonly ChatSessionCustomizationSkippedFile[];
 	}
 
@@ -146,7 +173,17 @@ declare module 'vscode' {
 	 * {@link ChatSessionCustomizationProvider.provideChatSessionCustomizations}.
 	 */
 	export interface ChatSessionCustomizationResult {
+		/**
+		 * The discovered customization items.
+		 */
 		readonly items: ChatSessionCustomizationItem[];
+
+		/**
+		 * Optional diagnostic information about the discovery process.
+		 * When provided, the data is forwarded to the debug log so that
+		 * scanned paths and skipped files are visible in the
+		 * Agent Debug Logs view.
+		 */
 		readonly diagnostics?: ChatSessionCustomizationDiagnostics;
 	}
 
@@ -155,6 +192,10 @@ declare module 'vscode' {
 	 * {@link ChatSessionCustomizationProvider.onDidChange}.
 	 */
 	export interface ChatSessionCustomizationChangeEvent {
+		/**
+		 * The customization types that were affected by the change.
+		 * When `undefined`, all types should be considered changed.
+		 */
 		readonly changedTypes?: readonly ChatSessionCustomizationType[];
 	}
 
