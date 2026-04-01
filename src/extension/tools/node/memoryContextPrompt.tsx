@@ -39,7 +39,9 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 	}
 
 	async render() {
-		const isPreviewFeaturesEnabled = this.authenticationService.copilotToken?.isEditorPreviewFeaturesEnabled() ?? true;
+		// Check if preview features are enabled - default to false if copilot token is not available
+		// to be conservative when authentication hasn't completed
+		const isPreviewFeaturesEnabled = this.authenticationService.copilotToken?.isEditorPreviewFeaturesEnabled() ?? false;
 		const enableCopilotMemory = isPreviewFeaturesEnabled && this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
 		const enableMemoryTool = this.configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, this.experimentationService);
 
@@ -261,7 +263,9 @@ export class MemoryInstructionsPrompt extends PromptElement<BasePromptElementPro
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const isPreviewFeaturesEnabled = this.authenticationService.copilotToken?.isEditorPreviewFeaturesEnabled() ?? true;
+		// Check if preview features are enabled - default to false if copilot token is not available
+		// to be conservative when authentication hasn't completed
+		const isPreviewFeaturesEnabled = this.authenticationService.copilotToken?.isEditorPreviewFeaturesEnabled() ?? false;
 		const enableCopilotMemory = isPreviewFeaturesEnabled && this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
 		const enableMemoryTool = this.configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, this.experimentationService);
 		if (!enableCopilotMemory && !enableMemoryTool) {

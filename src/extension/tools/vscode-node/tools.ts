@@ -94,7 +94,9 @@ export class ToolsContribution extends Disposable {
 			}
 
 			// Collect local repo-scoped memories only when CAPI memory is disabled
-			const isPreviewFeaturesEnabled = this.authenticationService.copilotToken?.isEditorPreviewFeaturesEnabled() ?? true;
+			// Check if preview features are enabled - default to false if copilot token is not available
+			// to be conservative when authentication hasn't completed
+			const isPreviewFeaturesEnabled = this.authenticationService.copilotToken?.isEditorPreviewFeaturesEnabled() ?? false;
 			const capiMemoryEnabled = isPreviewFeaturesEnabled && this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
 			if (storageUri && !capiMemoryEnabled) {
 				const repoMemoryUri = URI.joinPath(storageUri, 'memory-tool/memories/repo');

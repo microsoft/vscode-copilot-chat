@@ -544,7 +544,9 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		}
 
 		// List local repo memory files under repo/ (only when CAPI is not enabled)
-		const isPreviewFeaturesEnabled = this.authenticationService.copilotToken?.isEditorPreviewFeaturesEnabled() ?? true;
+		// Check if preview features are enabled - default to false if copilot token is not available
+		// to be conservative when authentication hasn't completed
+		const isPreviewFeaturesEnabled = this.authenticationService.copilotToken?.isEditorPreviewFeaturesEnabled() ?? false;
 		const capiEnabled = isPreviewFeaturesEnabled && this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
 		if (!capiEnabled) {
 			try {
