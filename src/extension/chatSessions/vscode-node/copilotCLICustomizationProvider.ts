@@ -80,7 +80,7 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 				type: vscode.ChatSessionCustomizationType.Agent,
 				name: agent.displayName || agent.name,
 				description: agent.description,
-				groupKey: fileUri ? undefined : 'Built-in',
+				groupKey: fileUri ? undefined : 'builtin',
 			});
 		}
 		items.push(...agentItems);

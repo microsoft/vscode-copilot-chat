@@ -182,7 +182,7 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(agentItems).toHaveLength(1);
 			expect(agentItems[0].uri.scheme).toBe('copilotcli');
 			expect(agentItems[0].uri.path).toBe('/agents/task');
-			expect(agentItems[0].groupKey).toBe('Built-in');
+			expect(agentItems[0].groupKey).toBe('builtin');
 		});
 
 		it('uses displayName from SDK agents when available', async () => {

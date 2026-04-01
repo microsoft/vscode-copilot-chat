@@ -169,7 +169,7 @@ describe('ClaudeCustomizationProvider', () => {
 			expect(agentItems).toHaveLength(2);
 			expect(agentItems[0].name).toBe('Explore');
 			expect(agentItems[0].description).toBe('Fast exploration agent');
-			expect(agentItems[0].groupKey).toBe('Built-in');
+			expect(agentItems[0].groupKey).toBe('builtin');
 			expect(agentItems[0].uri.scheme).toBe('claude-code');
 			expect(agentItems[0].uri.path).toBe('/agents/Explore');
 			expect(agentItems[1].name).toBe('Review');
@@ -201,7 +201,7 @@ describe('ClaudeCustomizationProvider', () => {
 			const agentItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Agent);
 			expect(agentItems).toHaveLength(1);
 			expect(agentItems[0].description).toBe('SDK version');
-			expect(agentItems[0].groupKey).toBe('Built-in');
+			expect(agentItems[0].groupKey).toBe('builtin');
 		});
 
 		it('filters out file agents not under .claude/', async () => {
