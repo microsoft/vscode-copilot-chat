@@ -45,8 +45,8 @@ export enum CustomInstructionsKind {
 export enum SkillStorage {
 	Extension = 'extension',
 	Internal = 'internal',
-	User = 'user',
-	Local = 'local',
+	Personal = 'personal',
+	Workspace = 'workspace',
 }
 
 export interface ISkillInfo {
@@ -224,14 +224,11 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 			},
 			() => {
 				if (this.configurationService.getNonExtensionConfig<boolean>(USE_AGENT_SKILLS_SETTING)) {
-					const personalSkillFolderUris = PERSONAL_SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(this.envService.userHome, folder));
-					const workspaceSkillFolderUris = this.workspaceService.getWorkspaceFolders().flatMap(workspaceFolder =>
-						WORKSPACE_SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(workspaceFolder, folder))
-					);
-					// List of **/skills folder URIs tagged with their storage classification
 					const taggedSkillFolderUris = [
-						...personalSkillFolderUris.map(uri => ({ uri, storage: SkillStorage.User })),
-						...workspaceSkillFolderUris.map(uri => ({ uri, storage: SkillStorage.Local })),
+						...PERSONAL_SKILL_FOLDERS.map(folder => ({ uri: extUriBiasedIgnorePathCase.joinPath(this.envService.userHome, folder), storage: SkillStorage.Personal })),
+						...this.workspaceService.getWorkspaceFolders().flatMap(workspaceFolder =>
+							WORKSPACE_SKILL_FOLDERS.map(folder => ({ uri: extUriBiasedIgnorePathCase.joinPath(workspaceFolder, folder), storage: SkillStorage.Workspace }))
+						),
 					];
 
 					// Get additional skill locations from config
@@ -285,7 +282,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 										// The skill directory is the first path segment under the skill folder
 										const skillName = relativePath.split('/')[0];
 										const skillFolderUri = extUriBiasedIgnorePathCase.joinPath(locationUri, skillName);
-										return { skillName, skillFolderUri, storage: SkillStorage.Local };
+										return { skillName, skillFolderUri, storage: SkillStorage.Workspace };
 									}
 								}
 							}

@@ -802,7 +802,7 @@ suite('ReadFile', () => {
 			));
 
 			const mockCustomInstructions = new MockCustomInstructionsService();
-			mockCustomInstructions.setSkillFiles([skillUri], SkillStorage.User);
+			mockCustomInstructions.setSkillFiles([skillUri], SkillStorage.Personal);
 			services.define(ICustomInstructionsService, mockCustomInstructions);
 
 			const telemetry = new CapturingTelemetryService();

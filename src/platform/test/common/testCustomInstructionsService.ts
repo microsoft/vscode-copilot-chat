@@ -33,7 +33,7 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 	/**
 	 * Set the URIs that should be recognized as skill files.
 	 */
-	setSkillFiles(uris: URI[], storage: SkillStorage = SkillStorage.Local): void {
+	setSkillFiles(uris: URI[], storage: SkillStorage = SkillStorage.Workspace): void {
 		this.skillFiles.clear();
 		uris.forEach(uri => this.skillFiles.set(uri.toString(), storage));
 	}
@@ -95,7 +95,7 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 		}
 		const skillFolderUri = this.getSkillDirectory(uri);
 		const skillName = this.getSkillName(uri);
-		const storage = this.skillFiles.get(uri.toString()) ?? SkillStorage.Local;
+		const storage = this.skillFiles.get(uri.toString()) ?? SkillStorage.Workspace;
 		return { skillName, skillFolderUri, storage };
 	}
 
