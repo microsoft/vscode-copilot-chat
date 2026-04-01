@@ -325,7 +325,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		} else {
 			// Workspace
 			const sessionRequestDetails = await this.chatSessionMetadataStore.getRequestDetails(session.id);
-			const workspaceFolderEntry = await this.chatSessionMetadataStore.getSessionWorkspaceFolderEntry(session.id);
+			const repositoryProperties = await this.chatSessionMetadataStore.getRepositoryProperties(session.id);
 
 			let lastCheckpointRef: string | undefined;
 			for (let i = sessionRequestDetails.length - 1; i >= 0; i--) {
@@ -342,7 +342,9 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 			metadata = {
 				isolationMode: IsolationMode.Workspace,
-				repositoryPath: workspaceFolderEntry?.repositoryPath,
+				repositoryPath: repositoryProperties?.repositoryPath,
+				branchName: repositoryProperties?.branchName,
+				baseBranchName: repositoryProperties?.baseBranchName,
 				workingDirectoryPath: workingDirectory?.fsPath,
 				firstCheckpointRef,
 				lastCheckpointRef
@@ -1707,7 +1709,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 		const sessionWorkingDirectory = getWorkingDirectory(session.object.workspace);
 		if (sessionWorkingDirectory && !isIsolationEnabled(session.object.workspace)) {
-			void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, sessionWorkingDirectory.fsPath, session.object.workspace.repository?.fsPath);
+			void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, sessionWorkingDirectory.fsPath, session.object.workspace.repositoryProperties);
 		}
 		disposables.add(session.object.attachStream(stream));
 		const permissionLevel = request.permissionLevel;
@@ -1847,7 +1849,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			void this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.object.sessionId, worktreeProperties);
 		}
 		if (workingDirectory && !isIsolationEnabled(workspaceInfo)) {
-			void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, workingDirectory.fsPath, workspaceInfo.repository?.fsPath);
+			void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, workingDirectory.fsPath, workspaceInfo.repositoryProperties);
 		}
 
 		try {
@@ -2378,7 +2380,7 @@ export function registerCLIChatCommands(
 			return;
 		}
 
-		copilotCliWorkspaceSession.trackSessionWorkspaceFolder(sessionId, workspaceFolder.fsPath, repository.rootUri.fsPath);
+		copilotCliWorkspaceSession.trackSessionWorkspaceFolder(sessionId, workspaceFolder.fsPath, repository.headBranchName ? { repositoryPath: repository.rootUri.fsPath, branchName: repository.headBranchName } : undefined);
 		copilotCliWorkspaceSession.clearWorkspaceChanges(workspaceFolder);
 
 		copilotcliSessionItemProvider.notifySessionsChange();

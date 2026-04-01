@@ -15,7 +15,7 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import * as path from '../../../util/vs/base/common/path';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { IChatSessionMetadataStore, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
+import { IChatSessionMetadataStore, RepositoryProperties, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { ChatSessionWorktreeFile } from '../common/chatSessionWorktreeService';
 
@@ -46,14 +46,16 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 		await this.metadataStore.deleteSessionMetadata(sessionId);
 	}
 
-	async trackSessionWorkspaceFolder(sessionId: string, workspaceFolderUri: string, repositoryFolderUri?: string): Promise<void> {
+	async trackSessionWorkspaceFolder(sessionId: string, workspaceFolderUri: string, repositoryProperties?: RepositoryProperties): Promise<void> {
 		const entry: WorkspaceFolderEntry = {
 			folderPath: workspaceFolderUri,
-			repositoryPath: repositoryFolderUri,
 			timestamp: Date.now()
 		};
 		this.workspaceState.set(sessionId, entry);
 		this.metadataStore.storeWorkspaceFolderInfo(sessionId, entry);
+		if (repositoryProperties) {
+			this.metadataStore.storeRepositoryProperties(sessionId, repositoryProperties);
+		}
 		this.logService.trace(`[ChatSessionWorkspaceFolderService] Tracked workspace folder ${workspaceFolderUri} for session ${sessionId}`);
 	}
 
@@ -71,6 +73,10 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 			return entry;
 		}
 		return await this.metadataStore.getSessionWorkspaceFolderEntry(sessionId);
+	}
+
+	async getRepositoryProperties(sessionId: string): Promise<RepositoryProperties | undefined> {
+		return await this.metadataStore.getRepositoryProperties(sessionId);
 	}
 
 	async handleRequestCompleted(workspaceFolderUri: vscode.Uri): Promise<void> {

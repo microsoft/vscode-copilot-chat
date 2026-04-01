@@ -38,6 +38,7 @@ import { MockChatResponseStream, TestChatRequest } from '../../../test/node/test
 import { type IToolsService } from '../../../tools/common/toolsService';
 import { mockLanguageModelChat } from '../../../tools/node/test/searchToolTestUtils';
 import { IAgentSessionsWorkspace } from '../../common/agentSessionsWorkspace';
+import { RepositoryProperties } from '../../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeCheckpointService } from '../../common/chatSessionWorktreeCheckpointService';
 import { IChatSessionWorktreeService, type ChatSessionWorktreeFile, type ChatSessionWorktreeProperties, type ChatSessionWorktreePropertiesV2 } from '../../common/chatSessionWorktreeService';
@@ -128,9 +129,9 @@ class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFo
 	private _sessionWorkspaceFolders = new Map<string, vscode.Uri>();
 	private _sessionWorkspaceFolderRepositories = new Map<string, vscode.Uri | undefined>();
 	private _workspaceChanges = new Map<string, readonly ChatSessionWorktreeFile[] | undefined>();
-	override trackSessionWorkspaceFolder = vi.fn(async (sessionId: string, workspaceFolderUri: string, repositoryFolderUri?: string) => {
+	override trackSessionWorkspaceFolder = vi.fn(async (sessionId: string, workspaceFolderUri: string, repositoryProperties?: RepositoryProperties) => {
 		this._sessionWorkspaceFolders.set(sessionId, vscode.Uri.file(workspaceFolderUri));
-		this._sessionWorkspaceFolderRepositories.set(sessionId, repositoryFolderUri ? vscode.Uri.file(repositoryFolderUri) : undefined);
+		this._sessionWorkspaceFolderRepositories.set(sessionId, repositoryProperties?.repositoryPath ? vscode.Uri.file(repositoryProperties.repositoryPath) : undefined);
 	});
 	override deleteTrackedWorkspaceFolder = vi.fn(async (sessionId: string) => {
 		this._sessionWorkspaceFolders.delete(sessionId);

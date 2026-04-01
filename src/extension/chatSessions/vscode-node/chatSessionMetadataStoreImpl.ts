@@ -13,7 +13,7 @@ import { SequencerByKey, ThrottledDelayer } from '../../../util/vs/base/common/a
 import { Lazy } from '../../../util/vs/base/common/lazy';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { dirname, isEqual } from '../../../util/vs/base/common/resources';
-import { ChatSessionMetadataFile, IChatSessionMetadataStore, RequestDetails, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
+import { ChatSessionMetadataFile, IChatSessionMetadataStore, RepositoryProperties, RequestDetails, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties } from '../common/chatSessionWorktreeService';
 import { isUntitledSessionId } from '../common/utils';
 import { IWorkspaceInfo } from '../common/workspaceInfo';
@@ -184,6 +184,15 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		await this.updateMetadataFields(sessionId, { workspaceFolder: entry });
 	}
 
+	async storeRepositoryProperties(sessionId: string, properties: RepositoryProperties): Promise<void> {
+		await this.updateMetadataFields(sessionId, { repositoryProperties: properties });
+	}
+
+	async getRepositoryProperties(sessionId: string): Promise<RepositoryProperties | undefined> {
+		const metadata = await this.getSessionMetadata(sessionId);
+		return metadata?.repositoryProperties;
+	}
+
 	getWorktreeProperties(sessionId: string): Promise<ChatSessionWorktreeProperties | undefined>;
 	getWorktreeProperties(folder: Uri): Promise<ChatSessionWorktreeProperties | undefined>;
 	async getWorktreeProperties(sessionId: string | Uri): Promise<ChatSessionWorktreeProperties | undefined> {
@@ -252,6 +261,7 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		return metadata.additionalWorkspaces.map(ws => ({
 			folder: !ws.worktreeProperties && ws.workspaceFolder?.folderPath ? Uri.file(ws.workspaceFolder.folderPath) : undefined,
 			repository: ws.worktreeProperties?.repositoryPath ? Uri.file(ws.worktreeProperties.repositoryPath) : undefined,
+			repositoryProperties: undefined,
 			worktree: ws.worktreeProperties?.worktreePath ? Uri.file(ws.worktreeProperties.worktreePath) : undefined,
 			worktreeProperties: ws.worktreeProperties,
 		}));
