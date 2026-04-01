@@ -499,6 +499,12 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 			return;
 		}
 
+		// Short-circuit if session already exists — avoids rebuilding
+		// the full IHistoricalTurn[] array on every render.
+		if (this.sessionTranscriptService.getTranscriptPath(sessionId)) {
+			return;
+		}
+
 		// Build IHistoricalTurn[] from the prompt context's Turn[] history
 		const history: IHistoricalTurn[] = this.props.promptContext.history.map(turn => ({
 			userMessage: turn.request.message,
