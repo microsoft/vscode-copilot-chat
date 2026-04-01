@@ -28,6 +28,7 @@ export interface InitializeFolderRepositoryOptions {
 	readonly isolation?: IsolationMode;
 	readonly stream: vscode.ChatResponseStream;
 	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
+	readonly newBranch?: Promise<string | undefined>;
 }
 
 /**

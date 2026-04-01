@@ -32,6 +32,7 @@ import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../claude/n
 import { ClaudeSlashCommandService, IClaudeSlashCommandService } from '../claude/vscode-node/claudeSlashCommandService';
 import { IAgentSessionsWorkspace } from '../common/agentSessionsWorkspace';
 
+import { GitBranchNameGenerator } from '../../prompt/node/gitBranch';
 import { IChatPromptFileService } from '../common/chatPromptFileService';
 import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
@@ -175,12 +176,14 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const gitService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IGitService));
 		const sessionTracker = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionTracker));
 		const terminalIntegration = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLITerminalIntegration));
+		const branchNameGenerator = copilotcliAgentInstaService.createInstance(GitBranchNameGenerator);
 
 		const copilotcliChatSessionParticipant = this._register(copilotcliAgentInstaService.createInstance(
 			CopilotCLIChatSessionParticipant,
 			copilotcliChatSessionContentProvider,
 			promptResolver,
-			cloudSessionProvider
+			cloudSessionProvider,
+			branchNameGenerator,
 		));
 		const copilotCLISessionService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionService));
 		const copilotCLIWorktreeManagerService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatSessionWorktreeService));
