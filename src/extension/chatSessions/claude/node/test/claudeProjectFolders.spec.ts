@@ -23,9 +23,9 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 	deleteNewSessionFolder(): void { }
 	async getFolderRepository(): Promise<{ folder: undefined; repository: undefined; worktree: undefined; worktreeProperties: undefined; trusted: undefined }> { return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined }; }
 	async initializeFolderRepository(): Promise<{ folder: undefined; repository: undefined; worktree: undefined; worktreeProperties: undefined; trusted: undefined }> { return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined }; }
+	async initializeMultiRootFolderRepositories(): Promise<{ primary: { folder: undefined; repository: undefined; worktree: undefined; worktreeProperties: undefined; trusted: undefined }; additional: never[] }> { return { primary: { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined }, additional: [] }; }
 	async getRepositoryInfo(): Promise<any> { return undefined; }
 	async getFolderMRU(): Promise<FolderRepositoryMRUEntry[]> { return this._mruEntries; }
-	async deleteMRUEntry(): Promise<void> { }
 }
 
 // #endregion
@@ -90,7 +90,7 @@ describe('getProjectFolders', () => {
 		const mruFolder = URI.file('/Users/test/recent-project');
 		const workspace = new TestWorkspaceService([]);
 		const folderManager = new MockFolderRepositoryManager();
-		folderManager.setMRUEntries([{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: false }]);
+		folderManager.setMRUEntries([{ folder: mruFolder, repository: undefined, lastAccessed: Date.now() }]);
 
 		const result = await getProjectFolders(workspace, folderManager);
 
@@ -113,7 +113,7 @@ describe('getProjectFolders', () => {
 		const mruFolder = URI.file('/Users/test/mru-folder');
 		const workspace = new TestWorkspaceService([workspaceFolder]);
 		const folderManager = new MockFolderRepositoryManager();
-		folderManager.setMRUEntries([{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: false }]);
+		folderManager.setMRUEntries([{ folder: mruFolder, repository: undefined, lastAccessed: Date.now() }]);
 
 		const result = await getProjectFolders(workspace, folderManager);
 

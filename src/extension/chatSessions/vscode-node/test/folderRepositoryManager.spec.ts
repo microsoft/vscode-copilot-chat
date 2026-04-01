@@ -16,6 +16,7 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { LanguageModelTextPart, LanguageModelToolResult2 } from '../../../../vscodeTypes';
 import { MockChatResponseStream } from '../../../test/node/testHelpers';
 import type { IToolsService } from '../../../tools/common/toolsService';
+import { RepositoryProperties } from '../../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
 import { ChatSessionWorktreeFile, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../../common/chatSessionWorktreeService';
 import { IFolderRepositoryManager } from '../../common/folderRepositoryManager';
@@ -58,46 +59,51 @@ class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>()
  */
 class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFolderService>() {
 	private _sessionWorkspaceFolders = new Map<string, vscode.Uri>();
-	private _recentFolders: { folder: vscode.Uri; lastAccessTime: number }[] = [];
+	private _sessionWorkspaceFolderRepositories = new Map<string, vscode.Uri | undefined>();
 	private _workspaceChanges = new Map<string, readonly ChatSessionWorktreeFile[] | undefined>();
 
-	override trackSessionWorkspaceFolder = vi.fn(async (sessionId: string, workspaceFolderUri: string): Promise<void> => {
+	override trackSessionWorkspaceFolder = vi.fn(async (sessionId: string, workspaceFolderUri: string, repositoryProperties?: RepositoryProperties): Promise<void> => {
 		this._sessionWorkspaceFolders.set(sessionId, vscode.Uri.file(workspaceFolderUri));
+		this._sessionWorkspaceFolderRepositories.set(sessionId, repositoryProperties?.repositoryPath ? vscode.Uri.file(repositoryProperties.repositoryPath) : undefined);
 	});
 
 	override deleteTrackedWorkspaceFolder = vi.fn(async (sessionId: string): Promise<void> => {
 		this._sessionWorkspaceFolders.delete(sessionId);
-	});
-
-	override deleteRecentFolder = vi.fn(async (folder: vscode.Uri): Promise<void> => {
-		this._recentFolders = this._recentFolders.filter(entry => entry.folder.fsPath !== folder.fsPath);
+		this._sessionWorkspaceFolderRepositories.delete(sessionId);
 	});
 
 	override getSessionWorkspaceFolder = vi.fn(async (sessionId: string): Promise<vscode.Uri | undefined> => {
 		return this._sessionWorkspaceFolders.get(sessionId);
 	});
 
-	override getRecentFolders = vi.fn(async (): Promise<{ folder: vscode.Uri; lastAccessTime: number }[]> => {
-		return this._recentFolders;
+	override getSessionWorkspaceFolderEntry = vi.fn(async (sessionId: string) => {
+		const folder = this._sessionWorkspaceFolders.get(sessionId);
+		if (!folder) {
+			return undefined;
+		}
+
+		return {
+			folderPath: folder.fsPath,
+			timestamp: Date.now()
+		};
 	});
 
-	override getWorkspaceChanges = vi.fn(async (workspaceFolderUri: vscode.Uri): Promise<readonly ChatSessionWorktreeFile[] | undefined> => {
-		return this._workspaceChanges.get(workspaceFolderUri.toString());
+	override getRepositoryProperties = vi.fn(async (_sessionId: string): Promise<RepositoryProperties | undefined> => {
+		return undefined;
 	});
 
-	setTestRecentFolders(folders: { folder: vscode.Uri; lastAccessTime: number }[]): void {
-		this._recentFolders = folders;
-	}
+	override handleRequestCompleted = vi.fn(async (_sessionId: string): Promise<void> => { });
+
+	override getWorkspaceChanges = vi.fn(async (sessionId: string): Promise<readonly ChatSessionWorktreeFile[] | undefined> => {
+		return this._workspaceChanges.get(sessionId);
+	});
 
 	setTestSessionWorkspaceFolder(sessionId: string, folder: vscode.Uri): void {
 		this._sessionWorkspaceFolders.set(sessionId, folder);
 	}
 
-	setTestWorkspaceChanges(folder: vscode.Uri, changes: readonly ChatSessionWorktreeFile[] | undefined): void {
-		this._workspaceChanges.set(folder.toString(), changes);
-	}
-	override clearWorkspaceChanges(workspaceFolderUri: vscode.Uri): void {
-		this._workspaceChanges.delete(workspaceFolderUri.toString());
+	override clearWorkspaceChanges(sessionId: string): void {
+		this._workspaceChanges.delete(sessionId);
 	}
 }
 
@@ -206,6 +212,7 @@ export class FakeFolderRepositoryManager extends mock<IFolderRepositoryManager>(
 	private _folderRepoInfo = new Map<string, {
 		folder: vscode.Uri | undefined;
 		repository: vscode.Uri | undefined;
+		repositoryProperties?: RepositoryProperties;
 		worktree: vscode.Uri | undefined;
 		trusted: boolean | undefined;
 		worktreeProperties: ChatSessionWorktreeProperties | undefined;
@@ -224,7 +231,7 @@ export class FakeFolderRepositoryManager extends mock<IFolderRepositoryManager>(
 		_token: vscode.CancellationToken
 	) => {
 		const info = this._folderRepoInfo.get(sessionId);
-		return info ?? { folder: undefined, repository: undefined, worktree: undefined, trusted: undefined, worktreeProperties: undefined };
+		return info ?? { folder: undefined, repository: undefined, repositoryProperties: undefined, worktree: undefined, trusted: undefined, worktreeProperties: undefined };
 	});
 
 	override initializeFolderRepository = vi.fn(async (
@@ -236,6 +243,7 @@ export class FakeFolderRepositoryManager extends mock<IFolderRepositoryManager>(
 		return {
 			folder: info?.folder,
 			repository: info?.repository,
+			repositoryProperties: info?.repositoryProperties,
 			worktree: info?.worktree,
 			trusted: info?.trusted ?? true,
 			worktreeProperties: info?.worktreeProperties
@@ -260,6 +268,7 @@ export class FakeFolderRepositoryManager extends mock<IFolderRepositoryManager>(
 	setTestFolderRepositoryInfo(sessionId: string, info: {
 		folder: vscode.Uri | undefined;
 		repository: vscode.Uri | undefined;
+		repositoryProperties?: RepositoryProperties;
 		worktree: vscode.Uri | undefined;
 		trusted: boolean | undefined;
 		worktreeProperties: ChatSessionWorktreeProperties | undefined;
@@ -543,98 +552,6 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 
 			expect(result.trusted).toBe(false);
-		});
-	});
-
-	describe('getFolderMRU', () => {
-		it('combines data from all sources', async () => {
-			gitService.setTestRecentRepositories([
-				{ rootUri: vscode.Uri.file('/repo1'), lastAccessTime: 1000 },
-				{ rootUri: vscode.Uri.file('/repo2'), lastAccessTime: 2000 }
-			]);
-			workspaceFolderService.setTestRecentFolders([
-				{ folder: vscode.Uri.file('/folder1'), lastAccessTime: 1500 }
-			]);
-
-			const result = await manager.getFolderMRU();
-
-			// Should have items from both sources
-			expect(result.length).toBeGreaterThan(0);
-		});
-
-		it('deduplicates entries', async () => {
-			const duplicateUri = vscode.Uri.file('/same/path');
-			gitService.setTestRecentRepositories([
-				{ rootUri: duplicateUri, lastAccessTime: 1000 }
-			]);
-			workspaceFolderService.setTestRecentFolders([
-				{ folder: duplicateUri, lastAccessTime: 2000 }
-			]);
-
-			const result = await manager.getFolderMRU();
-
-			// Should only have one entry for the duplicate path
-			const paths = result.map(r => r.folder.fsPath);
-			const uniquePaths = [...new Set(paths)];
-			expect(paths.length).toBe(uniquePaths.length);
-		});
-
-		it('sorts by last access time descending', async () => {
-			gitService.setTestRecentRepositories([
-				{ rootUri: vscode.Uri.file('/old'), lastAccessTime: 1000 },
-				{ rootUri: vscode.Uri.file('/new'), lastAccessTime: 3000 },
-				{ rootUri: vscode.Uri.file('/middle'), lastAccessTime: 2000 }
-			]);
-
-			const result = await manager.getFolderMRU();
-
-			expect(result[0].folder.fsPath).toBe(vscode.Uri.file('/new').fsPath);
-			expect(result[1].folder.fsPath).toBe(vscode.Uri.file('/middle').fsPath);
-			expect(result[2].folder.fsPath).toBe(vscode.Uri.file('/old').fsPath);
-		});
-	});
-
-	describe('deleteMRUEntry', () => {
-
-		it('removes entry from workspace folder service', async () => {
-			const folderUri = vscode.Uri.file('/workspace/folder');
-
-			workspaceFolderService.setTestRecentFolders([
-				{ folder: folderUri, lastAccessTime: Date.now() }
-			]);
-
-			// Verify it's there before deletion
-			const result = await manager.getFolderMRU();
-			expect(result.length).toBeGreaterThan(0);
-
-			await manager.deleteMRUEntry(folderUri);
-
-			// Verify deleteRecentFolder was called on workspace folder service
-			expect((workspaceFolderService.deleteRecentFolder).mock.calls.length).toBe(1);
-		});
-
-		it('handles non-existent folder deletion gracefully', async () => {
-			const nonExistentUri = vscode.Uri.file('/non/existent/path');
-
-			// Should not throw
-			await expect(manager.deleteMRUEntry(nonExistentUri)).resolves.toBeUndefined();
-		});
-
-		it('deduplicates after deletion from untitled session folders', async () => {
-			const folderUri = vscode.Uri.file('/my/folder');
-
-			manager.setNewSessionFolder('untitled:1', folderUri);
-			manager.setNewSessionFolder('untitled:2', folderUri);
-
-			let mru = await manager.getFolderMRU();
-			const beforeCount = mru.filter(entry => entry.folder.fsPath === folderUri.fsPath).length;
-
-			await manager.deleteMRUEntry(folderUri);
-
-			mru = await manager.getFolderMRU();
-			const afterCount = mru.filter(entry => entry.folder.fsPath === folderUri.fsPath).length;
-
-			expect(afterCount).toBeLessThan(beforeCount);
 		});
 	});
 
@@ -1043,7 +960,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			expect(worktreeService.createWorktree).toHaveBeenCalledWith(
 				expect.anything(),
 				expect.anything(),
-				'feature-branch'
+				'feature-branch',
+				undefined,
 			);
 		});
 
@@ -1073,6 +991,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			expect(worktreeService.createWorktree).toHaveBeenCalledWith(
 				expect.anything(),
 				expect.anything(),
+				undefined,
 				undefined
 			);
 		});

@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.111.0",
+		"vscode": "^1.115.0",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -146,7 +146,8 @@
 		"workspaceTrust",
 		"environmentPower",
 		"terminalTitle",
-		"toolInvocationApproveCombination"
+		"toolInvocationApproveCombination",
+		"chatSessionCustomizationProvider"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -1070,29 +1071,6 @@
 				}
 			},
 			{
-				"name": "copilot_toolReplay",
-				"modelDescription": "Replays a tool call from a previous chat session.",
-				"displayName": "tool replay",
-				"when": "false",
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"toolCallId": {
-							"type": "string",
-							"description": "the id of the tool original tool call"
-						},
-						"toolName": {
-							"type": "string",
-							"description": "the name of the tool being replayed"
-						},
-						"toolCallArgs": {
-							"type": "object",
-							"description": "the arguments of the tool call"
-						}
-					}
-				}
-			},
-			{
 				"name": "copilot_switchAgent",
 				"toolReferenceName": "switchAgent",
 				"displayName": "%copilot.tools.switchAgent.name%",
@@ -1734,15 +1712,6 @@
 						]
 					}
 				]
-			},
-			{
-				"id": "github.copilot.chatReplay",
-				"name": "chatReplay",
-				"fullName": "Chat Replay",
-				"when": "debugType == 'vscode-chat-replay'",
-				"locations": [
-					"panel"
-				]
 			}
 		],
 		"languageModelChatProviders": [
@@ -2257,24 +2226,6 @@
 				"category": "Copilot CLI"
 			},
 			{
-				"command": "github.copilot.chat.replay",
-				"title": "Start Chat Replay",
-				"icon": "$(debug-line-by-line)",
-				"enablement": "resourceFilename === 'benchRun.chatReplay.json' && !inDebugMode"
-			},
-			{
-				"command": "github.copilot.chat.replay.enableWorkspaceEditTracing",
-				"title": "%github.copilot.command.enableEditTracing%",
-				"category": "Developer",
-				"enablement": "!github.copilot.chat.replay.workspaceEditTracing"
-			},
-			{
-				"command": "github.copilot.chat.replay.disableWorkspaceEditTracing",
-				"title": "%github.copilot.command.disableEditTracing%",
-				"category": "Developer",
-				"enablement": "github.copilot.chat.replay.workspaceEditTracing"
-			},
-			{
 				"command": "github.copilot.chat.compact",
 				"title": "%github.copilot.command.compactConversation%"
 			},
@@ -2701,11 +2652,6 @@
 				"category": "Copilot"
 			},
 			{
-				"command": "github.copilot.chat.showAsChatSession",
-				"title": "Show as chat session",
-				"icon": "$(chat-sparkle)"
-			},
-			{
 				"command": "github.copilot.debug.collectWorkspaceIndexDiagnostics",
 				"title": "%github.copilot.command.collectWorkspaceIndexDiagnostics%",
 				"category": "Developer"
@@ -2915,6 +2861,13 @@
 				"command": "github.copilot.sessions.refreshChanges",
 				"title": "%github.copilot.command.sessions.refreshChanges%",
 				"icon": "$(refresh)",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.sessions.initializeRepository",
+				"title": "%github.copilot.command.sessions.initializeRepository%",
+				"enablement": "!chatSessionRequestInProgress",
+				"icon": "$(repo)",
 				"category": "GitHub Copilot"
 			}
 		],
@@ -4408,10 +4361,10 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.agentHistorySummarizationWithPromptCache": {
+					"github.copilot.chat.agentHistorySummarizationCacheFriendly": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "%github.copilot.config.agentHistorySummarizationWithPromptCache%",
+						"markdownDescription": "%github.copilot.config.agentHistorySummarizationCacheFriendly%",
 						"tags": [
 							"advanced",
 							"experimental",
@@ -4603,6 +4556,14 @@
 							"advanced"
 						]
 					},
+					"github.copilot.chat.cli.sessionControllerForSessionsApp.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.sessionControllerForSessionsApp.enabled%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.cli.terminalLinks.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -4683,6 +4644,17 @@
 						"default": 50,
 						"minimum": 1,
 						"markdownDescription": "%github.copilot.config.chat.agentDebugLog.fileLogging.maxRetainedSessionLogs%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.agentDebugLog.fileLogging.maxSessionLogSizeMB": {
+						"type": "number",
+						"default": 100,
+						"minimum": 1,
+						"markdownDescription": "%github.copilot.config.chat.agentDebugLog.fileLogging.maxSessionLogSizeMB%",
 						"tags": [
 							"advanced",
 							"experimental",
@@ -4787,16 +4759,6 @@
 					"group": "navigation@10"
 				},
 				{
-					"command": "github.copilot.chat.replay",
-					"group": "navigation@9",
-					"when": "resourceFilename === 'benchRun.chatReplay.json'"
-				},
-				{
-					"command": "github.copilot.chat.showAsChatSession",
-					"group": "navigation@9",
-					"when": "resourceFilename === 'benchRun.chatReplay.json' || resourceFilename === 'chat-export-logs.json'"
-				},
-				{
 					"command": "github.copilot.chat.copilotCLI.acceptDiff",
 					"group": "navigation@1",
 					"when": "github.copilot.chat.copilotCLI.hasActiveDiff"
@@ -4816,11 +4778,6 @@
 			],
 			"explorer/context": [
 				{
-					"command": "github.copilot.chat.showAsChatSession",
-					"when": "resourceFilename === 'benchRun.chatReplay.json' || resourceFilename === 'chat-export-logs.json'",
-					"group": "2_copilot@1"
-				},
-				{
 					"command": "github.copilot.chat.copilotCLI.addFileReference",
 					"group": "copilot",
 					"when": "github.copilot.chat.copilotCLI.hasSession && !explorerResourceIsFolder"
@@ -4829,17 +4786,17 @@
 			"editor/context": [
 				{
 					"command": "github.copilot.chat.fix",
-					"when": "!github.copilot.interactiveSession.disabled && !editorReadonly && editorSelectionHasDiagnostics",
+					"when": "!github.copilot.interactiveSession.disabled && chatSetupCompleted && !editorReadonly && editorSelectionHasDiagnostics",
 					"group": "1_chat@4"
 				},
 				{
 					"command": "github.copilot.chat.explain",
-					"when": "!github.copilot.interactiveSession.disabled",
+					"when": "!github.copilot.interactiveSession.disabled && chatSetupCompleted",
 					"group": "1_chat@5"
 				},
 				{
 					"command": "github.copilot.chat.review",
-					"when": "config.github.copilot.chat.reviewSelection.enabled && !github.copilot.interactiveSession.disabled && resourceScheme != 'vscode-chat-code-block'",
+					"when": "config.github.copilot.chat.reviewSelection.enabled && !github.copilot.interactiveSession.disabled && chatSetupCompleted && resourceScheme != 'vscode-chat-code-block'",
 					"group": "1_chat@6"
 				},
 				{
@@ -4883,6 +4840,11 @@
 				}
 			],
 			"chat/input/editing/sessionApplyActions": [
+				{
+					"command": "github.copilot.sessions.initializeRepository",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && !sessions.hasGitRepository",
+					"group": "init@1"
+				},
 				{
 					"command": "github.copilot.sessions.commitChanges",
 					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && sessions.hasGitRepository",
@@ -5233,10 +5195,6 @@
 					"when": "false"
 				},
 				{
-					"command": "github.copilot.chat.showAsChatSession",
-					"when": "false"
-				},
-				{
 					"command": "github.copilot.chat.checkoutPullRequestReroute",
 					"when": "false"
 				},
@@ -5270,6 +5228,10 @@
 				},
 				{
 					"command": "github.copilot.sessions.refreshChanges",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.sessions.initializeRepository",
 					"when": "false"
 				}
 			],
@@ -5499,7 +5461,7 @@
 			"scm/inputBox": [
 				{
 					"command": "github.copilot.git.generateCommitMessage",
-					"when": "scmProvider == git"
+					"when": "scmProvider == git && chatSetupCompleted"
 				}
 			],
 			"testing/message/context": [
@@ -5572,7 +5534,7 @@
 				{
 					"command": "github.copilot.git.resolveMergeConflicts",
 					"group": "z_chat@1",
-					"when": "config.git.enabled && !git.missing && !isInDiffEditor && !isMergeEditor && resource in git.mergeChanges && git.activeResourceHasMergeConflicts"
+					"when": "config.git.enabled && !git.missing && !isInDiffEditor && !isMergeEditor && resource in git.mergeChanges && git.activeResourceHasMergeConflicts && chatSetupCompleted"
 				}
 			],
 			"multiDiffEditor/content": [
@@ -5650,7 +5612,24 @@
 			"chat/input/editing/sessionChangeToolbar": [
 				{
 					"command": "github.copilot.sessions.discardChanges",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.changesVersionMode == branchChanges",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.hasGitRepository && sessions.changesVersionMode == branchChanges",
+					"group": "navigation@1"
+				}
+			],
+			"chat/customizations/create": [
+				{
+					"command": "copilot.claude.agents",
+					"when": "chatCustomizationSessionType == claude-code && chatCustomizationSection == agents",
+					"group": "navigation@1"
+				},
+				{
+					"command": "copilot.claude.hooks",
+					"when": "chatCustomizationSessionType == claude-code && chatCustomizationSection == hooks",
+					"group": "navigation@1"
+				},
+				{
+					"command": "copilot.claude.memory",
+					"when": "chatCustomizationSessionType == claude-code && chatCustomizationSection == instructions",
 					"group": "navigation@1"
 				}
 			]
@@ -5751,17 +5730,6 @@
 				"id": "markdown",
 				"extensions": [
 					".copilotmd"
-				]
-			}
-		],
-		"notebooks": [
-			{
-				"type": "copilot-chat-replay",
-				"displayName": "Copilot Chat Replay",
-				"selector": [
-					{
-						"filenamePattern": "*.chatreplay.json"
-					}
 				]
 			}
 		],
@@ -6120,35 +6088,6 @@
 				"autoAttachReferences": true
 			}
 		],
-		"debuggers": [
-			{
-				"type": "vscode-chat-replay",
-				"label": "vscode-chat-replay",
-				"languages": [
-					"json"
-				],
-				"when": "resourceFilename === 'benchRun.chatReplay.json'",
-				"configurationAttributes": {
-					"launch": {
-						"properties": {
-							"program": {
-								"type": "string",
-								"description": "Chat replay file to debug (parse for headers)",
-								"default": "${file}"
-							},
-							"stopOnEntry": {
-								"type": "boolean",
-								"default": true,
-								"description": "Break immediately to step through manually."
-							}
-						},
-						"required": [
-							"program"
-						]
-					}
-				}
-			}
-		],
 		"chatAgents": [],
 		"chatPromptFiles": [
 			{
@@ -6298,7 +6237,7 @@
 		"@vscode/lsif-language-service": "^0.1.0-pre.4",
 		"@vscode/test-cli": "^0.0.11",
 		"@vscode/test-electron": "^2.5.2",
-		"@vscode/test-web": "^0.0.71",
+		"@vscode/test-web": "^0.0.80",
 		"@vscode/vsce": "3.6.0",
 		"agent-browser": "^0.16.3",
 		"copyfiles": "^2.4.1",

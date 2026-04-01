@@ -53,6 +53,20 @@ export type StreamedEdit = {
 
 export type PushEdit = (edit: Result<StreamedEdit, NoNextEditReason>) => void;
 
+export class RequestEditWindow {
+	constructor(readonly window: OffsetRange) { }
+	containsCursor(cursor: OffsetRange): boolean {
+		return this.window.containsRange(cursor);
+	}
+}
+
+export class RequestEditWindowWithCursorJump {
+	constructor(readonly window: OffsetRange, readonly originalWindow: OffsetRange) { }
+	containsCursor(cursor: OffsetRange): boolean {
+		return this.window.containsRange(cursor) || this.originalWindow.containsRange(cursor);
+	}
+}
+
 export interface IStatelessNextEditProvider {
 	readonly ID: string;
 	provideNextEdit(request: StatelessNextEditRequest, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): EditStreamingWithTelemetry;
@@ -71,6 +85,13 @@ export class StatelessNextEditRequest<TFirstEdit = any> {
 	public fetchIssued = false;
 	public intermediateUserEdit: StringEdit | undefined = StringEdit.empty;
 
+	/**
+	 * Set by the stateless provider early in its execution (before any async work).
+	 * Used to check whether a new cursor position falls within the edit window when
+	 * deciding whether to reuse an in-flight request.
+	 */
+	public requestEditWindow: RequestEditWindow | RequestEditWindowWithCursorJump | undefined;
+
 	private readonly _result: DeferredPromise<StatelessNextEditResult> = new DeferredPromise<StatelessNextEditResult>();
 	public get result(): Promise<StatelessNextEditResult> {
 		return this._result.p;
@@ -79,6 +100,7 @@ export class StatelessNextEditRequest<TFirstEdit = any> {
 	constructor(
 		public readonly headerRequestId: string,
 		public readonly opportunityId: string,
+		/** this's the active document current contents (not sure "before" which edits this's named after -- maybe NES edits) */
 		public readonly documentBeforeEdits: StringText,
 		public readonly documents: readonly StatelessNextEditDocument[],
 		public readonly activeDocumentIdx: number,

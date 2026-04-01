@@ -114,6 +114,12 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		return gitAPI.recentRepositories;
 	}
 
+	async initRepository(uri: URI): Promise<RepoContext | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = await gitAPI?.init(uri);
+		return repository ? GitServiceImpl.repoToRepoContext(repository) : undefined;
+	}
+
 	async getRepository(uri: URI, forceOpen = true): Promise<RepoContext | undefined> {
 		const repository = await this._getRepository(uri, forceOpen);
 		if (!repository) {

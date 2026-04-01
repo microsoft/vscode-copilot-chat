@@ -25,6 +25,7 @@ import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
 import { buildMcpServersFromRegistry } from '../common/claudeMcpServerRegistry';
 import { dispatchMessage, KnownClaudeError } from '../common/claudeMessageDispatch';
+import { IClaudeRuntimeDataService } from '../common/claudeRuntimeDataService';
 import { ClaudeSessionUri } from '../common/claudeSessionUri';
 import { IClaudeToolPermissionService } from '../common/claudeToolPermissionService';
 import { claudeEditTools, getAffectedUrisForEditTool } from '../common/claudeTools';
@@ -211,6 +212,7 @@ export class ClaudeCodeSession extends Disposable {
 		@IClaudeCodeSdkService private readonly claudeCodeService: IClaudeCodeSdkService,
 		@IClaudeToolPermissionService private readonly toolPermissionService: IClaudeToolPermissionService,
 		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
+		@IClaudeRuntimeDataService private readonly runtimeDataService: IClaudeRuntimeDataService,
 		@IMcpService private readonly mcpService: IMcpService,
 		@IOTelService private readonly _otelService: IOTelService,
 		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService,
@@ -477,6 +479,10 @@ export class ClaudeCodeSession extends Disposable {
 			prompt: this._createPromptIterable(),
 			options
 		});
+
+		// Cache runtime data (agents, etc.) for the customization provider.
+		// Fire-and-forget to avoid blocking session startup — error handling is inside the service.
+		void this.runtimeDataService.update(this._queryGenerator);
 
 		// Take a snapshot of settings files so we can detect changes
 		await this._settingsChangeTracker.takeSnapshot();

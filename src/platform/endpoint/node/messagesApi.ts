@@ -173,7 +173,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	// Build output config with effort level for thinking, validating reasoningEffort
 	let effort: 'low' | 'medium' | 'high' | undefined;
 	if (thinkingConfig) {
-		const candidateEffort = reasoningEffort;
+		const candidateEffort = configurationService.getConfig(ConfigKey.TeamInternal.AnthropicThinkingEffort) ?? reasoningEffort;
 		if (candidateEffort === 'low' || candidateEffort === 'medium' || candidateEffort === 'high') {
 			effort = candidateEffort;
 		}

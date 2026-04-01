@@ -8,6 +8,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { IEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -158,6 +159,12 @@ class TestTelemetryService {
 	sendMSFTTelemetryEvent() { }
 }
 
+class TestEnvService {
+	declare readonly _serviceBrand: undefined;
+	readonly vscodeVersion = '1.99.0-test';
+	getVersion() { return '0.0.0-test'; }
+}
+
 describe('ChatDebugFileLoggerService', () => {
 	let disposables: DisposableStore;
 	let tmpDir: string;
@@ -178,6 +185,7 @@ describe('ChatDebugFileLoggerService', () => {
 			new TestConfigurationService() as unknown as IConfigurationService,
 			new NullExperimentationService() as unknown as IExperimentationService,
 			new TestTelemetryService() as unknown as ITelemetryService,
+			new TestEnvService() as unknown as IEnvService,
 		);
 		disposables.add(service);
 	});
@@ -206,11 +214,12 @@ describe('ChatDebugFileLoggerService', () => {
 		await service.flush('session-1');
 		const entries = await readLogEntries('session-1');
 
-		expect(entries).toHaveLength(1);
-		expect(entries[0].type).toBe('tool_call');
-		expect(entries[0].name).toBe('read_file');
-		expect(entries[0].sid).toBe('session-1');
-		expect(entries[0].status).toBe('ok');
+		expect(entries).toHaveLength(2);
+		expect(entries[0].type).toBe('session_start');
+		expect(entries[1].type).toBe('tool_call');
+		expect(entries[1].name).toBe('read_file');
+		expect(entries[1].sid).toBe('session-1');
+		expect(entries[1].status).toBe('ok');
 	});
 
 	it('writes LLM request with token counts', async () => {
@@ -221,10 +230,10 @@ describe('ChatDebugFileLoggerService', () => {
 		await service.flush('session-1');
 		const entries = await readLogEntries('session-1');
 
-		expect(entries).toHaveLength(1);
-		expect(entries[0].type).toBe('llm_request');
-		expect(entries[0].name).toBe('chat:gpt-4o');
-		const attrs = entries[0].attrs as Record<string, unknown>;
+		expect(entries).toHaveLength(2);
+		expect(entries[1].type).toBe('llm_request');
+		expect(entries[1].name).toBe('chat:gpt-4o');
+		const attrs = entries[1].attrs as Record<string, unknown>;
 		expect(attrs.model).toBe('gpt-4o');
 		expect(attrs.inputTokens).toBe(1000);
 		expect(attrs.outputTokens).toBe(500);
@@ -245,8 +254,8 @@ describe('ChatDebugFileLoggerService', () => {
 		await service.flush('session-1');
 		const entries = await readLogEntries('session-1');
 
-		expect(entries[0].status).toBe('error');
-		expect((entries[0].attrs as Record<string, unknown>).error).toBe('Command failed');
+		expect(entries[1].status).toBe('error');
+		expect((entries[1].attrs as Record<string, unknown>).error).toBe('Command failed');
 	});
 
 	it('isDebugLogUri returns true for files under debug-logs', () => {
@@ -302,7 +311,7 @@ describe('ChatDebugFileLoggerService', () => {
 		await service.flush('session-1');
 		const entries = await readLogEntries('session-1');
 
-		const args = (entries[0].attrs as Record<string, unknown>).args as string;
+		const args = (entries[1].attrs as Record<string, unknown>).args as string;
 		expect(args.length).toBeLessThan(longArgs.length);
 		expect(args).toContain('[truncated]');
 	});
@@ -364,6 +373,7 @@ describe('ChatDebugFileLoggerService', () => {
 			configService as unknown as IConfigurationService,
 			new NullExperimentationService() as unknown as IExperimentationService,
 			new TestTelemetryService() as unknown as ITelemetryService,
+			new TestEnvService() as unknown as IEnvService,
 		);
 		disposables.add(svc);
 		disposables.add(configChangeEmitter);

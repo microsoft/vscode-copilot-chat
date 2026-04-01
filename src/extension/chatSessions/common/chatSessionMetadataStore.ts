@@ -14,6 +14,12 @@ export interface WorkspaceFolderEntry {
 	readonly timestamp: number;
 }
 
+export interface RepositoryProperties {
+	readonly repositoryPath: string;
+	readonly branchName?: string;
+	readonly baseBranchName?: string;
+}
+
 /**
  * Serializable subset of ChatRequestModeInstructions (excludes toolReferences).
  */
@@ -44,11 +50,15 @@ export interface RequestDetails {
 	/** Mode instructions for this request (excluding toolReferences). */
 	modeInstructions?: StoredModeInstructions;
 
-	/** Checkpoint reference for this request. */
+	/** Checkpoint reference for this request (primary workspace). */
 	checkpointRef?: string;
+
+	/** Checkpoint references for additional workspaces, keyed by folder fsPath. */
+	additionalCheckpointRefs?: { [folderPath: string]: string };
 }
 
 export interface ChatSessionMetadataFile {
+	repositoryProperties?: RepositoryProperties;
 	worktreeProperties?: ChatSessionWorktreeProperties;
 	workspaceFolder?: WorkspaceFolderEntry;
 	additionalWorkspaces?: {
@@ -73,12 +83,14 @@ export interface IChatSessionMetadataStore {
 	deleteSessionMetadata(sessionId: string): Promise<void>;
 	storeWorktreeInfo(sessionId: string, properties: ChatSessionWorktreeProperties): Promise<void>;
 	storeWorkspaceFolderInfo(sessionId: string, entry: WorkspaceFolderEntry): Promise<void>;
+	storeRepositoryProperties(sessionId: string, properties: RepositoryProperties): Promise<void>;
+	getRepositoryProperties(sessionId: string): Promise<RepositoryProperties | undefined>;
 	getSessionIdForWorktree(folder: vscode.Uri): Promise<string | undefined>;
 	getSessionIdForWorkspaceFolder(folder: vscode.Uri): Promise<string[]>;
 	getWorktreeProperties(sessionId: string): Promise<ChatSessionWorktreeProperties | undefined>;
 	getWorktreeProperties(folder: Uri): Promise<ChatSessionWorktreeProperties | undefined>;
 	getSessionWorkspaceFolder(sessionId: string): Promise<vscode.Uri | undefined>;
-	getUsedWorkspaceFolders(): Promise<WorkspaceFolderEntry[]>;
+	getSessionWorkspaceFolderEntry(sessionId: string): Promise<WorkspaceFolderEntry | undefined>;
 	getAdditionalWorkspaces(sessionId: string): Promise<IWorkspaceInfo[]>;
 	setAdditionalWorkspaces(sessionId: string, workspaces: IWorkspaceInfo[]): Promise<void>;
 	getSessionFirstUserMessage(sessionId: string): Promise<string | undefined>;

@@ -16,8 +16,6 @@ import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } fro
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { ModelAliasRegistry } from '../../../platform/endpoint/common/modelAliasRegistry';
-import { encodePhaseData } from '../../../platform/endpoint/common/phaseDataContainer';
-import { encodeResponseOutputMessageId } from '../../../platform/endpoint/common/responseOutputMessageIdContainer';
 import { encodeStatefulMarker } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { AutoChatEndpoint } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
@@ -83,7 +81,8 @@ function buildConfigurationSchema(endpoint: IChatEndpoint): { configurationSchem
 							case 'none': return vscode.l10n.t('No reasoning applied');
 							case 'low': return vscode.l10n.t('Faster responses with less reasoning');
 							case 'medium': return vscode.l10n.t('Balanced reasoning and speed');
-							case 'high': return vscode.l10n.t('Maximum reasoning depth');
+							case 'high': return vscode.l10n.t('Greater reasoning depth but slower');
+							case 'xhigh': return vscode.l10n.t('Maximum reasoning depth but slower');
 							default: return level;
 						}
 					}),
@@ -714,20 +713,6 @@ export class CopilotLanguageModelWrapper extends Disposable {
 			if (delta.statefulMarker) {
 				progress.report(
 					new vscode.LanguageModelDataPart(encodeStatefulMarker(endpoint.model, delta.statefulMarker), CustomDataPartMimeTypes.StatefulMarker)
-				);
-			}
-
-			if (delta.phase) {
-				progress.report(
-					new vscode.LanguageModelDataPart(encodePhaseData({
-						phase: delta.phase,
-					}), CustomDataPartMimeTypes.PhaseData)
-				);
-			}
-
-			if (delta.responseOutputMessageId) {
-				progress.report(
-					new vscode.LanguageModelDataPart(encodeResponseOutputMessageId(delta.responseOutputMessageId), CustomDataPartMimeTypes.ResponseOutputMessageId)
 				);
 			}
 

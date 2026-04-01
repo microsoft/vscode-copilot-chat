@@ -93,7 +93,7 @@ function restoreEnvVariablesAfterTests() {
 function sessionOptionsFor(workingDirectory: Uri | undefined) {
 	return {
 		workingDirectory,
-		workspaceInfo: {
+		workspace: {
 			folder: workingDirectory,
 			repository: undefined,
 			worktree: undefined,
@@ -159,7 +159,7 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 		override async monitorSessionFiles() {
 			// Override to do nothing in tests
 		}
-		protected override async createSessionsOptions(options: { model?: string; workingDirectory?: Uri; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; sessionId?: string; debugTargetSessionIds?: readonly string[] }) {
+		protected override async createSessionsOptions(options: { model?: string; workingDirectory?: Uri; workspace: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; sessionId?: string; debugTargetSessionIds?: readonly string[] }) {
 			const testOptionsProvider = this.instantiationService.invokeFunction((accessor) => accessor.get(ITestSessionOptionsProvider));
 			const overrideOptions = await testOptionsProvider.getOptions();
 			const result = await super.createSessionsOptions({ ...options, agent: undefined });
@@ -492,7 +492,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				const session = await new Promise<IReference<ICopilotCLISession>>((resolve, reject) => {
 					const interval = disposables.add(new IntervalTimer());
 					interval.cancelAndSet(async () => {
-						const session = await sessionService.getSession({ sessionId, readonly: false, ...sessionOptionsFor(workingDirectory) }, CancellationToken.None);
+						const session = await sessionService.getSession({ sessionId, ...sessionOptionsFor(workingDirectory) }, CancellationToken.None);
 						if (session) {
 							interval.dispose();
 							resolve(session);
