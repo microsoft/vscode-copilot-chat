@@ -4,21 +4,33 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatRequest, LanguageModelToolInformation } from 'vscode';
+import type { CancellationToken, ChatRequest, LanguageModelToolInformation } from 'vscode';
 import { IChatHookService } from '../../../../platform/chat/common/chatHookService';
 import { ChatFetchResponseType, ChatResponse } from '../../../../platform/chat/common/commonTypes';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
+import { CodeReviewResult } from '../../../../platform/review/common/reviewCommand';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { Conversation, Turn } from '../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../../../prompt/common/intents';
 import { IBuildPromptResult, nullRenderPromptResult } from '../../../prompt/node/intents';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
+import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { TestToolsService } from '../../../tools/node/test/testToolsService';
 import { IToolCallingLoopOptions, IToolCallSingleResult, ToolCallingLoop } from '../../node/toolCallingLoop';
+import { reviewFileChanges } from '../../../review/node/doReview';
 import { MockChatHookService } from './toolCallingLoopHooks.spec';
+
+vi.mock('../../../review/node/doReview', () => ({
+	reviewFileChanges: vi.fn(),
+}));
+
+const mockReviewFileChanges = vi.mocked(reviewFileChanges);
 
 /**
  * Concrete test implementation that exposes autopilot-related protected methods.
@@ -68,6 +80,41 @@ class AutopilotTestToolCallingLoop extends ToolCallingLoop<IToolCallingLoopOptio
 	 */
 	public testEnsureAutopilotTools(tools: LanguageModelToolInformation[]): LanguageModelToolInformation[] {
 		return this.ensureAutopilotTools(tools);
+	}
+
+	/**
+	 * Expose hadCodeEdits for testing.
+	 */
+	public testHadCodeEdits(): boolean {
+		return this.hadCodeEdits();
+	}
+
+	/**
+	 * Expose getEditedFilePaths for testing.
+	 */
+	public testGetEditedFilePaths(): URI[] {
+		return this.getEditedFilePaths();
+	}
+
+	/**
+	 * Expose performAutopilotCodeReview for testing.
+	 */
+	public testPerformAutopilotCodeReview(token: CancellationToken): Promise<boolean> {
+		return (this as any).performAutopilotCodeReview(undefined, token);
+	}
+
+	/**
+	 * Set the taskCompleted flag for testing.
+	 */
+	public setTaskCompleted(value: boolean): void {
+		(this as any).taskCompleted = value;
+	}
+
+	/**
+	 * Set a pre-edit snapshot for testing.
+	 */
+	public setPreEditSnapshot(filePath: string, content: string): void {
+		(this as any).preEditSnapshots.set(filePath, content);
 	}
 }
 
@@ -382,6 +429,378 @@ describe('ToolCallingLoop autopilot', () => {
 			];
 			const result = loop.testEnsureAutopilotTools(tools);
 			expect(result).toBe(tools);
+		});
+	});
+
+	describe('hadCodeEdits', () => {
+		it('should return false when no tool calls were made', () => {
+			const loop = createLoop('autopilot');
+			expect(loop.testHadCodeEdits()).toBe(false);
+		});
+
+		it('should return false when only non-edit tools were called', () => {
+			const loop = createLoop('autopilot');
+			loop.addToolCallRound(createMockRound(['read_file', 'grep_search', 'list_dir']));
+			expect(loop.testHadCodeEdits()).toBe(false);
+		});
+
+		it('should return true when replace_string_in_file was called', () => {
+			const loop = createLoop('autopilot');
+			loop.addToolCallRound(createMockRound([ToolName.ReplaceString]));
+			expect(loop.testHadCodeEdits()).toBe(true);
+		});
+
+		it('should return true when insert_edit_into_file was called', () => {
+			const loop = createLoop('autopilot');
+			loop.addToolCallRound(createMockRound([ToolName.EditFile]));
+			expect(loop.testHadCodeEdits()).toBe(true);
+		});
+
+		it('should return true when apply_patch was called', () => {
+			const loop = createLoop('autopilot');
+			loop.addToolCallRound(createMockRound([ToolName.ApplyPatch]));
+			expect(loop.testHadCodeEdits()).toBe(true);
+		});
+
+		it('should return true when create_file was called', () => {
+			const loop = createLoop('autopilot');
+			loop.addToolCallRound(createMockRound([ToolName.CreateFile]));
+			expect(loop.testHadCodeEdits()).toBe(true);
+		});
+
+		it('should return true when multi_replace_string_in_file was called', () => {
+			const loop = createLoop('autopilot');
+			loop.addToolCallRound(createMockRound([ToolName.MultiReplaceString]));
+			expect(loop.testHadCodeEdits()).toBe(true);
+		});
+
+		it('should return true when edit_notebook_file was called', () => {
+			const loop = createLoop('autopilot');
+			loop.addToolCallRound(createMockRound([ToolName.EditNotebook]));
+			expect(loop.testHadCodeEdits()).toBe(true);
+		});
+
+		it('should detect edit tools in later rounds', () => {
+			const loop = createLoop('autopilot');
+			loop.addToolCallRound(createMockRound(['read_file']));
+			loop.addToolCallRound(createMockRound(['grep_search']));
+			loop.addToolCallRound(createMockRound([ToolName.ReplaceString]));
+			expect(loop.testHadCodeEdits()).toBe(true);
+		});
+	});
+
+	describe('getEditedFilePaths', () => {
+		function createRoundWithArgs(toolName: string, args: string): IToolCallRound {
+			return {
+				id: generateUuid(),
+				response: 'test response',
+				toolInputRetry: 0,
+				toolCalls: [{
+					id: generateUuid(),
+					name: toolName,
+					arguments: args,
+				}],
+			};
+		}
+
+		it('should return empty array when no edit tools were called', () => {
+			const loop = createLoop('autopilot');
+			loop.addToolCallRound(createMockRound(['read_file']));
+			expect(loop.testGetEditedFilePaths()).toEqual([]);
+		});
+
+		it('should extract filePath from replace_string_in_file', () => {
+			const loop = createLoop('autopilot');
+			loop.addToolCallRound(createRoundWithArgs(
+				ToolName.ReplaceString,
+				JSON.stringify({ filePath: '/home/user/project/src/index.ts', oldString: 'foo', newString: 'bar' })
+			));
+			const paths = loop.testGetEditedFilePaths();
+			expect(paths).toHaveLength(1);
+			expect(paths[0].fsPath).toBe('/home/user/project/src/index.ts');
+		});
+
+		it('should extract filePath from insert_edit_into_file', () => {
+			const loop = createLoop('autopilot');
+			loop.addToolCallRound(createRoundWithArgs(
+				ToolName.EditFile,
+				JSON.stringify({ filePath: '/home/user/project/src/app.ts', code: 'hello' })
+			));
+			const paths = loop.testGetEditedFilePaths();
+			expect(paths).toHaveLength(1);
+			expect(paths[0].fsPath).toBe('/home/user/project/src/app.ts');
+		});
+
+		it('should extract filePath from create_file', () => {
+			const loop = createLoop('autopilot');
+			loop.addToolCallRound(createRoundWithArgs(
+				ToolName.CreateFile,
+				JSON.stringify({ filePath: '/home/user/project/new-file.ts', content: 'export {}' })
+			));
+			const paths = loop.testGetEditedFilePaths();
+			expect(paths).toHaveLength(1);
+			expect(paths[0].fsPath).toBe('/home/user/project/new-file.ts');
+		});
+
+		it('should extract file paths from multi_replace_string_in_file replacements', () => {
+			const loop = createLoop('autopilot');
+			loop.addToolCallRound(createRoundWithArgs(
+				ToolName.MultiReplaceString,
+				JSON.stringify({
+					explanation: 'test',
+					replacements: [
+						{ filePath: '/home/user/project/a.ts', oldString: 'x', newString: 'y' },
+						{ filePath: '/home/user/project/b.ts', oldString: 'x', newString: 'y' },
+					]
+				})
+			));
+			const paths = loop.testGetEditedFilePaths();
+			expect(paths).toHaveLength(2);
+			expect(paths.map(p => p.fsPath)).toEqual(['/home/user/project/a.ts', '/home/user/project/b.ts']);
+		});
+
+		it('should extract file paths from apply_patch headers', () => {
+			const loop = createLoop('autopilot');
+			const patchText = [
+				'*** Begin Patch',
+				'*** Update File: /home/user/project/src/main.ts',
+				'@@ function hello()',
+				'-console.log("hello")',
+				'+console.log("world")',
+				'*** Add File: /home/user/project/src/new.ts',
+				'+export const x = 1;',
+				'*** End Patch',
+			].join('\n');
+			loop.addToolCallRound(createRoundWithArgs(
+				ToolName.ApplyPatch,
+				JSON.stringify({ input: patchText, explanation: 'test' })
+			));
+			const paths = loop.testGetEditedFilePaths();
+			expect(paths).toHaveLength(2);
+			expect(paths.map(p => p.fsPath)).toContain('/home/user/project/src/main.ts');
+			expect(paths.map(p => p.fsPath)).toContain('/home/user/project/src/new.ts');
+		});
+
+		it('should deduplicate file paths', () => {
+			const loop = createLoop('autopilot');
+			loop.addToolCallRound(createRoundWithArgs(
+				ToolName.ReplaceString,
+				JSON.stringify({ filePath: '/home/user/project/src/index.ts', oldString: 'a', newString: 'b' })
+			));
+			loop.addToolCallRound(createRoundWithArgs(
+				ToolName.ReplaceString,
+				JSON.stringify({ filePath: '/home/user/project/src/index.ts', oldString: 'c', newString: 'd' })
+			));
+			const paths = loop.testGetEditedFilePaths();
+			expect(paths).toHaveLength(1);
+		});
+
+		it('should handle malformed arguments gracefully', () => {
+			const loop = createLoop('autopilot');
+			loop.addToolCallRound(createRoundWithArgs(ToolName.ReplaceString, 'not valid json'));
+			loop.addToolCallRound(createRoundWithArgs(
+				ToolName.CreateFile,
+				JSON.stringify({ filePath: '/home/user/project/good.ts' })
+			));
+			const paths = loop.testGetEditedFilePaths();
+			expect(paths).toHaveLength(1);
+			expect(paths[0].fsPath).toBe('/home/user/project/good.ts');
+		});
+
+		it('should collect paths from multiple rounds and tool types', () => {
+			const loop = createLoop('autopilot');
+			loop.addToolCallRound(createRoundWithArgs(
+				ToolName.ReplaceString,
+				JSON.stringify({ filePath: '/home/user/project/a.ts', oldString: 'x', newString: 'y' })
+			));
+			loop.addToolCallRound(createRoundWithArgs(
+				ToolName.CreateFile,
+				JSON.stringify({ filePath: '/home/user/project/b.ts', content: '' })
+			));
+			loop.addToolCallRound(createRoundWithArgs(
+				ToolName.EditFile,
+				JSON.stringify({ filePath: '/home/user/project/c.ts', code: '' })
+			));
+			const paths = loop.testGetEditedFilePaths();
+			expect(paths).toHaveLength(3);
+		});
+	});
+
+	describe('performAutopilotCodeReview', () => {
+		function createRoundWithArgs(toolName: string, args: string): IToolCallRound {
+			return {
+				id: generateUuid(),
+				response: 'test response',
+				toolInputRetry: 0,
+				toolCalls: [{
+					id: generateUuid(),
+					name: toolName,
+					arguments: args,
+				}],
+			};
+		}
+
+		function createLoopWithEdits(permissionLevel: string): AutopilotTestToolCallingLoop {
+			const loop = createLoop(permissionLevel);
+			loop.setTaskCompleted(true);
+			loop.addToolCallRound(createRoundWithArgs(
+				ToolName.ReplaceString,
+				JSON.stringify({ filePath: '/home/user/project/src/index.ts', oldString: 'a', newString: 'b' })
+			));
+			return loop;
+		}
+
+		beforeEach(() => {
+			mockReviewFileChanges.mockReset();
+		});
+
+		it('should return false when permissionLevel is not autopilot', async () => {
+			const loop = createLoopWithEdits('agent');
+			const result = await loop.testPerformAutopilotCodeReview(tokenSource.token);
+			expect(result).toBe(false);
+			expect(mockReviewFileChanges).not.toHaveBeenCalled();
+		});
+
+		it('should return false when config is disabled', async () => {
+			const configService = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService)) as InMemoryConfigurationService;
+			await configService.setConfig(ConfigKey.Advanced.AutopilotCodeReviewEnabled, false);
+			const loop = createLoopWithEdits('autopilot');
+			const result = await loop.testPerformAutopilotCodeReview(tokenSource.token);
+			expect(result).toBe(false);
+			expect(mockReviewFileChanges).not.toHaveBeenCalled();
+		});
+
+		it('should return false when task is not completed', async () => {
+			const configService = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService)) as InMemoryConfigurationService;
+			await configService.setConfig(ConfigKey.Advanced.AutopilotCodeReviewEnabled, true);
+			const loop = createLoop('autopilot');
+			// taskCompleted defaults to false
+			loop.addToolCallRound(createRoundWithArgs(
+				ToolName.ReplaceString,
+				JSON.stringify({ filePath: '/home/user/project/src/index.ts', oldString: 'a', newString: 'b' })
+			));
+			const result = await loop.testPerformAutopilotCodeReview(tokenSource.token);
+			expect(result).toBe(false);
+		});
+
+		it('should return false when no code edits were made', async () => {
+			const configService = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService)) as InMemoryConfigurationService;
+			await configService.setConfig(ConfigKey.Advanced.AutopilotCodeReviewEnabled, true);
+			const loop = createLoop('autopilot');
+			loop.setTaskCompleted(true);
+			loop.addToolCallRound(createMockRound(['read_file']));
+			const result = await loop.testPerformAutopilotCodeReview(tokenSource.token);
+			expect(result).toBe(false);
+		});
+
+		it('should return false when token is cancelled', async () => {
+			const configService = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService)) as InMemoryConfigurationService;
+			await configService.setConfig(ConfigKey.Advanced.AutopilotCodeReviewEnabled, true);
+			const loop = createLoopWithEdits('autopilot');
+			tokenSource.cancel();
+			const result = await loop.testPerformAutopilotCodeReview(tokenSource.token);
+			expect(result).toBe(false);
+		});
+
+		it('should return true and set stopHookReason when review finds comments', async () => {
+			const configService = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService)) as InMemoryConfigurationService;
+			await configService.setConfig(ConfigKey.Advanced.AutopilotCodeReviewEnabled, true);
+			const reviewResult: CodeReviewResult = {
+				type: 'success',
+				comments: [{
+					uri: URI.file('/home/user/project/src/index.ts'),
+					range: { start: { line: 0, character: 0 }, end: { line: 0, character: 10 } } as any,
+					body: 'Consider using const instead of let',
+					kind: 'suggestion',
+					severity: 'warning',
+				}],
+			};
+			mockReviewFileChanges.mockResolvedValue(reviewResult);
+			const loop = createLoopWithEdits('autopilot');
+			const result = await loop.testPerformAutopilotCodeReview(tokenSource.token);
+			expect(result).toBe(true);
+			expect(mockReviewFileChanges).toHaveBeenCalledOnce();
+		});
+
+		it('should return false when review finds no comments', async () => {
+			const configService = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService)) as InMemoryConfigurationService;
+			await configService.setConfig(ConfigKey.Advanced.AutopilotCodeReviewEnabled, true);
+			mockReviewFileChanges.mockResolvedValue({ type: 'success', comments: [] });
+			const loop = createLoopWithEdits('autopilot');
+			const result = await loop.testPerformAutopilotCodeReview(tokenSource.token);
+			expect(result).toBe(false);
+		});
+
+		it('should return false when review returns an error', async () => {
+			const configService = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService)) as InMemoryConfigurationService;
+			await configService.setConfig(ConfigKey.Advanced.AutopilotCodeReviewEnabled, true);
+			mockReviewFileChanges.mockResolvedValue({ type: 'error', reason: 'Code review is not enabled' });
+			const loop = createLoopWithEdits('autopilot');
+			const result = await loop.testPerformAutopilotCodeReview(tokenSource.token);
+			expect(result).toBe(false);
+		});
+
+		it('should return false and not crash when reviewFileChanges throws', async () => {
+			const configService = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService)) as InMemoryConfigurationService;
+			await configService.setConfig(ConfigKey.Advanced.AutopilotCodeReviewEnabled, true);
+			mockReviewFileChanges.mockRejectedValue(new Error('Network error'));
+			const loop = createLoopWithEdits('autopilot');
+			const result = await loop.testPerformAutopilotCodeReview(tokenSource.token);
+			expect(result).toBe(false);
+		});
+
+		it('should not run review a second time', async () => {
+			const configService = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService)) as InMemoryConfigurationService;
+			await configService.setConfig(ConfigKey.Advanced.AutopilotCodeReviewEnabled, true);
+			mockReviewFileChanges.mockResolvedValue({ type: 'success', comments: [] });
+			const loop = createLoopWithEdits('autopilot');
+			await loop.testPerformAutopilotCodeReview(tokenSource.token);
+			// Second call should be a no-op because autopilotCodeReviewCompleted is true
+			loop.setTaskCompleted(true);
+			const result = await loop.testPerformAutopilotCodeReview(tokenSource.token);
+			expect(result).toBe(false);
+			expect(mockReviewFileChanges).toHaveBeenCalledOnce();
+		});
+
+		it('should pass pre-edit snapshot as baseContent when available', async () => {
+			const configService = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService)) as InMemoryConfigurationService;
+			await configService.setConfig(ConfigKey.Advanced.AutopilotCodeReviewEnabled, true);
+			mockReviewFileChanges.mockResolvedValue({ type: 'success', comments: [] });
+
+			const loop = createLoopWithEdits('autopilot');
+			loop.setPreEditSnapshot('/home/user/project/src/index.ts', 'const original = true;');
+			await loop.testPerformAutopilotCodeReview(tokenSource.token);
+
+			expect(mockReviewFileChanges).toHaveBeenCalledOnce();
+			const input = mockReviewFileChanges.mock.calls[0][1];
+			expect(input.files[0].baseContent).toBe('const original = true;');
+		});
+
+		it('should pass undefined baseContent when no snapshot exists', async () => {
+			const configService = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService)) as InMemoryConfigurationService;
+			await configService.setConfig(ConfigKey.Advanced.AutopilotCodeReviewEnabled, true);
+			mockReviewFileChanges.mockResolvedValue({ type: 'success', comments: [] });
+
+			const loop = createLoopWithEdits('autopilot');
+			// No snapshot set — simulates a file we couldn't capture
+			await loop.testPerformAutopilotCodeReview(tokenSource.token);
+
+			expect(mockReviewFileChanges).toHaveBeenCalledOnce();
+			const input = mockReviewFileChanges.mock.calls[0][1];
+			expect(input.files[0].baseContent).toBeUndefined();
+		});
+
+		it('should forward the cancellation token to reviewFileChanges', async () => {
+			const configService = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService)) as InMemoryConfigurationService;
+			await configService.setConfig(ConfigKey.Advanced.AutopilotCodeReviewEnabled, true);
+			mockReviewFileChanges.mockResolvedValue({ type: 'success', comments: [] });
+
+			const loop = createLoopWithEdits('autopilot');
+			await loop.testPerformAutopilotCodeReview(tokenSource.token);
+
+			expect(mockReviewFileChanges).toHaveBeenCalledOnce();
+			const passedToken = mockReviewFileChanges.mock.calls[0][2];
+			expect(passedToken).toBe(tokenSource.token);
 		});
 	});
 });

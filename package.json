@@ -4317,6 +4317,15 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.autopilot.codeReview.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.autopilot.codeReview.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.agent.largeToolResultsToDisk.enabled": {
 						"type": "boolean",
 						"default": true,
