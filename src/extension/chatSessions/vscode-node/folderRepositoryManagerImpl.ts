@@ -443,28 +443,6 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		modifiedFiles: Array<{ uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number }>,
 		token: vscode.CancellationToken
 	): Promise<'move' | 'copy' | 'skip' | 'cancel'> {
-		if (!this.toolsService.getTool('vscode_get_modified_files_confirmation')) {
-			// Fallback to simple confirmation without file list
-			const copyChanges = l10n.t('Copy Changes');
-			const moveChanges = l10n.t('Move Changes');
-			const skipChanges = l10n.t('Skip Changes');
-			const cancel = l10n.t('Cancel');
-			const input = {
-				title: l10n.t('Uncommitted Changes'),
-				message: l10n.t('Some repositories have uncommitted changes. Should these changes be included in the new worktrees?'),
-				buttons: [copyChanges, moveChanges, skipChanges, cancel]
-			};
-			const result = await this.toolsService.invokeTool(ToolName.CoreConfirmationToolWithOptions, { input, toolInvocationToken }, token);
-			const firstPart = result.content.at(0);
-			const selection = firstPart instanceof LanguageModelTextPart ? firstPart.value : undefined;
-			switch (selection?.toUpperCase()) {
-				case moveChanges.toUpperCase(): return 'move';
-				case copyChanges.toUpperCase(): return 'copy';
-				case skipChanges.toUpperCase(): return 'skip';
-				default: return 'cancel';
-			}
-		}
-
 		const title = l10n.t('Uncommitted Changes');
 		const message = l10n.t('Some repositories have uncommitted changes. Should these changes be included in the new worktrees?');
 		const copyChanges = l10n.t('Copy Changes');
