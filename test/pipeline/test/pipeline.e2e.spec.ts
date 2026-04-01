@@ -9,19 +9,22 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { runInputPipeline, RunPipelineOptions } from '../pipeline';
 import { allRecords, fixtures } from './fixtures/fixtureData';
 
+function snapshotPath(name: string): string {
+	return path.join(__dirname, 'expected', name);
+}
+
 /**
  * End-to-end tests for the nes-datagen pipeline.
  *
  * These tests exercise the full `runInputPipeline` with real fixture data,
  * verifying parsing → replay → prompt generation → response generation → output.
  *
- * Expected prompt/response contents are stored as separate files under
+ * Expected prompt/response contents are stored as separate snapshot files under
  * `test/pipeline/test/expected/` for easy reading and inspection.
+ * Run `vitest --update` to regenerate them.
  */
 
-const fixturesDir = path.join(__dirname, 'fixtures');
-const expectedDir = path.join(__dirname, 'expected');
-const configPath = path.join(fixturesDir, 'config.json');
+const configPath = path.join(__dirname, 'fixtures', 'config.json');
 
 let tmpDir: string;
 let inputPath: string;
@@ -88,20 +91,6 @@ async function runPipeline(opts?: Partial<RunPipelineOptions>): Promise<{
 	const samples = JSON.parse(outputContents) as OutputSample[];
 
 	return { samples, logs };
-}
-
-async function readExpectedFile(filename: string): Promise<string> {
-	return fs.readFile(path.join(expectedDir, filename), 'utf-8');
-}
-
-async function writeExpectedFileIfMissing(filename: string, content: string): Promise<void> {
-	const filePath = path.join(expectedDir, filename);
-	try {
-		await fs.access(filePath);
-	} catch {
-		await fs.mkdir(expectedDir, { recursive: true });
-		await fs.writeFile(filePath, content, 'utf-8');
-	}
 }
 
 // ---------------------------------------------------------------------------
@@ -214,55 +203,37 @@ describe('nes-datagen pipeline e2e', () => {
 		test('TypeScript sample prompt matches expected file', async () => {
 			const tsSample = result.samples.find(s => s.metadata.language === 'typescript')!;
 			const userPrompt = tsSample.messages.find(m => m.role === 'user')!.content;
-
-			await writeExpectedFileIfMissing('ts-user-prompt.txt', userPrompt);
-			const expected = await readExpectedFile('ts-user-prompt.txt');
-			expect(userPrompt).toBe(expected);
+			await expect(userPrompt).toMatchFileSnapshot(snapshotPath('ts-user-prompt.txt'));
 		});
 
 		test('TypeScript sample system prompt matches expected file', async () => {
 			const tsSample = result.samples.find(s => s.metadata.language === 'typescript')!;
 			const systemPrompt = tsSample.messages.find(m => m.role === 'system')!.content;
-
-			await writeExpectedFileIfMissing('ts-system-prompt.txt', systemPrompt);
-			const expected = await readExpectedFile('ts-system-prompt.txt');
-			expect(systemPrompt).toBe(expected);
+			await expect(systemPrompt).toMatchFileSnapshot(snapshotPath('ts-system-prompt.txt'));
 		});
 
 		test('TypeScript sample response matches expected file', async () => {
 			const tsSample = result.samples.find(s => s.metadata.language === 'typescript')!;
 			const response = tsSample.messages.find(m => m.role === 'assistant')!.content;
-
-			await writeExpectedFileIfMissing('ts-assistant-response.txt', response);
-			const expected = await readExpectedFile('ts-assistant-response.txt');
-			expect(response).toBe(expected);
+			await expect(response).toMatchFileSnapshot(snapshotPath('ts-assistant-response.txt'));
 		});
 
 		test('Python sample prompt matches expected file', async () => {
 			const pySample = result.samples.find(s => s.metadata.language === 'python')!;
 			const userPrompt = pySample.messages.find(m => m.role === 'user')!.content;
-
-			await writeExpectedFileIfMissing('py-user-prompt.txt', userPrompt);
-			const expected = await readExpectedFile('py-user-prompt.txt');
-			expect(userPrompt).toBe(expected);
+			await expect(userPrompt).toMatchFileSnapshot(snapshotPath('py-user-prompt.txt'));
 		});
 
 		test('Python sample system prompt matches expected file', async () => {
 			const pySample = result.samples.find(s => s.metadata.language === 'python')!;
 			const systemPrompt = pySample.messages.find(m => m.role === 'system')!.content;
-
-			await writeExpectedFileIfMissing('py-system-prompt.txt', systemPrompt);
-			const expected = await readExpectedFile('py-system-prompt.txt');
-			expect(systemPrompt).toBe(expected);
+			await expect(systemPrompt).toMatchFileSnapshot(snapshotPath('py-system-prompt.txt'));
 		});
 
 		test('Python sample response matches expected file', async () => {
 			const pySample = result.samples.find(s => s.metadata.language === 'python')!;
 			const response = pySample.messages.find(m => m.role === 'assistant')!.content;
-
-			await writeExpectedFileIfMissing('py-assistant-response.txt', response);
-			const expected = await readExpectedFile('py-assistant-response.txt');
-			expect(response).toBe(expected);
+			await expect(response).toMatchFileSnapshot(snapshotPath('py-assistant-response.txt'));
 		});
 	});
 
