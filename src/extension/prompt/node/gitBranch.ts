@@ -93,7 +93,7 @@ export class GitBranchNameGenerator {
 	}
 }
 
-function normalizeBranchName(branchName: string): string {
+export function normalizeBranchName(branchName: string): string {
 	// Only support alphanumeric characters and dashes for simplicity.
 	let normalized = branchName.replace(/[^a-zA-Z0-9\-]/g, '').toLowerCase();
 	// Collapse consecutive dots (..) into a single dot
