@@ -5619,17 +5619,17 @@
 			"chat/customizations/create": [
 				{
 					"command": "copilot.claude.agents",
-					"when": "aiCustomizationManagementHarness == claude-code && aiCustomizationManagementSection == agents",
+					"when": "chatCustomizationSessionType == claude-code && chatCustomizationSection == agents",
 					"group": "navigation@1"
 				},
 				{
 					"command": "copilot.claude.hooks",
-					"when": "aiCustomizationManagementHarness == claude-code && aiCustomizationManagementSection == hooks",
+					"when": "chatCustomizationSessionType == claude-code && chatCustomizationSection == hooks",
 					"group": "navigation@1"
 				},
 				{
 					"command": "copilot.claude.memory",
-					"when": "aiCustomizationManagementHarness == claude-code && aiCustomizationManagementSection == instructions",
+					"when": "chatCustomizationSessionType == claude-code && chatCustomizationSection == instructions",
 					"group": "navigation@1"
 				}
 			]
