@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { BugIndicatingError } from '../../../util/vs/base/common/errors';
 import { Position } from '../../../util/vs/editor/common/core/position';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { PositionOffsetTransformer } from '../../../util/vs/editor/common/core/text/positionToOffsetImpl';
@@ -32,11 +33,15 @@ export class CurrentDocument {
 
 	/** Returns the full text of the line containing the cursor. */
 	lineWithCursor(): string {
-		return this.lines[this.cursorLineOffset];
+		const line = this.lines.at(this.cursorLineOffset);
+		if (line === undefined) {
+			throw new BugIndicatingError(`CurrentDocument#lineWithCursor: cursor is out of bounds: cursor: ${this.cursorLineOffset}, doc line count: ${this.lines.length}`);
+		}
+		return line;
 	}
 
 	textAfterCursor(): string {
-		const line = this.lineWithCursor() ?? '';
+		const line = this.lineWithCursor();
 		return line.substring(this.cursorPosition.column - 1);
 	}
 
