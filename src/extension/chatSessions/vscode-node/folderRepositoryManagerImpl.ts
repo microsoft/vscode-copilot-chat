@@ -252,7 +252,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 
 		// Check for uncommitted changes and prompt user before creating worktree
 		let uncommittedChangesAction: 'move' | 'copy' | 'skip' | 'cancel' | undefined = undefined;
-		if ((!sessionId || isUntitledSessionId(sessionId)) && !worktreeProperties) {
+		if (!worktreeProperties) {
 			uncommittedChangesAction = await this.promptForUncommittedChangesAction(sessionId, repository, branch, toolInvocationToken, token);
 			if (uncommittedChangesAction === 'cancel') {
 				return { folder, repository, worktree, worktreeProperties, trusted: true, cancelled: true };
@@ -650,6 +650,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		repository: NonNullable<ReturnType<IGitService['activeRepository']['get']>>,
 		token: vscode.CancellationToken
 	): Promise<Array<{ uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number }>> {
+		this.workspaceFolderService.clearWorkspaceChanges(repositoryUri);
 		const workspaceChanges = await this.workspaceFolderService.getWorkspaceChanges(repositoryUri) ?? [];
 		if (workspaceChanges.length > 0) {
 			return workspaceChanges.map(change => this.toModifiedFileConfirmationEntry(change));
