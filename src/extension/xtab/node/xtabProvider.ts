@@ -283,16 +283,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		// Log user's raw aggressiveness setting when explicitly changed from default
 		const userAggressivenessSetting = this.configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsAggressiveness, this.expService);
-		if (userAggressivenessSetting !== AggressivenessSetting.Default) {
-			telemetryBuilder.setUserAggressivenessSetting(userAggressivenessSetting);
-		}
+		telemetryBuilder.setUserAggressivenessSetting(userAggressivenessSetting);
 
-		// Log aggressiveness level and user happiness score when using an aggressiveness-aware prompting strategy
-		if (isAggressivenessStrategy(promptOptions.promptingStrategy)) {
-			telemetryBuilder.setXtabAggressivenessLevel(aggressivenessLevel);
-			if (userHappinessScore !== undefined) {
-				telemetryBuilder.setXtabUserHappinessScore(userHappinessScore);
-			}
+		// Log aggressiveness level and user happiness score
+		telemetryBuilder.setXtabAggressivenessLevel(aggressivenessLevel);
+		if (userHappinessScore !== undefined) {
+			telemetryBuilder.setXtabUserHappinessScore(userHappinessScore);
 		}
 
 		const langCtx = await this.getAndProcessLanguageContext(
