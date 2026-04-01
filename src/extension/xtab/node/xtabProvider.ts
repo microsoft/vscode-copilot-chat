@@ -849,10 +849,11 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			const pseudoEditWindow = currentDocument.transformer.getOffsetRange(new Range(clippedTaggedCurrentDoc.keptRange.start + 1, 1, clippedTaggedCurrentDoc.keptRange.endExclusive, lastLineLength + 1));
 			return yield* XtabCustomDiffPatchResponseHandler.handleResponse(
 				linesStream,
-				request.documentBeforeEdits,
+				currentDocument,
 				activeDoc.id,
 				activeDoc.workspaceRoot,
 				pseudoEditWindow,
+				tracer,
 			);
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.UnifiedWithXml) {
 			const linesIter = linesStream[Symbol.asyncIterator]();
