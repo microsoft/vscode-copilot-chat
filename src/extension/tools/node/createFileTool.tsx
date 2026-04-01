@@ -21,7 +21,7 @@ import { extname } from '../../../util/vs/base/common/resources';
 import { count } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString, Position as ExtPosition, TextEdit } from '../../../vscodeTypes';
+import { Position as ExtPosition, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString, TextEdit } from '../../../vscodeTypes';
 import { CodeBlockProcessor } from '../../codeBlocks/node/codeBlockProcessor';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
