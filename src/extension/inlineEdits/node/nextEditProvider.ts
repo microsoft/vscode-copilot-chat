@@ -523,7 +523,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		// Check if we can reuse the regular pending request
 		const pendingRequestStillCurrent = documentAtInvocationTime.value === this._pendingStatelessNextEditRequest?.documentBeforeEdits.value;
-		const cursorWithinPendingEditWindow = !pendingRequestStillCurrent || !this._pendingStatelessNextEditRequest || cursorInRequestEditWindow(this._pendingStatelessNextEditRequest);
+		const cursorWithinPendingEditWindow = !this._pendingStatelessNextEditRequest || cursorInRequestEditWindow(this._pendingStatelessNextEditRequest);
 		const existingNextEditRequest = (pendingRequestStillCurrent || nesConfigs.isAsyncCompletions) && cursorWithinPendingEditWindow
 			&& !this._pendingStatelessNextEditRequest?.cancellationTokenSource.token.isCancellationRequested
 			&& this._pendingStatelessNextEditRequest || undefined;
