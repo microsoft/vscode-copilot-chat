@@ -63,6 +63,19 @@ declare module 'vscode' {
 		 * when this provider is active.
 		 */
 		readonly unsupportedTypes?: readonly ChatSessionCustomizationType[];
+
+		/**
+		 * When `true`, the "Generate with AI" sparkle button is replaced
+		 * with a plain "New" button for manual file creation.
+		 */
+		readonly hideGenerateButton?: boolean;
+
+		/**
+		 * Workspace sub-paths that this provider recognizes for file creation.
+		 * When set, the directory picker for new customization files only
+		 * offers workspace directories under these sub-paths.
+		 */
+		readonly workspaceSubpaths?: readonly string[];
 	}
 
 	/**

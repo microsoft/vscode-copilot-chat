@@ -73,6 +73,8 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 				vscode.ChatSessionCustomizationType.Prompt,
 				vscode.ChatSessionCustomizationType.Plugins,
 			],
+			hideGenerateButton: true,
+			workspaceSubpaths: ['.claude'],
 		};
 	}
 

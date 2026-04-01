@@ -139,6 +139,14 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(unsupported).toHaveLength(1);
 			expect(unsupported![0]).toBe(FakeChatSessionCustomizationType.Hook);
 		});
+
+		it('hides generate button', () => {
+			expect(CopilotCLICustomizationProvider.metadata.hideGenerateButton).toBe(true);
+		});
+
+		it('restricts workspace subpaths', () => {
+			expect(CopilotCLICustomizationProvider.metadata.workspaceSubpaths).toEqual(['.github', '.copilot', '.agents', '.claude']);
+		});
 	});
 
 	describe('provideChatSessionCustomizations', () => {

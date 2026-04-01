@@ -149,6 +149,14 @@ describe('ClaudeCustomizationProvider', () => {
 			expect(unsupported![0]).toBe(FakeChatSessionCustomizationType.Prompt);
 			expect(unsupported![1]).toBe(FakeChatSessionCustomizationType.Plugins);
 		});
+
+		it('hides generate button', () => {
+			expect(ClaudeCustomizationProvider.metadata.hideGenerateButton).toBe(true);
+		});
+
+		it('restricts workspace subpaths to .claude', () => {
+			expect(ClaudeCustomizationProvider.metadata.workspaceSubpaths).toEqual(['.claude']);
+		});
 	});
 
 	describe('agents from SDK', () => {
