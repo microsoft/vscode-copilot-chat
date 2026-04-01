@@ -213,25 +213,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 				existing.hasOwnSpans = true;
 				// Now that we know this is a real session, replay pending core events
 				if (!existing.parentSessionId) {
-					this._bufferEntry(sessionId, {
-						ts: Date.now(),
-						dur: 0,
-						sid: sessionId,
-						type: 'session_start',
-						name: 'session_start',
-						spanId: `session-start-${sessionId}`,
-						status: 'ok',
-						attrs: {
-							copilotVersion: this._envService.getVersion(),
-							vscodeVersion: this._envService.vscodeVersion,
-						},
-					});
-					for (const entry of this._pendingCoreEvents) {
-						this._bufferEntry(sessionId, { ...entry, sid: sessionId });
-					}
-					if (this._modelSnapshot) {
-						this._enqueueModelSnapshotWrite(existing);
-					}
+					this._emitSessionStartAndReplay(sessionId, existing);
 				}
 			}
 			return;
@@ -303,29 +285,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		// Replay pending core events only for parent sessions that have their own spans
 		// (not for sessions auto-created as a side effect of child parent references)
 		if (!childInfo && hasOwnSpans) {
-			// Emit a session_start entry with version metadata
-			this._bufferEntry(sessionId, {
-				ts: Date.now(),
-				dur: 0,
-				sid: sessionId,
-				type: 'session_start',
-				name: 'session_start',
-				spanId: `session-start-${sessionId}`,
-				status: 'ok',
-				attrs: {
-					copilotVersion: this._envService.getVersion(),
-					vscodeVersion: this._envService.vscodeVersion,
-				},
-			});
-
-			for (const entry of this._pendingCoreEvents) {
-				this._bufferEntry(sessionId, { ...entry, sid: sessionId });
-			}
-
-			// Write cached model snapshot as models.json in the session directory
-			if (this._modelSnapshot) {
-				this._enqueueModelSnapshotWrite(session);
-			}
+			this._emitSessionStartAndReplay(sessionId, session);
 		}
 
 		// Start auto-flush timer if this is the first active session
@@ -477,6 +437,32 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			await fs.promises.writeFile(fileUri.fsPath, fileName.endsWith('.json') ? JSON.stringify({ content }, null, 2) : content, 'utf-8');
 		} catch (err) {
 			this._logService.error(`[ChatDebugFileLogger] Failed to write ${fileName}`, err);
+		}
+	}
+
+	/**
+	 * Emit a session_start entry, replay cached core events, and write the model snapshot.
+	 * Called when a parent session is first promoted to hasOwnSpans.
+	 */
+	private _emitSessionStartAndReplay(sessionId: string, session: IActiveLogSession): void {
+		this._bufferEntry(sessionId, {
+			ts: Date.now(),
+			dur: 0,
+			sid: sessionId,
+			type: 'session_start',
+			name: 'session_start',
+			spanId: `session-start-${sessionId}`,
+			status: 'ok',
+			attrs: {
+				copilotVersion: this._envService.getVersion(),
+				vscodeVersion: this._envService.vscodeVersion,
+			},
+		});
+		for (const entry of this._pendingCoreEvents) {
+			this._bufferEntry(sessionId, { ...entry, sid: sessionId });
+		}
+		if (this._modelSnapshot) {
+			this._enqueueModelSnapshotWrite(session);
 		}
 	}
 

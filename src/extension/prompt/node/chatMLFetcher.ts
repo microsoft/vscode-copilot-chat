@@ -246,8 +246,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				// Extract and set structured prompt sections for the debug panel
 				if (otelInferenceSpan) {
 					// Support both Chat Completions API (messages) and Responses API (input) formats
-					const body = requestBody as { messages?: ReadonlyArray<{ role?: string; content?: string | unknown[]; tool_calls?: unknown[] }>; input?: ReadonlyArray<{ role?: string; content?: string | unknown[] }>; system?: string | unknown[]; instructions?: string };
-					const capiMessages = body.messages ?? body.input;
+					const capiMessages = (requestBody.messages ?? requestBody.input) as ReadonlyArray<{ role?: string; content?: string | unknown[] }> | undefined;
 					// User request: last user-role message
 					const userMessages = capiMessages?.filter(m => m.role === 'user');
 					const lastUserMsg = userMessages?.[userMessages.length - 1];
@@ -260,8 +259,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					// System instructions — check messages array, top-level system (Anthropic), or instructions (Responses API)
 					const systemMsg = capiMessages?.find(m => m.role === 'system');
 					const systemContent = systemMsg?.content
-						?? body.system
-						?? body.instructions;
+						?? (requestBody as Record<string, unknown>).system
+						?? (requestBody as Record<string, unknown>).instructions;
 					if (systemContent) {
 						const systemText = typeof systemContent === 'string'
 							? systemContent
@@ -272,8 +271,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 				// Always capture full request content for the debug panel
 				if (otelInferenceSpan) {
-					const body = requestBody as { messages?: ReadonlyArray<{ role?: string; content?: string | unknown[] }>; input?: ReadonlyArray<{ role?: string; content?: string | unknown[] }> };
-					const capiMessages = body.messages ?? body.input;
+					const capiMessages = (requestBody.messages ?? requestBody.input) as ReadonlyArray<{ role?: string; content?: string | unknown[] }> | undefined;
 					if (capiMessages) {
 						// Normalize non-string content (Anthropic arrays, Responses API parts) to strings for OTel schema
 						const normalized = capiMessages.map(m => ({
@@ -400,17 +398,18 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						if (parts.length > 0) {
 							otelInferenceSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, truncateForOTel(JSON.stringify([{ role: 'assistant', parts }])));
 						}
-						// Capture reasoning/thinking text if present (skip encrypted thinking)
-						const thinkingTexts = streamRecorder.deltas
-							.filter(d => d.thinking && !isEncryptedThinkingDelta(d.thinking) && d.thinking.text)
-							.map(d => {
-								const t = d.thinking!;
-								if ('encrypted' in t) { return ''; }
-								return Array.isArray(t.text) ? t.text.join('') : (t.text ?? '');
-							});
-						const reasoningText = thinkingTexts.join('');
-						if (reasoningText) {
-							otelInferenceSpan.setAttribute(CopilotChatAttr.REASONING_CONTENT, truncateForOTel(reasoningText));
+						// Capture reasoning/thinking text if present
+						const hasThinking = streamRecorder.deltas.some(d => d.thinking);
+						if (hasThinking) {
+							const thinkingTexts = streamRecorder.deltas
+								.filter(d => d.thinking && !isEncryptedThinkingDelta(d.thinking) && d.thinking.text)
+								.map(d => {
+									const t = d.thinking!;
+									if ('encrypted' in t) { return ''; }
+									return Array.isArray(t.text) ? t.text.join('') : (t.text ?? '');
+								});
+							const reasoningText = thinkingTexts.join('');
+							otelInferenceSpan.setAttribute(CopilotChatAttr.REASONING_CONTENT, truncateForOTel(reasoningText || '[encrypted]'));
 						}
 					}
 
