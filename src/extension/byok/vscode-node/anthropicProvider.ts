@@ -24,8 +24,9 @@ import { toErrorMessage } from '../../../util/common/errorMessage';
 import { RecordedProgress } from '../../../util/common/progressRecorder';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { anthropicMessagesToRawMessagesForLogging, apiMessageToAnthropicMessage } from '../common/anthropicMessageConverter';
-import { BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, LMResponsePart } from '../common/byokProvider';
+import { BYOKKnownModels, BYOKModelCapabilities, LMResponsePart } from '../common/byokProvider';
 import { AbstractLanguageModelChatProvider, ExtendedLanguageModelChatInformation, LanguageModelChatConfiguration } from './abstractLanguageModelChatProvider';
+import { byokKnownModelsToAPIInfoWithEffort } from './byokModelInfo';
 import { IBYOKStorageService } from './byokStorageService';
 
 export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
@@ -86,7 +87,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 					};
 				}
 			}
-			return byokKnownModelsToAPIInfo(this._name, modelList);
+			return byokKnownModelsToAPIInfoWithEffort(this._name, modelList);
 		} catch (error) {
 			this._logService.error(error, `Error fetching available ${AnthropicLMProvider.providerName} models`);
 			throw new Error(error.message ? error.message : error);
@@ -262,8 +263,9 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 			}
 
 			const rawEffort = options.modelConfiguration?.reasoningEffort;
-			const effort = supportsAdaptiveThinking && typeof rawEffort === 'string'
-				? rawEffort as 'low' | 'medium' | 'high'
+			const supportsEffort = modelCapabilities?.supportsReasoningEffort;
+			const effort = supportsEffort && typeof rawEffort === 'string' && supportsEffort.includes(rawEffort)
+				? rawEffort as 'low' | 'medium' | 'high' | 'max'
 				: undefined;
 
 			const params: Anthropic.Beta.Messages.MessageCreateParamsStreaming = {

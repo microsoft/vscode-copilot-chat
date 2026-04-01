@@ -62,8 +62,6 @@ class NullAgentSessionsWorkspace implements IAgentSessionsWorkspace {
 }
 
 class NullChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFolderService>() {
-	override getRecentFolders = vi.fn(async () => []);
-	override deleteRecentFolder = vi.fn(async () => { });
 	override deleteTrackedWorkspaceFolder = vi.fn(async () => { });
 	override trackSessionWorkspaceFolder = vi.fn(async () => { });
 	override getSessionWorkspaceFolder = vi.fn(async () => undefined);
@@ -149,7 +147,7 @@ describe('CopilotCLISessionService', () => {
 						}
 					}();
 				}
-				return disposables.add(new CopilotCLISession(workspaceInfo, agentName, sdkSession, logService, workspaceService, new MockChatSessionMetadataStore(), instantiationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' }))));
+				return disposables.add(new CopilotCLISession(workspaceInfo, agentName, sdkSession, [], logService, workspaceService, new MockChatSessionMetadataStore(), instantiationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' }))));
 			}
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);

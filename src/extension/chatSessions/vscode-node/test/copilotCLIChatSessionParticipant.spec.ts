@@ -54,6 +54,7 @@ import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../..
 import { CustomSessionTitleService } from '../../copilotcli/vscode-node/customSessionTitleServiceImpl';
 import { MockChatPromptFileService } from '../../copilotcli/vscode-node/test/testHelpers';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant } from '../copilotCLIChatSessionsContribution';
+import { ICopilotCLIFolderMruService } from '../copilotCLIFolderMru';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
 import { CopilotCLIFolderRepositoryManager } from '../folderRepositoryManagerImpl';
 
@@ -126,7 +127,6 @@ class FakeToolsService extends mock<IToolsService>() {
 class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFolderService>() {
 	private _sessionWorkspaceFolders = new Map<string, vscode.Uri>();
 	private _sessionWorkspaceFolderRepositories = new Map<string, vscode.Uri | undefined>();
-	private _recentFolders: { folder: vscode.Uri; lastAccessTime: number }[] = [];
 	private _workspaceChanges = new Map<string, readonly ChatSessionWorktreeFile[] | undefined>();
 	override trackSessionWorkspaceFolder = vi.fn(async (sessionId: string, workspaceFolderUri: string, repositoryFolderUri?: string) => {
 		this._sessionWorkspaceFolders.set(sessionId, vscode.Uri.file(workspaceFolderUri));
@@ -152,26 +152,9 @@ class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFo
 			timestamp: Date.now()
 		};
 	});
-	override getRecentFolders = vi.fn((): Promise<{ folder: vscode.Uri; lastAccessTime: number }[]> => {
-		return Promise.resolve(this._recentFolders);
-	});
 	override getWorkspaceChanges = vi.fn(async (workspaceFolderUri: vscode.Uri): Promise<readonly ChatSessionWorktreeFile[] | undefined> => {
 		return this._workspaceChanges.get(workspaceFolderUri.toString());
 	});
-	setTestRecentFolders(folders: { folder: vscode.Uri; lastAccessTime: number }[]): void {
-		this._recentFolders = folders;
-	}
-	setTestSessionWorkspaceFolder(sessionId: string, folder: vscode.Uri): void {
-		this._sessionWorkspaceFolders.set(sessionId, folder);
-	}
-
-	setTestSessionWorkspaceFolderEntry(sessionId: string, folder: vscode.Uri, repository?: vscode.Uri): void {
-		this._sessionWorkspaceFolders.set(sessionId, folder);
-		this._sessionWorkspaceFolderRepositories.set(sessionId, repository);
-	}
-	setTestWorkspaceChanges(folder: vscode.Uri, changes: readonly ChatSessionWorktreeFile[] | undefined): void {
-		this._workspaceChanges.set(folder.toString(), changes);
-	}
 	override clearWorkspaceChanges(workspaceFolderUri: vscode.Uri): void {
 		this._workspaceChanges.delete(workspaceFolderUri.toString());
 	}
@@ -390,7 +373,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 						}
 					}();
 				}
-				const session = new TestCopilotCLISession(workspaceInfo, agentName, sdkSession, logService, workspaceService, new MockChatSessionMetadataStore(), instantiationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })));
+				const session = new TestCopilotCLISession(workspaceInfo, agentName, sdkSession, [], logService, workspaceService, new MockChatSessionMetadataStore(), instantiationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })));
 				cliSessions.push(session);
 				return disposables.add(session);
 			}
@@ -764,7 +747,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			configurationService,
 			customSessionTitleService,
 			new MockExtensionContext() as unknown as IVSCodeExtensionContext,
-			logService
+			logService,
+			new (mock<ICopilotCLIFolderMruService>())(),
 		);
 		const invalidParticipant = new CopilotCLIChatSessionParticipant(
 			invalidContentProvider,

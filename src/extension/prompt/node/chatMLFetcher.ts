@@ -34,6 +34,7 @@ import { getCurrentCapturingToken, IRequestLogger } from '../../../platform/requ
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
+import { isEncryptedThinkingDelta } from '../../../platform/thinking/common/thinking';
 import { calculateLineRepetitionStats, isRepetitive } from '../../../util/common/anomalyDetection';
 import { ErrorUtils } from '../../../util/common/errors';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
@@ -244,25 +245,40 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 				// Extract and set structured prompt sections for the debug panel
 				if (otelInferenceSpan) {
-					const capiMessages = requestBody.messages as ReadonlyArray<{ role?: string; content?: string; tool_calls?: ReadonlyArray<{ id: string; function: { name: string; arguments: string } }> }>;
+					// Support both Chat Completions API (messages) and Responses API (input) formats
+					const capiMessages = (requestBody.messages ?? requestBody.input) as ReadonlyArray<{ role?: string; content?: string | unknown[] }> | undefined;
 					// User request: last user-role message
 					const userMessages = capiMessages?.filter(m => m.role === 'user');
 					const lastUserMsg = userMessages?.[userMessages.length - 1];
 					if (lastUserMsg?.content) {
-						otelInferenceSpan.setAttribute(CopilotChatAttr.USER_REQUEST, lastUserMsg.content);
+						const userContent = typeof lastUserMsg.content === 'string'
+							? lastUserMsg.content
+							: JSON.stringify(lastUserMsg.content);
+						otelInferenceSpan.setAttribute(CopilotChatAttr.USER_REQUEST, truncateForOTel(userContent));
 					}
-					// System instructions (first system message) — raw text for debug panel sections
+					// System instructions — check messages array, top-level system (Anthropic), or instructions (Responses API)
 					const systemMsg = capiMessages?.find(m => m.role === 'system');
-					if (systemMsg?.content) {
-						otelInferenceSpan.setAttribute(GenAiAttr.SYSTEM_INSTRUCTIONS, systemMsg.content);
+					const systemContent = systemMsg?.content
+						?? (requestBody as Record<string, unknown>).system
+						?? (requestBody as Record<string, unknown>).instructions;
+					if (systemContent) {
+						const systemText = typeof systemContent === 'string'
+							? systemContent
+							: JSON.stringify(systemContent);
+						otelInferenceSpan.setAttribute(GenAiAttr.SYSTEM_INSTRUCTIONS, systemText);
 					}
 				}
 
 				// Always capture full request content for the debug panel
 				if (otelInferenceSpan) {
-					const capiMessages = requestBody.messages as ReadonlyArray<{ role?: string; content?: string; tool_calls?: ReadonlyArray<{ id: string; function: { name: string; arguments: string } }> }>;
+					const capiMessages = (requestBody.messages ?? requestBody.input) as ReadonlyArray<{ role?: string; content?: string | unknown[] }> | undefined;
 					if (capiMessages) {
-						otelInferenceSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, truncateForOTel(JSON.stringify(toInputMessages(capiMessages))));
+						// Normalize non-string content (Anthropic arrays, Responses API parts) to strings for OTel schema
+						const normalized = capiMessages.map(m => ({
+							...m,
+							content: typeof m.content === 'string' ? m.content : m.content ? JSON.stringify(m.content) : undefined,
+						}));
+						otelInferenceSpan.setAttribute(GenAiAttr.INPUT_MESSAGES, truncateForOTel(JSON.stringify(toInputMessages(normalized))));
 					}
 				}
 				tokenCount = await chatEndpoint.acquireTokenizer().countMessagesTokens(messages);
@@ -381,6 +397,19 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						parts.push(...toolCalls);
 						if (parts.length > 0) {
 							otelInferenceSpan.setAttribute(GenAiAttr.OUTPUT_MESSAGES, truncateForOTel(JSON.stringify([{ role: 'assistant', parts }])));
+						}
+						// Capture reasoning/thinking text if present
+						const hasThinking = streamRecorder.deltas.some(d => d.thinking);
+						if (hasThinking) {
+							const thinkingTexts = streamRecorder.deltas
+								.filter(d => d.thinking && !isEncryptedThinkingDelta(d.thinking) && d.thinking.text)
+								.map(d => {
+									const t = d.thinking!;
+									if ('encrypted' in t) { return ''; }
+									return Array.isArray(t.text) ? t.text.join('') : (t.text ?? '');
+								});
+							const reasoningText = thinkingTexts.join('');
+							otelInferenceSpan.setAttribute(CopilotChatAttr.REASONING_CONTENT, truncateForOTel(reasoningText || '[encrypted]'));
 						}
 					}
 

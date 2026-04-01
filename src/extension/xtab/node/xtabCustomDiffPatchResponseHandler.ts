@@ -5,15 +5,16 @@
 
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { NoNextEditReason, StreamedEdit } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { ILogger } from '../../../platform/log/common/logService';
 import { ErrorUtils } from '../../../util/common/errors';
 import { isAbsolute } from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
 import { LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
-import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { toUniquePath } from '../common/promptCraftingUtils';
 import { ResponseTags } from '../common/tags';
+import { CurrentDocument } from '../common/xtabCurrentDocument';
 
 
 class Patch {
@@ -64,17 +65,23 @@ export class XtabCustomDiffPatchResponseHandler {
 
 	public static async *handleResponse(
 		linesStream: AsyncIterable<string>,
-		documentBeforeEdits: StringText,
+		currentDocument: CurrentDocument,
 		activeDocumentId: DocumentId,
 		workspaceRoot: URI | undefined,
 		window: OffsetRange | undefined,
+		parentTracer: ILogger,
 	): AsyncGenerator<StreamedEdit, NoNextEditReason, void> {
+		const tracer = parentTracer.createSubLogger(['XtabCustomDiffPatchResponseHandler', 'handleResponse']);
 		const activeDocRelativePath = toUniquePath(activeDocumentId, workspaceRoot?.path);
 		try {
 			for await (const edit of XtabCustomDiffPatchResponseHandler.extractEdits(linesStream)) {
 				const targetDocument = edit.filePath === activeDocRelativePath
 					? activeDocumentId
-					: XtabCustomDiffPatchResponseHandler.resolveTargetDocument(edit.filePath, workspaceRoot) ?? activeDocumentId; // FIXME@ulugbekna: it's wrong to fallback to active document but just ignoring edits is also bad
+					: XtabCustomDiffPatchResponseHandler.resolveTargetDocument(edit.filePath, workspaceRoot);
+				if (!targetDocument) {
+					tracer.error(`Could not resolve target document for edit: ${edit.toString()}`);
+					continue;
+				}
 				yield {
 					edit: XtabCustomDiffPatchResponseHandler.resolveEdit(edit),
 					isFromCursorJump: false,
@@ -87,7 +94,7 @@ export class XtabCustomDiffPatchResponseHandler {
 			return new NoNextEditReason.Unexpected(err);
 		}
 
-		return new NoNextEditReason.NoSuggestions(documentBeforeEdits, window, undefined);
+		return new NoNextEditReason.NoSuggestions(currentDocument.content, window, undefined);
 	}
 
 	private static resolveEdit(patch: Patch): LineReplacement {

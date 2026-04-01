@@ -60,7 +60,6 @@ export enum ToolName {
 	CoreRunTask = 'run_task',
 	CoreGetTaskOutput = 'get_task_output',
 	CoreRunTest = 'runTests',
-	ToolReplay = 'tool_replay',
 	EditFilesPlaceholder = 'edit_files',
 	CoreRunSubagent = 'runSubagent',
 	CoreConfirmationTool = 'vscode_get_confirmation',
@@ -110,7 +109,6 @@ export enum ContributedToolName {
 	CreateAndRunTask = 'copilot_createAndRunTask',
 	CreateDirectory = 'copilot_createDirectory',
 	RunVscodeCmd = 'copilot_runVscodeCommand',
-	ToolReplay = 'copilot_toolReplay',
 	EditFilesPlaceholder = 'copilot_editFiles',
 	SwitchAgent = 'copilot_switchAgent',
 	ResolveMemoryFileUri = 'copilot_resolveMemoryFileUri',
@@ -218,7 +216,6 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.CoreRunTest]: ToolCategory.Testing,
 
 	// Other tools - categorize appropriately
-	[ToolName.ToolReplay]: ToolCategory.RedundantButSpecific,
 	[ToolName.CoreConfirmationTool]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreConfirmationToolWithOptions]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreTerminalConfirmationTool]: ToolCategory.VSCodeInteraction,

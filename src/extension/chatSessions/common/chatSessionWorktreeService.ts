@@ -54,7 +54,7 @@ export const IChatSessionWorktreeService = createServiceIdentifier<IChatSessionW
 export interface IChatSessionWorktreeService {
 	readonly _serviceBrand: undefined;
 
-	createWorktree(repositoryPath: vscode.Uri, stream?: vscode.ChatResponseStream, baseBranch?: string): Promise<ChatSessionWorktreeProperties | undefined>;
+	createWorktree(repositoryPath: vscode.Uri, stream?: vscode.ChatResponseStream, baseBranch?: string, branchName?: string): Promise<ChatSessionWorktreeProperties | undefined>;
 
 	getWorktreeProperties(sessionId: string): Promise<ChatSessionWorktreeProperties | undefined>;
 	getWorktreeProperties(folder: vscode.Uri): Promise<ChatSessionWorktreeProperties | undefined>;
@@ -71,4 +71,13 @@ export interface IChatSessionWorktreeService {
 	getWorktreeChanges(sessionId: string): Promise<readonly vscode.ChatSessionChangedFile2[] | undefined>;
 
 	handleRequestCompleted(sessionId: string): Promise<void>;
+
+	/** Get worktree properties for all additional workspaces in a session. */
+	getAdditionalWorktreeProperties(sessionId: string): Promise<ChatSessionWorktreeProperties[]>;
+
+	/** Store worktree properties for additional workspaces in a session. */
+	setAdditionalWorktreeProperties(sessionId: string, properties: ChatSessionWorktreeProperties[]): Promise<void>;
+
+	/** Commit changes in a specific worktree, identified by its properties directly. */
+	handleRequestCompletedForWorktree(worktreeProperties: ChatSessionWorktreeProperties): Promise<void>;
 }

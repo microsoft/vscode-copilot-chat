@@ -61,10 +61,6 @@ export class MockChatSessionMetadataStore implements IChatSessionMetadataStore {
 		return undefined;
 	}
 
-	async getUsedWorkspaceFolders(): Promise<WorkspaceFolderEntry[]> {
-		return Array.from(this._workspaceFolders.values());
-	}
-
 	async getAdditionalWorkspaces(sessionId: string): Promise<IWorkspaceInfo[]> {
 		return this._additionalWorkspaces.get(sessionId) ?? [];
 	}

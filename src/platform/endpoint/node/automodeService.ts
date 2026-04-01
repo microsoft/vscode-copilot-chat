@@ -324,7 +324,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 				previous_model: entry?.endpoint?.model,
 				turn_number: (entry?.turnCount ?? 0) + 1,
 			};
-			const result = await this._routerDecisionFetcher.getRouterDecision(prompt, token.session_token, token.available_models, undefined, contextSignals);
+			const result = await this._routerDecisionFetcher.getRouterDecision(prompt, token.session_token, token.available_models, undefined, contextSignals, chatRequest?.sessionId, chatRequest?.id);
 
 			if (!result.candidate_models.length) {
 				return { lastRoutedPrompt: prompt, fallbackReason: 'emptyCandidateList' };

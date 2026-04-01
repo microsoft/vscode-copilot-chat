@@ -44,14 +44,14 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		super();
 	}
 
-	async createWorktree(repositoryPath: vscode.Uri, stream?: vscode.ChatResponseStream, baseBranch?: string): Promise<ChatSessionWorktreeProperties | undefined> {
+	async createWorktree(repositoryPath: vscode.Uri, stream?: vscode.ChatResponseStream, baseBranch?: string, branchName?: string): Promise<ChatSessionWorktreeProperties | undefined> {
 		if (!stream) {
-			return this._createWorktree(repositoryPath, undefined, baseBranch);
+			return this._createWorktree(repositoryPath, undefined, baseBranch, branchName);
 		}
 
 		return new Promise<ChatSessionWorktreeProperties | undefined>((resolve) => {
 			stream.progress(l10n.t('Creating isolated worktree for Copilot CLI session...'), async progress => {
-				const result = await this._createWorktree(repositoryPath, progress, baseBranch);
+				const result = await this._createWorktree(repositoryPath, progress, baseBranch, branchName);
 				resolve(result);
 				if (result) {
 					return l10n.t('Created isolated worktree for branch {0}', result.branchName);
@@ -61,7 +61,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		});
 	}
 
-	private async _createWorktree(repositoryPath: vscode.Uri, progress?: vscode.Progress<vscode.ChatResponsePart>, baseBranch?: string): Promise<ChatSessionWorktreeProperties | undefined> {
+	private async _createWorktree(repositoryPath: vscode.Uri, progress?: vscode.Progress<vscode.ChatResponsePart>, baseBranch?: string, branchName?: string): Promise<ChatSessionWorktreeProperties | undefined> {
 		try {
 			const activeRepository = await this.gitService.getRepository(repositoryPath);
 			if (!activeRepository) {
@@ -72,12 +72,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 			const autoCommit = this.configurationService.getConfig<boolean>(ConfigKey.Advanced.CLIAutoCommitEnabled);
 
-			// Attempt to generate a random branch name for the worktree
-			const randomBranchName = await this.gitService.generateRandomBranchName(repositoryPath);
-			const branchPrefix = vscode.workspace.getConfiguration('git').get<string>('branchPrefix') ?? '';
-
-			const branch = randomBranchName ? `${branchPrefix}copilot/${randomBranchName.substring(branchPrefix.length)}`
-				: `${branchPrefix}copilot/worktree-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
+			const branch = await this.generateBranchName(branchName, activeRepository);
 
 			// When a base branch is provided, we attempt to resolve it, to see whether it has an
 			// upstream. If there is an upstream, we use the upstream as the base for the worktree
@@ -127,6 +122,30 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			this.logService.error('[ChatSessionWorktreeService][_createWorktree] Error creating worktree for isolation: ', error);
 			return undefined;
 		}
+	}
+
+	private async generateBranchName(preferredName: string | undefined, repository: RepoContext) {
+		const branchPrefix = vscode.workspace.getConfiguration('git').get<string>('branchPrefix') ?? '';
+
+		if (preferredName) {
+			let branchName = `${branchPrefix}copilot/${preferredName}`;
+			// Check if we already have a branch with the preferred name, and if not, then use it.
+			// Else suffix the preferred name with a random string to avoid conflicts.
+			const refs = await this.gitService.getRefs(repository.rootUri, { pattern: `refs/heads/${branchName}` });
+			if (refs.some(ref => ref.name === branchName)) {
+				branchName = `${branchName}-${generateUuid().replaceAll('-', '').substring(0, 8).toLowerCase()}`;
+			}
+
+			return branchName;
+		}
+
+		// Attempt to generate a random branch name for the worktree
+		const randomBranchName = await this.gitService.generateRandomBranchName(repository.rootUri);
+
+		const branch = randomBranchName ? `${branchPrefix}copilot/${randomBranchName.substring(branchPrefix.length)}`
+			: `${branchPrefix}copilot/worktree-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
+
+		return branch;
 	}
 
 	getWorktreeProperties(sessionId: string): Promise<ChatSessionWorktreeProperties | undefined>;
@@ -634,5 +653,56 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				: undefined,
 			change.statistics.additions,
 			change.statistics.deletions);
+	}
+
+	async getAdditionalWorktreeProperties(sessionId: string): Promise<ChatSessionWorktreeProperties[]> {
+		const additionalWorkspaces = await this.metadataStore.getAdditionalWorkspaces(sessionId);
+		return additionalWorkspaces
+			.map(ws => ws.worktreeProperties)
+			.filter((props): props is ChatSessionWorktreeProperties => !!props);
+	}
+
+	async setAdditionalWorktreeProperties(sessionId: string, properties: ChatSessionWorktreeProperties[]): Promise<void> {
+		const workspaces = properties.map(props => ({
+			folder: undefined,
+			repository: vscode.Uri.file(props.repositoryPath),
+			worktree: vscode.Uri.file(props.worktreePath),
+			worktreeProperties: props,
+		}));
+		await this.metadataStore.setAdditionalWorkspaces(sessionId, workspaces);
+	}
+
+	async handleRequestCompletedForWorktree(worktreeProperties: ChatSessionWorktreeProperties): Promise<void> {
+		if (worktreeProperties.autoCommit === false) {
+			this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompletedForWorktree] Auto-commit is disabled, skipping commit for worktree ${worktreeProperties.worktreePath}`);
+			return;
+		}
+
+		const worktreePath = worktreeProperties.worktreePath;
+		const repository = await this.gitCommitMessageService.getRepository(vscode.Uri.file(worktreePath));
+		if (!repository) {
+			this.logService.error(`[ChatSessionWorktreeService][handleRequestCompletedForWorktree] Unable to find repository for working directory ${worktreePath}`);
+			throw new Error(`Unable to find repository for working directory ${worktreePath}`);
+		}
+
+		if (repository.state.workingTreeChanges.length === 0 && repository.state.indexChanges.length === 0 && repository.state.untrackedChanges.length === 0) {
+			this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompletedForWorktree] No changes to commit in working directory ${worktreePath}`);
+			return;
+		}
+
+		let message: string | undefined;
+		try {
+			message = await this.gitCommitMessageService.generateCommitMessage(repository, CancellationToken.None);
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			this.logService.error(`[ChatSessionWorktreeService][handleRequestCompletedForWorktree] Error generating commit message for ${worktreePath}: ${errorMessage}`);
+		}
+
+		if (!message) {
+			message = `Copilot CLI session changes`;
+		}
+
+		await this.gitService.commit(vscode.Uri.file(worktreePath), message, { all: true, noVerify: true, signCommit: false });
+		this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompletedForWorktree] Committed all changes in working directory ${worktreePath}`);
 	}
 }
