@@ -231,32 +231,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const currentDocument = new CurrentDocument(activeDocument.documentAfterEdits, cursorPosition);
 
-		const isCursorAtEndOfLine = currentDocument.isCursorAtEndOfLine();
-		telemetryBuilder.setIsCursorAtLineEnd(isCursorAtEndOfLine);
-
-		// Apply extra debounce based on cursor position - only one applies
-		const isInlineSuggestionPosition = isInlineSuggestion(currentDocument, cursorPosition);
-		telemetryBuilder.setIsInlineSuggestion(!!isInlineSuggestionPosition);
-
-		if (request.isSpeculative) {
-			tracer.trace('No extra debounce applied for speculative request');
-		} else {
-			const inlineSuggestionDebounce = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceInlineSuggestion, this.expService);
-			if (isInlineSuggestionPosition && inlineSuggestionDebounce > 0) {
-				tracer.trace('Debouncing for inline suggestion position');
-				delaySession.setExtraDebounce(inlineSuggestionDebounce);
-			} else if (isCursorAtEndOfLine) {
-				tracer.trace('Debouncing for cursor at end of line');
-				delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceEndOfLine, this.expService));
-			} else {
-				tracer.trace('No extra debounce applied');
-			}
-		}
-
-		// Adjust debounce based on user aggressiveness setting for non-aggressiveness models
-		if (!isAggressivenessStrategy(promptOptions.promptingStrategy)) {
-			this._applyAggressivenessSettings(delaySession, tracer);
-		}
+		this._configureDebounceTimings(request, currentDocument, promptOptions, telemetryBuilder, delaySession, tracer);
 
 		const areaAroundEditWindowLinesRange = computeAreaAroundEditWindowLinesRange(currentDocument);
 
@@ -424,6 +399,43 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			cancellationToken,
 			originalEditWindow,
 		);
+	}
+
+	private _configureDebounceTimings(
+		request: StatelessNextEditRequest,
+		currentDocument: CurrentDocument,
+		promptOptions: ModelConfig,
+		telemetry: StatelessNextEditTelemetryBuilder,
+		delaySession: DelaySession,
+		tracer: ILogger,
+	) {
+
+		const isCursorAtEndOfLine = currentDocument.isCursorAtEndOfLine();
+		telemetry.setIsCursorAtLineEnd(isCursorAtEndOfLine);
+
+		// Apply extra debounce based on cursor position - only one applies
+		const isInlineSuggestionPosition = isInlineSuggestion(currentDocument);
+		telemetry.setIsInlineSuggestion(!!isInlineSuggestionPosition);
+
+		if (request.isSpeculative) {
+			tracer.trace('No extra debounce applied for speculative request');
+		} else {
+			const inlineSuggestionDebounce = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceInlineSuggestion, this.expService);
+			if (isInlineSuggestionPosition && inlineSuggestionDebounce > 0) {
+				tracer.trace('Debouncing for inline suggestion position');
+				delaySession.setExtraDebounce(inlineSuggestionDebounce);
+			} else if (isCursorAtEndOfLine) {
+				tracer.trace('Debouncing for cursor at end of line');
+				delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceEndOfLine, this.expService));
+			} else {
+				tracer.trace('No extra debounce applied');
+			}
+		}
+
+		// Adjust debounce based on user aggressiveness setting for non-aggressiveness models
+		if (!isAggressivenessStrategy(promptOptions.promptingStrategy)) {
+			this._applyAggressivenessSettings(delaySession, tracer);
+		}
 	}
 
 	private _applyAggressivenessSettings(delaySession: DelaySession, tracer: ILogger): void {

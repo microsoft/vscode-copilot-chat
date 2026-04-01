@@ -35,13 +35,17 @@ export class CurrentDocument {
 		return this.lines[this.cursorLineOffset];
 	}
 
+	textAfterCursor(): string {
+		const line = this.lineWithCursor() ?? '';
+		return line.substring(this.cursorPosition.column - 1);
+	}
+
 	/**
 	 * Determines if the cursor is at the end of the line.
 	 */
 	isCursorAtEndOfLine(): boolean {
 		// checks if there's any non-whitespace character after the cursor in the line
-		const cursorLine = this.lineWithCursor();
-		const afterCursor = cursorLine.substring(this.cursorPosition.column - 1);
+		const afterCursor = this.textAfterCursor();
 		const isAtEndOfLine = afterCursor.match(/^\s*$/) !== null;
 		return isAtEndOfLine;
 	}
