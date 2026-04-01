@@ -264,7 +264,8 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		try {
 			newBranchName = options.newBranch ? await options.newBranch : undefined;
 		} catch (ex) {
-			this.logService.error(`Failed to generate a new branch name for worktree creation: ${ex}`);
+			const error = ex instanceof Error ? ex : new Error(String(ex));
+			this.logService.error(error, 'Failed to generate a new branch name for worktree creation');
 		}
 		worktreeProperties = worktreeProperties ?? await this.worktreeService.createWorktree(repository, stream, branch, newBranchName);
 
