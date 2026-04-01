@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { ChatSessionWorktreeProperties } from './chatSessionWorktreeService';
 
 export interface IWorkspaceInfo {
@@ -48,4 +49,28 @@ export function emptyWorkspaceInfo(): IWorkspaceInfo {
 		worktree: undefined,
 		worktreeProperties: undefined,
 	};
+}
+
+/**
+ * Given a file URI, finds which workspace (primary or additional) owns it.
+ * Returns the matching IWorkspaceInfo or undefined if no match.
+ */
+export function findOwningWorkspace(
+	file: vscode.Uri,
+	primaryWorkspace: IWorkspaceInfo,
+	additionalWorkspaces: IWorkspaceInfo[]
+): IWorkspaceInfo | undefined {
+	for (const ws of [primaryWorkspace, ...additionalWorkspaces]) {
+		const wd = getWorkingDirectory(ws);
+		if (wd && extUriBiasedIgnorePathCase.isEqualOrParent(file, wd)) {
+			return ws;
+		}
+		if (ws.folder && extUriBiasedIgnorePathCase.isEqualOrParent(file, ws.folder)) {
+			return ws;
+		}
+		if (ws.worktree && ws.repository && extUriBiasedIgnorePathCase.isEqualOrParent(file, ws.repository)) {
+			return ws;
+		}
+	}
+	return undefined;
 }

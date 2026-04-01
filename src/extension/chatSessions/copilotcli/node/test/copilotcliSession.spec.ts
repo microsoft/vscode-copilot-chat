@@ -209,6 +209,7 @@ describe('CopilotCLISession', () => {
 			sessionWorkspaceInfo,
 			sessionAgentName,
 			sdkSession as unknown as Session,
+			[],
 			logger,
 			workspaceService,
 			chatSessionMetadataStore,
