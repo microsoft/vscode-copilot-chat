@@ -133,12 +133,13 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(CopilotCLICustomizationProvider.metadata.iconId).toBe('worktree');
 		});
 
-		it('marks Hook and Prompt types as unsupported', () => {
-			const unsupported = CopilotCLICustomizationProvider.metadata.unsupportedTypes;
-			expect(unsupported).toBeDefined();
-			expect(unsupported).toHaveLength(2);
-			expect(unsupported![0]).toBe(FakeChatSessionCustomizationType.Hook);
-			expect(unsupported![1]).toBe(FakeChatSessionCustomizationType.Prompt);
+		it('supports Agent, Skill, and Instructions types', () => {
+			const supported = CopilotCLICustomizationProvider.metadata.supportedTypes;
+			expect(supported).toBeDefined();
+			expect(supported).toHaveLength(3);
+			expect(supported).toContain(FakeChatSessionCustomizationType.Agent);
+			expect(supported).toContain(FakeChatSessionCustomizationType.Skill);
+			expect(supported).toContain(FakeChatSessionCustomizationType.Instructions);
 		});
 	});
 
