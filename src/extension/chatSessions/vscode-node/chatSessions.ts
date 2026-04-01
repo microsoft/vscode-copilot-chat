@@ -35,6 +35,7 @@ import { IAgentSessionsWorkspace } from '../common/agentSessionsWorkspace';
 import { GitBranchNameGenerator } from '../../prompt/node/gitBranch';
 import { IClaudeRuntimeDataService } from '../claude/common/claudeRuntimeDataService';
 import { ClaudeRuntimeDataService } from '../claude/node/claudeRuntimeDataService';
+import { GitBranchNameGenerator } from '../../prompt/node/gitBranch';
 import { IChatPromptFileService } from '../common/chatPromptFileService';
 import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
