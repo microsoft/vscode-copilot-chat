@@ -29,14 +29,14 @@ const CLI_HOME_SUBPATHS = ['.copilot/', '.agents/'];
 
 export class CopilotCLICustomizationProvider extends Disposable implements vscode.ChatSessionCustomizationProvider {
 
-	private readonly _onDidChange = this._register(new Emitter<void>());
+	private readonly _onDidChange = this._register(new Emitter<vscode.ChatSessionCustomizationChangeEvent>());
 	readonly onDidChange = this._onDidChange.event;
 
 	static get metadata(): vscode.ChatSessionCustomizationProviderMetadata {
 		return {
 			label: 'Copilot CLI',
 			iconId: 'worktree',
-			unsupportedTypes: [vscode.ChatSessionCustomizationType.Hook, vscode.ChatSessionCustomizationType.Prompt],
+			unsupportedTypes: [vscode.ChatSessionCustomizationType.Hook],
 		};
 	}
 
@@ -49,13 +49,17 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 	) {
 		super();
 
-		this._register(this.chatPromptFileService.onDidChangeCustomAgents(() => this._onDidChange.fire()));
-		this._register(this.chatPromptFileService.onDidChangeInstructions(() => this._onDidChange.fire()));
-		this._register(this.chatPromptFileService.onDidChangeSkills(() => this._onDidChange.fire()));
-		this._register(this.copilotCLIAgents.onDidChangeAgents(() => this._onDidChange.fire()));
+		this._register(this.chatPromptFileService.onDidChangeCustomAgents(() => this._onDidChange.fire({ changedTypes: [vscode.ChatSessionCustomizationType.Agent] })));
+		this._register(this.chatPromptFileService.onDidChangeInstructions(() => this._onDidChange.fire({ changedTypes: [vscode.ChatSessionCustomizationType.Instructions] })));
+		this._register(this.chatPromptFileService.onDidChangeSkills(() => this._onDidChange.fire({ changedTypes: [vscode.ChatSessionCustomizationType.Skill] })));
+		this._register(this.copilotCLIAgents.onDidChangeAgents(() => this._onDidChange.fire({ changedTypes: [vscode.ChatSessionCustomizationType.Agent] })));
+
+		// Fire an initial change after the microtask queue drains so that
+		// consumers registered right after construction get a fresh fetch.
+		queueMicrotask(() => this._onDidChange.fire({}));
 	}
 
-	async provideChatSessionCustomizations(_token: vscode.CancellationToken): Promise<vscode.ChatSessionCustomizationItem[]> {
+	async provideChatSessionCustomizations(_token: vscode.CancellationToken): Promise<vscode.ChatSessionCustomizationResult> {
 		const items: vscode.ChatSessionCustomizationItem[] = [];
 
 		// Build a file URI lookup from prompt file agents for cross-referencing
@@ -109,7 +113,7 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 		this.logService.debug(`[CopilotCLICustomizationProvider] skills (${skillItems.length}): ${skillItems.map(s => s.name).join(', ') || '(none)'}`);
 
 		this.logService.debug(`[CopilotCLICustomizationProvider] total: ${items.length} items`);
-		return items;
+		return { items };
 	}
 
 	private isCLIPath(uri: URI): boolean {

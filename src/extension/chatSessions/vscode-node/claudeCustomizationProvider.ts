@@ -62,7 +62,7 @@ interface HooksSettings {
 
 export class ClaudeCustomizationProvider extends Disposable implements vscode.ChatSessionCustomizationProvider {
 
-	private readonly _onDidChange = this._register(new Emitter<void>());
+	private readonly _onDidChange = this._register(new Emitter<vscode.ChatSessionCustomizationChangeEvent>());
 	readonly onDidChange = this._onDidChange.event;
 
 	static get metadata(): vscode.ChatSessionCustomizationProviderMetadata {
@@ -71,7 +71,7 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 			iconId: 'claude',
 			unsupportedTypes: [
 				vscode.ChatSessionCustomizationType.Prompt,
-				new vscode.ChatSessionCustomizationType('plugins'),
+				vscode.ChatSessionCustomizationType.Plugins,
 			],
 		};
 	}
@@ -86,13 +86,19 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 	) {
 		super();
 
-		this._register(this.runtimeDataService.onDidChange(() => this._onDidChange.fire()));
-		this._register(this.chatPromptFileService.onDidChangeCustomAgents(() => this._onDidChange.fire()));
-		this._register(this.chatPromptFileService.onDidChangeSkills(() => this._onDidChange.fire()));
-		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => this._onDidChange.fire()));
+		this._register(this.runtimeDataService.onDidChange(() => this._onDidChange.fire({})));
+		this._register(this.chatPromptFileService.onDidChangeCustomAgents(() => this._onDidChange.fire({ changedTypes: [vscode.ChatSessionCustomizationType.Agent] })));
+		this._register(this.chatPromptFileService.onDidChangeSkills(() => this._onDidChange.fire({ changedTypes: [vscode.ChatSessionCustomizationType.Skill] })));
+		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => this._onDidChange.fire({})));
+
+		// Fire an initial change after the microtask queue drains so that
+		// consumers registered right after construction get a fresh fetch.
+		// This avoids a race where ChatPromptFileService's initial discovery
+		// fires onDidChangeCustomAgents *before* this provider subscribes.
+		queueMicrotask(() => this._onDidChange.fire({}));
 	}
 
-	async provideChatSessionCustomizations(_token: vscode.CancellationToken): Promise<vscode.ChatSessionCustomizationItem[]> {
+	async provideChatSessionCustomizations(_token: vscode.CancellationToken): Promise<vscode.ChatSessionCustomizationResult> {
 		const items: vscode.ChatSessionCustomizationItem[] = [];
 
 		// Agents: hybrid approach — file-based .claude/ agents merged with SDK-provided agents.
@@ -154,7 +160,7 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 		this.logService.debug(`[ClaudeCustomizationProvider] hooks (${hookItems.length}): ${hookItems.map(h => h.name).join(', ') || '(none)'}`);
 
 		this.logService.debug(`[ClaudeCustomizationProvider] total: ${items.length} items`);
-		return items;
+		return { items };
 	}
 
 	private async discoverInstructions(): Promise<vscode.ChatSessionCustomizationItem[]> {
