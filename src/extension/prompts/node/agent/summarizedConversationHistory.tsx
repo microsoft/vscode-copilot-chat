@@ -656,6 +656,7 @@ class ConversationHistorySummarizer {
 		let summarizationPrompt: ChatMessage[];
 		const associatedRequestId = this.props.promptContext.conversation?.getLatestTurn().id;
 		const cacheFriendlyMode = this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentHistorySummarizationCacheFriendly, this.experimentationService);
+		let usedCacheFriendlyPrompt = false;
 		try {
 			if (mode === SummaryMode.Full && cacheFriendlyMode) {
 				const customizations = await PromptRegistry.resolveAllCustomizations(this.instantiationService, endpoint);
@@ -667,6 +668,7 @@ class ConversationHistorySummarizer {
 				};
 				const expandedEndpoint = endpoint.cloneWithTokenOverride(endpoint.modelMaxPromptTokens * 1.15);
 				summarizationPrompt = (await renderPromptElement(this.instantiationService, expandedEndpoint, CacheFriendlySummarizationPrompt, props, undefined, this.token)).messages;
+				usedCacheFriendlyPrompt = true;
 			} else {
 				summarizationPrompt = (await renderPromptElement(this.instantiationService, endpoint, ConversationHistorySummarizationPrompt, { ...propsInfo.props, simpleMode: mode === SummaryMode.Simple }, undefined, this.token)).messages;
 			}
@@ -699,7 +701,7 @@ class ConversationHistorySummarizer {
 				),
 			} : undefined;
 
-			if (cacheFriendlyMode) {
+			if (usedCacheFriendlyPrompt) {
 				// Place cache breakpoints on the agent-loop prefix only (everything
 				// except the appended summarize instruction).  addCacheBreakpoints
 				// uses the last User message as the boundary between "current turn"
@@ -710,6 +712,8 @@ class ConversationHistorySummarizer {
 				// cached prefix.
 				const prefixMessages = summarizationPrompt.slice(0, -1);
 				addCacheBreakpoints(prefixMessages);
+			} else if (cacheFriendlyMode) {
+				addCacheBreakpoints(summarizationPrompt);
 			} else {
 				stripCacheBreakpoints(summarizationPrompt);
 			}
