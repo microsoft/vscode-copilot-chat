@@ -6,32 +6,13 @@
 import { ChatParticipantToolToken, LanguageModelTextPart } from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../copilotcli/node/userInputHelpers';
 import { ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
+import { IQuestion, IQuestionAnswer, IUserQuestionHandler } from '../copilotcli/node/userInputHelpers';
 
-export interface IQuestionOption {
-	readonly label: string;
-	readonly description?: string;
-	readonly recommended?: boolean;
-}
-
-export interface IQuestion {
-	readonly header: string;
-	readonly question: string;
-	readonly multiSelect?: boolean;
-	readonly options?: IQuestionOption[];
-	readonly allowFreeformInput?: boolean;
-}
 
 export interface IAskQuestionsParams {
 	readonly questions: IQuestion[];
-}
-
-export interface IQuestionAnswer {
-	readonly selected: string[];
-	readonly freeText: string | null;
-	readonly skipped: boolean;
 }
 
 export interface IAnswerResult {
@@ -46,17 +27,8 @@ export class UserQuestionHandler implements IUserQuestionHandler {
 		@IToolsService private readonly _toolsService: IToolsService,
 	) {
 	}
-	async askUserQuestion(question: UserInputRequest, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
-		const input: IAskQuestionsParams = {
-			questions: [
-				{
-					header: question.question,
-					question: question.question,
-					allowFreeformInput: question.allowFreeform,
-					options: question.choices?.map(option => ({ label: option })),
-				}
-			]
-		};
+	async askUserQuestion(question: IQuestion, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<IQuestionAnswer | undefined> {
+		const input: IAskQuestionsParams = { questions: [question] };
 		const result = await this._toolsService.invokeTool(ToolName.CoreAskQuestions, {
 			input,
 			toolInvocationToken,
@@ -78,15 +50,9 @@ export class UserQuestionHandler implements IUserQuestionHandler {
 		if (answer === undefined) {
 			return undefined;
 		} else if (answer.freeText) {
-			return {
-				answer: answer.freeText,
-				wasFreeform: true
-			};
+			return answer;
 		} else if (answer.selected.length) {
-			return {
-				answer: answer.selected.join(', '),
-				wasFreeform: false,
-			};
+			return answer;
 		}
 		return undefined;
 	}

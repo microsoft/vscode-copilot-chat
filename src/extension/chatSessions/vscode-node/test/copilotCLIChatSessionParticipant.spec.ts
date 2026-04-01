@@ -51,7 +51,7 @@ import { CopilotCLISession, CopilotCLISessionInput } from '../../copilotcli/node
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker, ICopilotCLISessionService } from '../../copilotcli/node/copilotcliSessionService';
 import { ICopilotCLIMCPHandler } from '../../copilotcli/node/mcpHandler';
 import { MockCliSdkSession, MockCliSdkSessionManager, MockSkillLocations, NullCopilotCLIAgents, NullICopilotCLIImageSupport } from '../../copilotcli/node/test/testHelpers';
-import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../copilotcli/node/userInputHelpers';
+import { IQuestion, IQuestionAnswer, IUserQuestionHandler } from '../../copilotcli/node/userInputHelpers';
 import { CustomSessionTitleService } from '../../copilotcli/vscode-node/customSessionTitleServiceImpl';
 import { MockChatPromptFileService } from '../../copilotcli/vscode-node/test/testHelpers';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant } from '../copilotCLIChatSessionsContribution';
@@ -358,7 +358,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const fileSystem = new MockFileSystemService();
 		class FakeUserQuestionHandler implements IUserQuestionHandler {
 			_serviceBrand: undefined;
-			async askUserQuestion(question: UserInputRequest, toolInvocationToken: vscode.ChatParticipantToolToken, token: vscode.CancellationToken): Promise<UserInputResponse | undefined> {
+			async askUserQuestion(question: IQuestion, toolInvocationToken: vscode.ChatParticipantToolToken, token: vscode.CancellationToken): Promise<IQuestionAnswer | undefined> {
 				return undefined;
 			}
 		}
@@ -538,7 +538,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests).toHaveLength(1);
-		expect(cliSessions[0].requests[0].input).toEqual({ command: 'compact' });
+		expect(cliSessions[0].requests[0].input).toEqual({ command: 'compact', prompt: '' });
 		expect(promptResolver.resolvePrompt).not.toHaveBeenCalled();
 	});
 

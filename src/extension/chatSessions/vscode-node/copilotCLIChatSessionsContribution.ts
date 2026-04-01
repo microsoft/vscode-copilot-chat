@@ -1353,7 +1353,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
 			} else if (request.command && !request.prompt && !isUntitled) {
 				const input = (copilotCLICommands as readonly string[]).includes(request.command)
-					? { command: request.command as CopilotCLICommand }
+					? { command: request.command as CopilotCLICommand, prompt: '' }
 					: { prompt: `/${request.command}` };
 				await session.object.handleRequest(request, input, [], model, authInfo, token);
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);

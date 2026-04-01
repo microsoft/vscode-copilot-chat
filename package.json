@@ -6060,6 +6060,16 @@
 					{
 						"name": "compact",
 						"description": "%github.copilot.command.cli.compact.description%"
+					},
+					{
+						"name": "plan",
+						"description": "%github.copilot.command.cli.plan.description%",
+						"when": "config.github.copilot.chat.cli.planExitMode.enabled"
+					},
+					{
+						"name": "fleet",
+						"description": "%github.copilot.command.cli.fleet.description%",
+						"when": "config.github.copilot.chat.cli.planExitMode.enabled"
 					}
 				],
 				"customAgentTarget": "github-copilot",

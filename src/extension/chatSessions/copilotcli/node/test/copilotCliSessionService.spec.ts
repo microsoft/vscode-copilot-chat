@@ -40,7 +40,7 @@ import { ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker } from '../copilotcliSessionService';
 import { CopilotCLIMCPHandler } from '../mcpHandler';
-import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
+import { IQuestion, IQuestionAnswer, IUserQuestionHandler } from '../userInputHelpers';
 import { MockCliSdkSession, MockCliSdkSessionManager, MockSkillLocations, NullCopilotCLIAgents, NullICopilotCLIImageSupport } from './testHelpers';
 
 // Re-export for backward compatibility with other spec files
@@ -129,7 +129,7 @@ describe('CopilotCLISessionService', () => {
 		}();
 		class FakeUserQuestionHandler implements IUserQuestionHandler {
 			_serviceBrand: undefined;
-			async askUserQuestion(question: UserInputRequest, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
+			async askUserQuestion(question: IQuestion, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<IQuestionAnswer | undefined> {
 				return undefined;
 			}
 		}
