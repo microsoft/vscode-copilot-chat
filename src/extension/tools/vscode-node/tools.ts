@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import { l10n } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
@@ -14,6 +14,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { Disposable, DisposableMap } from '../../../util/vs/base/common/lifecycle';
 import { autorun, autorunIterableDelta } from '../../../util/vs/base/common/observableInternal';
 import { URI } from '../../../util/vs/base/common/uri';
+import { isCopilotMemoryConfigEnabled } from '../common/agentMemoryService';
 import { getContributedToolName } from '../common/toolNames';
 import { isVscodeLanguageModelTool } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
@@ -94,10 +95,7 @@ export class ToolsContribution extends Disposable {
 			}
 
 			// Collect local repo-scoped memories only when CAPI memory is disabled
-			// Check if preview features are enabled - default to false if copilot token is not available
-			// to be conservative when authentication hasn't completed
-			const isPreviewFeaturesEnabled = this.authenticationService.copilotToken?.isEditorPreviewFeaturesEnabled() ?? false;
-			const capiMemoryEnabled = isPreviewFeaturesEnabled && this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
+			const capiMemoryEnabled = isCopilotMemoryConfigEnabled(this.authenticationService, this.configurationService, this.experimentationService);
 			if (storageUri && !capiMemoryEnabled) {
 				const repoMemoryUri = URI.joinPath(storageUri, 'memory-tool/memories/repo');
 				try {

@@ -13,7 +13,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Tag } from '../../prompts/node/base/tag';
-import { IAgentMemoryService, normalizeCitations, RepoMemoryEntry } from '../common/agentMemoryService';
+import { IAgentMemoryService, isCopilotMemoryConfigEnabled, normalizeCitations, RepoMemoryEntry } from '../common/agentMemoryService';
 import { ToolName } from '../common/toolNames';
 import { extractSessionId } from './memoryTool';
 
@@ -39,10 +39,7 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 	}
 
 	async render() {
-		// Check if preview features are enabled - default to false if copilot token is not available
-		// to be conservative when authentication hasn't completed
-		const isPreviewFeaturesEnabled = this.authenticationService.copilotToken?.isEditorPreviewFeaturesEnabled() ?? false;
-		const enableCopilotMemory = isPreviewFeaturesEnabled && this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
+		const enableCopilotMemory = isCopilotMemoryConfigEnabled(this.authenticationService, this.configurationService, this.experimentationService);
 		const enableMemoryTool = this.configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, this.experimentationService);
 
 		const userMemoryContent = enableMemoryTool ? await this.getUserMemoryContent() : undefined;
@@ -263,10 +260,7 @@ export class MemoryInstructionsPrompt extends PromptElement<BasePromptElementPro
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		// Check if preview features are enabled - default to false if copilot token is not available
-		// to be conservative when authentication hasn't completed
-		const isPreviewFeaturesEnabled = this.authenticationService.copilotToken?.isEditorPreviewFeaturesEnabled() ?? false;
-		const enableCopilotMemory = isPreviewFeaturesEnabled && this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
+		const enableCopilotMemory = isCopilotMemoryConfigEnabled(this.authenticationService, this.configurationService, this.experimentationService);
 		const enableMemoryTool = this.configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, this.experimentationService);
 		if (!enableCopilotMemory && !enableMemoryTool) {
 			return null;

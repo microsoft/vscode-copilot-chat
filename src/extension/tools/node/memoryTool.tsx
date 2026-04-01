@@ -16,7 +16,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { URI } from '../../../util/vs/base/common/uri';
 import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
-import { IAgentMemoryService, RepoMemoryEntry } from '../common/agentMemoryService';
+import { IAgentMemoryService, isCopilotMemoryConfigEnabled, RepoMemoryEntry } from '../common/agentMemoryService';
 import { IMemoryCleanupService } from '../common/memoryCleanupService';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
@@ -544,10 +544,7 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		}
 
 		// List local repo memory files under repo/ (only when CAPI is not enabled)
-		// Check if preview features are enabled - default to false if copilot token is not available
-		// to be conservative when authentication hasn't completed
-		const isPreviewFeaturesEnabled = this.authenticationService.copilotToken?.isEditorPreviewFeaturesEnabled() ?? false;
-		const capiEnabled = isPreviewFeaturesEnabled && this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
+		const capiEnabled = isCopilotMemoryConfigEnabled(this.authenticationService, this.configurationService, this.experimentationService);
 		if (!capiEnabled) {
 			try {
 				const repoUri = this._resolveUri('/memories/repo/', 'repo');
