@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { afterAll, beforeAll, expect, suite, test } from 'vitest';
-import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
+import { ICustomInstructionsService, SkillStorage } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { IExtensionsService } from '../../../../platform/extensions/common/extensionsService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
@@ -763,7 +763,7 @@ suite('ReadFile', () => {
 
 			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
 			expect(event).toBeDefined();
-			expect(event!.properties!.skillStorage).toBe('local');
+			expect(event!.properties!.skillStorage).toBe(SkillStorage.Workspace);
 			expect(event!.properties!.skillNameHash).not.toBe('');
 			expect(event!.properties!.extensionIdHash).toBe('');
 			expect(event!.properties!.extensionVersion).toBe('');
@@ -775,7 +775,7 @@ suite('ReadFile', () => {
 			expect(enhanced!.properties!.skillPath).toBe(skillUri.toString());
 			expect(enhanced!.properties!.extensionId).toBe('');
 			expect(enhanced!.properties!.extensionVersion).toBe('');
-			expect(enhanced!.properties!.skillStorage).toBe('local');
+			expect(enhanced!.properties!.skillStorage).toBe(SkillStorage.Workspace);
 			expect(enhanced!.properties!.contentHash).not.toBe('');
 
 			const internal = telemetry.internalEvents.find(e => e.eventName === 'skillContentRead');
@@ -783,7 +783,7 @@ suite('ReadFile', () => {
 			expect(internal!.properties!.skillName).toBe('my-skill');
 			expect(internal!.properties!.skillPath).toBe(skillUri.toString());
 			expect(internal!.properties!.extensionId).toBe('');
-			expect(internal!.properties!.skillStorage).toBe('local');
+			expect(internal!.properties!.skillStorage).toBe(SkillStorage.Workspace);
 			expect(internal!.properties!.contentHash).not.toBe('');
 
 			testAccessor.dispose();
@@ -802,7 +802,7 @@ suite('ReadFile', () => {
 			));
 
 			const mockCustomInstructions = new MockCustomInstructionsService();
-			mockCustomInstructions.setSkillFiles([skillUri]);
+			mockCustomInstructions.setSkillFiles([skillUri], SkillStorage.Personal);
 			services.define(ICustomInstructionsService, mockCustomInstructions);
 
 			const telemetry = new CapturingTelemetryService();
@@ -816,7 +816,7 @@ suite('ReadFile', () => {
 
 			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
 			expect(event).toBeDefined();
-			expect(event!.properties!.skillStorage).toBe('user');
+			expect(event!.properties!.skillStorage).toBe(SkillStorage.Personal);
 
 			testAccessor.dispose();
 		});
@@ -860,7 +860,7 @@ suite('ReadFile', () => {
 
 			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
 			expect(event).toBeDefined();
-			expect(event!.properties!.skillStorage).toBe('extension');
+			expect(event!.properties!.skillStorage).toBe(SkillStorage.Extension);
 			expect(event!.properties!.extensionIdHash).not.toBe('');
 			expect(event!.properties!.extensionVersion).toBe('1.2.3');
 			expect(event!.properties!.contentHash).not.toBe('');
@@ -871,7 +871,7 @@ suite('ReadFile', () => {
 			expect(enhanced!.properties!.skillPath).toBe(skillUri.toString());
 			expect(enhanced!.properties!.extensionId).toBe('publisher.my-ext');
 			expect(enhanced!.properties!.extensionVersion).toBe('1.2.3');
-			expect(enhanced!.properties!.skillStorage).toBe('extension');
+			expect(enhanced!.properties!.skillStorage).toBe(SkillStorage.Extension);
 			expect(enhanced!.properties!.contentHash).not.toBe('');
 
 			const internal = telemetry.internalEvents.find(e => e.eventName === 'skillContentRead');
@@ -879,7 +879,7 @@ suite('ReadFile', () => {
 			expect(internal!.properties!.skillName).toBe('ext-skill');
 			expect(internal!.properties!.extensionId).toBe('publisher.my-ext');
 			expect(internal!.properties!.extensionVersion).toBe('1.2.3');
-			expect(internal!.properties!.skillStorage).toBe('extension');
+			expect(internal!.properties!.skillStorage).toBe(SkillStorage.Extension);
 			expect(internal!.properties!.contentHash).not.toBe('');
 
 			testAccessor.dispose();
@@ -897,7 +897,7 @@ suite('ReadFile', () => {
 			));
 
 			const mockCustomInstructions = new MockCustomInstructionsService();
-			mockCustomInstructions.setSkillFiles([skillUri]);
+			mockCustomInstructions.setSkillFiles([skillUri], SkillStorage.Internal);
 			services.define(ICustomInstructionsService, mockCustomInstructions);
 
 			const telemetry = new CapturingTelemetryService();
@@ -911,7 +911,7 @@ suite('ReadFile', () => {
 
 			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
 			expect(event).toBeDefined();
-			expect(event!.properties!.skillStorage).toBe('internal');
+			expect(event!.properties!.skillStorage).toBe(SkillStorage.Internal);
 
 			testAccessor.dispose();
 		});

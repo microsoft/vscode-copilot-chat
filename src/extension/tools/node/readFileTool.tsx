@@ -8,11 +8,9 @@ import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
-import { PERSONAL_SKILL_FOLDERS } from '../../../platform/customInstructions/common/promptTypes';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { INativeEnvService } from '../../../platform/env/common/envService';
 import { IExtensionsService } from '../../../platform/extensions/common/extensionsService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
@@ -132,7 +130,6 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@IExtensionsService private readonly extensionsService: IExtensionsService,
-		@INativeEnvService private readonly envService: INativeEnvService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ReadFileParams>, token: vscode.CancellationToken) {
@@ -379,7 +376,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		// Reuses extensionSkillInfo/skillInfo already computed above.
 		// TODO: Add pluginNameHash and pluginVersion properties once vscode core's
 		// extensionPromptFileProvider command exposes IAgentPluginService metadata.
-		if (skillInfo && documentSnapshot) {
+		if (skillInfo && documentSnapshot && uri && this.customInstructionsService.isSkillMdFile(uri)) {
 			const content = documentSnapshot instanceof TextDocumentSnapshot ? documentSnapshot.getText() : '';
 			const extensionId = extensionSkillInfo?.extensionId ?? '';
 			const extensionVersion = extensionId ? this.extensionsService.getExtension(extensionId)?.packageJSON?.version ?? '' : '';
@@ -388,10 +385,10 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 			// Plaintext properties shared by enhanced GH and internal MSFT events
 			const plaintextProps = {
 				skillName: skillInfo.skillName,
-				skillPath: uri!.toString(),
+				skillPath: uri.toString(),
 				extensionId,
 				extensionVersion,
-				skillStorage: this.getSkillStorage(uri!, extensionSkillInfo),
+				skillStorage: skillInfo.storage,
 				contentHash,
 			};
 
@@ -409,29 +406,6 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 
 			this.telemetryService.sendInternalMSFTTelemetryEvent('skillContentRead', plaintextProps);
 		}
-	}
-
-	/**
-	 * Classifies skill storage provenance. Mirrors the discovery logic in
-	 * {@link CustomInstructionsService._matchInstructionLocationsFromSkills}
-	 * which uses the same {@link PERSONAL_SKILL_FOLDERS} + userHome check.
-	 *
-	 * Skills from config-based locations (`chat.skills.location` setting) fall
-	 * through to `'local'` since they are user-configured workspace-adjacent paths.
-	 */
-	private getSkillStorage(uri: URI, extensionSkillInfo: { extensionId?: string } | undefined): string {
-		if (extensionSkillInfo?.extensionId) {
-			return 'extension';
-		}
-		if (uri.scheme === 'vscode-chat-internal') {
-			return 'internal';
-		}
-		for (const folder of PERSONAL_SKILL_FOLDERS) {
-			if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, extUriBiasedIgnorePathCase.joinPath(this.envService.userHome, folder))) {
-				return 'user';
-			}
-		}
-		return 'local';
 	}
 
 	async resolveInput(input: IReadFileParamsV1, promptContext: IBuildPromptContext): Promise<IReadFileParamsV1> {
