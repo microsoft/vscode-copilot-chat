@@ -153,8 +153,13 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 	/**
 	 * Check if the chat.copilotMemory.enabled config is enabled.
 	 * Uses experiment-based configuration for gradual rollout.
+	 * Returns false if editor preview features are disabled by organization policy.
 	 */
 	private isCAPIMemorySyncConfigEnabled(): boolean {
+		// Check if preview features are disabled by organization policy
+		if (!this.authenticationService.copilotToken?.isEditorPreviewFeaturesEnabled()) {
+			return false;
+		}
 		return this.configService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
 	}
 

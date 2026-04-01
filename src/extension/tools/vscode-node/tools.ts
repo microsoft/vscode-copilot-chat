@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { l10n } from 'vscode';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
@@ -27,6 +28,7 @@ export class ToolsContribution extends Disposable {
 		@IToolGroupingCache toolGrouping: IToolGroupingCache,
 		@IToolGroupingService toolGroupingService: IToolGroupingService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
@@ -92,7 +94,8 @@ export class ToolsContribution extends Disposable {
 			}
 
 			// Collect local repo-scoped memories only when CAPI memory is disabled
-			const capiMemoryEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
+			const isPreviewFeaturesEnabled = this.authenticationService.copilotToken?.isEditorPreviewFeaturesEnabled() ?? true;
+			const capiMemoryEnabled = isPreviewFeaturesEnabled && this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
 			if (storageUri && !capiMemoryEnabled) {
 				const repoMemoryUri = URI.joinPath(storageUri, 'memory-tool/memories/repo');
 				try {

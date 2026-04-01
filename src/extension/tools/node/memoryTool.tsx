@@ -5,6 +5,7 @@
 
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { createDirectoryIfNotExists, IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
@@ -157,6 +158,7 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		@IMemoryCleanupService private readonly memoryCleanupService: IMemoryCleanupService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
@@ -542,7 +544,8 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		}
 
 		// List local repo memory files under repo/ (only when CAPI is not enabled)
-		const capiEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
+		const isPreviewFeaturesEnabled = this.authenticationService.copilotToken?.isEditorPreviewFeaturesEnabled() ?? true;
+		const capiEnabled = isPreviewFeaturesEnabled && this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
 		if (!capiEnabled) {
 			try {
 				const repoUri = this._resolveUri('/memories/repo/', 'repo');
