@@ -4649,6 +4649,17 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.agentDebugLog.fileLogging.maxSessionLogSizeMB": {
+						"type": "number",
+						"default": 100,
+						"minimum": 1,
+						"markdownDescription": "%github.copilot.config.chat.agentDebugLog.fileLogging.maxSessionLogSizeMB%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.otel.enabled": {
 						"type": "boolean",
 						"default": false,

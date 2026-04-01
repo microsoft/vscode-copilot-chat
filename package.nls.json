@@ -379,6 +379,7 @@
 	"github.copilot.config.chat.agentDebugLog.fileLogging.enabled": "Enable writing chat debug events to JSONL files on disk for diagnostics. When disabled, the built-in `troubleshoot` skill is also disabled. Requires window reload to take effect.",
 	"github.copilot.config.chat.agentDebugLog.fileLogging.flushIntervalMs": "How often (in milliseconds) buffered debug log entries are flushed to disk. Lower values provide more up-to-date logs at the cost of more frequent disk writes.",
 	"github.copilot.config.chat.agentDebugLog.fileLogging.maxRetainedSessionLogs": "Maximum number of chat debug session log directories to retain on disk. Each chat session produces one directory. Older session logs are automatically deleted when this limit is exceeded.",
+	"github.copilot.config.chat.agentDebugLog.fileLogging.maxSessionLogSizeMB": "Maximum size in megabytes for a single chat debug session log file. When the log exceeds this size, older entries are truncated to retain the most recent data. Defaults to 100 MB.",
 	"github.copilot.config.inlineEdits.diagnosticsContextProvider.enabled": "Enable diagnostics context provider for next edit suggestions.",
 	"github.copilot.config.inlineEdits.chatSessionContextProvider.enabled": "Enable chat session context provider for next edit suggestions.",
 	"github.copilot.config.codesearch.agent.enabled": "Enable code search capabilities in agent mode.",

@@ -25,8 +25,8 @@ const DEFAULT_FLUSH_INTERVAL_MS = 4_000;
 const MIN_FLUSH_INTERVAL_MS = 2_000;
 const MAX_ATTR_VALUE_LENGTH = 5_000;
 const MAX_PENDING_CORE_EVENTS = 100;
-const MAX_SESSION_LOG_BYTES = 100 * 1024 * 1024; // 100MB
-const TRUNCATION_RETAIN_BYTES = 60 * 1024 * 1024; // 60 MB
+const DEFAULT_MAX_SESSION_LOG_MB = 100;
+const TRUNCATION_RETAIN_RATIO = 0.6; // retain 60% of max on truncation
 const MAX_SPAN_SESSION_INDEX = 10_000;
 
 
@@ -87,6 +87,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	private _debugLogsDirUri: URI | undefined;
 	private _autoFlushTimer: ReturnType<typeof setInterval> | undefined;
 	private _autoFlushIntervalMs: number;
+	private _maxSessionLogBytes: number;
 	private _totalBytesWritten = 0;
 	private _totalSessionCount = 0;
 
@@ -111,16 +112,21 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			*/
 			this._telemetryService.sendMSFTTelemetryEvent('chatDebugFileLogger.disabled');
 			this._autoFlushIntervalMs = DEFAULT_FLUSH_INTERVAL_MS;
+			this._maxSessionLogBytes = DEFAULT_MAX_SESSION_LOG_MB * 1024 * 1024;
 			return;
 		}
 
 		this._autoFlushIntervalMs = Math.max(MIN_FLUSH_INTERVAL_MS, this._configurationService.getConfig(ConfigKey.Advanced.ChatDebugFileLoggingFlushInterval) ?? DEFAULT_FLUSH_INTERVAL_MS);
+		this._maxSessionLogBytes = Math.max(1, this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ChatDebugFileLoggingMaxSessionLogSizeMB, this._experimentationService) ?? DEFAULT_MAX_SESSION_LOG_MB) * 1024 * 1024;
 
-		// React to flush interval changes at runtime
+		// React to changes at runtime
 		this._register(this._configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(ConfigKey.Advanced.ChatDebugFileLoggingFlushInterval.fullyQualifiedId)) {
 				this._autoFlushIntervalMs = Math.max(MIN_FLUSH_INTERVAL_MS, this._configurationService.getConfig(ConfigKey.Advanced.ChatDebugFileLoggingFlushInterval) ?? DEFAULT_FLUSH_INTERVAL_MS);
 				this._restartFlushTimer();
+			}
+			if (e.affectsConfiguration(ConfigKey.Advanced.ChatDebugFileLoggingMaxSessionLogSizeMB.fullyQualifiedId)) {
+				this._maxSessionLogBytes = Math.max(1, this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ChatDebugFileLoggingMaxSessionLogSizeMB, this._experimentationService) ?? DEFAULT_MAX_SESSION_LOG_MB) * 1024 * 1024;
 			}
 		}));
 
@@ -764,7 +770,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			}
 			await fs.promises.appendFile(session.uri.fsPath, content, 'utf-8');
 			session.bytesWritten += Buffer.byteLength(content, 'utf-8');
-			if (session.bytesWritten > MAX_SESSION_LOG_BYTES) {
+			if (session.bytesWritten > this._maxSessionLogBytes) {
 				await this._truncateLogFile(session);
 			}
 		} catch (err) {
@@ -780,11 +786,12 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		try {
 			const filePath = session.uri.fsPath;
 			const stat = await fs.promises.stat(filePath);
-			if (stat.size <= MAX_SESSION_LOG_BYTES) {
+			if (stat.size <= this._maxSessionLogBytes) {
 				return;
 			}
 
-			const skipBytes = stat.size - TRUNCATION_RETAIN_BYTES;
+			const retainBytes = Math.floor(this._maxSessionLogBytes * TRUNCATION_RETAIN_RATIO);
+			const skipBytes = stat.size - retainBytes;
 			const fd = await fs.promises.open(filePath, 'r');
 			try {
 				// Read a small probe around the cut point to find the next newline
