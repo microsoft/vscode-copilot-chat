@@ -737,7 +737,7 @@ suite('ReadFile', () => {
 			}
 		}
 
-		test('should send separate skillContentRead event with skillStorage=local for workspace skill files', async () => {
+		test('should send separate skillContentRead event with skillStorage=workspace for workspace skill files', async () => {
 			const skillContent = '# My Skill\nDo something useful.';
 			const skillUri = URI.file('/workspace/.github/skills/my-skill/SKILL.md');
 			const testDoc = createTextDocumentData(skillUri, skillContent, 'markdown').document;
@@ -763,7 +763,7 @@ suite('ReadFile', () => {
 
 			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
 			expect(event).toBeDefined();
-			expect(event!.properties!.skillStorage).toBe('local');
+			expect(event!.properties!.skillStorage).toBe('workspace');
 			expect(event!.properties!.skillNameHash).not.toBe('');
 			expect(event!.properties!.extensionIdHash).toBe('');
 			expect(event!.properties!.extensionVersion).toBe('');
@@ -775,7 +775,7 @@ suite('ReadFile', () => {
 			expect(enhanced!.properties!.skillPath).toBe(skillUri.toString());
 			expect(enhanced!.properties!.extensionId).toBe('');
 			expect(enhanced!.properties!.extensionVersion).toBe('');
-			expect(enhanced!.properties!.skillStorage).toBe('local');
+			expect(enhanced!.properties!.skillStorage).toBe('workspace');
 			expect(enhanced!.properties!.contentHash).not.toBe('');
 
 			const internal = telemetry.internalEvents.find(e => e.eventName === 'skillContentRead');
@@ -783,13 +783,13 @@ suite('ReadFile', () => {
 			expect(internal!.properties!.skillName).toBe('my-skill');
 			expect(internal!.properties!.skillPath).toBe(skillUri.toString());
 			expect(internal!.properties!.extensionId).toBe('');
-			expect(internal!.properties!.skillStorage).toBe('local');
+			expect(internal!.properties!.skillStorage).toBe('workspace');
 			expect(internal!.properties!.contentHash).not.toBe('');
 
 			testAccessor.dispose();
 		});
 
-		test('should send skillStorage=user for personal skill files', async () => {
+		test('should send skillStorage=personal for personal skill files', async () => {
 			const skillContent = '# Personal Skill';
 			// NullNativeEnvService uses /home/testuser as userHome
 			const skillUri = URI.file('/home/testuser/.copilot/skills/personal-skill/SKILL.md');
@@ -816,7 +816,7 @@ suite('ReadFile', () => {
 
 			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
 			expect(event).toBeDefined();
-			expect(event!.properties!.skillStorage).toBe('user');
+			expect(event!.properties!.skillStorage).toBe('personal');
 
 			testAccessor.dispose();
 		});
