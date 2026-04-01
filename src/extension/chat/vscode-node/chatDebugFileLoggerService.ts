@@ -117,7 +117,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		}
 
 		this._autoFlushIntervalMs = Math.max(MIN_FLUSH_INTERVAL_MS, this._configurationService.getConfig(ConfigKey.Advanced.ChatDebugFileLoggingFlushInterval) ?? DEFAULT_FLUSH_INTERVAL_MS);
-		this._maxSessionLogBytes = Math.max(1, this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ChatDebugFileLoggingMaxSessionLogSizeMB, this._experimentationService) ?? DEFAULT_MAX_SESSION_LOG_MB) * 1024 * 1024;
+		this._maxSessionLogBytes = this._resolveMaxSessionLogBytes();
 
 		// React to changes at runtime
 		this._register(this._configurationService.onDidChangeConfiguration(e => {
@@ -126,7 +126,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 				this._restartFlushTimer();
 			}
 			if (e.affectsConfiguration(ConfigKey.Advanced.ChatDebugFileLoggingMaxSessionLogSizeMB.fullyQualifiedId)) {
-				this._maxSessionLogBytes = Math.max(1, this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ChatDebugFileLoggingMaxSessionLogSizeMB, this._experimentationService) ?? DEFAULT_MAX_SESSION_LOG_MB) * 1024 * 1024;
+				this._maxSessionLogBytes = this._resolveMaxSessionLogBytes();
 			}
 		}));
 
@@ -146,6 +146,12 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 				this._onCoreDebugEvent(event);
 			}));
 		}
+	}
+
+	private _resolveMaxSessionLogBytes(): number {
+		const raw = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ChatDebugFileLoggingMaxSessionLogSizeMB, this._experimentationService);
+		const mb = typeof raw === 'number' && Number.isFinite(raw) ? raw : DEFAULT_MAX_SESSION_LOG_MB;
+		return Math.max(1, Math.floor(mb)) * 1024 * 1024;
 	}
 
 	override dispose(): void {
@@ -779,8 +785,9 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	}
 
 	/**
-	 * Truncate a log file to retain the newest ~80MB using a streaming
-	 * approach via a temp file to avoid loading the entire tail into memory.
+	 * Truncate a log file to retain the newest portion (TRUNCATION_RETAIN_RATIO
+	 * of the configured max size) using a streaming approach via a temp file
+	 * to avoid loading the entire tail into memory.
 	 */
 	private async _truncateLogFile(session: IActiveLogSession): Promise<void> {
 		try {
