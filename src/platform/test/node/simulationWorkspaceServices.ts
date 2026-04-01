@@ -758,6 +758,10 @@ export class TestingGitService implements IGitService {
 		return [];
 	}
 
+	getBranchBase(_uri: URI, _name: string): Promise<Branch | undefined> {
+		return Promise.resolve(undefined);
+	}
+
 	async diffBetweenWithStats(uri: URI, ref1: string, ref2: string, path?: string): Promise<DiffChange[] | undefined> {
 		return [];
 	}
