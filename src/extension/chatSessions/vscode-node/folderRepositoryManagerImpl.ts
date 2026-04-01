@@ -169,7 +169,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 			} else {
 				const repoContext = await this.gitService.getRepository(selectedFolder);
 				const branchBase = repoContext?.headBranchName
-					? await this.gitService.getBranchBase(selectedFolder, repoContext.headBranchName)
+					? await this.gitService.getBranchBase(repoContext.rootUri, repoContext.headBranchName)
 					: undefined;
 
 				repositoryUri = repoContext?.rootUri;
