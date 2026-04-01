@@ -249,7 +249,7 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 		}
 
 		if (summaryForCurrentTurn) {
-			history.push(<SummaryMessageElement endpoint={this.props.endpoint} summaryText={summaryForCurrentTurn} transcriptPath={this.props.transcriptPath} transcriptLineCount={this.props.transcriptLineCount} />);
+			history.push(<SummaryMessageElement endpoint={this.props.endpoint} summaryText={summaryForCurrentTurn} />);
 
 			return (<PrioritizedList priority={this.props.priority} descending={false} passPriority={true}>
 				{history.reverse()}
@@ -309,7 +309,7 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 
 			if (summaryForTurn) {
 				// We have a summary for a tool call round that was part of this turn
-				turnComponents.push(<SummaryMessageElement endpoint={this.props.endpoint} summaryText={summaryForTurn.text} transcriptPath={this.props.transcriptPath} transcriptLineCount={this.props.transcriptLineCount} />);
+				turnComponents.push(<SummaryMessageElement endpoint={this.props.endpoint} summaryText={summaryForTurn.text} />);
 			} else if (!turn.isContinuation) {
 				turnComponents.push(<AgentUserMessage flexGrow={1} {...getUserMessagePropsFromTurn(turn, this.props.endpoint, {
 					userQueryTagName: this.props.userQueryTagName,
@@ -409,10 +409,6 @@ export interface SummarizedAgentHistoryProps extends BasePromptElementProps, Age
 	readonly summarizationInstructions?: string;
 	/** Whether this summarization was triggered as a background or foreground operation. Defaults to 'foreground'. */
 	readonly summarizationSource?: 'background' | 'foreground';
-	/** Path to the conversation transcript JSONL file, used to inform the model after summarization */
-	readonly transcriptPath?: string;
-	/** Number of lines in the transcript at the time of compaction */
-	readonly transcriptLineCount?: number;
 }
 
 /**
@@ -434,18 +430,41 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 		let historyMetadata: SummarizedConversationHistoryMetadata | undefined;
 		const transcriptLookupEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.ConversationTranscriptLookup, this.experimentationService);
 
-		if (this.props.triggerSummarize) {
-			// If transcript lookup is enabled, lazily start the transcript session now
-			// (before summarization) so it captures the full pre-compaction conversation.
-			// startSession is idempotent — if hooks already started it, this is a no-op.
-			if (transcriptLookupEnabled) {
-				await this.ensureTranscriptSession();
+		// Resolve transcript path and flush to disk so the model can read the up-to-date file
+		let transcriptPath: string | undefined;
+		const sessionId = this.props.promptContext.conversation?.sessionId;
+		if (transcriptLookupEnabled && sessionId) {
+			// Lazily start the transcript session now (before summarization) so it
+			// captures the full pre-compaction conversation. startSession is
+			// idempotent — if hooks already started it, this is a no-op.
+			await this.ensureTranscriptSession();
+
+			const transcriptUri = this.sessionTranscriptService.getTranscriptPath(sessionId);
+			if (transcriptUri) {
+				await this.sessionTranscriptService.flush(sessionId);
+				transcriptPath = transcriptUri.fsPath;
 			}
+		}
+
+		if (this.props.triggerSummarize) {
 
 			const summarizer = this.instantiationService.createInstance(ConversationHistorySummarizer, this.props, sizing, progress, token);
 			const summResult = await summarizer.summarizeHistory();
 			if (summResult) {
-				historyMetadata = new SummarizedConversationHistoryMetadata(summResult.toolCallRoundId, summResult.summary, {
+				// Bake the transcript hint into the summary text so it is
+				// frozen at compaction time and never changes on subsequent renders
+				// (preserving Anthropic prompt cache stability).
+				let summary = summResult.summary;
+				if (transcriptPath) {
+					const lineCount = this.sessionTranscriptService.getLineCount(sessionId!);
+					summary += `\nIf you need specific details from before compaction (such as exact code snippets, error messages, tool results, or content you previously generated), use the ${ToolName.ReadFile} tool to look up the full uncompacted conversation transcript at: "${transcriptPath}"`;
+					if (lineCount !== undefined) {
+						summary += `\nAt the time of this request, the transcript has ${lineCount} lines.`;
+					}
+					summary += `\nExample usage: ${ToolName.ReadFile}(filePath: "${transcriptPath}")`;
+				}
+
+				historyMetadata = new SummarizedConversationHistoryMetadata(summResult.toolCallRoundId, summary, {
 					thinking: summResult.thinking,
 					usage: summResult.usage,
 					promptTokenDetails: summResult.promptTokenDetails,
@@ -455,22 +474,7 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 					numRoundsSinceLastSummarization: summResult.numRoundsSinceLastSummarization,
 					durationMs: summResult.durationMs,
 				});
-				this.addSummaryToHistory(summResult.summary, summResult.toolCallRoundId, summResult.thinking);
-			}
-		}
-
-		// Resolve transcript path and flush to disk so the model can read the up-to-date file
-		let transcriptPath: string | undefined;
-		let transcriptLineCount: number | undefined;
-		if (transcriptLookupEnabled) {
-			const sessionId = this.props.promptContext.conversation?.sessionId;
-			if (sessionId) {
-				const transcriptUri = this.sessionTranscriptService.getTranscriptPath(sessionId);
-				if (transcriptUri) {
-					await this.sessionTranscriptService.flush(sessionId);
-					transcriptPath = transcriptUri.fsPath;
-					transcriptLineCount = this.sessionTranscriptService.getLineCount(sessionId);
-				}
+				this.addSummaryToHistory(summary, summResult.toolCallRoundId, summResult.thinking);
 			}
 		}
 
@@ -479,8 +483,6 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 			<ConversationHistory
 				{...this.props}
 				promptContext={promptContext}
-				transcriptPath={transcriptPath}
-				transcriptLineCount={transcriptLineCount}
 				enableCacheBreakpoints={this.props.enableCacheBreakpoints} />
 		</>;
 	}
@@ -494,6 +496,12 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 	private async ensureTranscriptSession(): Promise<void> {
 		const sessionId = this.props.promptContext.conversation?.sessionId;
 		if (!sessionId) {
+			return;
+		}
+
+		// Short-circuit if session already exists — avoids rebuilding
+		// the full IHistoricalTurn[] array on every render.
+		if (this.sessionTranscriptService.getTranscriptPath(sessionId)) {
 			return;
 		}
 
@@ -1049,8 +1057,6 @@ export class SummarizedConversationHistoryPropsBuilder {
 interface SummaryMessageProps extends BasePromptElementProps {
 	readonly summaryText: string;
 	readonly endpoint: IChatEndpoint;
-	readonly transcriptPath?: string;
-	readonly transcriptLineCount?: number;
 }
 
 class SummaryMessageElement extends PromptElement<SummaryMessageProps> {
@@ -1059,7 +1065,6 @@ class SummaryMessageElement extends PromptElement<SummaryMessageProps> {
 			<Tag name='conversation-summary'>
 				{this.props.summaryText}
 			</Tag>
-			{this.props.transcriptPath && <><br />If you need specific details from before compaction (such as exact code snippets, error messages, tool results, or content you previously generated), use the {ToolName.ReadFile} tool to look up the full uncompacted conversation transcript at: "{this.props.transcriptPath}"{this.props.transcriptLineCount !== undefined && <><br />At the time of this request, the transcript has {this.props.transcriptLineCount} lines.</>}<br />Example usage: {ToolName.ReadFile}(filePath: "{this.props.transcriptPath}")</>}
 			{this.props.endpoint.family === 'gpt-4.1' && <Tag name='reminderInstructions'>
 				<DefaultOpenAIKeepGoingReminder />
 			</Tag>}
