@@ -12,7 +12,7 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { constObservable, observableValue } from '../../../../util/vs/base/common/observableInternal';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { IChatSessionMetadataStore, WorkspaceFolderEntry } from '../../common/chatSessionMetadataStore';
+import { IChatSessionMetadataStore, RepositoryProperties, WorkspaceFolderEntry } from '../../common/chatSessionMetadataStore';
 import { ChatSessionWorkspaceFolderService } from '../chatSessionWorkspaceFolderServiceImpl';
 
 /**
@@ -71,11 +71,16 @@ class MockLogService extends mock<ILogService>() {
 
 class MockMetadataStore extends mock<IChatSessionMetadataStore>() {
 	private readonly _data = new Map<string, WorkspaceFolderEntry>();
+	private readonly _repoData = new Map<string, RepositoryProperties>();
 	override storeWorktreeInfo = vi.fn(async () => { });
 	override storeWorkspaceFolderInfo = vi.fn(async (_sessionId: string, _entry: WorkspaceFolderEntry) => {
 		this._data.set(_sessionId, _entry);
 	});
+	override storeRepositoryProperties = vi.fn(async (_sessionId: string, properties: RepositoryProperties) => {
+		this._repoData.set(_sessionId, properties);
+	});
 	override getWorktreeProperties = vi.fn(async () => undefined);
+	override getRepositoryProperties = vi.fn(async (_sessionId: string) => this._repoData.get(_sessionId));
 	override getSessionWorkspaceFolder = vi.fn(async (_sessionId: string): Promise<vscode.Uri | undefined> => {
 		const entry = this._data.get(_sessionId);
 		if (entry?.folderPath) {
@@ -85,6 +90,7 @@ class MockMetadataStore extends mock<IChatSessionMetadataStore>() {
 	});
 	override deleteSessionMetadata = vi.fn(async (_sessionId: string) => {
 		this._data.delete(_sessionId);
+		this._repoData.delete(_sessionId);
 	});
 }
 
@@ -366,10 +372,14 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
 				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
 
-				const folderUri = vscode.Uri.file('/repo');
+				const sessionId = 'session-1';
+				await metadataStore.storeRepositoryProperties(sessionId, {
+					repositoryPath: '/repo',
+					branchName: 'main',
+				});
 
-				const first = await service.getWorkspaceChanges(folderUri);
-				const second = await service.getWorkspaceChanges(folderUri);
+				const first = await service.getWorkspaceChanges(sessionId);
+				const second = await service.getWorkspaceChanges(sessionId);
 
 				expect(first).toBe(second);
 				// getRepository is called once for the first call, the second uses cache
@@ -381,12 +391,16 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
 				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
 
-				const folderUri = vscode.Uri.file('/repo');
+				const sessionId = 'session-1';
+				await metadataStore.storeRepositoryProperties(sessionId, {
+					repositoryPath: '/repo',
+					branchName: 'main',
+				});
 
-				await service.getWorkspaceChanges(folderUri);
-				service.clearWorkspaceChanges(folderUri);
+				await service.getWorkspaceChanges(sessionId);
+				service.clearWorkspaceChanges(sessionId);
 
-				await service.getWorkspaceChanges(folderUri);
+				await service.getWorkspaceChanges(sessionId);
 				expect(gitService.getRepository).toHaveBeenCalledTimes(2);
 			});
 
@@ -395,27 +409,39 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
 				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
 
-				const folderUri = vscode.Uri.file('/repo');
+				const sessionId = 'session-1';
+				await metadataStore.storeRepositoryProperties(sessionId, {
+					repositoryPath: '/repo',
+					branchName: 'main',
+				});
 
-				await service.getWorkspaceChanges(folderUri);
-				await service.handleRequestCompleted(folderUri);
+				await service.getWorkspaceChanges(sessionId);
+				await service.handleRequestCompleted(sessionId);
 
-				await service.getWorkspaceChanges(folderUri);
+				await service.getWorkspaceChanges(sessionId);
 				expect(gitService.getRepository).toHaveBeenCalledTimes(2);
 			});
 
 			it('should return empty array when repository has no changes', async () => {
 				const repo = makeRepoContext({ changes: undefined });
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
+				await metadataStore.storeRepositoryProperties('session-1', {
+					repositoryPath: '/repo',
+					branchName: 'main',
+				});
 
-				const result = await service.getWorkspaceChanges(vscode.Uri.file('/repo'));
+				const result = await service.getWorkspaceChanges('session-1');
 				expect(result).toEqual([]);
 			});
 
 			it('should return empty array when no repository is found', async () => {
 				gitService.getRepository = vi.fn().mockResolvedValue(undefined);
+				await metadataStore.storeRepositoryProperties('session-1', {
+					repositoryPath: '/repo',
+					branchName: 'main',
+				});
 
-				const result = await service.getWorkspaceChanges(vscode.Uri.file('/no-repo'));
+				const result = await service.getWorkspaceChanges('session-1');
 				expect(result).toEqual([]);
 			});
 
@@ -424,15 +450,19 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
 				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
 
-				const folderUri = vscode.Uri.file('/repo');
+				const sessionId = 'session-1';
+				await metadataStore.storeRepositoryProperties(sessionId, {
+					repositoryPath: '/repo',
+					branchName: 'main',
+				});
 
 				// Clear cache between calls to force re-entry into getWorkspaceChanges
-				await service.getWorkspaceChanges(folderUri);
-				service.clearWorkspaceChanges(folderUri);
-				await service.getWorkspaceChanges(folderUri);
+				await service.getWorkspaceChanges(sessionId);
+				service.clearWorkspaceChanges(sessionId);
+				await service.getWorkspaceChanges(sessionId);
 
-				service.clearWorkspaceChanges(folderUri);
-				await service.getWorkspaceChanges(folderUri);
+				service.clearWorkspaceChanges(sessionId);
+				await service.getWorkspaceChanges(sessionId);
 
 				// All 3 calls should have hit getRepository (cache was manually cleared each time)
 				expect(gitService.getRepository).toHaveBeenCalledTimes(3);
@@ -454,23 +484,35 @@ describe('ChatSessionWorkspaceFolderService', () => {
 					});
 				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 0, deletions: 0 });
 
-				await service.getWorkspaceChanges(folder1);
-				await service.getWorkspaceChanges(folder2);
+				const sessionId1 = 'session-1';
+				const sessionId2 = 'session-2';
 
-				// Invalidate only folder1's cache
-				service.clearWorkspaceChanges(folder1);
+				await service.trackSessionWorkspaceFolder(sessionId1, folder1.fsPath, {
+					repositoryPath: folder1.fsPath,
+					branchName: 'main',
+				});
+				await service.trackSessionWorkspaceFolder(sessionId2, folder2.fsPath, {
+					repositoryPath: folder2.fsPath,
+					branchName: 'main',
+				});
 
-				// folder2 should still use cache
-				await service.getWorkspaceChanges(folder2);
-				// folder1 needs refresh
-				await service.getWorkspaceChanges(folder1);
+				await service.getWorkspaceChanges(sessionId1);
+				await service.getWorkspaceChanges(sessionId2);
 
-				// folder1: called twice (initial + after invalidation), folder2: called once (cached)
+				// Invalidate only sessionId1's cache
+				service.clearWorkspaceChanges(sessionId1);
+
+				// sessionId2 should still use cache
+				await service.getWorkspaceChanges(sessionId2);
+				// sessionId1 needs refresh
+				await service.getWorkspaceChanges(sessionId1);
+
+				// sessionId1: called twice (initial + after invalidation), sessionId2: called once (cached)
 				const calls = (gitService.getRepository as ReturnType<typeof vi.fn>).mock.calls;
-				const folder1Calls = calls.filter((c: URI[]) => c[0].fsPath === folder1.fsPath).length;
-				const folder2Calls = calls.filter((c: URI[]) => c[0].fsPath === folder2.fsPath).length;
-				expect(folder1Calls).toBe(2);
-				expect(folder2Calls).toBe(1);
+				const sessionId1Calls = calls.filter((c: URI[]) => c[0].fsPath === folder1.fsPath).length;
+				const sessionId2Calls = calls.filter((c: URI[]) => c[0].fsPath === folder2.fsPath).length;
+				expect(sessionId1Calls).toBe(2);
+				expect(sessionId2Calls).toBe(1);
 			});
 		});
 	});

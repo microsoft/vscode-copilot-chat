@@ -80,4 +80,18 @@ export interface IChatSessionWorktreeService {
 
 	/** Commit changes in a specific worktree, identified by its properties directly. */
 	handleRequestCompletedForWorktree(worktreeProperties: ChatSessionWorktreeProperties): Promise<void>;
+
+	/**
+	 * Attempts to clean up a worktree when a session is archived.
+	 * If auto-commit is enabled and there are uncommitted changes, commits them first.
+	 * Returns whether the worktree was successfully deleted.
+	 */
+	cleanupWorktreeOnArchive(sessionId: string): Promise<{ cleaned: boolean; reason?: string }>;
+
+	/**
+	 * Recreates a worktree from the session branch when a session is unarchived.
+	 * The branch must still exist (it is preserved during archive cleanup).
+	 * Returns whether the worktree was successfully recreated.
+	 */
+	recreateWorktreeOnUnarchive(sessionId: string): Promise<{ recreated: boolean; reason?: string }>;
 }

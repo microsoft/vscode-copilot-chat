@@ -16,8 +16,9 @@ import { ResourceSet } from '../../../util/vs/base/common/map';
 import { isEqual } from '../../../util/vs/base/common/resources';
 import { createTimeout } from '../../inlineEdits/common/common';
 import { IToolsService } from '../../tools/common/toolsService';
+import { RepositoryProperties } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
-import { ChatSessionWorktreeFile, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
+import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import {
 	FolderRepositoryInfo,
 	FolderRepositoryMRUEntry,
@@ -117,6 +118,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		let folderUri = selectedFolder;
 		let worktree: vscode.Uri | undefined = undefined;
 		let worktreeProperties: ChatSessionWorktreeProperties | undefined = undefined;
+		let repositoryProperties: RepositoryProperties | undefined = undefined;
 
 		// If we have just one folder opened in workspace, use that as default
 		// TODO: @DonJayamanne Handle Session View.
@@ -146,6 +148,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 				return {
 					folder: selectedFolder,
 					repository: undefined,
+					repositoryProperties: undefined,
 					trusted: false,
 					worktree,
 					worktreeProperties
@@ -161,13 +164,29 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 
 			// Now look for a git repository in the selected folder.
 			// If found, use it. If not, proceed without isolation.`
-			repositoryUri = worktreeProperties ? vscode.Uri.file(worktreeProperties.repositoryPath) : (await this.gitService.getRepository(selectedFolder, true))?.rootUri;
+			if (worktreeProperties) {
+				repositoryUri = vscode.Uri.file(worktreeProperties.repositoryPath);
+			} else {
+				const repoContext = await this.gitService.getRepository(selectedFolder);
+
+				repositoryUri = repoContext?.rootUri;
+				repositoryProperties = repoContext
+					? {
+						repositoryPath: repoContext.rootUri.fsPath,
+						branchName: repoContext.headBranchName,
+						baseBranchName: repoContext.upstreamRemote && repoContext.upstreamBranchName
+							? `${repoContext.upstreamRemote}/${repoContext.upstreamBranchName}`
+							: undefined,
+					} satisfies RepositoryProperties
+					: undefined;
+			}
 
 			// If no git repo found, use folder directly without isolation
 			if (!repositoryUri) {
 				return {
 					folder: selectedFolder,
 					repository: undefined,
+					repositoryProperties: undefined,
 					trusted: true,
 					worktree,
 					worktreeProperties
@@ -182,6 +201,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 				return {
 					folder: folderUri,
 					repository: undefined,
+					repositoryProperties: undefined,
 					trusted,
 					worktree,
 					worktreeProperties
@@ -191,6 +211,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 			return {
 				folder: undefined,
 				repository: undefined,
+				repositoryProperties: undefined,
 				trusted: true,
 				worktree,
 				worktreeProperties
@@ -204,6 +225,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 			return {
 				folder: folderUri ?? repositoryUri,
 				repository: repositoryUri,
+				repositoryProperties,
 				trusted: false,
 				worktree,
 				worktreeProperties
@@ -213,6 +235,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		return {
 			folder: folderUri ?? repositoryUri,
 			repository: repositoryUri,
+			repositoryProperties,
 			trusted: true,
 			worktree,
 			worktreeProperties
@@ -229,13 +252,13 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 	): Promise<FolderRepositoryInfo> {
 		const { stream, toolInvocationToken, branch, isolation } = options;
 
-		let { folder, repository, trusted, worktree, worktreeProperties } = await this.getFolderRepositoryForNewSession(sessionId, options.folder, stream, token);
+		let { folder, repository, repositoryProperties, trusted, worktree, worktreeProperties } = await this.getFolderRepositoryForNewSession(sessionId, options.folder, stream, token);
 		if (trusted === false) {
-			return { folder, repository, worktree, worktreeProperties, trusted };
+			return { folder, repository, repositoryProperties, worktree, worktreeProperties, trusted };
 		}
 		if (!repository) {
 			// No git repository found, proceed without isolation
-			return { folder, repository, worktree, worktreeProperties, trusted: true };
+			return { folder, repository, repositoryProperties, worktree, worktreeProperties, trusted: true };
 		}
 
 		// If user explicitly chose workspace mode, skip worktree creation
@@ -244,6 +267,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 			return {
 				folder: folder ?? repository,
 				repository,
+				repositoryProperties,
 				worktree: undefined,
 				worktreeProperties: undefined,
 				trusted: true
@@ -255,7 +279,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		if (!worktreeProperties) {
 			uncommittedChangesAction = await this.promptForUncommittedChangesAction(sessionId, repository, branch, toolInvocationToken, token);
 			if (uncommittedChangesAction === 'cancel') {
-				return { folder, repository, worktree, worktreeProperties, trusted: true, cancelled: true };
+				return { folder, repository, repositoryProperties, worktree, worktreeProperties, trusted: true, cancelled: true };
 			}
 		}
 
@@ -275,6 +299,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 			return {
 				folder: folder ?? repository,
 				repository,
+				repositoryProperties,
 				worktree,
 				worktreeProperties,
 				trusted
@@ -300,6 +325,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		return {
 			folder: folder ?? repository,
 			repository,
+			repositoryProperties,
 			worktree: worktree ?? vscode.Uri.file(worktreeProperties.worktreePath),
 			worktreeProperties,
 			trusted: true
@@ -333,7 +359,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 
 		if (trustedInfos.length === 0) {
 			return {
-				primary: { folder: primaryFolder, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: false },
+				primary: { folder: primaryFolder, repository: undefined, repositoryProperties: undefined, worktree: undefined, worktreeProperties: undefined, trusted: false },
 				additional: []
 			};
 		}
@@ -342,18 +368,19 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		if (isolation === 'workspace') {
 			this.logService.info(`[FolderRepositoryManager] Multi-root: workspace isolation mode, skipping worktree creation for all folders`);
 			const primary = trustedInfos.find(t => t.folder.fsPath === primaryFolder.fsPath)?.info
-				?? { folder: primaryFolder, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: true };
+				?? { folder: primaryFolder, repository: undefined, repositoryProperties: undefined, worktree: undefined, worktreeProperties: undefined, trusted: true };
 			const additional = trustedInfos
 				.filter(t => t.folder.fsPath !== primaryFolder.fsPath)
 				.map(t => ({
 					folder: t.info.folder ?? t.folder,
 					repository: undefined,
+					repositoryProperties: undefined,
 					worktree: undefined,
 					worktreeProperties: undefined,
 					trusted: true as boolean | undefined,
 				}));
 			return {
-				primary: { ...primary, repository: undefined, worktree: undefined, worktreeProperties: undefined },
+				primary: { ...primary, repository: undefined, repositoryProperties: undefined, worktree: undefined, worktreeProperties: undefined },
 				additional
 			};
 		}
@@ -381,7 +408,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 			uncommittedChangesAction = await this._promptForMultiRootUncommittedChanges(toolInvocationToken, allModifiedFiles, token);
 			if (uncommittedChangesAction === 'cancel') {
 				return {
-					primary: { folder: primaryFolder, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: true, cancelled: true },
+					primary: { folder: primaryFolder, repository: undefined, repositoryProperties: undefined, worktree: undefined, worktreeProperties: undefined, trusted: true, cancelled: true },
 					additional: []
 				};
 			}
@@ -408,6 +435,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 					info: {
 						folder: info.folder ?? info.repository,
 						repository: info.repository,
+						repositoryProperties: info.repositoryProperties,
 						worktree: vscode.Uri.file(worktreeProperties.worktreePath),
 						worktreeProperties,
 						trusted: true as boolean | undefined,
@@ -436,7 +464,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 
 		// 8. Build result
 		const primaryResult = results.find(r => r.folder.fsPath === primaryFolder.fsPath)?.info
-			?? { folder: primaryFolder, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: true };
+			?? { folder: primaryFolder, repository: undefined, repositoryProperties: undefined, worktree: undefined, worktreeProperties: undefined, trusted: true };
 		const additionalResults = results
 			.filter(r => r.folder.fsPath !== primaryFolder.fsPath)
 			.map(r => r.info);
@@ -606,11 +634,6 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		repository: NonNullable<ReturnType<IGitService['activeRepository']['get']>>,
 		token: vscode.CancellationToken
 	): Promise<Array<{ uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number }>> {
-		this.workspaceFolderService.clearWorkspaceChanges(repositoryUri);
-		const workspaceChanges = await this.workspaceFolderService.getWorkspaceChanges(repositoryUri) ?? [];
-		if (workspaceChanges.length > 0) {
-			return workspaceChanges.map(change => this.toModifiedFileConfirmationEntry(change));
-		}
 
 		if (token.isCancellationRequested || !repository.changes) {
 			return [];
@@ -627,16 +650,6 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		}
 
 		return [...modifiedFiles.values()];
-	}
-
-	private toModifiedFileConfirmationEntry(change: ChatSessionWorktreeFile): { uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number } {
-		const uri = vscode.Uri.file(change.modifiedFilePath ?? change.filePath);
-		return {
-			uri: uri,
-			originalUri: change.originalFilePath ? vscode.Uri.file(change.originalFilePath) : undefined,
-			insertions: change.statistics.additions,
-			deletions: change.statistics.deletions
-		};
 	}
 
 	/**
@@ -750,12 +763,12 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 		// For untitled sessions, use what ever is in memory.
 		if (isUntitledSessionId(sessionId)) {
 			if (options) {
-				const { folder, repository, trusted } = await this.getFolderRepositoryForNewSession(sessionId, undefined, options.stream, token);
-				return { folder, repository, worktree: undefined, worktreeProperties: undefined, trusted };
+				const { folder, repository, repositoryProperties, trusted } = await this.getFolderRepositoryForNewSession(sessionId, undefined, options.stream, token);
+				return { folder, repository, repositoryProperties, worktree: undefined, worktreeProperties: undefined, trusted };
 			} else {
 				const folder = this._newSessionFolders.get(sessionId)?.uri
 					?? await this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
-				return { folder, repository: undefined, worktree: undefined, trusted: undefined, worktreeProperties: undefined };
+				return { folder, repository: undefined, repositoryProperties: undefined, worktree: undefined, trusted: undefined, worktreeProperties: undefined };
 			}
 		}
 
@@ -774,6 +787,7 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 			return {
 				folder: repositoryUri,
 				repository: repositoryUri,
+				repositoryProperties: undefined,
 				worktree: worktreeUri,
 				worktreeProperties,
 				trusted
@@ -783,6 +797,7 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 		// Check session workspace folder
 		const sessionWorkspaceFolderEntry = await this.workspaceFolderService.getSessionWorkspaceFolderEntry(sessionId);
 		if (sessionWorkspaceFolderEntry) {
+			const repositoryProperties = await this.workspaceFolderService.getRepositoryProperties(sessionId);
 			let trusted: boolean | undefined;
 			if (options) {
 				trusted = await this.verifyTrust(vscode.Uri.file(sessionWorkspaceFolderEntry.folderPath), options.stream);
@@ -790,9 +805,10 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 
 			return {
 				folder: vscode.Uri.file(sessionWorkspaceFolderEntry.folderPath),
-				repository: sessionWorkspaceFolderEntry.repositoryPath
-					? vscode.Uri.file(sessionWorkspaceFolderEntry.repositoryPath)
+				repository: repositoryProperties?.repositoryPath
+					? vscode.Uri.file(repositoryProperties.repositoryPath)
 					: undefined,
+				repositoryProperties,
 				worktree: undefined,
 				worktreeProperties: undefined,
 				trusted
@@ -810,13 +826,14 @@ export class CopilotCLIFolderRepositoryManager extends FolderRepositoryManager {
 			return {
 				folder: cwd,
 				repository: undefined,
+				repositoryProperties: undefined,
 				worktree: undefined,
 				worktreeProperties: undefined,
 				trusted
 			};
 		}
 
-		return { folder: undefined, repository: undefined, worktree: undefined, trusted: undefined, worktreeProperties: undefined };
+		return { folder: undefined, repository: undefined, repositoryProperties: undefined, worktree: undefined, trusted: undefined, worktreeProperties: undefined };
 	}
 }
 

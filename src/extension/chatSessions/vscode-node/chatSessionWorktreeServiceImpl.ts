@@ -471,6 +471,145 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		});
 	}
 
+	async cleanupWorktreeOnArchive(sessionId: string): Promise<{ cleaned: boolean; reason?: string }> {
+		const worktreeProperties = await this.getWorktreeProperties(sessionId);
+		if (!worktreeProperties) {
+			return { cleaned: false, reason: 'no-worktree' };
+		}
+
+		const worktreePath = worktreeProperties.worktreePath;
+
+		// Check if the worktree directory exists
+		try {
+			await fs.access(worktreePath);
+		} catch {
+			this.logService.trace(`[ChatSessionWorktreeService][cleanupWorktreeOnArchive] Worktree path does not exist: ${worktreePath}`);
+			return { cleaned: false, reason: 'worktree-not-found' };
+		}
+
+		// Get the git repository for the worktree
+		const repository = await this.gitCommitMessageService.getRepository(vscode.Uri.file(worktreePath));
+		if (!repository) {
+			this.logService.warn(`[ChatSessionWorktreeService][cleanupWorktreeOnArchive] Unable to find repository for worktree ${worktreePath}`);
+			return { cleaned: false, reason: 'no-repository' };
+		}
+
+		const hasUncommittedChanges = repository.state.workingTreeChanges.length > 0
+			|| repository.state.indexChanges.length > 0
+			|| repository.state.untrackedChanges.length > 0;
+
+		if (hasUncommittedChanges) {
+			// For auto-commit sessions, commit changes before cleanup
+			if (worktreeProperties.autoCommit !== false) {
+				this.logService.trace(`[ChatSessionWorktreeService][cleanupWorktreeOnArchive] Auto-committing changes before cleanup for session ${sessionId}`);
+				try {
+					await this.handleRequestCompleted(sessionId);
+				} catch (error) {
+					const errorMessage = error instanceof Error ? error.message : String(error);
+					this.logService.error(`[ChatSessionWorktreeService][cleanupWorktreeOnArchive] Failed to auto-commit: ${errorMessage}`);
+					return { cleaned: false, reason: 'auto-commit-failed' };
+				}
+			} else {
+				// Non-auto-commit sessions with uncommitted changes: skip cleanup
+				this.logService.trace(`[ChatSessionWorktreeService][cleanupWorktreeOnArchive] Skipping cleanup for session ${sessionId}: has uncommitted changes and auto-commit is disabled`);
+				return { cleaned: false, reason: 'uncommitted-changes' };
+			}
+		}
+
+		// Verify the branch exists before deleting the worktree
+		try {
+			const refs = await this.gitService.getRefs(
+				vscode.Uri.file(worktreeProperties.repositoryPath),
+				{ pattern: `refs/heads/${worktreeProperties.branchName}` }
+			);
+			if (!refs || refs.length === 0) {
+				this.logService.warn(`[ChatSessionWorktreeService][cleanupWorktreeOnArchive] Branch ${worktreeProperties.branchName} not found, skipping cleanup`);
+				return { cleaned: false, reason: 'branch-not-found' };
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			this.logService.warn(`[ChatSessionWorktreeService][cleanupWorktreeOnArchive] Failed to verify branch: ${errorMessage}`);
+			return { cleaned: false, reason: 'branch-check-failed' };
+		}
+
+		// Delete the worktree
+		try {
+			const parentRepository = await this.gitService.getRepository(vscode.Uri.file(worktreeProperties.repositoryPath), true);
+			if (!parentRepository) {
+				this.logService.warn(`[ChatSessionWorktreeService][cleanupWorktreeOnArchive] No parent repository found for ${worktreeProperties.repositoryPath}`);
+				return { cleaned: false, reason: 'no-parent-repository' };
+			}
+			await this.gitService.deleteWorktree(parentRepository.rootUri, worktreePath);
+			this.logService.trace(`[ChatSessionWorktreeService][cleanupWorktreeOnArchive] Deleted worktree ${worktreePath} for session ${sessionId}`);
+			return { cleaned: true };
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			this.logService.error(`[ChatSessionWorktreeService][cleanupWorktreeOnArchive] Failed to delete worktree: ${errorMessage}`);
+			return { cleaned: false, reason: 'delete-failed' };
+		}
+	}
+
+	async recreateWorktreeOnUnarchive(sessionId: string): Promise<{ recreated: boolean; reason?: string }> {
+		const worktreeProperties = await this.getWorktreeProperties(sessionId);
+		if (!worktreeProperties) {
+			return { recreated: false, reason: 'no-worktree-properties' };
+		}
+
+		const worktreePath = worktreeProperties.worktreePath;
+
+		// Check if the worktree already exists on disk
+		try {
+			await fs.access(worktreePath);
+			this.logService.trace(`[ChatSessionWorktreeService][recreateWorktreeOnUnarchive] Worktree already exists at ${worktreePath}`);
+			return { recreated: false, reason: 'already-exists' };
+		} catch {
+			// Expected — worktree was cleaned up on archive
+		}
+
+		// Verify the branch still exists in the parent repository
+		try {
+			const refs = await this.gitService.getRefs(
+				vscode.Uri.file(worktreeProperties.repositoryPath),
+				{ pattern: `refs/heads/${worktreeProperties.branchName}` }
+			);
+			if (!refs || refs.length === 0) {
+				this.logService.warn(`[ChatSessionWorktreeService][recreateWorktreeOnUnarchive] Branch ${worktreeProperties.branchName} no longer exists`);
+				return { recreated: false, reason: 'branch-not-found' };
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			this.logService.warn(`[ChatSessionWorktreeService][recreateWorktreeOnUnarchive] Failed to verify branch: ${errorMessage}`);
+			return { recreated: false, reason: 'branch-check-failed' };
+		}
+
+		// Recreate the worktree from the existing branch
+		try {
+			const parentRepository = await this.gitService.getRepository(vscode.Uri.file(worktreeProperties.repositoryPath), true);
+			if (!parentRepository) {
+				this.logService.warn(`[ChatSessionWorktreeService][recreateWorktreeOnUnarchive] No parent repository found for ${worktreeProperties.repositoryPath}`);
+				return { recreated: false, reason: 'no-parent-repository' };
+			}
+
+			// Use commitish (existing branch) without branch (no -b flag) to checkout the existing branch
+			const createdPath = await this.gitService.createWorktree(parentRepository.rootUri, {
+				path: worktreePath,
+				commitish: worktreeProperties.branchName,
+			});
+
+			if (!createdPath) {
+				this.logService.error(`[ChatSessionWorktreeService][recreateWorktreeOnUnarchive] createWorktree returned no path`);
+				return { recreated: false, reason: 'create-failed' };
+			}
+
+			this.logService.trace(`[ChatSessionWorktreeService][recreateWorktreeOnUnarchive] Recreated worktree at ${createdPath} for session ${sessionId}`);
+			return { recreated: true };
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			this.logService.error(`[ChatSessionWorktreeService][recreateWorktreeOnUnarchive] Failed to recreate worktree: ${errorMessage}`);
+			return { recreated: false, reason: 'create-failed' };
+		}
+	}
+
 	private async _getWorktreeChangesFromIndex(worktreeProperties: ChatSessionWorktreeProperties): Promise<readonly ChatSessionWorktreeFile[] | undefined> {
 		const worktreePath = vscode.Uri.file(worktreeProperties.worktreePath);
 		const worktreeRepository = await this.gitService.getRepository(worktreePath);

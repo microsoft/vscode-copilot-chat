@@ -12,10 +12,9 @@ import { DiffChange } from '../../../platform/git/vscode/git';
 import { ILogService } from '../../../platform/log/common/logService';
 import { SequencerByKey } from '../../../util/vs/base/common/async';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { ResourceMap } from '../../../util/vs/base/common/map';
 import * as path from '../../../util/vs/base/common/path';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { IChatSessionMetadataStore, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
+import { IChatSessionMetadataStore, RepositoryProperties, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { ChatSessionWorktreeFile } from '../common/chatSessionWorktreeService';
 
@@ -28,8 +27,9 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 
 	private static readonly EMPTY_TREE_OBJECT = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
-	private readonly workspaceFolderChanges = new ResourceMap<ChatSessionWorktreeFile[]>();
 	private readonly workspaceState = new Map<string, WorkspaceFolderEntry>();
+	private readonly workspaceFolderChanges = new Map<string, ChatSessionWorktreeFile[]>();
+
 	private readonly workspaceChangesSequencer = new SequencerByKey<string>();
 
 	constructor(
@@ -46,14 +46,16 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 		await this.metadataStore.deleteSessionMetadata(sessionId);
 	}
 
-	async trackSessionWorkspaceFolder(sessionId: string, workspaceFolderUri: string, repositoryFolderUri?: string): Promise<void> {
+	async trackSessionWorkspaceFolder(sessionId: string, workspaceFolderUri: string, repositoryProperties?: RepositoryProperties): Promise<void> {
 		const entry: WorkspaceFolderEntry = {
 			folderPath: workspaceFolderUri,
-			repositoryPath: repositoryFolderUri,
 			timestamp: Date.now()
 		};
 		this.workspaceState.set(sessionId, entry);
-		this.metadataStore.storeWorkspaceFolderInfo(sessionId, entry);
+		await this.metadataStore.storeWorkspaceFolderInfo(sessionId, entry);
+		if (repositoryProperties) {
+			await this.metadataStore.storeRepositoryProperties(sessionId, repositoryProperties);
+		}
 		this.logService.trace(`[ChatSessionWorkspaceFolderService] Tracked workspace folder ${workspaceFolderUri} for session ${sessionId}`);
 	}
 
@@ -73,29 +75,41 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 		return await this.metadataStore.getSessionWorkspaceFolderEntry(sessionId);
 	}
 
-	async handleRequestCompleted(workspaceFolderUri: vscode.Uri): Promise<void> {
-		// Clear changes cache
-		this.workspaceFolderChanges.delete(workspaceFolderUri);
+	async getRepositoryProperties(sessionId: string): Promise<RepositoryProperties | undefined> {
+		return await this.metadataStore.getRepositoryProperties(sessionId);
 	}
 
-	async getWorkspaceChanges(workspaceFolderUri: vscode.Uri): Promise<readonly ChatSessionWorktreeFile[] | undefined> {
-		return this.workspaceChangesSequencer.queue(workspaceFolderUri.toString(), async () => {
+	async handleRequestCompleted(sessionId: string): Promise<void> {
+		// Clear changes cache
+		this.workspaceFolderChanges.delete(sessionId);
+	}
 
-			const cachedChanges = this.workspaceFolderChanges.get(workspaceFolderUri);
+	async getWorkspaceChanges(sessionId: string): Promise<readonly ChatSessionWorktreeFile[] | undefined> {
+		return this.workspaceChangesSequencer.queue(sessionId, async () => {
+
+			const cachedChanges = this.workspaceFolderChanges.get(sessionId);
 			if (cachedChanges) {
 				return cachedChanges;
 			}
 
-			const repository = await this.gitService.getRepository(workspaceFolderUri);
+			const repositoryProperties = await this.getRepositoryProperties(sessionId);
+			if (!repositoryProperties) {
+				this.logService.warn(`[ChatSessionWorkspaceFolderService][getWorkspaceChanges] No repository properties found for session ${sessionId}`);
+				return [];
+			}
+
+			const repository = await this.gitService.getRepository(vscode.Uri.file(repositoryProperties.repositoryPath));
 			if (!repository?.changes) {
 				return [];
 			}
 
-			// Check for untracked changes
-			const hasUntrackedChanges = [
-				...repository.changes?.workingTree ?? [],
-				...repository.changes?.untrackedChanges ?? [],
-			].some(change => change.status === 7 /* UNTRACKED */);
+			// Check for untracked changes, only if the session branch matches the current branch
+			const hasUntrackedChanges = repositoryProperties.branchName === repository.headBranchName
+				? [
+					...repository.changes?.workingTree ?? [],
+					...repository.changes?.untrackedChanges ?? [],
+				].some(change => change.status === 7 /* UNTRACKED */)
+				: false;
 
 			const diffChanges: DiffChange[] = [];
 
@@ -120,7 +134,9 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 					await this.gitService.exec(repository.rootUri, ['add', '-A', '--', '.'], { GIT_INDEX_FILE: diffIndexFile });
 
 					// Diff the temp index with the base branch
-					const result = await this.gitService.exec(repository.rootUri, ['diff', '--cached', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--'], { GIT_INDEX_FILE: diffIndexFile });
+					const result = repositoryProperties.baseBranchName
+						? await this.gitService.exec(repository.rootUri, ['diff', '--cached', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--merge-base', repositoryProperties.baseBranchName, '--'], { GIT_INDEX_FILE: diffIndexFile })
+						: await this.gitService.exec(repository.rootUri, ['diff', '--cached', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--'], { GIT_INDEX_FILE: diffIndexFile });
 					diffChanges.push(...parseGitChangesRaw(repository.rootUri.fsPath, result));
 				} catch (error) {
 					this.logService.error(`[ChatSessionWorkspaceFolderService][getWorkspaceChanges] Error while processing workspace changes: ${error}`);
@@ -134,7 +150,9 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 				}
 			} else {
 				// Tracked changes
-				const result = await this.gitService.exec(repository.rootUri, ['diff', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--']);
+				const result = repositoryProperties.baseBranchName
+					? await this.gitService.exec(repository.rootUri, ['diff', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--merge-base', repositoryProperties.baseBranchName, '--'])
+					: await this.gitService.exec(repository.rootUri, ['diff', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--']);
 				diffChanges.push(...parseGitChangesRaw(repository.rootUri.fsPath, result));
 			}
 
@@ -152,12 +170,12 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 				}
 			} satisfies ChatSessionWorktreeFile));
 
-			this.workspaceFolderChanges.set(workspaceFolderUri, changes);
+			this.workspaceFolderChanges.set(sessionId, changes);
 			return changes;
 		});
 	}
 
-	clearWorkspaceChanges(workspaceFolderUri: vscode.Uri): void {
-		this.workspaceFolderChanges.delete(workspaceFolderUri);
+	clearWorkspaceChanges(sessionId: string): void {
+		this.workspaceFolderChanges.delete(sessionId);
 	}
 }

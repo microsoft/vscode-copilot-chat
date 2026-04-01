@@ -100,7 +100,9 @@ export class ChatSessionRepositoryTracker extends Disposable {
 			this.logService.trace(`[ChatSessionRepositoryTracker][onDidChangesWorkspaceFile] Updated session properties for worktree ${uri.toString()}.`);
 		} else if (workspaceSessionIds.length > 0) {
 			// Workspace
-			this.workspaceFolderService.clearWorkspaceChanges(uri);
+			for (const sessionId of workspaceSessionIds) {
+				this.workspaceFolderService.clearWorkspaceChanges(sessionId);
+			}
 
 			// This is still using the old ChatSessionItem API so there is no need to refresh each session
 			// associated with the workspace folder. When the new controller API is fully adopted we will

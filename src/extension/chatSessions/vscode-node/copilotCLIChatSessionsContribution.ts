@@ -34,7 +34,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { EXTENSION_ID } from '../../common/constants';
 import { ChatVariablesCollection, extractDebugTargetSessionIds, isPromptFile } from '../../prompt/common/chatVariablesCollection';
 import { IToolsService } from '../../tools/common/toolsService';
-import { IChatSessionMetadataStore, StoredModeInstructions } from '../common/chatSessionMetadataStore';
+import { IChatSessionMetadataStore, RepositoryProperties, StoredModeInstructions } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeCheckpointService } from '../common/chatSessionWorktreeCheckpointService';
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
@@ -272,7 +272,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			changes.push(...(await this.worktreeManager.getWorktreeChanges(session.id) ?? []));
 		} else if (workingDirectory && await vscode.workspace.isResourceTrusted(workingDirectory)) {
 			// Workspace
-			const workspaceChanges = await this.workspaceFolderService.getWorkspaceChanges(workingDirectory) ?? [];
+			const workspaceChanges = await this.workspaceFolderService.getWorkspaceChanges(session.id) ?? [];
 			changes.push(...workspaceChanges.map(change => new vscode.ChatSessionChangedFile2(
 				vscode.Uri.file(change.filePath),
 				change.originalFilePath
@@ -325,7 +325,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		} else {
 			// Workspace
 			const sessionRequestDetails = await this.chatSessionMetadataStore.getRequestDetails(session.id);
-			const workspaceFolderEntry = await this.chatSessionMetadataStore.getSessionWorkspaceFolderEntry(session.id);
+			const repositoryProperties = await this.chatSessionMetadataStore.getRepositoryProperties(session.id);
 
 			let lastCheckpointRef: string | undefined;
 			for (let i = sessionRequestDetails.length - 1; i >= 0; i--) {
@@ -342,7 +342,9 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 			metadata = {
 				isolationMode: IsolationMode.Workspace,
-				repositoryPath: workspaceFolderEntry?.repositoryPath,
+				repositoryPath: repositoryProperties?.repositoryPath,
+				branchName: repositoryProperties?.branchName,
+				baseBranchName: repositoryProperties?.baseBranchName,
 				workingDirectoryPath: workingDirectory?.fsPath,
 				firstCheckpointRef,
 				lastCheckpointRef
@@ -1517,7 +1519,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					// When isolation is not enabled, we are operating in the workspace directly,
 					// so we stage all the changes in the workspace directory when the session is
 					// completed
-					await this.workspaceFolderService.handleRequestCompleted(workingDirectory);
+					await this.workspaceFolderService.handleRequestCompleted(session.sessionId);
 				}
 
 				// Create checkpoint - we create a checkpoint for the worktree changes so that users
@@ -1707,7 +1709,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 		const sessionWorkingDirectory = getWorkingDirectory(session.object.workspace);
 		if (sessionWorkingDirectory && !isIsolationEnabled(session.object.workspace)) {
-			void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, sessionWorkingDirectory.fsPath, session.object.workspace.repository?.fsPath);
+			void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, sessionWorkingDirectory.fsPath, session.object.workspace.repositoryProperties);
 		}
 		disposables.add(session.object.attachStream(stream));
 		const permissionLevel = request.permissionLevel;
@@ -1847,7 +1849,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			void this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.object.sessionId, worktreeProperties);
 		}
 		if (workingDirectory && !isIsolationEnabled(workspaceInfo)) {
-			void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, workingDirectory.fsPath, workspaceInfo.repository?.fsPath);
+			void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, workingDirectory.fsPath, workspaceInfo.repositoryProperties);
 		}
 
 		try {
@@ -2352,7 +2354,7 @@ export function registerCLIChatCommands(
 			});
 		} else if (workspaceFolder) {
 			// Workspace
-			copilotCliWorkspaceSession.clearWorkspaceChanges(workspaceFolder);
+			copilotCliWorkspaceSession.clearWorkspaceChanges(sessionId);
 		}
 
 		copilotcliSessionItemProvider.notifySessionsChange();
@@ -2378,8 +2380,15 @@ export function registerCLIChatCommands(
 			return;
 		}
 
-		copilotCliWorkspaceSession.trackSessionWorkspaceFolder(sessionId, workspaceFolder.fsPath, repository.rootUri.fsPath);
-		copilotCliWorkspaceSession.clearWorkspaceChanges(workspaceFolder);
+		const repositoryProperties = repository.headBranchName
+			? {
+				repositoryPath: repository.rootUri.fsPath,
+				branchName: repository.headBranchName
+			} satisfies RepositoryProperties
+			: undefined;
+
+		copilotCliWorkspaceSession.trackSessionWorkspaceFolder(sessionId, workspaceFolder.fsPath, repositoryProperties);
+		copilotCliWorkspaceSession.clearWorkspaceChanges(sessionId);
 
 		copilotcliSessionItemProvider.notifySessionsChange();
 	}));

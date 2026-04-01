@@ -16,6 +16,7 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { LanguageModelTextPart, LanguageModelToolResult2 } from '../../../../vscodeTypes';
 import { MockChatResponseStream } from '../../../test/node/testHelpers';
 import type { IToolsService } from '../../../tools/common/toolsService';
+import { RepositoryProperties } from '../../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
 import { ChatSessionWorktreeFile, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../../common/chatSessionWorktreeService';
 import { IFolderRepositoryManager } from '../../common/folderRepositoryManager';
@@ -61,9 +62,9 @@ class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFo
 	private _sessionWorkspaceFolderRepositories = new Map<string, vscode.Uri | undefined>();
 	private _workspaceChanges = new Map<string, readonly ChatSessionWorktreeFile[] | undefined>();
 
-	override trackSessionWorkspaceFolder = vi.fn(async (sessionId: string, workspaceFolderUri: string, repositoryPath?: string): Promise<void> => {
+	override trackSessionWorkspaceFolder = vi.fn(async (sessionId: string, workspaceFolderUri: string, repositoryProperties?: RepositoryProperties): Promise<void> => {
 		this._sessionWorkspaceFolders.set(sessionId, vscode.Uri.file(workspaceFolderUri));
-		this._sessionWorkspaceFolderRepositories.set(sessionId, repositoryPath ? vscode.Uri.file(repositoryPath) : undefined);
+		this._sessionWorkspaceFolderRepositories.set(sessionId, repositoryProperties?.repositoryPath ? vscode.Uri.file(repositoryProperties.repositoryPath) : undefined);
 	});
 
 	override deleteTrackedWorkspaceFolder = vi.fn(async (sessionId: string): Promise<void> => {
@@ -81,24 +82,28 @@ class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFo
 			return undefined;
 		}
 
-		const repository = this._sessionWorkspaceFolderRepositories.get(sessionId);
 		return {
 			folderPath: folder.fsPath,
-			repositoryPath: repository?.fsPath,
 			timestamp: Date.now()
 		};
 	});
 
-	override getWorkspaceChanges = vi.fn(async (workspaceFolderUri: vscode.Uri): Promise<readonly ChatSessionWorktreeFile[] | undefined> => {
-		return this._workspaceChanges.get(workspaceFolderUri.toString());
+	override getRepositoryProperties = vi.fn(async (_sessionId: string): Promise<RepositoryProperties | undefined> => {
+		return undefined;
+	});
+
+	override handleRequestCompleted = vi.fn(async (_sessionId: string): Promise<void> => { });
+
+	override getWorkspaceChanges = vi.fn(async (sessionId: string): Promise<readonly ChatSessionWorktreeFile[] | undefined> => {
+		return this._workspaceChanges.get(sessionId);
 	});
 
 	setTestSessionWorkspaceFolder(sessionId: string, folder: vscode.Uri): void {
 		this._sessionWorkspaceFolders.set(sessionId, folder);
 	}
 
-	override clearWorkspaceChanges(workspaceFolderUri: vscode.Uri): void {
-		this._workspaceChanges.delete(workspaceFolderUri.toString());
+	override clearWorkspaceChanges(sessionId: string): void {
+		this._workspaceChanges.delete(sessionId);
 	}
 }
 
@@ -207,6 +212,7 @@ export class FakeFolderRepositoryManager extends mock<IFolderRepositoryManager>(
 	private _folderRepoInfo = new Map<string, {
 		folder: vscode.Uri | undefined;
 		repository: vscode.Uri | undefined;
+		repositoryProperties?: RepositoryProperties;
 		worktree: vscode.Uri | undefined;
 		trusted: boolean | undefined;
 		worktreeProperties: ChatSessionWorktreeProperties | undefined;
@@ -225,7 +231,7 @@ export class FakeFolderRepositoryManager extends mock<IFolderRepositoryManager>(
 		_token: vscode.CancellationToken
 	) => {
 		const info = this._folderRepoInfo.get(sessionId);
-		return info ?? { folder: undefined, repository: undefined, worktree: undefined, trusted: undefined, worktreeProperties: undefined };
+		return info ?? { folder: undefined, repository: undefined, repositoryProperties: undefined, worktree: undefined, trusted: undefined, worktreeProperties: undefined };
 	});
 
 	override initializeFolderRepository = vi.fn(async (
@@ -237,6 +243,7 @@ export class FakeFolderRepositoryManager extends mock<IFolderRepositoryManager>(
 		return {
 			folder: info?.folder,
 			repository: info?.repository,
+			repositoryProperties: info?.repositoryProperties,
 			worktree: info?.worktree,
 			trusted: info?.trusted ?? true,
 			worktreeProperties: info?.worktreeProperties
@@ -261,6 +268,7 @@ export class FakeFolderRepositoryManager extends mock<IFolderRepositoryManager>(
 	setTestFolderRepositoryInfo(sessionId: string, info: {
 		folder: vscode.Uri | undefined;
 		repository: vscode.Uri | undefined;
+		repositoryProperties?: RepositoryProperties;
 		worktree: vscode.Uri | undefined;
 		trusted: boolean | undefined;
 		worktreeProperties: ChatSessionWorktreeProperties | undefined;
