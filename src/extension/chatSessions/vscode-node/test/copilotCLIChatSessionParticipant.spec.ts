@@ -146,18 +146,20 @@ class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFo
 			return undefined;
 		}
 
-		const repository = this._sessionWorkspaceFolderRepositories.get(sessionId);
 		return {
 			folderPath: folder.fsPath,
-			repositoryPath: repository?.fsPath,
 			timestamp: Date.now()
 		};
 	});
-	override getWorkspaceChanges = vi.fn(async (workspaceFolderUri: vscode.Uri): Promise<readonly ChatSessionWorktreeFile[] | undefined> => {
-		return this._workspaceChanges.get(workspaceFolderUri.toString());
+	override getRepositoryProperties = vi.fn(async (_sessionId: string): Promise<RepositoryProperties | undefined> => {
+		return undefined;
 	});
-	override clearWorkspaceChanges(workspaceFolderUri: vscode.Uri): void {
-		this._workspaceChanges.delete(workspaceFolderUri.toString());
+	override handleRequestCompleted = vi.fn(async (_sessionId: string): Promise<void> => { });
+	override getWorkspaceChanges = vi.fn(async (sessionId: string): Promise<readonly ChatSessionWorktreeFile[] | undefined> => {
+		return this._workspaceChanges.get(sessionId);
+	});
+	override clearWorkspaceChanges(sessionId: string): void {
+		this._workspaceChanges.delete(sessionId);
 	}
 }
 

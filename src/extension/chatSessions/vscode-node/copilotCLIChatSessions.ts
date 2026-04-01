@@ -390,7 +390,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			changes.push(...(await this.copilotCLIWorktreeManagerService.getWorktreeChanges(session.id) ?? []));
 		} else if (workingDirectory && await vscode.workspace.isResourceTrusted(workingDirectory)) {
 			// Workspace
-			const workspaceChanges = await this.workspaceFolderService.getWorkspaceChanges(workingDirectory) ?? [];
+			const workspaceChanges = await this.workspaceFolderService.getWorkspaceChanges(session.id) ?? [];
 			changes.push(...workspaceChanges.map(change => new vscode.ChatSessionChangedFile2(
 				vscode.Uri.file(change.filePath),
 				change.originalFilePath
@@ -1213,7 +1213,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					// When isolation is not enabled, we are operating in the workspace directly,
 					// so we stage all the changes in the workspace directory when the session is
 					// completed
-					await this.workspaceFolderService.handleRequestCompleted(workingDirectory);
+					await this.workspaceFolderService.handleRequestCompleted(session.sessionId);
 				}
 
 				// Create checkpoint - we create a checkpoint for the worktree changes so that users
@@ -2055,7 +2055,7 @@ export function registerCLIChatCommands(
 			});
 		} else if (workspaceFolder) {
 			// Workspace
-			copilotCliWorkspaceSession.clearWorkspaceChanges(workspaceFolder);
+			copilotCliWorkspaceSession.clearWorkspaceChanges(sessionId);
 		}
 
 		await contentProvider.refreshSession({ reason: 'update', sessionId });
@@ -2082,7 +2082,7 @@ export function registerCLIChatCommands(
 		}
 
 		copilotCliWorkspaceSession.trackSessionWorkspaceFolder(sessionId, workspaceFolder.fsPath, repository.headBranchName ? { repositoryPath: repository.rootUri.fsPath, branchName: repository.headBranchName } : undefined);
-		copilotCliWorkspaceSession.clearWorkspaceChanges(workspaceFolder);
+		copilotCliWorkspaceSession.clearWorkspaceChanges(sessionId);
 
 		await contentProvider.refreshSession({ reason: 'update', sessionId });
 	}));

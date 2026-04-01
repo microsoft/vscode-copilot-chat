@@ -18,7 +18,7 @@ import { createTimeout } from '../../inlineEdits/common/common';
 import { IToolsService } from '../../tools/common/toolsService';
 import { RepositoryProperties } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
-import { ChatSessionWorktreeFile, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
+import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import {
 	FolderRepositoryInfo,
 	FolderRepositoryMRUEntry,
@@ -634,11 +634,11 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		repository: NonNullable<ReturnType<IGitService['activeRepository']['get']>>,
 		token: vscode.CancellationToken
 	): Promise<Array<{ uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number }>> {
-		this.workspaceFolderService.clearWorkspaceChanges(repositoryUri);
-		const workspaceChanges = await this.workspaceFolderService.getWorkspaceChanges(repositoryUri) ?? [];
-		if (workspaceChanges.length > 0) {
-			return workspaceChanges.map(change => this.toModifiedFileConfirmationEntry(change));
-		}
+		// this.workspaceFolderService.clearWorkspaceChanges(repositoryUri);
+		// const workspaceChanges = await this.workspaceFolderService.getWorkspaceChanges(repositoryUri) ?? [];
+		// if (workspaceChanges.length > 0) {
+		// 	return workspaceChanges.map(change => this.toModifiedFileConfirmationEntry(change));
+		// }
 
 		if (token.isCancellationRequested || !repository.changes) {
 			return [];
@@ -657,15 +657,15 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		return [...modifiedFiles.values()];
 	}
 
-	private toModifiedFileConfirmationEntry(change: ChatSessionWorktreeFile): { uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number } {
-		const uri = vscode.Uri.file(change.modifiedFilePath ?? change.filePath);
-		return {
-			uri: uri,
-			originalUri: change.originalFilePath ? vscode.Uri.file(change.originalFilePath) : undefined,
-			insertions: change.statistics.additions,
-			deletions: change.statistics.deletions
-		};
-	}
+	// private toModifiedFileConfirmationEntry(change: ChatSessionWorktreeFile): { uri: vscode.Uri; originalUri?: vscode.Uri; insertions?: number; deletions?: number } {
+	// 	const uri = vscode.Uri.file(change.modifiedFilePath ?? change.filePath);
+	// 	return {
+	// 		uri: uri,
+	// 		originalUri: change.originalFilePath ? vscode.Uri.file(change.originalFilePath) : undefined,
+	// 		insertions: change.statistics.additions,
+	// 		deletions: change.statistics.deletions
+	// 	};
+	// }
 
 	/**
 	 * Verify trust for a folder/repository and report via stream if not trusted.
