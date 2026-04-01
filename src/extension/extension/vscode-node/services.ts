@@ -32,7 +32,6 @@ import { IEndpointProvider } from '../../../platform/endpoint/common/endpointPro
 import { AutomodeService, IAutomodeService } from '../../../platform/endpoint/node/automodeService';
 import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
 import { DomainService } from '../../../platform/endpoint/node/domainServiceImpl';
-import { ScenarioAutomationCAPIClientImpl } from '../../../platform/endpoint/node/scenarioAutomationCAPIClientImpl';
 import { INativeEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { NativeEnvServiceImpl } from '../../../platform/env/vscode-node/nativeEnvServiceImpl';
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
@@ -85,7 +84,7 @@ import { IWorkspaceMutationManager } from '../../../platform/testing/common/work
 import { ISetupTestsDetector, SetupTestsDetector } from '../../../platform/testing/node/setupTestDetector';
 import { ITestDepsResolver, TestDepsResolver } from '../../../platform/testing/node/testDepsResolver';
 import { ITokenizerProvider, TokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
-import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService, MockGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
+import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
 import { IRerankerService, RerankerService } from '../../../platform/workspaceChunkSearch/common/rerankerService';
 import { ScenarioAutomationWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/scenarioAutomationWorkspaceChunkSearchService';
 import { IWorkspaceChunkSearchService, WorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
@@ -200,18 +199,16 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 		builder.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [createStaticGitHubTokenProvider()]));
 		builder.define(IEndpointProvider, new SyncDescriptor(ScenarioAutomationEndpointProviderImpl));
 		builder.define(IIgnoreService, new SyncDescriptor(NullIgnoreService));
-		builder.define(ICAPIClientService, new SyncDescriptor(ScenarioAutomationCAPIClientImpl));
-		builder.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));
-		builder.define(IGithubAvailableEmbeddingTypesService, new MockGithubAvailableEmbeddingTypesService());
 		builder.define(IWorkspaceChunkSearchService, new SyncDescriptor(ScenarioAutomationWorkspaceChunkSearchService));
 	} else {
 		builder.define(IAuthenticationService, new SyncDescriptor(AuthenticationService));
 		builder.define(IEndpointProvider, new SyncDescriptor(ProductionEndpointProvider));
 		builder.define(IIgnoreService, new SyncDescriptor(VsCodeIgnoreService));
-		builder.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));
-		builder.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(GithubAvailableEmbeddingTypesService));
 		builder.define(IWorkspaceChunkSearchService, new SyncDescriptor(WorkspaceChunkSearchService));
 	}
+
+	builder.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));
+	builder.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(GithubAvailableEmbeddingTypesService));
 
 	builder.define(ITestGenInfoStorage, new SyncDescriptor(TestGenInfoStorage)); // Used for test generation (/tests intent)
 	builder.define(IParserService, new SyncDescriptor(ParserServiceImpl, [/*useWorker*/ true]));
