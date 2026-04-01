@@ -6237,7 +6237,7 @@
 		"@vscode/lsif-language-service": "^0.1.0-pre.4",
 		"@vscode/test-cli": "^0.0.11",
 		"@vscode/test-electron": "^2.5.2",
-		"@vscode/test-web": "^0.0.71",
+		"@vscode/test-web": "^0.0.80",
 		"@vscode/vsce": "3.6.0",
 		"agent-browser": "^0.16.3",
 		"copyfiles": "^2.4.1",
@@ -6342,6 +6342,7 @@
 	},
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",
+		"brace-expansion": "^2.0.1",
 		"string_decoder": "npm:string_decoder@1.2.0",
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
