@@ -28,6 +28,10 @@ Use direct debug log files written by Copilot Chat:
 debug-logs/<sessionId>/
   main.jsonl                              — always start here; primary conversation log
   models.json                             — (optional) snapshot of available models at session start
+  system_prompt_0.json                    — (optional) full system prompt sent to the model (untruncated)
+  system_prompt_1.json                    — (optional) written when the model changes mid-session
+  tools_0.json                            — (optional) tool definitions sent to the model
+  tools_1.json                            — (optional) written when the model changes mid-session
   runSubagent-<agentName>-<uuid>.jsonl    — (optional) subagent's tool calls & LLM requests
   searchSubagent-<uuid>.jsonl             — (optional) search subagent work
   title-<uuid>.jsonl                      — (optional, UI-only) title generation
@@ -36,6 +40,8 @@ debug-logs/<sessionId>/
 ```
 
 Always read `main.jsonl` first — it has the full conversation flow. Child files only appear when those operations occurred. `main.jsonl` contains `child_session_ref` entries that link to each child file by name. Title, categorization, and summarize files are UI housekeeping and rarely relevant to troubleshooting. When investigating model availability or selection issues, read `models.json` — it contains the full list of models (with capabilities, billing, and limits) that were available when the session started.
+
+When investigating what the model was told (system prompt, instructions), read the `system_prompt_*.json` file referenced by a `system_prompt_ref` entry in `main.jsonl`. The file contains the full untruncated system prompt as `{ "content": "..." }`. When investigating which tools were available, read the `tools_*.json` file similarly. If the model changed mid-session, multiple numbered files exist — each `llm_request` entry has a `systemPromptFile` attr indicating which file was active for that request.
 
 Each line is a JSON object. Common fields: `ts` (epoch ms), `dur` (duration ms), `sid` (session ID), `type`, `name`, `spanId`, `parentSpanId`, `status` (`ok`|`error`), `attrs` (type-specific details).
 
@@ -58,15 +64,15 @@ Key attrs: `args` (JSON string of tool input), `result` (tool output or error te
 
 #### llm_request — model round-trip
 ```jsonl
-{"ts":1773200231010,"dur":3001,"sid":"62f52dec","type":"llm_request","name":"chat:gpt-4o","spanId":"000000000000000c","parentSpanId":"0000000000000003","status":"ok","attrs":{"model":"gpt-4o","inputTokens":15025,"outputTokens":126,"ttft":1987}}
+{"ts":1773200231010,"dur":3001,"sid":"62f52dec","type":"llm_request","name":"chat:gpt-4o","spanId":"000000000000000c","parentSpanId":"0000000000000003","status":"ok","attrs":{"model":"gpt-4o","inputTokens":15025,"outputTokens":126,"ttft":1987,"maxTokens":32000,"systemPromptFile":"system_prompt_0.json","userRequest":"echo hello","inputMessages":"[{...}]"}}
 ```
-Key attrs: `model`, `inputTokens`, `outputTokens`, `ttft` (time to first token in ms), `error` (when failed).
+Key attrs: `model`, `inputTokens`, `outputTokens`, `ttft` (time to first token in ms), `maxTokens`, `temperature`, `topP`, `systemPromptFile` (references a file in the session directory), `userRequest` (the full user message content, untruncated), `inputMessages` (full messages array as JSON, pre-truncated at 64KB), `error` (when failed).
 
 #### agent_response — model output (text + tool calls)
 ```jsonl
-{"ts":1773200234011,"dur":0,"sid":"62f52dec","type":"agent_response","name":"agent_response","spanId":"agent-msg-000000000000000c","parentSpanId":"0000000000000003","status":"ok","attrs":{"response":"[{\"role\":\"assistant\",\"parts\":[{\"type\":\"text\",\"content\":\"Running your command now.\"},{\"type\":\"tool_call\",\"name\":\"run_in_terminal\",\"arguments\":\"{...}\"}]}]"}}
+{"ts":1773200234011,"dur":0,"sid":"62f52dec","type":"agent_response","name":"agent_response","spanId":"agent-msg-000000000000000c","parentSpanId":"0000000000000003","status":"ok","attrs":{"response":"[{\"role\":\"assistant\",...}]","reasoning":"The user wants me to run a command."}}
 ```
-Key attrs: `response` (JSON-encoded array of message parts; may be truncated).
+Key attrs: `response` (JSON-encoded array of message parts; may be truncated), `reasoning` (optional — the model's chain-of-thought/thinking text when thinking mode is active; may be truncated).
 
 #### user_message — user input
 ```jsonl
@@ -84,6 +90,23 @@ Key attrs: `agentName`, `description` (optional), `error` (when failed).
 ```jsonl
 {"ts":1773200260000,"dur":0,"sid":"62f52dec","type":"generic","name":"some-event","spanId":"abc123","status":"ok","attrs":{"details":"Additional context","category":"some-category"}}
 ```
+
+Special generic entries:
+- `system_prompt_ref` — references a `system_prompt_*.json` file in the session directory. `attrs.file` is the filename, `attrs.model` is the model it was written for. Read this file to see the full system prompt.
+- `tools_ref` — references a `tools_*.json` file. `attrs.file` is the filename, `attrs.model` is the model.
+
+#### session_start — session metadata (appears once at session start)
+```jsonl
+{"ts":1773200251300,"dur":0,"sid":"62f52dec","type":"session_start","name":"session_start","spanId":"session-start-62f52dec","status":"ok","attrs":{"copilotVersion":"0.43.2026033104","vscodeVersion":"1.99.0"}}
+```
+Key attrs: `copilotVersion`, `vscodeVersion`. Useful for identifying which build produced the logs.
+
+#### turn_start / turn_end — tool-calling loop iteration boundaries
+```jsonl
+{"ts":1773200251400,"dur":0,"sid":"62f52dec","type":"turn_start","name":"turn_start:0","spanId":"turn-start-X-0","status":"ok","attrs":{"turnId":"0"}}
+{"ts":1773200255000,"dur":0,"sid":"62f52dec","type":"turn_end","name":"turn_end:0","spanId":"turn-end-X-0","status":"ok","attrs":{"turnId":"0"}}
+```
+Key attrs: `turnId` (iteration number within a single user request's tool-calling loop). Use these to identify which iteration events belong to and to count total loop iterations.
 
 ### Reading the event hierarchy
 

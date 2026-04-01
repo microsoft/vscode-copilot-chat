@@ -60,6 +60,7 @@ export interface BYOKModelCapabilities {
 	requestHeaders?: Record<string, string>;
 	supportedEndpoints?: ModelSupportedEndpoint[];
 	zeroDataRetentionEnabled?: boolean;
+	supportsReasoningEffort?: string[];
 }
 
 export interface BYOKModelRegistry {
@@ -149,7 +150,7 @@ export function byokKnownModelToAPIInfo(providerName: string, id: string, capabi
 		capabilities: {
 			toolCalling: capabilities.toolCalling,
 			imageInput: capabilities.vision
-		}
+		},
 	};
 }
 
