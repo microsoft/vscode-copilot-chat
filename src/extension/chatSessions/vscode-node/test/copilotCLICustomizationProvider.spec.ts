@@ -141,6 +141,24 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(supported).toContain(FakeChatSessionCustomizationType.Skill);
 			expect(supported).toContain(FakeChatSessionCustomizationType.Instructions);
 		});
+
+		it('only returns items whose type is in supportedTypes', async () => {
+			mockCopilotCLIAgents.setAgents([makeSweAgent('explore', 'Explore')]);
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const supported = new Set(CopilotCLICustomizationProvider.metadata.supportedTypes!.map(t => t.id));
+			for (const item of items) {
+				expect(supported.has(item.type.id), `item "${item.name}" has type "${item.type.id}" not in supportedTypes`).toBe(true);
+			}
+		});
+
+		it('sets groupKey "builtin" for items with synthetic URIs', async () => {
+			mockCopilotCLIAgents.setAgents([makeSweAgent('explore', 'Explore')]);
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const builtinItems = items.filter(i => i.uri.scheme !== 'file');
+			for (const item of builtinItems) {
+				expect(item.groupKey, `item "${item.name}" should have groupKey "builtin"`).toBe('builtin');
+			}
+		});
 	});
 
 	describe('provideChatSessionCustomizations', () => {

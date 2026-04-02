@@ -150,6 +150,28 @@ describe('ClaudeCustomizationProvider', () => {
 			expect(supported).toContain(FakeChatSessionCustomizationType.Instructions);
 			expect(supported).toContain(FakeChatSessionCustomizationType.Hook);
 		});
+
+		it('only returns items whose type is in supportedTypes', async () => {
+			mockRuntimeDataService.setAgents([
+				{ name: 'Explore', description: 'Fast exploration agent' },
+			]);
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const supported = new Set(ClaudeCustomizationProvider.metadata.supportedTypes!.map(t => t.id));
+			for (const item of items) {
+				expect(supported.has(item.type.id), `item "${item.name}" has type "${item.type.id}" which is not in supportedTypes`).toBe(true);
+			}
+		});
+
+		it('sets groupKey "builtin" for items with synthetic URIs', async () => {
+			mockRuntimeDataService.setAgents([
+				{ name: 'Explore', description: 'Explore agent' },
+			]);
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const builtinItems = items.filter(i => i.uri.scheme !== 'file');
+			for (const item of builtinItems) {
+				expect(item.groupKey, `item "${item.name}" with scheme "${item.uri.scheme}" should have groupKey "builtin"`).toBe('builtin');
+			}
+		});
 	});
 
 	describe('agents from SDK', () => {
