@@ -162,14 +162,14 @@ describe('ClaudeCustomizationProvider', () => {
 			}
 		});
 
-		it('sets groupKey "builtin" for items with synthetic URIs', async () => {
+		it('does not set groupKey for items with synthetic URIs (vscode infers grouping)', async () => {
 			mockRuntimeDataService.setAgents([
 				{ name: 'Explore', description: 'Explore agent' },
 			]);
 			const items = await provider.provideChatSessionCustomizations(undefined!);
 			const builtinItems = items.filter(i => i.uri.scheme !== 'file');
 			for (const item of builtinItems) {
-				expect(item.groupKey, `item "${item.name}" with scheme "${item.uri.scheme}" should have groupKey "builtin"`).toBe('builtin');
+				expect(item.groupKey, `item "${item.name}" with scheme "${item.uri.scheme}" should not have groupKey (vscode infers)`).toBeUndefined();
 			}
 		});
 	});
@@ -191,7 +191,7 @@ describe('ClaudeCustomizationProvider', () => {
 			expect(agentItems).toHaveLength(2);
 			expect(agentItems[0].name).toBe('Explore');
 			expect(agentItems[0].description).toBe('Fast exploration agent');
-			expect(agentItems[0].groupKey).toBe('builtin');
+			expect(agentItems[0].groupKey).toBeUndefined();
 			expect(agentItems[0].uri.scheme).toBe('claude-code');
 			expect(agentItems[0].uri.path).toBe('/agents/Explore');
 			expect(agentItems[1].name).toBe('Review');
@@ -223,7 +223,7 @@ describe('ClaudeCustomizationProvider', () => {
 			const agentItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Agent);
 			expect(agentItems).toHaveLength(1);
 			expect(agentItems[0].description).toBe('SDK version');
-			expect(agentItems[0].groupKey).toBe('builtin');
+			expect(agentItems[0].groupKey).toBeUndefined();
 		});
 
 		it('filters out file agents not under .claude/', async () => {

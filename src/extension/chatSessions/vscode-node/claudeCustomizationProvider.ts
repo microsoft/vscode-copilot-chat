@@ -109,7 +109,7 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 				type: vscode.ChatSessionCustomizationType.Agent,
 				name: agent.name,
 				description: agent.description,
-				groupKey: 'builtin',
+				// No groupKey — vscode infers Built-in from non-file: scheme
 			});
 		}
 

@@ -99,7 +99,8 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 				type: vscode.ChatSessionCustomizationType.Agent,
 				name: matchedFile?.name ?? (agent.displayName || agent.name),
 				description: agent.description,
-				groupKey: matchedFile ? undefined : 'builtin',
+				// No groupKey — vscode infers from URI scheme:
+				// file: → Workspace/User, copilotcli: → Built-in
 			});
 		}
 

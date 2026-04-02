@@ -151,12 +151,12 @@ describe('CopilotCLICustomizationProvider', () => {
 			}
 		});
 
-		it('sets groupKey "builtin" for items with synthetic URIs', async () => {
+		it('does not set groupKey for items with synthetic URIs (vscode infers grouping)', async () => {
 			mockCopilotCLIAgents.setAgents([makeSweAgent('explore', 'Explore')]);
 			const items = await provider.provideChatSessionCustomizations(undefined!);
 			const builtinItems = items.filter(i => i.uri.scheme !== 'file');
 			for (const item of builtinItems) {
-				expect(item.groupKey, `item "${item.name}" should have groupKey "builtin"`).toBe('builtin');
+				expect(item.groupKey, `item "${item.name}" should not have groupKey (vscode infers)`).toBeUndefined();
 			}
 		});
 	});
@@ -200,7 +200,7 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(agentItems).toHaveLength(1);
 			expect(agentItems[0].uri.scheme).toBe('copilotcli');
 			expect(agentItems[0].uri.path).toBe('/agents/task');
-			expect(agentItems[0].groupKey).toBe('builtin');
+			expect(agentItems[0].groupKey).toBeUndefined();
 		});
 
 		it('uses displayName from SDK agents when available', async () => {
