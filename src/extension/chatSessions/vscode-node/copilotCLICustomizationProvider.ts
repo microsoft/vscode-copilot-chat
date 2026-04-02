@@ -15,17 +15,11 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IChatPromptFileService } from '../common/chatPromptFileService';
 import { ICopilotCLIAgents } from '../copilotcli/node/copilotCli';
 
-/**
- * Workspace-relative path prefixes that are relevant to Copilot CLI.
- * Matches the copilot-agent-runtime discovery paths for skills, instructions, and agents.
- */
-const CLI_SUBPATHS = ['.github/', '.copilot/', '.agents/'];
+/** Workspace-relative prefixes the copilot-agent-runtime discovers. */
+const CLI_WORKSPACE_PREFIXES = ['.github/', '.copilot/', '.agents/'];
 
-/**
- * Home-directory relative path prefixes for Copilot CLI customizations.
- * Matches the copilot-agent-runtime personal skill/instruction directories.
- */
-const CLI_HOME_SUBPATHS = ['.copilot/', '.agents/'];
+/** Home-directory prefixes the copilot-agent-runtime discovers. */
+const CLI_HOME_PREFIXES = ['.copilot/', '.agents/'];
 
 export class CopilotCLICustomizationProvider extends Disposable implements vscode.ChatSessionCustomizationProvider {
 
@@ -163,7 +157,7 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 			const folderPath = folder.path.endsWith('/') ? folder.path : folder.path + '/';
 			if (uri.path.startsWith(folderPath)) {
 				const relative = uri.path.slice(folderPath.length);
-				if (CLI_SUBPATHS.some(prefix => relative.startsWith(prefix))) {
+				if (CLI_WORKSPACE_PREFIXES.some(prefix => relative.startsWith(prefix))) {
 					return true;
 				}
 			}
@@ -174,7 +168,7 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 		const homePrefix = homePath.endsWith('/') ? homePath : homePath + '/';
 		if (uri.path.startsWith(homePrefix)) {
 			const relative = uri.path.slice(homePrefix.length);
-			if (CLI_HOME_SUBPATHS.some(prefix => relative.startsWith(prefix))) {
+			if (CLI_HOME_PREFIXES.some(prefix => relative.startsWith(prefix))) {
 				return true;
 			}
 		}
