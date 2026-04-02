@@ -175,11 +175,18 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 	}
 }
 
+/** An agent with its source URI preserved for UI and cross-referencing. */
+export interface CLIAgentInfo {
+	readonly agent: Readonly<SweCustomAgent>;
+	/** File URI for prompt-file agents, synthetic `copilotcli:` URI for SDK-only agents. */
+	readonly sourceUri: URI;
+}
+
 export interface ICopilotCLIAgents {
 	readonly _serviceBrand: undefined;
 	readonly onDidChangeAgents: Event<void>;
 	resolveAgent(agentId: string): Promise<SweCustomAgent | undefined>;
-	getAgents(): Promise<Readonly<SweCustomAgent>[]>;
+	getAgents(): Promise<readonly CLIAgentInfo[]>;
 	getSessionAgent(sessionId: string): Promise<string | undefined>;
 }
 
@@ -188,7 +195,7 @@ export const ICopilotCLIAgents = createServiceIdentifier<ICopilotCLIAgents>('ICo
 export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	declare _serviceBrand: undefined;
 	private sessionAgents: Record<string, { agentId?: string; createdDateTime: number }> = {};
-	private _agentsPromise?: Promise<Readonly<SweCustomAgent>[]>;
+	private _agentsPromise?: Promise<readonly CLIAgentInfo[]>;
 	private readonly _onDidChangeAgents = this._register(new Emitter<void>());
 	readonly onDidChangeAgents: Event<void> = this._onDidChangeAgents.event;
 	constructor(
@@ -245,23 +252,22 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 			return agentId;
 		}
 		const agents = await this.getAgents();
-		return agents.find(agent => agent.name.toLowerCase() === agentId)?.name;
+		return agents.find(a => a.agent.name.toLowerCase() === agentId)?.agent.name;
 	}
 
 	async resolveAgent(agentId: string): Promise<SweCustomAgent | undefined> {
 		for (const promptFile of this.chatPromptFileService.customAgentPromptFiles) {
 			if (agentId === promptFile.uri.toString()) {
-				return this.toCustomAgent(promptFile);
+				return this.toCustomAgent(promptFile)?.agent;
 			}
 		}
 		const customAgents = await this.getAgents();
 		agentId = agentId.toLowerCase();
-		const agent = customAgents.find(agent => agent.name.toLowerCase() === agentId || agent.displayName?.toLowerCase() === agentId);
-		// Return a clone to allow mutations (to tools, etc).
-		return agent ? this.cloneAgent(agent) : undefined;
+		const match = customAgents.find(a => a.agent.name.toLowerCase() === agentId || a.agent.displayName?.toLowerCase() === agentId);
+		return match ? this.cloneAgent(match.agent) : undefined;
 	}
 
-	async getAgents(): Promise<Readonly<SweCustomAgent>[]> {
+	async getAgents(): Promise<readonly CLIAgentInfo[]> {
 		// Cache the promise to avoid concurrent fetches
 		if (!this._agentsPromise) {
 			this._agentsPromise = this.getAgentsImpl().catch((error) => {
@@ -271,23 +277,26 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 			});
 		}
 
-		return this._agentsPromise.then(agents => agents.map(agent => this.cloneAgent(agent)));
+		return this._agentsPromise.then(infos => infos.map(i => ({ agent: this.cloneAgent(i.agent), sourceUri: i.sourceUri })));
 	}
 
-	async getAgentsImpl(): Promise<Readonly<SweCustomAgent>[]> {
-		const mergedAgents = new Map<string, SweCustomAgent>();
+	async getAgentsImpl(): Promise<readonly CLIAgentInfo[]> {
+		const merged = new Map<string, CLIAgentInfo>();
 		for (const agent of await this.getSDKAgents()) {
-			mergedAgents.set(agent.name.toLowerCase(), this.cloneAgent(agent));
+			merged.set(agent.name.toLowerCase(), {
+				agent: this.cloneAgent(agent),
+				sourceUri: URI.from({ scheme: 'copilotcli', path: `/agents/${agent.name}` }),
+			});
 		}
 		for (const promptFile of this.chatPromptFileService.customAgentPromptFiles) {
-			const agent = this.toCustomAgent(promptFile);
-			if (!agent) {
+			const info = this.toCustomAgent(promptFile);
+			if (!info) {
 				continue;
 			}
-			mergedAgents.set(agent.name.toLowerCase(), agent);
+			merged.set(info.agent.name.toLowerCase(), info);
 		}
 
-		return [...mergedAgents.values()].map(agent => this.cloneAgent(agent));
+		return [...merged.values()];
 	}
 
 	private async getSDKAgents(): Promise<Readonly<SweCustomAgent>[]> {
@@ -302,7 +311,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		return agents.map(agent => this.cloneAgent(agent));
 	}
 
-	private toCustomAgent(promptFile: ParsedPromptFile): SweCustomAgent | undefined {
+	private toCustomAgent(promptFile: ParsedPromptFile): CLIAgentInfo | undefined {
 		const agentName = getAgentFileNameFromFilePath(promptFile.uri);
 		const headerName = promptFile.header?.name?.trim();
 		const name = headerName === undefined || headerName === '' ? agentName : headerName;
@@ -314,13 +323,16 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		const model = promptFile.header?.model?.[0];
 
 		return {
-			name,
-			displayName: name,
-			description: promptFile.header?.description ?? '',
-			tools: tools.length > 0 ? tools : null,
-			prompt: async () => promptFile.body?.getContent() ?? '',
-			disableModelInvocation: promptFile.header?.disableModelInvocation ?? false,
-			...(model ? { model } : {}),
+			agent: {
+				name,
+				displayName: name,
+				description: promptFile.header?.description ?? '',
+				tools: tools.length > 0 ? tools : null,
+				prompt: async () => promptFile.body?.getContent() ?? '',
+				disableModelInvocation: promptFile.header?.disableModelInvocation ?? false,
+				...(model ? { model } : {}),
+			},
+			sourceUri: promptFile.uri,
 		};
 	}
 
