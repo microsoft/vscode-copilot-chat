@@ -482,8 +482,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					const approved = true;
 					event.data.actions;
 					try {
+						const planPath = this._sdkSession.getPlanPath();
+
 						const userInputRequest: IQuestion = {
-							question: l10n.t('Approve this plan?'),
+							question: planPath ? l10n.t('Approve this plan {0}?', Uri.file(planPath).toString()) : l10n.t('Approve this plan?'),
 							header: l10n.t('Approve this plan?'),
 							options: event.data.actions.map(a => ({ label: (actionDescriptions as Record<string, string>)[a] ?? a, recommended: a === event.data.recommendedAction })),
 							allowFreeformInput: true,

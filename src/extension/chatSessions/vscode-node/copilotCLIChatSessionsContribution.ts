@@ -1309,7 +1309,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				history: [requestTurn],
 				yieldRequested: false,
 			};
-			const branchNamePromise = (isUntitled && request.prompt && this.branchNameGenerator) ? this.branchNameGenerator.generateBranchName(fakeContext, token) : Promise.resolve(undefined); const [model, agent] = await Promise.all([
+			const branchNamePromise = (isUntitled && request.prompt && this.branchNameGenerator) ? this.branchNameGenerator.generateBranchName(fakeContext, token) : Promise.resolve(undefined);
+			const [model, agent] = await Promise.all([
 				this.getModelId(request, token),
 				this.getAgent(id, request, token),
 			]);
