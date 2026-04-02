@@ -58,6 +58,8 @@ import { IEditToolLearningService } from '../../tools/common/editToolLearningSer
 import { ContributedToolName, ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
 import { applyPatch5Description } from '../../tools/node/applyPatchTool';
+import { multiReplaceStringPrimaryDescription } from '../../tools/node/multiReplaceStringTool';
+import { replaceStringBatchDescription } from '../../tools/node/replaceStringTool';
 import { getAgentMaxRequests } from '../common/agentConfig';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
@@ -151,6 +153,17 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 		const ap = tools.findIndex(t => t.name === ToolName.ApplyPatch);
 		if (ap !== -1) {
 			tools[ap] = { ...tools[ap], description: applyPatch5Description };
+		}
+	}
+
+	if (configurationService.getExperimentBasedConfig(ConfigKey.Advanced.BatchReplaceStringDescriptions, experimentationService)) {
+		const rs = tools.findIndex(t => t.name === ToolName.ReplaceString);
+		if (rs !== -1) {
+			tools[rs] = { ...tools[rs], description: replaceStringBatchDescription };
+		}
+		const mrs = tools.findIndex(t => t.name === ToolName.MultiReplaceString);
+		if (mrs !== -1) {
+			tools[mrs] = { ...tools[mrs], description: multiReplaceStringPrimaryDescription };
 		}
 	}
 
