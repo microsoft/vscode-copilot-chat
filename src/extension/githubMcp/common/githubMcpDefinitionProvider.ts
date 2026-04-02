@@ -87,8 +87,8 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 		return this.configurationService.getConfig<boolean>(ConfigKey.GitHubMcpLockdown);
 	}
 
-	private get channel(): string {
-		return this.configurationService.getConfig<string>(ConfigKey.GitHubMcpChannel);
+	private get channel(): ConfigKey.GitHubMcpChannelValue {
+		return this.configurationService.getConfig<ConfigKey.GitHubMcpChannelValue>(ConfigKey.GitHubMcpChannel);
 	}
 
 	private get gheConfig(): string | undefined {
