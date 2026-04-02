@@ -17,6 +17,15 @@ export interface FetchedValueOptions<T> {
 	 * and this function is not called.
 	 */
 	isStale: (value: T) => boolean;
+
+	/**
+	 * When `true`, automatically calls {@link FetchedValue.resolve} once per minute so
+	 * the synchronous {@link FetchedValue.value} getter stays up-to-date.
+	 *
+	 * **Caution:** enabling this will lead to more network requests because the value
+	 * is re-fetched periodically regardless of whether it is being read.
+	 */
+	keepCacheHot?: boolean;
 }
 
 /**
@@ -48,6 +57,7 @@ export class FetchedValue<T> {
 	private _value: T | undefined;
 	private _inflightFetch: Promise<T> | undefined;
 	private _disposed = false;
+	private _keepCacheHotTimer: ReturnType<typeof setInterval> | undefined;
 
 	private readonly _fetch: () => Promise<T>;
 	private readonly _isStale: (value: T) => boolean;
@@ -55,6 +65,11 @@ export class FetchedValue<T> {
 	constructor(options: FetchedValueOptions<T>) {
 		this._fetch = options.fetch;
 		this._isStale = options.isStale;
+		if (options.keepCacheHot) {
+			this._keepCacheHotTimer = setInterval(() => {
+				this.resolve().catch(() => { /* swallow — next interval will retry */ });
+			}, 60_000);
+		}
 	}
 
 	/**
@@ -95,6 +110,10 @@ export class FetchedValue<T> {
 		this._disposed = true;
 		this._value = undefined;
 		this._inflightFetch = undefined;
+		if (this._keepCacheHotTimer !== undefined) {
+			clearInterval(this._keepCacheHotTimer);
+			this._keepCacheHotTimer = undefined;
+		}
 	}
 
 	private async _doFetch(): Promise<T> {
