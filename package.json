@@ -3330,6 +3330,22 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.githubMcpServer.channel": {
+						"type": "string",
+						"default": "stable",
+						"enum": [
+							"stable",
+							"insiders"
+						],
+						"enumDescriptions": [
+							"%github.copilot.config.githubMcpServer.channel.stable%",
+							"%github.copilot.config.githubMcpServer.channel.insiders%"
+						],
+						"markdownDescription": "%github.copilot.config.githubMcpServer.channel%",
+						"tags": [
+							"experimental"
+						]
+					},
 					"github.copilot.chat.switchAgent.enabled": {
 						"type": "boolean",
 						"default": false,
