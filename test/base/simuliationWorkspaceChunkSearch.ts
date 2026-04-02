@@ -114,7 +114,7 @@ export class SimulationCodeSearchChunkSearchService extends Disposable implement
 		};
 	}
 
-	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, _onProgress?: (message: string) => void, _telemetryInfo?: TelemetryCorrelationId, _token?: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+	triggerIndexing(trigger: BuildIndexTriggerReason, _onProgress?: (message: string) => void, _telemetryInfo?: TelemetryCorrelationId, _token?: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
 		throw new Error('Method not implemented.');
 	}
 

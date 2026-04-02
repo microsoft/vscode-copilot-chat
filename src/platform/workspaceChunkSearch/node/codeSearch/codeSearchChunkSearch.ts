@@ -720,12 +720,12 @@ export class CodeSearchChunkSearch extends Disposable {
 		};
 	}
 
-	public async triggerRemoteIndexing(triggerReason: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
-		const triggerResult = await this.doTriggerRemoteIndexing(triggerReason, onProgress, telemetryInfo, token);
+	public async triggerIndexing(triggerReason: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+		const triggerResult = await this.doTriggerIndexing(triggerReason, onProgress, telemetryInfo, token);
 		if (triggerResult.isOk()) {
-			this._logService.trace(`CodeSearch.triggerRemoteIndexing(${triggerReason}) succeeded`);
+			this._logService.trace(`CodeSearch.triggerIndexing(${triggerReason}) succeeded`);
 		} else {
-			this._logService.trace(`CodeSearch.triggerRemoteIndexing(${triggerReason}) failed. ${triggerResult.err.id}`);
+			this._logService.trace(`CodeSearch.triggerIndexing(${triggerReason}) failed. ${triggerResult.err.id}`);
 		}
 
 		/* __GDPR__
@@ -743,14 +743,6 @@ export class CodeSearchChunkSearch extends Disposable {
 
 		return triggerResult;
 	}
-
-	public async triggerDiffIndexing(): Promise<undefined> {
-		const diffArray = await this.getLocalDiff();
-		if (Array.isArray(diffArray)) {
-			this._embeddingsChunkSearch.tryTriggerReindexing(diffArray, new TelemetryCorrelationId('CodeSearchChunkSearch::triggerDiffIndexing'));
-		}
-	}
-
 
 	@LogExecTime(self => self._logService, 'CodeSearchChunkSearch::openGitRepo')
 	private async openGitRepo(repo: RepoInfo, remoteInfo: ResolvedRepoRemoteInfo): Promise<void> {
@@ -840,7 +832,7 @@ export class CodeSearchChunkSearch extends Disposable {
 		this._codeSearchRepos.delete(repo.rootUri);
 	}
 
-	private async doTriggerRemoteIndexing(triggerReason: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+	private async doTriggerIndexing(triggerReason: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
 		this._logService.trace(`RepoTracker.TriggerRemoteIndexing(${triggerReason}).started`);
 
 		await this.initialize();
