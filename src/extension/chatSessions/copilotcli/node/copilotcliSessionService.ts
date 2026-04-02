@@ -639,10 +639,11 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	protected async createSessionsOptions(options: { model?: string; workspace: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; agent: SweCustomAgent | undefined; copilotUrl?: string; sessionId?: string; debugTargetSessionIds?: readonly string[]; mcpServerMappings?: McpServerMappings }): Promise<{ readonly sessionOptions: Readonly<SessionOptions>; readonly agentName: string | undefined }> {
-		const [customAgents, skillLocations] = await Promise.all([
+		const [agentInfos, skillLocations] = await Promise.all([
 			this.agents.getAgents(),
 			this.copilotCLISkills.getSkillsLocations(),
 		]);
+		const customAgents = agentInfos.map(i => i.agent);
 		const variablesContext = this._promptVariablesService.buildTemplateVariablesContext(options.sessionId, options.debugTargetSessionIds);
 		const systemMessage = variablesContext ? { mode: 'append' as const, content: variablesContext } : undefined;
 

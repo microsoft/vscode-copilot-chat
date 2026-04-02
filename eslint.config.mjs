@@ -246,6 +246,10 @@ export default tseslint.config(
 							from: './test/'
 						},
 						{
+							target: './src/shared-fetch-utils',
+							from: ['./src/extension', './src/platform', './src/util', './src/lib']
+						},
+						{
 							target: './src/util',
 							from: ['./src/platform', './src/extension']
 						},
