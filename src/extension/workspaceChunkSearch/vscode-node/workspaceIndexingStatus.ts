@@ -194,7 +194,11 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 					state.remoteIndexState.externalIngestState?.status === CodeSearchRepoStatus.Ready
 					// Or if external ingest is disabled but all repos are indexed.
 					// This isn't 100% true because files outside of the repos aren't indexed in this case
-					|| (!state.remoteIndexState.externalIngestState && state.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.Ready))
+					|| (
+						!state.remoteIndexState.externalIngestState
+						&& state.remoteIndexState.repos.length > 0
+						&& state.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.Ready)
+					)
 				) {
 					return this._writeStatusItem({
 						primary: {
