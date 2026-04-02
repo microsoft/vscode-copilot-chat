@@ -11,7 +11,7 @@ import { CopilotToken } from '../../../platform/authentication/common/copilotTok
 import { IBlockedExtensionService } from '../../../platform/chat/common/blockedExtensionService';
 import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
@@ -180,6 +180,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		@IVSCodeExtensionContext private readonly _vsCodeExtensionContext: IVSCodeExtensionContext,
 		@IAutomodeService private readonly _automodeService: IAutomodeService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super();
 
@@ -243,7 +244,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 		// Experiment: sort endpoints by vendor priority (OpenAI, Anthropic, Gemini, others).
 		// Auto endpoint is always first via its category order.
-		if (this._expService.getTreatmentVariable<boolean>('chat.modelPickerVendorOrdering')) {
+		if (this._configurationService.getExperimentBasedConfig(ConfigKey.Shared.ModelPickerVendorOrdering, this._expService)) {
 			const getVendorPriority = (e: IChatEndpoint): number => {
 				if (e instanceof AutoChatEndpoint) { return -1; }
 				const provider = e.modelProvider.toLowerCase();

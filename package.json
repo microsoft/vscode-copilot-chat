@@ -4586,6 +4586,15 @@
 							"advanced"
 						]
 					},
+					"github.copilot.chat.modelPickerVendorOrdering": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.modelPickerVendorOrdering%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.searchSubagent.enabled": {
 						"type": "boolean",
 						"default": false,
