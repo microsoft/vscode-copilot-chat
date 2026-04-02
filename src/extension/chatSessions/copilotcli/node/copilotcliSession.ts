@@ -783,7 +783,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const artifacts: { label: string; uri: string; type: 'devServer' | 'screenshot' | 'plan' }[] = [];
 		const planPath = this._sdkSession.getPlanPath();
 		if (planPath) {
-			artifacts.push({ label: 'Plan', uri: Uri.file(planPath).toString(), type: 'plan' });
+			artifacts.push({ label: l10n.t('Plan'), uri: Uri.file(planPath).toString(), type: 'plan' });
 		}
 		Promise.resolve(this._toolsService
 			.invokeTool('setArtifacts', { input: { artifacts }, toolInvocationToken: this._toolInvocationToken }, CancellationToken.None))
