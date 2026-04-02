@@ -190,7 +190,10 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const gitService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IGitService));
 		const sessionTracker = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionTracker));
 		const terminalIntegration = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLITerminalIntegration));
-		const branchNameGenerator = copilotcliAgentInstaService.createInstance(GitBranchNameGenerator);
+		const aiGeneratedBranchNames = instantiationService.invokeFunction(accessor =>
+			accessor.get(IConfigurationService).getConfig(ConfigKey.Advanced.CLIAIGenerateBranchNames)
+		);
+		const branchNameGenerator = aiGeneratedBranchNames ? copilotcliAgentInstaService.createInstance(GitBranchNameGenerator) : undefined;
 
 		const copilotcliChatSessionParticipant = this._register(copilotcliAgentInstaService.createInstance(
 			CopilotCLIChatSessionParticipant,
@@ -260,6 +263,10 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const gitService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IGitService));
 		const gitExtensionService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IGitExtensionService));
 		const toolsService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IToolsService));
+		const aiGeneratedBranchNames = instantiationService.invokeFunction(accessor =>
+			accessor.get(IConfigurationService).getConfig(ConfigKey.Advanced.CLIAIGenerateBranchNames)
+		);
+		const branchNameGenerator = aiGeneratedBranchNames ? copilotcliAgentInstaService.createInstance(GitBranchNameGenerator) : undefined;
 
 		const copilotcliChatSessionParticipant = this._register(copilotcliAgentInstaService.createInstance(
 			CopilotCLIChatSessionParticipantV1,
@@ -267,6 +274,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			promptResolver,
 			copilotcliSessionItemProvider,
 			cloudSessionProvider,
+			branchNameGenerator
 		));
 		const copilotCLISessionService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionService));
 		const copilotCLIWorktreeManagerService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatSessionWorktreeService));
