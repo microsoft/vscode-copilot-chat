@@ -56,12 +56,13 @@ class AutoModeTokenBank extends Disposable {
 	) {
 		super();
 
+		const expName = location === ChatLocation.Editor
+			? 'copilotchat.autoModelHint.editor'
+			: 'copilotchat.autoModelHint';
+
 		this._fetchedValue = this._register(createCapiClientFetchedValue<AutoModeAPIResponse>(capiClientService, envService, {
 			request: async () => {
 				const authToken = (await authService.getCopilotToken()).token;
-				const expName = location === ChatLocation.Editor
-					? 'copilotchat.autoModelHint.editor'
-					: 'copilotchat.autoModelHint';
 				const autoModeHint = expService.getTreatmentVariable<string>(expName) || 'auto';
 				return {
 					headers: {
@@ -73,9 +74,14 @@ class AutoModeTokenBank extends Disposable {
 				};
 			},
 			requestMetadata: { type: RequestType.AutoModels },
-			parseResponse: (res) => {
+			parseResponse: async (res) => {
+				if (res.status < 200 || res.status >= 300) {
+					const text = await res.text().catch(() => '');
+					throw new Error(`AutoMode token response status: ${res.status}${text ? `, body: ${text}` : ''}`);
+				}
+				const data = await res.json() as AutoModeAPIResponse;
 				this._usedSinceLastFetch = false;
-				return res.body as AutoModeAPIResponse;
+				return data;
 			},
 			isStale: (token) => {
 				if (!this._usedSinceLastFetch) {
