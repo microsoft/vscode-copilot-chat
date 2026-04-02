@@ -62,27 +62,58 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 	async provideChatSessionCustomizations(_token: vscode.CancellationToken): Promise<vscode.ChatSessionCustomizationItem[]> {
 		const items: vscode.ChatSessionCustomizationItem[] = [];
 
-		// Build a file URI lookup from prompt file agents for cross-referencing
-		const fileAgentLookup = new Map<string, URI>();
+		// Build a file URI lookup from prompt file agents for cross-referencing.
+		// We normalize names by lowercasing and replacing hyphens/underscores
+		// so that 'apple-docs' matches 'apple_docs_investigator' etc.
+		const fileAgentLookup = new Map<string, { uri: URI; name: string }>();
 		for (const agent of this.chatPromptFileService.customAgents) {
 			const name = deriveNameFromUri(agent.uri, AGENT_FILE_EXTENSION);
-			fileAgentLookup.set(name.toLowerCase(), agent.uri);
+			const normalizedKey = name.toLowerCase().replace(/[-_]/g, '');
+			fileAgentLookup.set(normalizedKey, { uri: agent.uri, name });
 		}
 
 		// Agents: use ICopilotCLIAgents as the primary source (includes SDK + prompt file agents).
 		// Cross-reference with chatPromptFileService.customAgents for file URIs when available.
+		// An SDK agent matches a file agent if its normalized name starts with the file's
+		// normalized name (e.g. 'appledocsinvestigator' starts with 'appledocs').
 		const cliAgents = await this.copilotCLIAgents.getAgents();
+		const matchedFileKeys = new Set<string>();
 		const agentItems: vscode.ChatSessionCustomizationItem[] = [];
 		for (const agent of cliAgents) {
-			const fileUri = fileAgentLookup.get(agent.name.toLowerCase());
+			const normalizedName = agent.name.toLowerCase().replace(/[-_]/g, '');
+			// Find matching file agent
+			let matchedFile: { uri: URI; name: string } | undefined;
+			let matchedKey: string | undefined;
+			for (const [key, file] of fileAgentLookup) {
+				if (normalizedName === key || normalizedName.startsWith(key)) {
+					matchedFile = file;
+					matchedKey = key;
+					break;
+				}
+			}
+			if (matchedKey) {
+				matchedFileKeys.add(matchedKey);
+			}
 			agentItems.push({
-				uri: fileUri ?? URI.from({ scheme: 'copilotcli', path: `/agents/${agent.name}` }),
+				uri: matchedFile?.uri ?? URI.from({ scheme: 'copilotcli', path: `/agents/${agent.name}` }),
 				type: vscode.ChatSessionCustomizationType.Agent,
-				name: agent.displayName || agent.name,
+				name: matchedFile?.name ?? (agent.displayName || agent.name),
 				description: agent.description,
-				groupKey: fileUri ? undefined : 'builtin',
+				groupKey: matchedFile ? undefined : 'builtin',
 			});
 		}
+
+		// Add file-based agents not matched by any SDK agent
+		for (const [key, file] of fileAgentLookup) {
+			if (!matchedFileKeys.has(key)) {
+				agentItems.push({
+					uri: file.uri,
+					type: vscode.ChatSessionCustomizationType.Agent,
+					name: file.name,
+				});
+			}
+		}
+
 		items.push(...agentItems);
 		this.logService.debug(`[CopilotCLICustomizationProvider] agents (${agentItems.length}): ${agentItems.map(a => a.name).join(', ') || '(none)'}`);
 
