@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { AuthenticationGetSessionOptions, AuthenticationSession } from 'vscode';
-import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { BaseAuthenticationService, GITHUB_SCOPE_ALIGNED, GITHUB_SCOPE_USER_EMAIL, IAuthenticationService, MinimalModeError, StrictAuthenticationPresentationOptions } from './authentication';
 import { CopilotToken, createTestExtendedTokenInfo } from './copilotToken';
@@ -65,18 +65,14 @@ export class StaticGitHubAuthenticationService extends BaseAuthenticationService
 	}
 
 	/**
-	 * When an embeddings override URL is configured (e.g. Blackbird local
-	 * server), return a placeholder token instead of `undefined` or a noAuth
-	 * token.  This allows services like WorkspaceChunkSearchService to
-	 * initialise and route embeddings requests through the override URL.
-	 * Without an override URL the production behaviour is preserved.
+	 * In scenario automation the copilot token may be a noAuth token.
+	 * Return a placeholder so that services checking `copilotToken?.isNoAuthUser`
+	 * (e.g. {@link ScenarioAutomationEndpointProviderImpl}) behave correctly.
 	 */
 	override get copilotToken(): CopilotToken | undefined {
 		const token = this._tokenStore.copilotToken;
-		if (this._configurationService.getConfig(ConfigKey.Advanced.DebugOverrideEmbeddingsUrl)) {
-			if (!token || token.isNoAuthUser) {
-				return new CopilotToken(createTestExtendedTokenInfo());
-			}
+		if (token?.isNoAuthUser) {
+			return new CopilotToken(createTestExtendedTokenInfo());
 		}
 		return token;
 	}

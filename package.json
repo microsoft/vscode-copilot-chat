@@ -4058,28 +4058,6 @@
 						],
 						"description": "%github.copilot.config.projectSetupInfoSkill.enabled%"
 					},
-					"github.copilot.chat.debug.overrideChatEngine": {
-						"type": [
-							"string",
-							"null"
-						],
-						"markdownDescription": "%github.copilot.config.debug.overrideChatEngine%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
-					"github.copilot.chat.debug.overrideEmbeddingsUrl": {
-						"type": [
-							"string",
-							"null"
-						],
-						"markdownDescription": "%github.copilot.config.debug.overrideEmbeddingsUrl%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
 					"github.copilot.chat.debug.promptOverrideFile": {
 						"type": [
 							"string",

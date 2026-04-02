@@ -12,7 +12,6 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { Range } from '../../../util/vs/editor/common/core/range';
 import { FileChunkAndScore } from '../../chunking/common/chunk';
 import { stripChunkTextMetadata, truncateToMaxUtf8Length } from '../../chunking/common/chunkingStringUtils';
-import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
 import { getGitHubRepoInfoFromContext, IGitService, toGithubNwo } from '../../git/common/gitService';
 import { ILogService } from '../../log/common/logService';
@@ -27,13 +26,19 @@ import {
 } from './workspaceChunkSearchService';
 
 /**
+ * The Blackbird local server endpoint for embeddings code search.
+ * In scenario automation (msbench), Blackbird always runs at this address.
+ */
+const BLACKBIRD_EMBEDDINGS_URL = 'http://localhost:4443/api/embeddings/code/search';
+
+/**
  * Scenario automation implementation of {@link IWorkspaceChunkSearchService}.
  *
  * This is a minimal implementation that directly calls the Blackbird local
- * embeddings endpoint (configured via {@link ConfigKey.Advanced.DebugOverrideEmbeddingsUrl})
- * without depending on the production {@link WorkspaceChunkSearchService} or
- * any of its strategies.  All methods except {@link searchFileChunks} and
- * {@link getIndexState} are no-ops.
+ * embeddings endpoint without depending on the production
+ * {@link WorkspaceChunkSearchService} or any of its strategies.
+ * All methods except {@link searchFileChunks} and {@link getIndexState}
+ * are no-ops.
  */
 export class ScenarioAutomationWorkspaceChunkSearchService implements IWorkspaceChunkSearchService {
 	declare readonly _serviceBrand: undefined;
@@ -41,7 +46,6 @@ export class ScenarioAutomationWorkspaceChunkSearchService implements IWorkspace
 	readonly onDidChangeIndexState: Event<void> = Event.None;
 
 	constructor(
-		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@IGitService private readonly _gitService: IGitService,
 		@ILogService private readonly _logService: ILogService,
@@ -54,7 +58,7 @@ export class ScenarioAutomationWorkspaceChunkSearchService implements IWorkspace
 	}
 
 	async isAvailable(): Promise<boolean> {
-		return !!this._configService.getConfig(ConfigKey.Advanced.DebugOverrideEmbeddingsUrl);
+		return true;
 	}
 
 	async searchFileChunks(
@@ -65,12 +69,6 @@ export class ScenarioAutomationWorkspaceChunkSearchService implements IWorkspace
 		_progress: vscode.Progress<vscode.ChatResponsePart> | undefined,
 		_token: CancellationToken,
 	): Promise<WorkspaceChunkSearchResult> {
-		const overrideUrl = this._configService.getConfig(ConfigKey.Advanced.DebugOverrideEmbeddingsUrl);
-		if (!overrideUrl) {
-			this._logService.trace('ScenarioAutomationWorkspaceChunkSearchService: no override URL configured');
-			return { chunks: [] };
-		}
-
 		const repo = this._gitService.repositories[0];
 		const repoInfo = repo ? getGitHubRepoInfoFromContext(repo) : undefined;
 		const nwo = repoInfo ? toGithubNwo(repoInfo.id) : (process.env.SWEBENCH_REPO ?? '');
@@ -78,13 +76,7 @@ export class ScenarioAutomationWorkspaceChunkSearchService implements IWorkspace
 		const queryText = query.queryText;
 		const maxResults = sizing.maxResults ?? 20;
 
-		const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-		const authToken = process.env.COPILOT_EMBEDDINGS_AUTH_TOKEN;
-		if (authToken) {
-			headers['Authorization'] = `Bearer ${authToken}`;
-		}
-
-		this._logService.trace(`ScenarioAutomationWorkspaceChunkSearchService: searching ${overrideUrl} for "${queryText}" in repo ${nwo}`);
+		this._logService.trace(`ScenarioAutomationWorkspaceChunkSearchService: searching for "${queryText}" in repo ${nwo}`);
 
 		if (!nwo) {
 			this._logService.error('ScenarioAutomationWorkspaceChunkSearchService: no repo NWO available (git has no remotes and SWEBENCH_REPO is unset)');
@@ -98,14 +90,13 @@ export class ScenarioAutomationWorkspaceChunkSearchService implements IWorkspace
 			limit: maxResults,
 			embedding_model: EmbeddingType.metis_1024_I16_Binary.id,
 		};
-		this._logService.trace(`ScenarioAutomationWorkspaceChunkSearchService: request body: ${JSON.stringify(requestBody)}`);
 
 		let response;
 		try {
-			response = await this._fetcherService.fetch(overrideUrl, {
+			response = await this._fetcherService.fetch(BLACKBIRD_EMBEDDINGS_URL, {
 				callSite: 'ScenarioAutomationWorkspaceChunkSearchService.searchFileChunks',
 				method: 'POST',
-				headers,
+				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(requestBody),
 			});
 		} catch (e) {
