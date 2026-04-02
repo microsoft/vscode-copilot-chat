@@ -1832,7 +1832,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		})();
 
 		const [{ workspaceInfo, cancelled }, model, agent] = await Promise.all([
-			this.getOrInitializeWorkingDirectory(undefined, stream, request.toolInvocationToken, token),
+			this.getOrInitializeWorkingDirectory(undefined, Promise.resolve(undefined), stream, request.toolInvocationToken, token),
 			this.getModelId(request, token), // prefer model in request, as we're delegating from another session here.
 			this.getAgent(undefined, undefined, token)
 		]);
