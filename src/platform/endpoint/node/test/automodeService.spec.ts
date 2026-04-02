@@ -21,6 +21,10 @@ import { NullTelemetryService } from '../../../telemetry/common/nullTelemetrySer
 import { ICAPIClientService } from '../../common/capiClient';
 import { AutomodeService } from '../automodeService';
 
+function createMockHeaders(entries: Record<string, string> = {}): { get(name: string): string | null } {
+	return { get: (name: string) => entries[name] ?? null };
+}
+
 describe('AutomodeService', () => {
 	let automodeService: AutomodeService;
 	let mockCAPIClientService: ICAPIClientService;
@@ -66,6 +70,8 @@ describe('AutomodeService', () => {
 	function mockApiResponse(available_models: string[], session_token = 'test-token', expiresInSeconds = 3600): void {
 		(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
 			ok: true,
+			status: 200,
+			headers: createMockHeaders(),
 			json: vi.fn().mockResolvedValue({
 				available_models,
 				expires_at: Math.floor(Date.now() / 1000) + expiresInSeconds,
@@ -87,6 +93,8 @@ describe('AutomodeService', () => {
 		mockCAPIClientService = {
 			makeRequest: vi.fn().mockResolvedValue({
 				ok: true,
+				status: 200,
+				headers: createMockHeaders(),
 				json: vi.fn().mockResolvedValue({
 					available_models: ['gpt-4o', 'gpt-4o-mini'],
 					expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -154,6 +162,8 @@ describe('AutomodeService', () => {
 				if (opts?.type === RequestType.ModelRouter) {
 					return Promise.resolve({
 						ok: true,
+						status: 200,
+						headers: createMockHeaders(),
 						text: vi.fn().mockResolvedValue(JSON.stringify({
 							predicted_label: 'needs_reasoning',
 							confidence: 0.85,
@@ -167,6 +177,8 @@ describe('AutomodeService', () => {
 				}
 				return Promise.resolve({
 					ok: true,
+					status: 200,
+					headers: createMockHeaders(),
 					json: vi.fn().mockResolvedValue({
 						available_models: ['gpt-4o', 'gpt-4o-mini'],
 						expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -205,6 +217,8 @@ describe('AutomodeService', () => {
 					capturedBody = req.body;
 					return Promise.resolve({
 						ok: true,
+						status: 200,
+						headers: createMockHeaders(),
 						text: vi.fn().mockResolvedValue(JSON.stringify({
 							predicted_label: 'needs_reasoning',
 							confidence: 0.85,
@@ -218,6 +232,8 @@ describe('AutomodeService', () => {
 				}
 				return Promise.resolve({
 					ok: true,
+					status: 200,
+					headers: createMockHeaders(),
 					json: vi.fn().mockResolvedValue({
 						available_models: ['gpt-4o', 'gpt-4o-mini'],
 						expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -416,6 +432,8 @@ describe('AutomodeService', () => {
 				if (opts?.type === RequestType.ModelRouter) {
 					return Promise.resolve({
 						ok: true,
+						status: 200,
+						headers: createMockHeaders(),
 						text: vi.fn().mockResolvedValue(JSON.stringify({
 							predicted_label: 'needs_reasoning',
 							confidence: 0.9,
@@ -429,6 +447,8 @@ describe('AutomodeService', () => {
 				}
 				return Promise.resolve({
 					ok: true,
+					status: 200,
+					headers: createMockHeaders(),
 					json: vi.fn().mockResolvedValue({
 						available_models,
 						expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -449,6 +469,8 @@ describe('AutomodeService', () => {
 				}
 				return Promise.resolve({
 					ok: true,
+					status: 200,
+					headers: createMockHeaders(),
 					json: vi.fn().mockResolvedValue({
 						available_models: ['claude-sonnet', 'gpt-4o'],
 						expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -500,6 +522,8 @@ describe('AutomodeService', () => {
 				}
 				return Promise.resolve({
 					ok: true,
+					status: 200,
+					headers: createMockHeaders(),
 					json: vi.fn().mockResolvedValue({
 						available_models: ['claude-sonnet', 'gpt-4o'],
 						expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -669,6 +693,8 @@ describe('AutomodeService', () => {
 				if (opts?.type === RequestType.ModelRouter) {
 					return Promise.resolve({
 						ok: true,
+						status: 200,
+						headers: createMockHeaders(),
 						text: vi.fn().mockResolvedValue(JSON.stringify({
 							predicted_label: 'needs_reasoning',
 							confidence: 0.9,
@@ -682,6 +708,8 @@ describe('AutomodeService', () => {
 				}
 				return Promise.resolve({
 					ok: true,
+					status: 200,
+					headers: createMockHeaders(),
 					json: vi.fn().mockResolvedValue({
 						available_models: ['claude-sonnet', 'gpt-4o'],
 						expires_at: Math.floor(Date.now() / 1000) + 3600,
