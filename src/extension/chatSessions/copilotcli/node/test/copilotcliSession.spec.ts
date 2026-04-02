@@ -5,14 +5,14 @@
 
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatContext, ChatParticipantToolToken } from 'vscode';
+import type { ChatParticipantToolToken } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../../platform/log/common/logService';
+import { NoopOTelService, resolveOTelConfig } from '../../../../../platform/otel/common/index';
 import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../../../../platform/requestLogger/node/requestLogger';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
-import { mock } from '../../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import * as path from '../../../../../util/vs/base/common/path';
@@ -22,14 +22,13 @@ import { ChatSessionStatus, ChatToolInvocationPart, Uri } from '../../../../../v
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../test/node/testHelpers';
 import { ExternalEditTracker } from '../../../common/externalEditTracker';
+import { MockChatSessionMetadataStore } from '../../../common/test/mockChatSessionMetadataStore';
 import { IWorkspaceInfo } from '../../../common/workspaceInfo';
 import { FakeToolsService, ToolCall } from '../../common/copilotCLITools';
-import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
-import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
-import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
-import { NullICopilotCLIImageSupport } from './copilotCliSessionService.spec';
+import { IQuestion, IQuestionAnswer, IUserQuestionHandler } from '../userInputHelpers';
+import { NullICopilotCLIImageSupport } from './testHelpers';
 
 vi.mock('../cliHelpers', async (importOriginal) => ({
 	...(await importOriginal<typeof import('../cliHelpers')>()),
@@ -112,12 +111,17 @@ class MockSdkSession {
 	async send(options: { prompt: string; mode?: string }) {
 		this.lastSendOptions = options;
 		// Simulate a normal successful turn with a message
+		this.emit('user.message', { content: options.prompt });
 		this.emit('assistant.turn_start', {});
-		this.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+		this.emit('assistant.message', { messageId: `msg_${Date.now()}`, content: `Echo: ${options.prompt}` });
 		this.emit('assistant.turn_end', {});
 	}
 
 	async compactHistory() { return { success: true }; }
+
+	async abort() { }
+
+	isAbortable(): boolean { return true; }
 
 	async initializeAndValidateTools() { }
 	getCurrentToolMetadata(): unknown[] | undefined { return this._toolMetadata; }
@@ -159,18 +163,15 @@ describe('CopilotCLISession', () => {
 	let sdkSession: MockSdkSession;
 	let workspaceService: IWorkspaceService;
 	let logger: ILogService;
-	let sessionOptions: CopilotCLISessionOptions;
+	let sessionWorkspaceInfo: IWorkspaceInfo;
+	let sessionAgentName: string | undefined;
 	let instaService: IInstantiationService;
-	let sdk: ICopilotCLISDK;
 	let requestLogger: IRequestLogger;
 	let toolsService: FakeToolsService;
 	let configurationService: IConfigurationService;
-	const delegationService = new class extends mock<IChatDelegationSummaryService>() {
-		override async summarize(context: ChatContext, token: CancellationToken): Promise<string | undefined> {
-			return undefined;
-		}
-	}();
+	let chatSessionMetadataStore: MockChatSessionMetadataStore;
 	let authInfo: NonNullable<SessionOptions['authInfo']>;
+	let userQuestionAnswer: IQuestionAnswer | undefined;
 	beforeEach(async () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
@@ -181,18 +182,16 @@ describe('CopilotCLISession', () => {
 			token: '',
 			host: 'https://github.com'
 		};
-		sdk = new class extends mock<ICopilotCLISDK>() {
-			override async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
-				return authInfo;
-			}
-		};
+		chatSessionMetadataStore = new MockChatSessionMetadataStore();
 		sdkSession = new MockSdkSession();
 		workspaceService = createWorkspaceService('/workspace');
-		sessionOptions = new CopilotCLISessionOptions({ workspaceInfo: workspaceInfoFor(workspaceService.getWorkspaceFolders()![0]) }, logger);
+		sessionWorkspaceInfo = workspaceInfoFor(workspaceService.getWorkspaceFolders()![0]);
+		sessionAgentName = undefined;
 		configurationService = accessor.get(IConfigurationService);
 		await configurationService.setConfig(ConfigKey.Advanced.CLIPlanExitModeEnabled, true);
 		instaService = services.seal();
 		toolsService = new FakeToolsService();
+		userQuestionAnswer = undefined;
 	});
 
 	afterEach(() => {
@@ -204,23 +203,25 @@ describe('CopilotCLISession', () => {
 	async function createSession(): Promise<CopilotCLISession> {
 		class FakeUserQuestionHandler implements IUserQuestionHandler {
 			_serviceBrand: undefined;
-			async askUserQuestion(question: UserInputRequest, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
-				return undefined;
+			async askUserQuestion(question: IQuestion, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<IQuestionAnswer | undefined> {
+				return userQuestionAnswer;
 			}
 		}
 		return disposables.add(new CopilotCLISession(
-			sessionOptions,
+			sessionWorkspaceInfo,
+			sessionAgentName,
 			sdkSession as unknown as Session,
+			[],
 			logger,
 			workspaceService,
-			sdk,
+			chatSessionMetadataStore,
 			instaService,
-			delegationService,
 			requestLogger,
 			new NullICopilotCLIImageSupport(),
 			toolsService,
 			new FakeUserQuestionHandler(),
-			configurationService
+			configurationService,
+			new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' })),
 		));
 	}
 
@@ -375,7 +376,7 @@ describe('CopilotCLISession', () => {
 
 	it('auto-approves read permission inside working directory without external handler', async () => {
 		let result: unknown;
-		sessionOptions = new CopilotCLISessionOptions({ workspaceInfo: workspaceInfoFor(URI.file('/workingDirectory')) }, logger);
+		sessionWorkspaceInfo = workspaceInfoFor(URI.file('/workingDirectory'));
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
@@ -396,14 +397,12 @@ describe('CopilotCLISession', () => {
 		let result: unknown;
 		const worktreeUri = URI.file('/worktrees/session1');
 		const folderUri = URI.file('/original-repo');
-		sessionOptions = new CopilotCLISessionOptions({
-			workspaceInfo: {
-				folder: folderUri,
-				repository: folderUri,
-				worktree: worktreeUri,
-				worktreeProperties: { version: 1, autoCommit: false, baseCommit: 'abc', branchName: 'main', repositoryPath: '/original-repo', worktreePath: '/worktrees/session1' },
-			}
-		}, logger);
+		sessionWorkspaceInfo = {
+			folder: folderUri,
+			repository: folderUri,
+			worktree: worktreeUri,
+			worktreeProperties: { version: 1, autoCommit: false, baseCommit: 'abc', branchName: 'main', repositoryPath: '/original-repo', worktreePath: '/worktrees/session1' },
+		};
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
@@ -423,14 +422,12 @@ describe('CopilotCLISession', () => {
 		let result: unknown;
 		const worktreeUri = URI.file('/worktrees/session1');
 		const folderUri = URI.file('/original-repo');
-		sessionOptions = new CopilotCLISessionOptions({
-			workspaceInfo: {
-				folder: folderUri,
-				repository: folderUri,
-				worktree: worktreeUri,
-				worktreeProperties: { version: 1, autoCommit: false, baseCommit: 'abc', branchName: 'main', repositoryPath: '/original-repo', worktreePath: '/worktrees/session1' },
-			}
-		}, logger);
+		sessionWorkspaceInfo = {
+			folder: folderUri,
+			repository: folderUri,
+			worktree: worktreeUri,
+			worktreeProperties: { version: 1, autoCommit: false, baseCommit: 'abc', branchName: 'main', repositoryPath: '/original-repo', worktreePath: '/worktrees/session1' },
+		};
 		sdkSession.send = async ({ prompt }: any) => {
 			sdkSession.emit('assistant.turn_start', {});
 			sdkSession.emit('assistant.message', { content: `Echo: ${prompt}` });
@@ -694,44 +691,10 @@ describe('CopilotCLISession', () => {
 			const stream = new MockChatResponseStream();
 			session.attachStream(stream);
 
-			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { command: 'compact' }, [], undefined, authInfo, CancellationToken.None);
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { command: 'compact', prompt: '' }, [], undefined, authInfo, CancellationToken.None);
 
 			expect(sdkSession.currentMode).toBe('interactive');
 			expect(stream.output.join('\n')).toContain('Compacted conversation.');
-		});
-	});
-
-	describe('/mcp command', () => {
-		it('shows no servers message when no MCP tools are loaded', async () => {
-			sdkSession.toolMetadata = [];
-			const session = await createSession();
-			const stream = new MockChatResponseStream();
-			session.attachStream(stream);
-			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { command: 'mcp' }, [], undefined, authInfo, CancellationToken.None);
-
-			expect(stream.output.join('\n')).toContain('No MCP servers connected.');
-		});
-
-		it('lists MCP servers grouped by namespace with tool details', async () => {
-			sdkSession.toolMetadata = [
-				{ name: 'github-get_file', namespacedName: 'github/get_file', mcpServerName: 'VS Code MCP Gateway', mcpToolName: 'get_file', title: 'Get file contents', description: 'Get the contents of a file' },
-				{ name: 'github-search_code', namespacedName: 'github/search_code', mcpServerName: 'VS Code MCP Gateway', mcpToolName: 'search_code', title: 'Search code', description: 'Search for code across repos' },
-				{ name: 'playwright-navigate', namespacedName: 'playwright/navigate', mcpServerName: 'VS Code MCP Gateway', mcpToolName: 'navigate', title: 'Navigate', description: 'Navigate to a URL' },
-				{ name: 'non_mcp_tool', description: 'A built-in tool without MCP' },
-			];
-			const session = await createSession();
-			const stream = new MockChatResponseStream();
-			session.attachStream(stream);
-			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { command: 'mcp' }, [], undefined, authInfo, CancellationToken.None);
-
-			const output = stream.output.join('\n');
-			expect(output).toContain('github (2 tools)');
-			expect(output).toContain('playwright (1 tool)');
-			expect(output).toContain('**Get file contents** (`get_file`)');
-			expect(output).toContain('**Search code** (`search_code`)');
-			expect(output).toContain('**Navigate** (`navigate`)');
-			// Non-MCP tool should not appear
-			expect(output).not.toContain('non_mcp_tool');
 		});
 	});
 
@@ -1190,11 +1153,11 @@ describe('CopilotCLISession', () => {
 			expect(result.value).toEqual({ approved: false });
 		});
 
-		it('approves when user confirms via confirmation tool in non-autopilot mode', async () => {
+		it('approves when user confirms via user question handler in non-autopilot mode', async () => {
 			const result = { value: undefined as unknown };
 			const summary = 'Here is the plan';
 			setupSendWithExitPlanMode({ summary, actions: ['exit_only'] }, result);
-			toolsService.setConfirmationResult('yes');
+			userQuestionAnswer = { selected: ['exit_only'], freeText: null, skipped: false };
 			const session = await createSession();
 			const stream = new MockChatResponseStream();
 			session.attachStream(stream);
@@ -1203,14 +1166,12 @@ describe('CopilotCLISession', () => {
 			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
 
 			expect(result.value).toEqual({ approved: true, selectedAction: 'exit_only' });
-			expect(toolsService.invokeToolCalls).toHaveLength(1);
-			expect(toolsService.invokeToolCalls[0].input).toMatchObject({ message: summary });
 		});
 
 		it('sets autoApproveEdits when user confirms with autoApprove permission level', async () => {
 			const result = { value: undefined as unknown };
 			setupSendWithExitPlanMode({ summary: 'Here is the plan', actions: ['exit_only'] }, result);
-			toolsService.setConfirmationResult('yes');
+			userQuestionAnswer = { selected: ['exit_only'], freeText: null, skipped: false };
 			const session = await createSession();
 			session.setPermissionLevel('autoApprove');
 			const stream = new MockChatResponseStream();

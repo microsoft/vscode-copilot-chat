@@ -16,6 +16,7 @@ import { eventToPromise } from '../../../completions-core/vscode-node/lib/src/pr
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
 import { IWorkspaceInfo } from '../../common/workspaceInfo';
 import { getCopilotCLISessionDir } from '../../copilotcli/node/cliHelpers';
+import { NullCopilotCLIAgents } from '../../copilotcli/node/test/testHelpers';
 import { ChatSessionMetadataStore } from '../chatSessionMetadataStoreImpl';
 
 vi.mock('../../copilotcli/node/cliHelpers', async (importOriginal) => {
@@ -92,6 +93,10 @@ function sessionMetadataFileUri(sessionId: string): Uri {
 	return Uri.joinPath(sessionDirectoryUri(sessionId), 'vscode.metadata.json');
 }
 
+function sessionRequestMetadataFileUri(sessionId: string): Uri {
+	return Uri.joinPath(sessionDirectoryUri(sessionId), 'vscode.requests.metadata.json');
+}
+
 function makeWorktreeV1Props(overrides?: Partial<ChatSessionWorktreeProperties>): ChatSessionWorktreeProperties {
 	return {
 		version: 1,
@@ -162,6 +167,7 @@ describe('ChatSessionMetadataStore', () => {
 			mockFs,
 			logService,
 			extensionContext,
+			new NullCopilotCLIAgents(),
 		);
 		// Flush microtasks to let initialization settle
 		await vi.advanceTimersByTimeAsync(0);
@@ -749,9 +755,6 @@ describe('ChatSessionMetadataStore', () => {
 			);
 			expect(bulkWrites).toHaveLength(0);
 
-			// Store should still function with empty data
-			const folders = await store.getUsedWorkspaceFolders();
-			expect(folders).toEqual([]);
 			store.dispose();
 		});
 	});
@@ -1018,62 +1021,6 @@ describe('ChatSessionMetadataStore', () => {
 			const store = await createStore();
 			const folder = await store.getSessionWorkspaceFolder('session-empty');
 			expect(folder).toBeUndefined();
-			store.dispose();
-		});
-	});
-
-	// ──────────────────────────────────────────────────────────────────────────
-	// getUsedWorkspaceFolders
-	// ──────────────────────────────────────────────────────────────────────────
-	describe('getUsedWorkspaceFolders', () => {
-		it('should return empty array when no workspace folders exist', async () => {
-			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
-
-			const store = await createStore();
-			const folders = await store.getUsedWorkspaceFolders();
-			expect(folders).toEqual([]);
-			store.dispose();
-		});
-
-		it('should return deduplicated workspace folders', async () => {
-			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
-				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
-				'session-2': { workspaceFolder: { folderPath: Uri.file('/workspace/b').fsPath, timestamp: 200 } },
-			}));
-
-			const store = await createStore();
-			const folders = await store.getUsedWorkspaceFolders();
-			expect(folders).toHaveLength(2);
-			const paths = folders.map(f => f.folderPath);
-			expect(paths).toContain(Uri.file('/workspace/a').fsPath);
-			expect(paths).toContain(Uri.file('/workspace/b').fsPath);
-			store.dispose();
-		});
-
-		it('should use latest timestamp when multiple sessions point to same folder', async () => {
-			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
-				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/shared').fsPath, timestamp: 100 } },
-				'session-2': { workspaceFolder: { folderPath: Uri.file('/workspace/shared').fsPath, timestamp: 300 } },
-				'session-3': { workspaceFolder: { folderPath: Uri.file('/workspace/shared').fsPath, timestamp: 200 } },
-			}));
-
-			const store = await createStore();
-			const folders = await store.getUsedWorkspaceFolders();
-			expect(folders).toHaveLength(1);
-			expect(folders[0].timestamp).toBe(300);
-			store.dispose();
-		});
-
-		it('should ignore sessions with only worktree properties', async () => {
-			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
-				'session-wt': { worktreeProperties: makeWorktreeV1Props() },
-				'session-folder': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
-			}));
-
-			const store = await createStore();
-			const folders = await store.getUsedWorkspaceFolders();
-			expect(folders).toHaveLength(1);
-			expect(folders[0].folderPath).toBe(Uri.file('/workspace/a').fsPath);
 			store.dispose();
 		});
 	});
@@ -1698,6 +1645,126 @@ describe('ChatSessionMetadataStore', () => {
 	});
 
 	// ──────────────────────────────────────────────────────────────────────────
+	// getRequestDetails / appendRequestDetails
+	// ──────────────────────────────────────────────────────────────────────────
+	describe('getRequestDetails / appendRequestDetails', () => {
+		it('should append and retrieve request details', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-1', copilotRequestId: 'sdk-1', toolIdEditMap: { 'tool-1': 'edit-1' } }]);
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-2', copilotRequestId: 'sdk-2', toolIdEditMap: { 'tool-2': 'edit-2' } }]);
+
+			const details = await store.getRequestDetails('session-1');
+			expect(details).toEqual([
+				{ vscodeRequestId: 'request-1', copilotRequestId: 'sdk-1', toolIdEditMap: { 'tool-1': 'edit-1' } },
+				{ vscodeRequestId: 'request-2', copilotRequestId: 'sdk-2', toolIdEditMap: { 'tool-2': 'edit-2' } },
+			]);
+			store.dispose();
+		});
+
+		it('should return empty array when request details file does not exist', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			const details = await store.getRequestDetails('missing-session');
+			expect(details).toEqual([]);
+			store.dispose();
+		});
+
+
+		it('should merge with existing request details on append', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const sessionId = 'session-merge';
+			await mockFs.createDirectory(sessionDirectoryUri(sessionId));
+			const fileUri = sessionRequestMetadataFileUri(sessionId);
+			// Seed with existing array-format request details
+			await mockFs.writeFile(fileUri, new TextEncoder().encode(JSON.stringify([
+				{ vscodeRequestId: 'request-existing', copilotRequestId: 'sdk-existing', toolIdEditMap: { 'tool-1': 'edit-1' } },
+			])));
+
+			const store = await createStore();
+			await store.updateRequestDetails(sessionId, [{ vscodeRequestId: 'request-new', copilotRequestId: 'sdk-new', toolIdEditMap: { 'tool-2': 'edit-2' } }]);
+
+			const raw = await mockFs.readFile(fileUri);
+			const parsed = JSON.parse(new TextDecoder().decode(raw));
+			expect(parsed).toEqual([
+				{ vscodeRequestId: 'request-existing', copilotRequestId: 'sdk-existing', toolIdEditMap: { 'tool-1': 'edit-1' } },
+				{ vscodeRequestId: 'request-new', copilotRequestId: 'sdk-new', toolIdEditMap: { 'tool-2': 'edit-2' } },
+			]);
+			store.dispose();
+		});
+
+		it('should merge fields when appending with same vscodeRequestId', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-1', toolIdEditMap: { 'tool-1': 'edit-1' } }]);
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-1', copilotRequestId: 'sdk-1', toolIdEditMap: { 'tool-1': 'edit-1' } }]);
+
+			const details = await store.getRequestDetails('session-1');
+			expect(details).toHaveLength(1);
+			expect(details[0].copilotRequestId).toBe('sdk-1');
+			store.dispose();
+		});
+
+		it('should serialize concurrent appends to the same session', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await Promise.all([
+				store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-1', copilotRequestId: 'sdk-1', toolIdEditMap: { 'tool-1': 'edit-1' } }]),
+				store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-2', copilotRequestId: 'sdk-2', toolIdEditMap: { 'tool-2': 'edit-2' } }]),
+				store.updateRequestDetails('session-1', [{ vscodeRequestId: 'request-3', copilotRequestId: 'sdk-3', toolIdEditMap: { 'tool-3': 'edit-3' } }]),
+			]);
+
+			const details = await store.getRequestDetails('session-1');
+			expect(details).toHaveLength(3);
+			expect(details.map(d => d.vscodeRequestId)).toEqual(['request-1', 'request-2', 'request-3']);
+			store.dispose();
+		});
+
+	});
+
+	// ──────────────────────────────────────────────────────────────────────────
+	// getSessionAgent
+	// ──────────────────────────────────────────────────────────────────────────
+	describe('getSessionAgent', () => {
+		it('should return agent from last request details entry with agentId', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'req-1', toolIdEditMap: {}, agentId: 'agent-a' }]);
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'req-2', toolIdEditMap: {} }]);
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'req-3', toolIdEditMap: {}, agentId: 'agent-b' }]);
+
+			const agent = await store.getSessionAgent('session-1');
+			expect(agent).toBe('agent-b');
+			store.dispose();
+		});
+
+		it('should return undefined when no entries have agentId', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await store.updateRequestDetails('session-1', [{ vscodeRequestId: 'req-1', toolIdEditMap: {} }]);
+
+			const agent = await store.getSessionAgent('session-1');
+			expect(agent).toBeUndefined();
+			store.dispose();
+		});
+
+		it('should return undefined for non-existent session', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			const agent = await store.getSessionAgent('missing-session');
+			expect(agent).toBeUndefined();
+			store.dispose();
+		});
+	});
+
+	// ──────────────────────────────────────────────────────────────────────────
 	// Constructor & edge cases
 	// ──────────────────────────────────────────────────────────────────────────
 	describe('constructor and edge cases', () => {
@@ -1732,34 +1799,6 @@ describe('ChatSessionMetadataStore', () => {
 			);
 			store.dispose();
 		});
-
-		it('should handle bulk file with invalid JSON gracefully', async () => {
-			mockFs.mockFile(BULK_METADATA_FILE, 'not-valid-json{{{');
-
-			// This will fail to parse, fall through to global state migration path
-			const store = await createStore();
-
-			// Should still function — store returns empty data
-			const folders = await store.getUsedWorkspaceFolders();
-			expect(folders).toEqual([]);
-			store.dispose();
-		});
-
-		it('should dispose ThrottledDelayer on dispose', async () => {
-			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
-			const store = await createStore();
-
-			// Should not throw
-			store.dispose();
-		});
-
-		it('should work correctly when globalState returns empty objects for both keys', async () => {
-			// globalState.get returns default {} for both keys
-			const store = await createStore();
-
-			const folders = await store.getUsedWorkspaceFolders();
-			expect(folders).toEqual([]);
-			store.dispose();
-		});
 	});
+
 });

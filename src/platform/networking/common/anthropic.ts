@@ -83,40 +83,6 @@ export const TOOL_SEARCH_SUPPORTED_MODELS = [
 	'claude-opus-4.6',
 ] as const;
 
-export const nonDeferredToolNames = new Set([
-	// Read/navigate
-	'read_file',
-	'list_dir',
-	// Search
-	'grep_search',
-	'semantic_search',
-	'file_search',
-	// Edit
-	'replace_string_in_file',
-	'multi_replace_string_in_file',
-	'insert_edit_into_file',
-	'apply_patch',
-	'create_file',
-	// Terminal
-	'run_in_terminal',
-	'get_terminal_output',
-	// Other high-usage tools
-	'get_errors',
-	'manage_todo_list',
-	// Subagent tools
-	'runSubagent',
-	'search_subagent',
-	// Testing
-	'runTests',
-	// Misc
-	'ask_questions',
-	'switch_agent',
-	'memory',
-	'task_complete',
-	// Custom tool search (must always be available so the model can search for deferred tools)
-	CUSTOM_TOOL_SEARCH_NAME,
-]);
-
 /**
  * Context management types for Anthropic Messages API
  * Based on https://platform.claude.com/docs/en/build-with-claude/context-editing

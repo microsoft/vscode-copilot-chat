@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
+import { ContentBlockParam, DocumentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
@@ -13,14 +13,29 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ChatLocation } from '../../chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, ContextManagementResponse, CUSTOM_TOOL_SEARCH_NAME, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
+import { AnthropicMessagesTool, ContextManagementResponse, CUSTOM_TOOL_SEARCH_NAME, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
 import { FinishedCallback, IIPCodeCitation, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, rawMessageToCAPI } from '../../networking/common/openai';
+import { IToolDeferralService } from '../../networking/common/toolDeferralService';
 import { sendEngineMessagesTelemetry } from '../../networking/node/chatStream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
+
+/**
+ * Build the `input_schema` for an Anthropic tool from an arbitrary JSON Schema
+ * object. Ensures `type: 'object'` and `properties` default, preserves extra
+ * keys like `$defs` and `additionalProperties`, and strips `$schema` which the
+ * Anthropic API rejects.
+ */
+export function buildToolInputSchema(schema: Record<string, unknown> | undefined): Record<string, unknown> & { type: 'object' } {
+	if (!schema) {
+		return { type: 'object', properties: {} };
+	}
+	const { $schema: _, ...rest } = schema;
+	return { type: 'object', properties: {}, ...rest };
+}
 
 /** IP Code Citation annotation from Messages API copilot_annotations */
 interface AnthropicIPCodeCitation {
@@ -85,6 +100,7 @@ interface AnthropicStreamEvent {
 export function createMessagesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, endpoint: IChatEndpoint): IEndpointBody {
 	const configurationService = accessor.get(IConfigurationService);
 	const experimentationService = accessor.get(IExperimentationService);
+	const toolDeferralService = accessor.get(IToolDeferralService);
 
 	const toolSearchEnabled = isAnthropicToolSearchEnabled(endpoint, configurationService);
 	const customToolSearchEnabled = isAnthropicCustomToolSearchEnabled(endpoint, configurationService, experimentationService);
@@ -102,15 +118,11 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 			if (!tool.function.name || tool.function.name.length === 0) {
 				continue;
 			}
-			const isDeferred = toolSearchEnabled && isAllowedConversationAgent && !isSubagent && !nonDeferredToolNames.has(tool.function.name);
+			const isDeferred = toolSearchEnabled && isAllowedConversationAgent && !isSubagent && !toolDeferralService.isNonDeferredTool(tool.function.name);
 			const anthropicTool: AnthropicMessagesTool = {
 				name: tool.function.name,
 				description: tool.function.description || '',
-				input_schema: {
-					type: 'object',
-					properties: (tool.function.parameters as { properties?: Record<string, unknown> })?.properties ?? {},
-					required: (tool.function.parameters as { required?: string[] })?.required ?? [],
-				},
+				input_schema: buildToolInputSchema(tool.function.parameters as Record<string, unknown> | undefined),
 				...(isDeferred ? { defer_loading: true } : {}),
 			};
 			(isDeferred ? deferredTools : nonDeferredTools).push(anthropicTool);
@@ -129,12 +141,13 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	// knows to use the search tool to discover them.
 	finalTools.push(...nonDeferredTools, ...deferredTools);
 
-	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
-	// or if the location is not the chat panel (conversation agent)
-	// or if the model doesn't support thinking
+	// Thinking is enabled only when options.enableThinking is true, a non-zero thinking budget
+	// is configured for the model, and the model supports thinking. reasoningEffort (if present)
+	// is used only to configure the effort level when thinking is enabled, not to gate it.
+	const reasoningEffort = options.reasoningEffort;
 	let thinkingConfig: { type: 'enabled' | 'adaptive'; budget_tokens?: number } | undefined;
-	if (isAllowedConversationAgent && !options.disableThinking) {
-		const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
+	if (options.enableThinking) {
+		const configuredBudget = configurationService.getConfig(ConfigKey.AnthropicThinkingBudget);
 		const thinkingExplicitlyDisabled = configuredBudget === 0;
 		const forceExtendedThinking = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicForceExtendedThinking, experimentationService);
 		if (endpoint.supportsAdaptiveThinking && !thinkingExplicitlyDisabled && !forceExtendedThinking) {
@@ -145,8 +158,9 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 			const normalizedBudget = (configuredBudget && configuredBudget > 0)
 				? (configuredBudget < minBudget ? minBudget : configuredBudget)
 				: undefined;
+			const maxBudget = endpoint.maxThinkingBudget ?? 32000;
 			const thinkingBudget = normalizedBudget
-				? Math.min(maxTokens - 1, normalizedBudget)
+				? Math.min(maxBudget, maxTokens - 1, normalizedBudget)
 				: undefined;
 			if (thinkingBudget) {
 				thinkingConfig = { type: 'enabled', budget_tokens: thinkingBudget };
@@ -156,10 +170,14 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	const thinkingEnabled = !!thinkingConfig;
 
-	// Build output config with effort level for adaptive thinking
-	const effort = (endpoint.supportsAdaptiveThinking && thinkingConfig?.type === 'adaptive')
-		? configurationService.getConfig(ConfigKey.AnthropicThinkingEffort)
-		: undefined;
+	// Build output config with effort level for thinking, validating reasoningEffort
+	let effort: 'low' | 'medium' | 'high' | undefined;
+	if (thinkingConfig) {
+		const candidateEffort = configurationService.getConfig(ConfigKey.TeamInternal.AnthropicThinkingEffort) ?? reasoningEffort;
+		if (candidateEffort === 'low' || candidateEffort === 'medium' || candidateEffort === 'high') {
+			effort = candidateEffort;
+		}
+	}
 
 	// Build context management configuration
 	const contextManagement = isAllowedConversationAgent && !isSubagent && isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
@@ -294,8 +312,8 @@ export function rawMessagesToMessagesAPI(messages: readonly Raw.ChatMessage[], v
 						: undefined;
 
 					const validContent = toolReferenceContent
-						?? toolContent.filter((c): c is TextBlockParam | ImageBlockParam =>
-							(c.type === 'text' || c.type === 'image') && !(c.type === 'text' && c.text.trim() === '')
+						?? toolContent.filter((c): c is TextBlockParam | ImageBlockParam | DocumentBlockParam =>
+							(c.type === 'text' || c.type === 'image' || c.type === 'document') && !(c.type === 'text' && c.text.trim() === '')
 						);
 
 					const toolResultBlock: ToolResultBlockParam = {
@@ -363,6 +381,8 @@ function tryParseToolReferences(content: ContentBlockParam[], validToolNames?: S
 
 function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionContentPart[]): ContentBlockParam[] {
 	const convertedContent: ContentBlockParam[] = [];
+	// Track pending cache_control that couldn't be attached to a preceding block
+	let pendingCacheControl = false;
 
 	for (const part of content) {
 		switch (part.type) {
@@ -401,12 +421,25 @@ function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionConten
 				if (previousBlock && contentBlockSupportsCacheControl(previousBlock)) {
 					previousBlock.cache_control = { type: 'ephemeral' };
 				} else {
-					// Empty string is invalid
+					// No preceding block to attach to — defer until the next
+					// cacheable content block is added, or silently drop it.
+					// Previously this created a whitespace-only text block which
+					// the Anthropic API rejects with "text content block must
+					// contain non-whitespace text".
+					pendingCacheControl = true;
+				}
+				break;
+			}
+			case Raw.ChatCompletionContentPartKind.Document: {
+				if (part.documentData.mediaType === 'application/pdf') {
 					convertedContent.push({
-						type: 'text',
-						text: ' ',
-						cache_control: { type: 'ephemeral' }
-					});
+						type: 'document',
+						source: {
+							type: 'base64',
+							media_type: 'application/pdf',
+							data: part.documentData.data,
+						}
+					} satisfies DocumentBlockParam);
 				}
 				break;
 			}
@@ -434,6 +467,15 @@ function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionConten
 					}
 				}
 				break;
+			}
+		}
+
+		// Attach any pending cache_control to the block we just added
+		if (pendingCacheControl && convertedContent.length > 0) {
+			const lastBlock = convertedContent.at(-1)!;
+			if (contentBlockSupportsCacheControl(lastBlock)) {
+				lastBlock.cache_control = { type: 'ephemeral' };
+				pendingCacheControl = false;
 			}
 		}
 	}

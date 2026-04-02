@@ -13,7 +13,27 @@ export type UserInputResponse = { answer: string; wasFreeform: boolean };
 
 export const IUserQuestionHandler = createServiceIdentifier<IUserQuestionHandler>('IUserQuestionHandler');
 
+export interface IQuestionOption {
+	readonly label: string;
+	readonly description?: string;
+	readonly recommended?: boolean;
+}
+
+export interface IQuestionAnswer {
+	readonly selected: string[];
+	readonly freeText: string | null;
+	readonly skipped: boolean;
+}
+
+export interface IQuestion {
+	readonly header: string;
+	readonly question: string;
+	readonly multiSelect?: boolean;
+	readonly options?: IQuestionOption[];
+	readonly allowFreeformInput?: boolean;
+}
+
 export interface IUserQuestionHandler {
 	_serviceBrand: undefined;
-	askUserQuestion(question: UserInputRequest, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined>;
+	askUserQuestion(question: IQuestion, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<IQuestionAnswer | undefined>;
 }

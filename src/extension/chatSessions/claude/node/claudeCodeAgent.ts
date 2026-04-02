@@ -3,14 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput, McpServerConfig, Options, PermissionMode, PreToolUseHookInput, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { TodoWriteInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
+import { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput, McpServerConfig, Options, PermissionMode, PreToolUseHookInput, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
+import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IMcpService } from '../../../../platform/mcp/common/mcpService';
+import { CopilotChatAttr, GenAiAttr, IOTelService, type ISpanHandle, SpanKind, SpanStatusCode, truncateForOTel } from '../../../../platform/otel/common/index';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { DeferredPromise } from '../../../../util/vs/base/common/async';
@@ -19,22 +20,20 @@ import { Disposable, DisposableMap } from '../../../../util/vs/base/common/lifec
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseThinkingProgressPart, LanguageModelToolMCPSource } from '../../../../vscodeTypes';
-import { ToolName } from '../../../tools/common/toolNames';
-import { IToolsService } from '../../../tools/common/toolsService';
+import { LanguageModelToolMCPSource } from '../../../../vscodeTypes';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
 import { buildMcpServersFromRegistry } from '../common/claudeMcpServerRegistry';
+import { dispatchMessage, KnownClaudeError } from '../common/claudeMessageDispatch';
+import { IClaudeRuntimeDataService } from '../common/claudeRuntimeDataService';
 import { ClaudeSessionUri } from '../common/claudeSessionUri';
 import { IClaudeToolPermissionService } from '../common/claudeToolPermissionService';
-import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '../common/claudeTools';
-import { completeToolInvocation, createFormattedToolInvocation } from '../common/toolInvocationFormatter';
+import { claudeEditTools, getAffectedUrisForEditTool } from '../common/claudeTools';
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
 import { resolvePromptToContentBlocks } from './claudePromptResolver';
 import { IClaudeSessionStateService } from './claudeSessionStateService';
 import { ClaudeSettingsChangeTracker } from './claudeSettingsChangeTracker';
-import { SYNTHETIC_MODEL_ID } from './sessionParser/claudeSessionSchema';
 
 // Manages Claude Code agent interactions and language model server lifecycle
 export class ClaudeAgentManager extends Disposable {
@@ -129,8 +128,6 @@ export class ClaudeAgentManager extends Disposable {
 	}
 }
 
-class KnownClaudeError extends Error { }
-
 /**
  * Represents a queued chat request waiting to be processed by the Claude session
  */
@@ -140,6 +137,7 @@ interface QueuedRequest {
 	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
 	readonly token: vscode.CancellationToken;
 	readonly yieldRequested?: () => boolean;
+	readonly messageId: string;
 	readonly deferred: DeferredPromise<void>;
 }
 
@@ -154,7 +152,6 @@ interface CurrentRequest {
 }
 
 export class ClaudeCodeSession extends Disposable {
-	private static readonly DenyToolMessage = 'The user declined to run the tool';
 	private static readonly GATEWAY_IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
 	private _queryGenerator: Query | undefined;
@@ -174,26 +171,30 @@ export class ClaudeCodeSession extends Disposable {
 	private _gatewayIdleTimeout: ReturnType<typeof setTimeout> | undefined;
 
 	/**
-	 * Sets the model on the active SDK session.
+	 * Sets the model on the active SDK session, or stores it for the next session start.
 	 */
 	private async _setModel(modelId: string): Promise<void> {
-		if (this._queryGenerator && modelId !== this._currentModelId) {
+		if (modelId === this._currentModelId) {
+			return;
+		}
+		this._currentModelId = modelId;
+		if (this._queryGenerator) {
 			this.logService.trace(`[ClaudeCodeSession] Setting model to ${modelId} on active session`);
-			// TODO: Does this throw? How would we handle errors here?
 			await this._queryGenerator.setModel(modelId);
-			this._currentModelId = modelId;
 		}
 	}
 
 	/**
-	 * Sets the permission mode on the active SDK session.
+	 * Sets the permission mode on the active SDK session, or stores it for the next session start.
 	 */
 	private async _setPermissionMode(mode: PermissionMode): Promise<void> {
-		if (this._queryGenerator && mode !== this._currentPermissionMode) {
+		if (mode === this._currentPermissionMode) {
+			return;
+		}
+		this._currentPermissionMode = mode;
+		if (this._queryGenerator) {
 			this.logService.trace(`[ClaudeCodeSession] Setting permission mode to ${mode} on active session`);
-			// TODO: Does this throw? How would we handle errors here?
 			await this._queryGenerator.setPermissionMode(mode);
-			this._currentPermissionMode = mode;
 		}
 	}
 
@@ -208,16 +209,28 @@ export class ClaudeCodeSession extends Disposable {
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@INativeEnvService private readonly envService: INativeEnvService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@IToolsService private readonly toolsService: IToolsService,
 		@IClaudeCodeSdkService private readonly claudeCodeService: IClaudeCodeSdkService,
 		@IClaudeToolPermissionService private readonly toolPermissionService: IClaudeToolPermissionService,
 		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
+		@IClaudeRuntimeDataService private readonly runtimeDataService: IClaudeRuntimeDataService,
 		@IMcpService private readonly mcpService: IMcpService,
+		@IOTelService private readonly _otelService: IOTelService,
+		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService,
 	) {
 		super();
 		this._currentModelId = initialModelId;
 		this._currentPermissionMode = initialPermissionMode;
 		this._isResumed = !isNewSession;
+		this._debugFileLogger.startSession(this.sessionId).catch(err => {
+			this.logService.error('[ClaudeCodeSession] Failed to start debug log session', err);
+		});
+		this._register({
+			dispose: () => {
+				this._debugFileLogger.endSession(this.sessionId).catch(err => {
+					this.logService.error('[ClaudeCodeSession] Failed to end debug log session', err);
+				});
+			}
+		});
 		// Initialize edit tracker with plan directory as ignored
 		const planDirUri = URI.joinPath(this.envService.userHome, '.claude', 'plans');
 		this._editTracker = new ExternalEditTracker([planDirUri]);
@@ -321,11 +334,8 @@ export class ClaudeCodeSession extends Disposable {
 		}
 		this._snapshotTools(request.tools);
 
-		if (!this._queryGenerator) {
-			await this._startSession(token);
-		}
-
 		// Read current model and permission mode from session state service
+		// Do this BEFORE starting a session so the Options are correct from the start
 		const modelId = this.sessionStateService.getModelIdForSession(this.sessionId);
 		const permissionMode = this.sessionStateService.getPermissionModeForSession(this.sessionId);
 
@@ -335,6 +345,10 @@ export class ClaudeCodeSession extends Disposable {
 		}
 		await this._setPermissionMode(permissionMode);
 
+		if (!this._queryGenerator) {
+			await this._startSession(token);
+		}
+
 		// Add this request to the queue and wait for completion
 		const deferred = new DeferredPromise<void>();
 		const queuedRequest: QueuedRequest = {
@@ -343,6 +357,7 @@ export class ClaudeCodeSession extends Disposable {
 			toolInvocationToken,
 			token,
 			yieldRequested,
+			messageId: request.id,
 			deferred
 		};
 
@@ -417,14 +432,6 @@ export class ClaudeCodeSession extends Disposable {
 			// TODO: CAPI does not yet support the WebSearch tool
 			// Once it does, we can re-enable it.
 			disallowedTools: ['WebSearch'],
-			env: {
-				...process.env,
-				ANTHROPIC_BASE_URL: `http://localhost:${this.serverConfig.port}`,
-				ANTHROPIC_API_KEY: `${this.serverConfig.nonce}.${this.sessionId}`,
-				CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
-				USE_BUILTIN_RIPGREP: '0',
-				PATH: `${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin${pathSep}${process.env.PATH}`
-			},
 			// Use sessionId for new sessions, resume for existing ones (mutually exclusive)
 			...(this._isResumed
 				? { resume: this.sessionId }
@@ -435,6 +442,19 @@ export class ClaudeCodeSession extends Disposable {
 			permissionMode: this._currentPermissionMode,
 			hooks: this._buildHooks(token),
 			mcpServers,
+			settings: {
+				env: {
+					ANTHROPIC_BASE_URL: `http://localhost:${this.serverConfig.port}`,
+					ANTHROPIC_AUTH_TOKEN: `${this.serverConfig.nonce}.${this.sessionId}`,
+					CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+					USE_BUILTIN_RIPGREP: '0',
+					PATH: `${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin${pathSep}${process.env.PATH}`
+				},
+				attribution: {
+					commit: '',
+					pr: '',
+				},
+			},
 			canUseTool: async (name, input) => {
 				if (!this._currentRequest) {
 					return { behavior: 'deny', message: 'No active request' };
@@ -459,6 +479,10 @@ export class ClaudeCodeSession extends Disposable {
 			prompt: this._createPromptIterable(),
 			options
 		});
+
+		// Cache runtime data (agents, etc.) for the customization provider.
+		// Fire-and-forget to avoid blocking session startup — error handling is inside the service.
+		void this.runtimeDataService.update(this._queryGenerator);
 
 		// Take a snapshot of settings files so we can detect changes
 		await this._settingsChangeTracker.takeSnapshot();
@@ -542,8 +566,23 @@ export class ClaudeCodeSession extends Disposable {
 			const promptLabel = request.prompt.filter(p => p.type === 'text').at(-1)?.text ?? 'Claude Session Prompt';
 			this.sessionStateService.setCapturingTokenForSession(
 				this.sessionId,
-				new CapturingToken(promptLabel, 'claude', false)
+				new CapturingToken(promptLabel, 'claude', undefined, undefined, this.sessionId)
 			);
+
+			// Emit a user_message span event for the debug panel
+			// Use a non-standard operation name so completedSpanToDebugEvent ignores this span
+			// (avoids a "Model Turn · 0 tokens" entry); only the user_message event is rendered.
+			const userMsgSpan = this._otelService.startSpan('user_message', {
+				kind: SpanKind.INTERNAL,
+				attributes: {
+					[GenAiAttr.OPERATION_NAME]: 'user_message',
+					[CopilotChatAttr.CHAT_SESSION_ID]: this.sessionId,
+				},
+			});
+			const userContent = truncateForOTel(promptLabel);
+			userMsgSpan.setAttribute(CopilotChatAttr.USER_REQUEST, userContent);
+			userMsgSpan.addEvent('user_message', { content: userContent, [CopilotChatAttr.CHAT_SESSION_ID]: this.sessionId });
+			userMsgSpan.end();
 
 			yield {
 				type: 'user',
@@ -552,7 +591,10 @@ export class ClaudeCodeSession extends Disposable {
 					content: request.prompt
 				},
 				parent_tool_use_id: null,
-				session_id: this.sessionId
+				session_id: this.sessionId,
+				// NOTE: messageId seems to be in the format request_<uuid> but it doesn't seem
+				// to be a problem to use as the message ID for the SDK.
+				uuid: request.messageId as `${string}-${string}-${string}-${string}-${string}`
 			};
 
 			// Wait for this request to complete before yielding the next one
@@ -579,6 +621,7 @@ export class ClaudeCodeSession extends Disposable {
 	 * Routes messages to appropriate handlers and manages request completion
 	 */
 	private async _processMessages(): Promise<void> {
+		const otelToolSpans = new Map<string, ISpanHandle>();
 		try {
 			const unprocessedToolCalls = new Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>();
 			for await (const message of this._queryGenerator!) {
@@ -605,20 +648,16 @@ export class ClaudeCodeSession extends Disposable {
 				}
 
 				this.logService.trace(`claude-agent-sdk Message: ${JSON.stringify(message, null, 2)}`);
+				const result = this.instantiationService.invokeFunction(dispatchMessage, message, this.sessionId, {
+					stream: this._currentRequest.stream,
+					toolInvocationToken: this._currentRequest.toolInvocationToken,
+					token: this._currentRequest.token,
+				}, {
+					unprocessedToolCalls,
+					otelToolSpans,
+				});
 
-				if (message.type === 'assistant') {
-					// Skip synthetic messages (e.g., "No response requested." from abort)
-					if (message.message.model === SYNTHETIC_MODEL_ID) {
-						this.logService.trace('[ClaudeCodeSession] Skipping synthetic message');
-						continue;
-					}
-					this.handleAssistantMessage(message, this._currentRequest.stream, unprocessedToolCalls);
-				} else if (message.type === 'user') {
-					this.handleUserMessage(message, this._currentRequest.stream, unprocessedToolCalls, this._currentRequest.toolInvocationToken, this._currentRequest.token);
-				} else if (message.type === 'system' && message.subtype === 'compact_boundary') {
-					this._currentRequest.stream.markdown('*Conversation compacted*');
-				} else if (message.type === 'result') {
-					this.handleResultMessage(message, this._currentRequest.stream);
+				if (result?.requestComplete) {
 					// Clear the capturing token so subsequent requests get their own
 					this.sessionStateService.setCapturingTokenForSession(this.sessionId, undefined);
 					// Resolve and remove the completed request
@@ -634,6 +673,13 @@ export class ClaudeCodeSession extends Disposable {
 			this._cleanup(new Error('Session ended unexpectedly'));
 		} catch (error) {
 			this._cleanup(error as Error);
+		} finally {
+			// Clean up any remaining OTel spans
+			for (const [, span] of otelToolSpans) {
+				span.setStatus(SpanStatusCode.ERROR, 'session ended before tool completed');
+				span.end();
+			}
+			otelToolSpans.clear();
 		}
 	}
 
@@ -799,138 +845,4 @@ export class ClaudeCodeSession extends Disposable {
 		return false;
 	}
 
-	/**
-	 * Handles assistant messages containing text content and tool use blocks
-	 */
-	private handleAssistantMessage(
-		message: SDKAssistantMessage,
-		stream: vscode.ChatResponseStream,
-		unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>
-	): void {
-		for (const item of message.message.content) {
-			if (item.type === 'text') {
-				stream.markdown(item.text);
-			} else if (item.type === 'thinking') {
-				stream.push(new ChatResponseThinkingProgressPart(item.thinking));
-			} else if (item.type === 'tool_use') {
-				unprocessedToolCalls.set(item.id, item);
-				const invocation = createFormattedToolInvocation(item, false);
-				if (invocation) {
-					if (message.parent_tool_use_id) {
-						invocation.subAgentInvocationId = message.parent_tool_use_id;
-					}
-					invocation.enablePartialUpdate = true;
-					stream.push(invocation);
-				}
-			}
-		}
-	}
-
-	/**
-	 * Handles user messages containing tool results
-	 */
-	private handleUserMessage(
-		message: SDKUserMessage,
-		stream: vscode.ChatResponseStream,
-		unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>,
-		toolInvocationToken: vscode.ChatParticipantToolToken,
-		token: vscode.CancellationToken
-	): void {
-		if (Array.isArray(message.message.content)) {
-			for (const toolResult of message.message.content) {
-				if (toolResult.type === 'tool_result') {
-					this.processToolResult(toolResult, stream, unprocessedToolCalls, toolInvocationToken, token);
-				}
-			}
-		}
-	}
-
-	/**
-	 * Processes individual tool results and handles special tool types
-	 */
-	private processToolResult(
-		toolResult: Anthropic.Messages.ToolResultBlockParam,
-		stream: vscode.ChatResponseStream,
-		unprocessedToolCalls: Map<string, Anthropic.Beta.Messages.BetaToolUseBlock>,
-		toolInvocationToken: vscode.ChatParticipantToolToken,
-		token: vscode.CancellationToken
-	): void {
-		const toolUse = unprocessedToolCalls.get(toolResult.tool_use_id!);
-		if (!toolUse) {
-			return;
-		}
-
-		unprocessedToolCalls.delete(toolResult.tool_use_id!);
-		const invocation = createFormattedToolInvocation(toolUse, true);
-		if (invocation) {
-			invocation.enablePartialUpdate = true;
-			invocation.isComplete = true;
-			invocation.isError = toolResult.is_error;
-			if (toolResult.content === ClaudeCodeSession.DenyToolMessage) {
-				invocation.isConfirmed = false;
-			}
-			// Populate tool output for display in chat UI
-			completeToolInvocation(toolUse, toolResult, invocation);
-		}
-
-		if (toolUse.name === ClaudeToolNames.TodoWrite) {
-			this.processTodoWriteTool(toolUse, toolInvocationToken, token);
-		}
-
-		if (invocation) {
-			stream.push(invocation);
-		}
-	}
-
-	/**
-	 * Handles the TodoWrite tool by converting Claude's todo format to the core todo list format
-	 */
-	private processTodoWriteTool(
-		toolUse: Anthropic.Beta.Messages.BetaToolUseBlock,
-		toolInvocationToken: vscode.ChatParticipantToolToken,
-		token: vscode.CancellationToken
-	): void {
-		const input = toolUse.input as TodoWriteInput;
-		this.toolsService.invokeTool(ToolName.CoreManageTodoList, {
-			input: {
-				operation: 'write',
-				todoList: input.todos.map((todo, i) => ({
-					id: i,
-					title: todo.content,
-					description: '',
-					status: todo.status === 'pending' ?
-						'not-started' :
-						(todo.status === 'in_progress' ?
-							'in-progress' :
-							'completed')
-				} satisfies IManageTodoListToolInputParams['todoList'][number])),
-			} satisfies IManageTodoListToolInputParams,
-			toolInvocationToken,
-		}, token);
-	}
-
-	/**
-	 * Handles result messages that indicate completion or errors
-	 */
-	private handleResultMessage(
-		message: SDKResultMessage,
-		stream: vscode.ChatResponseStream
-	): void {
-		if (message.subtype === 'error_max_turns') {
-			stream.progress(l10n.t('Maximum turns reached ({0})', message.num_turns));
-		} else if (message.subtype === 'error_during_execution') {
-			throw new KnownClaudeError(l10n.t('Error during execution'));
-		}
-	}
-
-}
-
-interface IManageTodoListToolInputParams {
-	readonly operation?: 'write' | 'read'; // Optional in write-only mode
-	readonly todoList: readonly {
-		readonly id: number;
-		readonly title: string;
-		readonly description: string;
-		readonly status: 'not-started' | 'in-progress' | 'completed';
-	}[];
 }

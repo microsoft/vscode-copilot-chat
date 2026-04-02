@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type * as vscode from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 
 export const IChatSessionWorktreeCheckpointService = createServiceIdentifier<IChatSessionWorktreeCheckpointService>('IChatSessionWorktreeCheckpointService');
@@ -12,8 +11,11 @@ export interface IChatSessionWorktreeCheckpointService {
 	readonly _serviceBrand: undefined;
 
 	handleRequest(sessionId: string): Promise<void>;
-	handleRequestCompleted(sessionId: string): Promise<void>;
+	handleRequestCompleted(sessionId: string, requestId: string): Promise<void>;
 
-	getWorktreeChanges(sessionId: string): Promise<readonly vscode.ChatSessionChangedFile2[] | undefined>;
-	getWorktreeCheckpointSupport(sessionId: string): Promise<boolean>;
+	/** Create baseline checkpoints for additional worktrees at request start. */
+	handleAdditionalWorktreesRequest(sessionId: string): Promise<void>;
+
+	/** Create post-turn checkpoints for additional worktrees at request completion. */
+	handleAdditionalWorktreesRequestCompleted(sessionId: string, requestId: string): Promise<void>;
 }

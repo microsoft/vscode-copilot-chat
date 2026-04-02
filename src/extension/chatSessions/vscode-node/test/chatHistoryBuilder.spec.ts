@@ -4,14 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import Anthropic from '@anthropic-ai/sdk';
-import { readFile } from 'fs/promises';
-import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import type * as vscode from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatReferenceBinaryData, ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
 import { IClaudeCodeSession, ISubagentSession, StoredMessage, SYNTHETIC_MODEL_ID } from '../../claude/node/sessionParser/claudeSessionSchema';
-import { buildSessions, parseSessionFileContent } from '../../claude/node/sessionParser/claudeSessionParser';
 import { buildChatHistory, collectSdkModelIds } from '../chatHistoryBuilder';
 
 // #region Test Helpers
@@ -713,150 +710,6 @@ describe('buildChatHistory', () => {
 			const systemParts = getResponseParts(snapshot, 0);
 			expect(systemParts).toHaveLength(1);
 			expect(systemParts[0]).toMatchObject({ type: 'markdown', content: '\n\n---\n\n*Conversation compacted*' });
-		});
-	});
-
-	// #endregion
-
-	// #region Real Session Fixtures
-
-	/**
-	 * Loads a real JSONL session fixture through the full parser pipeline
-	 * (parseSessionFileContent → buildSessions), returning the first session.
-	 */
-	async function loadFixtureSession(filename: string): Promise<IClaudeCodeSession> {
-		const fixturePath = path.join(__dirname, 'fixtures', filename);
-		const content = await readFile(fixturePath, 'utf8');
-		const parseResult = parseSessionFileContent(content, fixturePath);
-		const buildResult = buildSessions(parseResult);
-		expect(buildResult.sessions.length).toBeGreaterThan(0);
-		return buildResult.sessions[0];
-	}
-
-	describe('real session fixtures', () => {
-		it('shrek session: multi-turn conversation with /compact command', async () => {
-			// This session contains 3 conversation turns, a /compact command with stdout,
-			// system messages, and a synthetic assistant message — exercising the full pipeline.
-			const fixtureSession = await loadFixtureSession('98b76fb9-f5d3-40c5-ab82-b970c20e3764.jsonl');
-			const result = buildChatHistory(fixtureSession);
-			const snapshot = mapHistoryForSnapshot(result);
-
-			// Expected: 3 request/response pairs + compact system separator + /compact command + stdout response
-			// Turn 1: "Give me 4 20 sentince long paragraphs of lorem ipsum as if you were shrek"
-			// Turn 2: "...for testing"
-			// Turn 3: "im testing chat just do it" → response includes system "Conversation compacted"
-			// Turn 4: "/compact" → "Compacted PreCompact [callback] completed successfully"
-			expect(snapshot).toHaveLength(8);
-
-			// Turn 1
-			expect(snapshot[0]).toMatchObject({ type: 'request' });
-			expect((snapshot[0] as SnapshotRequest).prompt).toContain('lorem ipsum');
-			expect(snapshot[1]).toMatchObject({ type: 'response' });
-
-			// Turn 2
-			expect(snapshot[2]).toMatchObject({ type: 'request' });
-			expect((snapshot[2] as SnapshotRequest).prompt).toContain('for testing');
-			expect(snapshot[3]).toMatchObject({ type: 'response' });
-
-			// Turn 3 — response should include the "Conversation compacted" separator
-			expect(snapshot[4]).toMatchObject({ type: 'request' });
-			expect((snapshot[4] as SnapshotRequest).prompt).toContain('just do it');
-			expect(snapshot[5]).toMatchObject({ type: 'response' });
-			const turn3Parts = getResponseParts(snapshot, 5);
-			const systemPart = turn3Parts.find(p => p.type === 'markdown' && (p as Record<string, unknown>).content === '\n\n---\n\n*Conversation compacted*');
-			expect(systemPart).toBeDefined();
-
-			// Turn 4 — /compact command with stdout
-			expect(snapshot[6]).toMatchObject({ type: 'request', prompt: '/compact' });
-			expect(snapshot[7]).toMatchObject({ type: 'response' });
-			const compactResponseParts = getResponseParts(snapshot, 7);
-			expect(compactResponseParts).toHaveLength(1);
-			expect(compactResponseParts[0]).toMatchObject({
-				type: 'markdown',
-				content: 'Compacted PreCompact [callback] completed successfully',
-			});
-
-			// Synthetic message ("No response requested.") should NOT appear anywhere
-			for (const turn of snapshot) {
-				if (turn.type === 'response') {
-					for (const part of turn.parts) {
-						if (part.type === 'markdown') {
-							expect((part as Record<string, unknown>).content).not.toContain('No response requested');
-						}
-					}
-				}
-			}
-
-			// Structural: no consecutive request turns
-			for (let j = 0; j < result.length - 1; j++) {
-				if (result[j] instanceof ChatRequestTurn2) {
-					expect(result[j + 1]).toBeInstanceOf(ChatResponseTurn2);
-				}
-			}
-		});
-
-		it('tool use session: thinking blocks and bash tool invocation', async () => {
-			// This session contains a single turn with thinking blocks, text, and a Bash tool call.
-			const fixtureSession = await loadFixtureSession('bd937e2a-89e9-4d7b-8125-293a35863fa4.jsonl');
-			const result = buildChatHistory(fixtureSession);
-			const snapshot = mapHistoryForSnapshot(result);
-
-			// Expected: 1 request + 1 response
-			expect(snapshot).toHaveLength(2);
-
-			// Request: "run sleep 4"
-			expect(snapshot[0]).toMatchObject({ type: 'request' });
-			expect((snapshot[0] as SnapshotRequest).prompt).toContain('run sleep 4');
-
-			// Response: should contain thinking, markdown, tool, thinking, markdown parts
-			expect(snapshot[1]).toMatchObject({ type: 'response' });
-			const parts = getResponseParts(snapshot, 1);
-
-			// Verify thinking blocks are present
-			const thinkingParts = parts.filter(p => p.type === 'thinking');
-			expect(thinkingParts.length).toBeGreaterThanOrEqual(2);
-
-			// Verify markdown text parts exist
-			const markdownParts = parts.filter(p => p.type === 'markdown');
-			expect(markdownParts.length).toBeGreaterThanOrEqual(2);
-			expect(markdownParts.some(p => (p as Record<string, unknown>).content === 'I\'ll run the sleep command for 4 seconds.')).toBe(true);
-			expect(markdownParts.some(p => ((p as Record<string, unknown>).content as string).includes('completed successfully'))).toBe(true);
-
-			// Verify tool invocation exists and is completed
-			const toolParts = parts.filter(p => p.type === 'tool');
-			expect(toolParts).toHaveLength(1);
-			expect(toolParts[0]).toMatchObject({
-				type: 'tool',
-				toolName: 'Bash',
-				isComplete: true,
-				isError: false,
-			});
-		});
-
-		it('preserves the existing 4c289ca8 fixture behavior', async () => {
-			// Backward-compatible test for the original fixture
-			const fixturePath = path.join(__dirname, 'fixtures', '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl');
-			const fixtureContent = await readFile(fixturePath, 'utf8');
-
-			// Parse through real parser
-			const parseResult = parseSessionFileContent(fixtureContent, fixturePath);
-			const buildResult = buildSessions(parseResult);
-			expect(buildResult.sessions.length).toBeGreaterThan(0);
-
-			const result = buildChatHistory(buildResult.sessions[0]);
-
-			const requests = result.filter(t => t instanceof ChatRequestTurn2);
-			const responses = result.filter(t => t instanceof ChatResponseTurn2);
-
-			expect(requests.length).toBeGreaterThan(0);
-			expect(responses.length).toBeGreaterThan(0);
-
-			// No two consecutive request turns
-			for (let j = 0; j < result.length - 1; j++) {
-				if (result[j] instanceof ChatRequestTurn2) {
-					expect(result[j + 1]).toBeInstanceOf(ChatResponseTurn2);
-				}
-			}
 		});
 	});
 

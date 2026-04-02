@@ -24,7 +24,7 @@ import { isString } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../vscodeTypes';
-import { isPromptFile, isPromptInstructionText } from '../../prompt/common/chatVariablesCollection';
+import { isCustomizationsIndex, isPromptFile } from '../../prompt/common/chatVariablesCollection';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { IChatDiskSessionResources } from '../../prompts/common/chatDiskSessionResources';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
@@ -206,7 +206,10 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 }
 
 async function isExternalInstructionsFile(normalizedUri: URI, customInstructionsService: ICustomInstructionsService, buildPromptContext?: IBuildPromptContext): Promise<boolean> {
-	if (normalizedUri.scheme === 'vscode-chat-internal' || normalizedUri.scheme === 'copilot-skill') {
+	if (normalizedUri.scheme === 'vscode-chat-internal') {
+		return true;
+	}
+	if (customInstructionsService.getExtensionSkillInfo(normalizedUri)) {
 		return true;
 	}
 	if (buildPromptContext) {
@@ -246,7 +249,7 @@ function getInstructionsIndexFile(buildPromptContext: IBuildPromptContext, custo
 		return cachedInstructionIndexFile.file;
 	}
 
-	const indexVariable = buildPromptContext.chatVariables.find(isPromptInstructionText);
+	const indexVariable = buildPromptContext.chatVariables.find(isCustomizationsIndex);
 	if (indexVariable && isString(indexVariable.value)) {
 		const indexFile = customInstructionsService.parseInstructionIndexFile(indexVariable.value);
 		cachedInstructionIndexFile = { requestId: buildPromptContext.requestId, file: indexFile };
@@ -330,8 +333,12 @@ export function isDirExternalAndNeedsConfirmation(accessor: ServicesAccessor, ur
 	}
 	if (buildPromptContext) {
 		const instructionIndexFile = getInstructionsIndexFile(buildPromptContext, customInstructionsService);
-		if (instructionIndexFile && instructionIndexFile.skillFolders.has(normalizedUri)) {
-			return false;
+		if (instructionIndexFile) {
+			for (const skillFolderUri of instructionIndexFile.skillFolders) {
+				if (extUriBiasedIgnorePathCase.isEqualOrParent(normalizedUri, skillFolderUri)) {
+					return false;
+				}
+			}
 		}
 	} else {
 		if (customInstructionsService.isExternalInstructionsFolder(normalizedUri)) {

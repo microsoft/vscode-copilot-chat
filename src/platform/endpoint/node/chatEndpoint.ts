@@ -30,7 +30,7 @@ import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/t
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
-import { isAnthropicFamily, isGeminiFamily } from '../common/chatModelCapabilities';
+import { isGeminiFamily } from '../common/chatModelCapabilities';
 import { IDomainService } from '../common/domainService';
 import { CustomModel, IChatModelInformation, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createMessagesRequestBody, processResponseFromMessagesEndpoint } from './messagesApi';
@@ -128,6 +128,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly supportsAdaptiveThinking?: boolean;
 	public readonly minThinkingBudget?: number;
 	public readonly maxThinkingBudget?: number;
+	public readonly supportsReasoningEffort?: string[];
 	public readonly isPremium?: boolean | undefined;
 	public readonly multiplier?: number | undefined;
 	public readonly restrictedToSkus?: string[] | undefined;
@@ -168,11 +169,16 @@ export class ChatEndpoint implements IChatEndpoint {
 		this.supportsAdaptiveThinking = modelMetadata.capabilities.supports.adaptive_thinking;
 		this.minThinkingBudget = modelMetadata.capabilities.supports.min_thinking_budget;
 		this.maxThinkingBudget = modelMetadata.capabilities.supports.max_thinking_budget;
+		this.supportsReasoningEffort = modelMetadata.capabilities.supports.reasoning_effort;
 		this._supportsStreaming = !!modelMetadata.capabilities.supports.streaming;
 		this.customModel = modelMetadata.custom_model;
 		this.maxPromptImages = modelMetadata.capabilities.limits?.vision?.max_prompt_images;
 	}
 
+	// TODO: Thread enableThinking through the fetch pipeline (INetworkRequestOptions / chatMLFetcher positional params)
+	// so getExtraHeaders can gate the interleaved-thinking header on whether thinking is actually enabled for the
+	// request, rather than using the location check. Once plumbed, replace isAllowedConversationAgentModel with
+	// an enableThinking check for the thinking header (keep location gate for context management / tool search).
 	public getExtraHeaders(location?: ChatLocation): Record<string, string> {
 		const headers: Record<string, string> = { ...this.modelMetadata.requestHeaders };
 
@@ -206,16 +212,6 @@ export class ChatEndpoint implements IChatEndpoint {
 		}
 
 		return headers;
-	}
-
-	private _getThinkingBudget(): number | undefined {
-		const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._expService);
-		if (!configuredBudget || configuredBudget <= 0) {
-			return undefined;
-		}
-		const normalizedBudget = configuredBudget < 1024 ? 1024 : configuredBudget;
-		// Cap thinking budget to Anthropic's recommended max (32000), and ensure it's less than max output tokens
-		return Math.min(32000, this._maxOutputTokens - 1, normalizedBudget);
 	}
 
 	public get modelMaxPromptTokens(): number {
@@ -345,13 +341,6 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	protected customizeCapiBody(body: IEndpointBody, options: ICreateEndpointBodyOptions): IEndpointBody {
-		const isConversationAgent = options.location === ChatLocation.Agent;
-		if (isAnthropicFamily(this) && !options.disableThinking && isConversationAgent) {
-			const thinkingBudget = this._getThinkingBudget();
-			if (thinkingBudget) {
-				body.thinking_budget = thinkingBudget;
-			}
-		}
 
 		// Apply Gemini function calling mode if configured
 		const hasTools = !!options.requestOptions?.tools?.length;
@@ -404,7 +393,7 @@ export class ChatEndpoint implements IChatEndpoint {
 			useWebSocket
 			&& options.conversationId
 			&& options.turnId
-			&& this._chatWebSocketService.hasActiveConnection(options.conversationId, options.turnId)
+			&& this._chatWebSocketService.hasActiveConnection(options.conversationId)
 		);
 		const response = await this._makeChatRequest2({
 			...options,

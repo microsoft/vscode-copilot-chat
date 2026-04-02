@@ -16,6 +16,8 @@ import { IEnvService } from '../../../platform/env/common/envService';
 import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -35,7 +37,7 @@ import { CodeBlockInfo, CodeBlockProcessor, isCodeBlockWithResource } from '../.
 import { ICommandService } from '../../commands/node/commandService';
 import { Intent } from '../../common/constants';
 import { GenericInlineIntentInvocation } from '../../context/node/resolvers/genericInlineIntentInvocation';
-import { ChatVariablesCollection, isPromptInstruction } from '../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, InstructionFileIdPrefix, isInstructionFile } from '../../prompt/common/chatVariablesCollection';
 import { CodeBlock, Conversation, Turn } from '../../prompt/common/conversation';
 import { IBuildPromptContext, InternalToolReference, IWorkingSet, IWorkingSetEntry, WorkingSetEntryState } from '../../prompt/common/intents';
 import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
@@ -207,6 +209,7 @@ class EditIntentRequestHandler {
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ITelemetryService protected readonly telemetryService: ITelemetryService,
 		@IEditLogService private readonly editLogService: IEditLogService,
+		@IOTelService private readonly otelService: IOTelService,
 	) { }
 
 	async getResult(): Promise<vscode.ChatResult> {
@@ -266,6 +269,7 @@ class EditIntentRequestHandler {
 				editStepCount: this.conversation.turns.length,
 				sessionDuration: Date.now() - turn.startTime,
 			});
+			GenAiMetrics.incrementAgentEditResponseCount(this.otelService, Boolean(result.errorDetails) ? 'error' : 'success');
 		}
 
 		await this.editLogService.markCompleted(turn.id, result.errorDetails ? 'error' : 'success');
@@ -329,6 +333,7 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 		@ICommandService protected readonly commandService: ICommandService,
 		@ITelemetryService protected readonly telemetryService: ITelemetryService,
 		@INotebookService private readonly notebookService: INotebookService,
+		@IOTelService protected readonly otelService: IOTelService,
 	) { }
 
 	getAvailableTools(): vscode.LanguageModelToolInformation[] | Promise<vscode.LanguageModelToolInformation[]> | undefined {
@@ -467,9 +472,8 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 			// TODO@joyceerhl if this reference is subsequently modified and joins the working set, should we suppress it again in the UI?
 			return true;
 		}
-		const PROMPT_INSTRUCTION_PREFIX = 'vscode.prompt.instructions';
-		const PROMPT_INSTRUCTION_ROOT_PREFIX = `${PROMPT_INSTRUCTION_PREFIX}.root`;
-		const promptInstruction = chatVariables.find((variable) => isPromptInstruction(variable) && URI.isUri(variable.value) && isEqual(variable.value, uri));
+		const PROMPT_INSTRUCTION_ROOT_PREFIX = `${InstructionFileIdPrefix}.root`;
+		const promptInstruction = chatVariables.find((variable) => isInstructionFile(variable) && URI.isUri(variable.value) && isEqual(variable.value, uri));
 		if (promptInstruction) {
 			// Report references for root prompt instruction files and not their children
 			return promptInstruction.reference.id.startsWith(PROMPT_INSTRUCTION_ROOT_PREFIX);

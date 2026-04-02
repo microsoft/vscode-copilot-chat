@@ -8,11 +8,12 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { IEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { CopilotChatAttr, GenAiAttr, GenAiOperationName } from '../../../../platform/otel/common/index';
-import { ICompletedSpanData, IOTelService, SpanStatusCode } from '../../../../platform/otel/common/otelService';
+import { ICompletedSpanData, IOTelService, ISpanEventData, SpanStatusCode } from '../../../../platform/otel/common/otelService';
 import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
@@ -67,11 +68,15 @@ class TestOTelService {
 	private readonly _onDidCompleteSpan = new Emitter<ICompletedSpanData>();
 	readonly onDidCompleteSpan = this._onDidCompleteSpan.event;
 
-	private readonly _onDidEmitSpanEvent = new Emitter<never>();
+	private readonly _onDidEmitSpanEvent = new Emitter<ISpanEventData>();
 	readonly onDidEmitSpanEvent = this._onDidEmitSpanEvent.event;
 
 	fireSpan(span: ICompletedSpanData): void {
 		this._onDidCompleteSpan.fire(span);
+	}
+
+	fireSpanEvent(event: ISpanEventData): void {
+		this._onDidEmitSpanEvent.fire(event);
 	}
 
 	startSpan() { return { setAttribute() { }, setAttributes() { }, setStatus() { }, recordException() { }, addEvent() { }, getSpanContext() { return undefined; }, end() { } }; }
@@ -151,7 +156,13 @@ class TestConfigurationService {
 
 class TestTelemetryService {
 	declare readonly _serviceBrand: undefined;
-	sendTelemetryEvent() { }
+	sendMSFTTelemetryEvent() { }
+}
+
+class TestEnvService {
+	declare readonly _serviceBrand: undefined;
+	readonly vscodeVersion = '1.99.0-test';
+	getVersion() { return '0.0.0-test'; }
 }
 
 describe('ChatDebugFileLoggerService', () => {
@@ -174,6 +185,7 @@ describe('ChatDebugFileLoggerService', () => {
 			new TestConfigurationService() as unknown as IConfigurationService,
 			new NullExperimentationService() as unknown as IExperimentationService,
 			new TestTelemetryService() as unknown as ITelemetryService,
+			new TestEnvService() as unknown as IEnvService,
 		);
 		disposables.add(service);
 	});
@@ -202,11 +214,12 @@ describe('ChatDebugFileLoggerService', () => {
 		await service.flush('session-1');
 		const entries = await readLogEntries('session-1');
 
-		expect(entries).toHaveLength(1);
-		expect(entries[0].type).toBe('tool_call');
-		expect(entries[0].name).toBe('read_file');
-		expect(entries[0].sid).toBe('session-1');
-		expect(entries[0].status).toBe('ok');
+		expect(entries).toHaveLength(2);
+		expect(entries[0].type).toBe('session_start');
+		expect(entries[1].type).toBe('tool_call');
+		expect(entries[1].name).toBe('read_file');
+		expect(entries[1].sid).toBe('session-1');
+		expect(entries[1].status).toBe('ok');
 	});
 
 	it('writes LLM request with token counts', async () => {
@@ -217,10 +230,10 @@ describe('ChatDebugFileLoggerService', () => {
 		await service.flush('session-1');
 		const entries = await readLogEntries('session-1');
 
-		expect(entries).toHaveLength(1);
-		expect(entries[0].type).toBe('llm_request');
-		expect(entries[0].name).toBe('chat:gpt-4o');
-		const attrs = entries[0].attrs as Record<string, unknown>;
+		expect(entries).toHaveLength(2);
+		expect(entries[1].type).toBe('llm_request');
+		expect(entries[1].name).toBe('chat:gpt-4o');
+		const attrs = entries[1].attrs as Record<string, unknown>;
 		expect(attrs.model).toBe('gpt-4o');
 		expect(attrs.inputTokens).toBe(1000);
 		expect(attrs.outputTokens).toBe(500);
@@ -241,8 +254,8 @@ describe('ChatDebugFileLoggerService', () => {
 		await service.flush('session-1');
 		const entries = await readLogEntries('session-1');
 
-		expect(entries[0].status).toBe('error');
-		expect((entries[0].attrs as Record<string, unknown>).error).toBe('Command failed');
+		expect(entries[1].status).toBe('error');
+		expect((entries[1].attrs as Record<string, unknown>).error).toBe('Command failed');
 	});
 
 	it('isDebugLogUri returns true for files under debug-logs', () => {
@@ -298,7 +311,7 @@ describe('ChatDebugFileLoggerService', () => {
 		await service.flush('session-1');
 		const entries = await readLogEntries('session-1');
 
-		const args = (entries[0].attrs as Record<string, unknown>).args as string;
+		const args = (entries[1].attrs as Record<string, unknown>).args as string;
 		expect(args.length).toBeLessThan(longArgs.length);
 		expect(args).toContain('[truncated]');
 	});
@@ -360,6 +373,7 @@ describe('ChatDebugFileLoggerService', () => {
 			configService as unknown as IConfigurationService,
 			new NullExperimentationService() as unknown as IExperimentationService,
 			new TestTelemetryService() as unknown as ITelemetryService,
+			new TestEnvService() as unknown as IEnvService,
 		);
 		disposables.add(svc);
 		disposables.add(configChangeEmitter);
@@ -384,5 +398,128 @@ describe('ChatDebugFileLoggerService', () => {
 
 		clearSpy.mockRestore();
 		setSpy.mockRestore();
+	});
+
+	it('inherits session ID from parent span for child spans without session ID', async () => {
+		await service.startSession('session-1');
+
+		// Parent span with session ID
+		const parentSpan = makeSpan({
+			spanId: 'parent-span-1',
+			attributes: {
+				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.INVOKE_AGENT,
+				[GenAiAttr.AGENT_NAME]: 'copilot',
+				[CopilotChatAttr.CHAT_SESSION_ID]: 'session-1',
+			},
+		});
+		otelService.fireSpan(parentSpan);
+
+		// Child span without session ID but with parentSpanId
+		const childSpan = makeSpan({
+			spanId: 'child-span-1',
+			parentSpanId: 'parent-span-1',
+			attributes: {
+				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_TOOL,
+				[GenAiAttr.TOOL_NAME]: 'read_file',
+				// No CHAT_SESSION_ID — should inherit from parent
+			},
+		});
+		otelService.fireSpan(childSpan);
+
+		await service.flush('session-1');
+		const entries = await readLogEntries('session-1');
+
+		const toolEntry = entries.find(e => e.type === 'tool_call');
+		expect(toolEntry).toBeDefined();
+		expect(toolEntry!.name).toBe('read_file');
+		expect(toolEntry!.sid).toBe('session-1');
+	});
+
+	it('inherits session ID from parent span for user_message span events', async () => {
+		await service.startSession('session-1');
+
+		// Parent span with session ID
+		const parentSpan = makeSpan({
+			spanId: 'parent-span-2',
+			attributes: {
+				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.INVOKE_AGENT,
+				[GenAiAttr.AGENT_NAME]: 'copilot',
+				[CopilotChatAttr.CHAT_SESSION_ID]: 'session-1',
+			},
+		});
+		otelService.fireSpan(parentSpan);
+
+		// user_message event without session ID but with parentSpanId
+		const spanEvent: ISpanEventData = {
+			spanId: 'child-event-span',
+			traceId: 'trace-1',
+			parentSpanId: 'parent-span-2',
+			eventName: 'user_message',
+			attributes: { content: 'hello world' },
+			timestamp: 1500,
+		};
+		otelService.fireSpanEvent(spanEvent);
+
+		await service.flush('session-1');
+		const entries = await readLogEntries('session-1');
+
+		const userMsgEntry = entries.find(e => e.type === 'user_message');
+		expect(userMsgEntry).toBeDefined();
+		expect(userMsgEntry!.sid).toBe('session-1');
+		expect((userMsgEntry!.attrs as Record<string, unknown>).content).toBe('hello world');
+	});
+
+	it('writes models.json when model snapshot is set before session starts', async () => {
+		const models = [{ id: 'gpt-4o', name: 'GPT-4o', capabilities: { type: 'chat', family: 'gpt-4o' } }];
+		service.setModelSnapshot(models);
+
+		await service.startSession('session-models');
+		await service.flush('session-models');
+
+		const sessionDir = service.getSessionDir('session-models');
+		expect(sessionDir).toBeDefined();
+		const modelsPath = path.join(sessionDir!.fsPath, 'models.json');
+		const content = await fs.promises.readFile(modelsPath, 'utf-8');
+		const parsed = JSON.parse(content);
+		expect(parsed).toHaveLength(1);
+		expect(parsed[0].id).toBe('gpt-4o');
+	});
+
+	it('writes models.json when model snapshot arrives after session starts', async () => {
+		await service.startSession('session-late');
+		await service.flush('session-late');
+
+		// Model snapshot arrives after session already started
+		const models = [{ id: 'claude-sonnet', name: 'Claude Sonnet' }];
+		service.setModelSnapshot(models);
+		await service.flush('session-late');
+
+		const sessionDir = service.getSessionDir('session-late');
+		expect(sessionDir).toBeDefined();
+		const modelsPath = path.join(sessionDir!.fsPath, 'models.json');
+		const content = await fs.promises.readFile(modelsPath, 'utf-8');
+		const parsed = JSON.parse(content);
+		expect(parsed).toHaveLength(1);
+		expect(parsed[0].id).toBe('claude-sonnet');
+	});
+
+	it('does not write models.json more than once per session', async () => {
+		const models = [{ id: 'gpt-4o', name: 'GPT-4o' }];
+		service.setModelSnapshot(models);
+
+		await service.startSession('session-dedup');
+		await service.flush('session-dedup');
+
+		const sessionDir = service.getSessionDir('session-dedup');
+		const modelsPath = path.join(sessionDir!.fsPath, 'models.json');
+
+		// Overwrite the file with different content to detect if it gets rewritten
+		await fs.promises.writeFile(modelsPath, '"sentinel"', 'utf-8');
+
+		// Calling setModelSnapshot again should NOT overwrite for existing sessions
+		service.setModelSnapshot([{ id: 'new-model' }]);
+
+		const content = await fs.promises.readFile(modelsPath, 'utf-8');
+		expect(content).toBe('"sentinel"');
 	});
 });

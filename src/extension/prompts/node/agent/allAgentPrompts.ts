@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import './anthropicPrompts';
+import './familyHPrompts';
 import './geminiPrompts';
 import './minimaxPrompts';
 import './vscModelPrompts';
@@ -13,6 +14,8 @@ import './openai/gpt51CodexPrompt';
 import './openai/gpt51Prompt';
 import './openai/gpt52Prompt';
 import './openai/gpt53CodexPrompt';
+import './openai/gpt54ConcisePrompt';
+import './openai/gpt54LargePrompt';
 import './openai/gpt54Prompt';
 import './openai/gpt5CodexPrompt';
 import './openai/gpt5Prompt';

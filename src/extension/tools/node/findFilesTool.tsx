@@ -31,6 +31,7 @@ export interface IFindFilesToolParams {
 
 export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 	public static readonly toolName = ToolName.FindFiles;
+	public static readonly nonDeferred = true;
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
@@ -62,7 +63,7 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 
 
 		const results = await raceTimeoutAndCancellationError(
-			(searchToken) => Promise.resolve(this.searchService.findFiles(globResult.patterns, undefined, searchToken)),
+			(searchToken) => Promise.resolve(this.searchService.findFiles(globResult.patterns, { caseInsensitive: true }, searchToken)),
 			token,
 			timeoutInMs,
 			'Timeout in searching files, try a more specific search pattern'

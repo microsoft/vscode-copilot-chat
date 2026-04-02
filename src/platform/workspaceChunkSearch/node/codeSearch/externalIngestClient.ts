@@ -7,6 +7,7 @@ import ingestUtils = require('@github/blackbird-external-ingest-utils');
 import * as l10n from '@vscode/l10n';
 import crypto from 'crypto';
 import { CancellationToken } from 'vscode-languageserver-protocol';
+import { toErrorMessage } from '../../../../util/common/errorMessage';
 import { Result } from '../../../../util/common/result';
 import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { raceCancellationError } from '../../../../util/vs/base/common/async';
@@ -30,6 +31,12 @@ export interface ExternalIngestFile {
 	read(): Promise<Uint8Array>;
 }
 
+export interface ExternalIngestUpdateIndexResult {
+	readonly checkpoint: string;
+	readonly totalFileCount: number;
+	readonly updatedFileCount: number;
+}
+
 /**
  * Interface for the external ingest client that handles indexing and searching files.
  */
@@ -41,7 +48,7 @@ export interface IExternalIngestClient {
 		callTracker: CallTracker,
 		token: CancellationToken,
 		onProgress?: (message: string) => void
-	): Promise<Result<{ checkpoint: string }, Error>>;
+	): Promise<Result<ExternalIngestUpdateIndexResult, Error>>;
 
 	listFilesets(callTracker: CallTracker, token: CancellationToken): Promise<string[]>;
 	deleteFileset(filesetName: string, callTracker: CallTracker, token: CancellationToken): Promise<void>;
@@ -59,7 +66,7 @@ export interface IExternalIngestClient {
 	canIngestDocument(filePath: string, data: Uint8Array): boolean;
 }
 
-class ExternalIngestRequestError extends Error {
+export class ExternalIngestRequestError extends Error {
 	constructor(
 		message: string,
 		public readonly response: Response
@@ -153,7 +160,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		throw new ExternalIngestRequestError(`${method} ${pathId} failed with status ${response.status}`, response);
 	}
 
-	async updateIndex(filesetName: string, currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, inCallTracker: CallTracker, token: CancellationToken, onProgress?: (message: string) => void): Promise<Result<{ checkpoint: string }, Error>> {
+	async updateIndex(filesetName: string, currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, inCallTracker: CallTracker, token: CancellationToken, onProgress?: (message: string) => void): Promise<Result<ExternalIngestUpdateIndexResult, Error>> {
 		const callTracker = inCallTracker.add('ExternalIngestClient::updateIndex');
 		const authToken = await raceCancellationError(this.getAuthToken(), token);
 		if (!authToken) {
@@ -200,7 +207,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		if (newCheckpoint === currentCheckpoint) {
 			this.logService.info('ExternalIngestClient::updateIndex(): Checkpoint matches current checkpoint, skipping ingest.');
-			return Result.ok({ checkpoint: newCheckpoint });
+			return Result.ok({ checkpoint: newCheckpoint, totalFileCount: mappings.size, updatedFileCount: 0 });
 		}
 
 		// Retry loop for 409 Conflict: per the external indexing spec, if any ingestion
@@ -240,7 +247,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		callTracker: CallTracker,
 		token: CancellationToken,
 		onProgress?: (message: string) => void,
-	): Promise<Result<{ checkpoint: string }, Error>> {
+	): Promise<Result<ExternalIngestUpdateIndexResult, Error>> {
 		onProgress?.(l10n.t('Creating snapshot...'));
 
 		// Create checkpoint (phase 1). A 429 without Retry-After means "too many filesets",
@@ -277,7 +284,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			codedSymbolRange.end === 0
 		) {
 			this.logService.info('ExternalIngestClient::performIngestion(): Ingest has already run successfully');
-			return Result.ok({ checkpoint: newCheckpoint });
+			return Result.ok({ checkpoint: newCheckpoint, totalFileCount: mappings.size, updatedFileCount: 0 });
 		}
 		this.logService.debug(`ExternalIngestClient::performIngestion(): Got ingest ID: ${ingestId}`);
 
@@ -382,12 +389,22 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 							try {
 								this.logService.debug(`ExternalIngestClient::performIngestion(): Uploading file: ${fileEntry.relativePath}`);
-								const bytes = await fileEntry.read();
-								const content = encodeBase64(VSBuffer.wrap(bytes));
+
+								let content: string | undefined = undefined;
+								try {
+									const bytes = await fileEntry.read();
+									content = encodeBase64(VSBuffer.wrap(bytes));
+								} catch (err) {
+									this.logService.warn(`ExternalIngestClient::performIngestion(): Failed to read file for ${fileEntry.relativePath}: ${toErrorMessage(err, true)}`);
+								}
+
 								await this.makeRequest(authToken, 'POST', '/external/code/ingest/document', {
 									ingest_id: ingestId,
-									content,
-									file_path: fileEntry.relativePath,
+
+									// If the file read failed, we still upload but pass empty content and empty path.
+									// This signals that we've completed the upload but the document should be deleted
+									content: typeof content === 'string' ? content : '',
+									file_path: typeof content === 'string' ? fileEntry.relativePath : '',
 									doc_id: requestedDocSha,
 								}, { retriesOn500: 3, retriesOnRateLimiting: 10 }, callTracker, uploadCts.token);
 							} catch (e) {
@@ -456,7 +473,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		const body = await resp.text();
 		this.logService.debug(`requestId: '${requestId}', body: ${body}`);
 
-		return Result.ok({ checkpoint: newCheckpoint });
+		return Result.ok({ checkpoint: newCheckpoint, totalFileCount: mappings.size, updatedFileCount: uploaded });
 	}
 
 	async listFilesets(callTracker: CallTracker, token: CancellationToken): Promise<string[]> {

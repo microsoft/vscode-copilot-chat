@@ -12,8 +12,7 @@ import { IChatHookService, PreCompactHookInput } from '../../../../platform/chat
 import { ChatFetchResponseType, ChatLocation, ChatResponse, FetchSuccess } from '../../../../platform/chat/common/commonTypes';
 import { IHistoricalTurn, ISessionTranscriptService } from '../../../../platform/chat/common/sessionTranscriptService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { isAnthropicFamily } from '../../../../platform/endpoint/common/chatModelCapabilities';
-import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
+import { isAnthropicFamily, isGeminiFamily } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { APIUsage } from '../../../../platform/networking/common/openai';
@@ -42,6 +41,7 @@ import { Tag } from '../base/tag';
 import { ChatToolCalls } from '../panel/toolCalling';
 import { AgentPrompt, AgentPromptProps, AgentUserMessage, AgentUserMessageCustomizations, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
 import { DefaultOpenAIKeepGoingReminder } from './openai/defaultOpenAIPrompt';
+import { PromptRegistry } from './promptRegistry';
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
@@ -249,7 +249,7 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 		}
 
 		if (summaryForCurrentTurn) {
-			history.push(<SummaryMessageElement endpoint={this.props.endpoint} summaryText={summaryForCurrentTurn} transcriptPath={this.props.transcriptPath} />);
+			history.push(<SummaryMessageElement endpoint={this.props.endpoint} summaryText={summaryForCurrentTurn} />);
 
 			return (<PrioritizedList priority={this.props.priority} descending={false} passPriority={true}>
 				{history.reverse()}
@@ -309,7 +309,7 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 
 			if (summaryForTurn) {
 				// We have a summary for a tool call round that was part of this turn
-				turnComponents.push(<SummaryMessageElement endpoint={this.props.endpoint} summaryText={summaryForTurn.text} transcriptPath={this.props.transcriptPath} />);
+				turnComponents.push(<SummaryMessageElement endpoint={this.props.endpoint} summaryText={summaryForTurn.text} />);
 			} else if (!turn.isContinuation) {
 				turnComponents.push(<AgentUserMessage flexGrow={1} {...getUserMessagePropsFromTurn(turn, this.props.endpoint, {
 					userQueryTagName: this.props.userQueryTagName,
@@ -409,8 +409,6 @@ export interface SummarizedAgentHistoryProps extends BasePromptElementProps, Age
 	readonly summarizationInstructions?: string;
 	/** Whether this summarization was triggered as a background or foreground operation. Defaults to 'foreground'. */
 	readonly summarizationSource?: 'background' | 'foreground';
-	/** Path to the conversation transcript JSONL file, used to inform the model after summarization */
-	readonly transcriptPath?: string;
 }
 
 /**
@@ -432,18 +430,41 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 		let historyMetadata: SummarizedConversationHistoryMetadata | undefined;
 		const transcriptLookupEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.ConversationTranscriptLookup, this.experimentationService);
 
-		if (this.props.triggerSummarize) {
-			// If transcript lookup is enabled, lazily start the transcript session now
-			// (before summarization) so it captures the full pre-compaction conversation.
-			// startSession is idempotent — if hooks already started it, this is a no-op.
-			if (transcriptLookupEnabled) {
-				await this.ensureTranscriptSession();
+		// Resolve transcript path and flush to disk so the model can read the up-to-date file
+		let transcriptPath: string | undefined;
+		const sessionId = this.props.promptContext.conversation?.sessionId;
+		if (transcriptLookupEnabled && sessionId) {
+			// Lazily start the transcript session now (before summarization) so it
+			// captures the full pre-compaction conversation. startSession is
+			// idempotent — if hooks already started it, this is a no-op.
+			await this.ensureTranscriptSession();
+
+			const transcriptUri = this.sessionTranscriptService.getTranscriptPath(sessionId);
+			if (transcriptUri) {
+				await this.sessionTranscriptService.flush(sessionId);
+				transcriptPath = transcriptUri.fsPath;
 			}
+		}
+
+		if (this.props.triggerSummarize) {
 
 			const summarizer = this.instantiationService.createInstance(ConversationHistorySummarizer, this.props, sizing, progress, token);
 			const summResult = await summarizer.summarizeHistory();
 			if (summResult) {
-				historyMetadata = new SummarizedConversationHistoryMetadata(summResult.toolCallRoundId, summResult.summary, {
+				// Bake the transcript hint into the summary text so it is
+				// frozen at compaction time and never changes on subsequent renders
+				// (preserving Anthropic prompt cache stability).
+				let summary = summResult.summary;
+				if (transcriptPath) {
+					const lineCount = this.sessionTranscriptService.getLineCount(sessionId!);
+					summary += `\nIf you need specific details from before compaction (such as exact code snippets, error messages, tool results, or content you previously generated), use the ${ToolName.ReadFile} tool to look up the full uncompacted conversation transcript at: "${transcriptPath}"`;
+					if (lineCount !== undefined) {
+						summary += `\nAt the time of this request, the transcript has ${lineCount} lines.`;
+					}
+					summary += `\nExample usage: ${ToolName.ReadFile}(filePath: "${transcriptPath}")`;
+				}
+
+				historyMetadata = new SummarizedConversationHistoryMetadata(summResult.toolCallRoundId, summary, {
 					thinking: summResult.thinking,
 					usage: summResult.usage,
 					promptTokenDetails: summResult.promptTokenDetails,
@@ -453,20 +474,7 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 					numRoundsSinceLastSummarization: summResult.numRoundsSinceLastSummarization,
 					durationMs: summResult.durationMs,
 				});
-				this.addSummaryToHistory(summResult.summary, summResult.toolCallRoundId, summResult.thinking);
-			}
-		}
-
-		// Resolve transcript path and flush to disk so the model can read the up-to-date file
-		let transcriptPath: string | undefined;
-		if (transcriptLookupEnabled) {
-			const sessionId = this.props.promptContext.conversation?.sessionId;
-			if (sessionId) {
-				const transcriptUri = this.sessionTranscriptService.getTranscriptPath(sessionId);
-				if (transcriptUri) {
-					await this.sessionTranscriptService.flush(sessionId);
-					transcriptPath = transcriptUri.fsPath;
-				}
+				this.addSummaryToHistory(summary, summResult.toolCallRoundId, summResult.thinking);
 			}
 		}
 
@@ -475,7 +483,6 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 			<ConversationHistory
 				{...this.props}
 				promptContext={promptContext}
-				transcriptPath={transcriptPath}
 				enableCacheBreakpoints={this.props.enableCacheBreakpoints} />
 		</>;
 	}
@@ -489,6 +496,12 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 	private async ensureTranscriptSession(): Promise<void> {
 		const sessionId = this.props.promptContext.conversation?.sessionId;
 		if (!sessionId) {
+			return;
+		}
+
+		// Short-circuit if session already exists — avoids rebuilding
+		// the full IHistoricalTurn[] array on every render.
+		if (this.sessionTranscriptService.getTranscriptPath(sessionId)) {
 			return;
 		}
 
@@ -562,7 +575,6 @@ class ConversationHistorySummarizer {
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
-		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IChatHookService private readonly chatHookService: IChatHookService,
 	) { }
 
@@ -647,23 +659,24 @@ class ConversationHistorySummarizer {
 
 	private async getSummary(mode: SummaryMode, propsInfo: ISummarizedConversationHistoryInfo): Promise<SummarizationResult> {
 		const stopwatch = new StopWatch(false);
-		const forceGpt41 = this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentHistorySummarizationForceGpt41, this.experimentationService);
-		const gpt41Endpoint = await this.endpointProvider.getChatEndpoint('copilot-base');
-		const endpoint = forceGpt41 && (gpt41Endpoint.modelMaxPromptTokens >= this.props.endpoint.modelMaxPromptTokens) ?
-			gpt41Endpoint :
-			this.props.endpoint;
+		const endpoint = this.props.endpoint;
 
 		let summarizationPrompt: ChatMessage[];
 		const associatedRequestId = this.props.promptContext.conversation?.getLatestTurn().id;
-		const promptCacheMode = this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentHistorySummarizationWithPromptCache, this.experimentationService);
+		const cacheFriendlyMode = this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentHistorySummarizationCacheFriendly, this.experimentationService);
+		let usedCacheFriendlyPrompt = false;
 		try {
-			if (mode === SummaryMode.Full && promptCacheMode) {
-				const props: AgentPromptProps = {
+			if (mode === SummaryMode.Full && cacheFriendlyMode) {
+				const customizations = await PromptRegistry.resolveAllCustomizations(this.instantiationService, endpoint);
+				const props: CacheFriendlySummarizationPromptProps = {
 					...propsInfo.props,
-					triggerSummarize: false
+					triggerSummarize: false,
+					enableCacheBreakpoints: true,
+					customizations,
 				};
-				const expandedEndpoint = endpoint.cloneWithTokenOverride(endpoint.modelMaxPromptTokens * 1.05);
-				summarizationPrompt = (await renderPromptElement(this.instantiationService, expandedEndpoint, AgentPromptWithSummaryPrompt, props, undefined, this.token)).messages;
+				const expandedEndpoint = endpoint.cloneWithTokenOverride(endpoint.modelMaxPromptTokens * 1.15);
+				summarizationPrompt = (await renderPromptElement(this.instantiationService, expandedEndpoint, CacheFriendlySummarizationPrompt, props, undefined, this.token)).messages;
+				usedCacheFriendlyPrompt = true;
 			} else {
 				summarizationPrompt = (await renderPromptElement(this.instantiationService, endpoint, ConversationHistorySummarizationPrompt, { ...propsInfo.props, simpleMode: mode === SummaryMode.Simple }, undefined, this.token)).messages;
 			}
@@ -696,15 +709,53 @@ class ConversationHistorySummarizer {
 				),
 			} : undefined;
 
-			if (promptCacheMode) {
+			if (usedCacheFriendlyPrompt) {
+				// Place cache breakpoints on the agent-loop prefix only (everything
+				// except the appended summarize instruction).  addCacheBreakpoints
+				// uses the last User message as the boundary between "current turn"
+				// and "history above", so running it on the full prompt (which ends
+				// with the summarize UserMessage) would shift that boundary and
+				// place breakpoints at different positions than the agent loop did —
+				// causing the Anthropic cache lookback to miss the agent loop's
+				// cached prefix.
+				const prefixMessages = summarizationPrompt.slice(0, -1);
+				addCacheBreakpoints(prefixMessages);
+			} else if (cacheFriendlyMode) {
 				addCacheBreakpoints(summarizationPrompt);
 			} else {
 				stripCacheBreakpoints(summarizationPrompt);
 			}
 
+			let messages = ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt);
+			// Gemini strictly requires every function_call to have a matching function_response.
+			// When prompt-tsx prunes tool result messages due to token budget, orphaned tool_calls
+			// can remain, causing a 400 INVALID_ARGUMENT error. Strip them for Gemini models.
+			if (isGeminiFamily(endpoint)) {
+				const validationResult = ToolCallingLoop.validateToolMessagesCore(messages, { stripOrphanedToolCalls: true });
+				messages = validationResult.messages;
+				if (validationResult.strippedToolCallCount > 0) {
+					this.logInfo(`Stripped ${validationResult.strippedToolCallCount} orphaned tool calls from summarization prompt`, mode);
+					/* __GDPR__
+						"summarization.strippedOrphanedToolCalls" : {
+							"owner": "vijayu",
+							"comment": "Tracks when orphaned tool calls are stripped from the summarization prompt for Gemini models",
+							"strippedToolCallCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of orphaned tool_calls stripped from the summarization prompt." },
+							"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model ID." },
+							"mode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The summarization mode (simple or full)." }
+						}
+					*/
+					this.telemetryService.sendMSFTTelemetryEvent('summarization.strippedOrphanedToolCalls', {
+						model: endpoint.model,
+						mode,
+					}, {
+						strippedToolCallCount: validationResult.strippedToolCallCount,
+					});
+				}
+			}
+
 			summaryResponse = await endpoint.makeChatRequest2({
 				debugName: `summarizeConversationHistory-${mode}`,
-				messages: ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt),
+				messages,
 				finishedCb: undefined,
 				location: ChatLocation.Other,
 				requestOptions: {
@@ -763,6 +814,7 @@ class ConversationHistorySummarizer {
 		}
 
 		this.sendSummarizationTelemetry('success', response.requestId, this.props.endpoint.model, mode, elapsedTime, response.usage);
+		this.logInfo(`Summarization usage: prompt=${response.usage?.prompt_tokens ?? '?'}, cached=${response.usage?.prompt_tokens_details?.cached_tokens ?? '?'}, completion=${response.usage?.completion_tokens ?? '?'}`, mode);
 		return response;
 	}
 
@@ -867,12 +919,37 @@ class ConversationHistorySummarizer {
 	}
 }
 
-class AgentPromptWithSummaryPrompt extends PromptElement<AgentPromptProps> {
+/**
+ * Cache-friendly summarization prompt that shares the agent loop's prefix for prompt cache hits.
+ *
+ * Structure:
+ * - AgentPrompt preamble + conversation history (byte-identical to the agent loop → cache hit)
+ * - SummaryPrompt instructions (appended AFTER history to maximize prefix overlap)
+ * - Final "Summarize..." user message
+ *
+ * The key insight: by placing SummaryPrompt after the history rather than before, the prefix
+ * match with the preceding agent loop request extends through the entire conversation
+ * (potentially 80k+ cached tokens instead of just ~17k for the preamble alone).
+ */
+interface CacheFriendlySummarizationPromptProps extends AgentPromptProps {
+	readonly workingNotebook?: NotebookDocument;
+	readonly summarizationInstructions?: string;
+}
+
+class CacheFriendlySummarizationPrompt extends PromptElement<CacheFriendlySummarizationPromptProps> {
 	override async render(state: void, sizing: PromptSizing) {
 		return <>
 			<AgentPrompt {...this.props} />
-			<UserMessage>
+			{this.props.workingNotebook && <WorkingNotebookSummary priority={998} notebook={this.props.workingNotebook} />}
+			<UserMessage priority={1000}>
 				{SummaryPrompt}
+				{this.props.summarizationInstructions && <>
+					<br /><br />
+					## Additional instructions from the user:<br />
+					{this.props.summarizationInstructions}
+				</>}
+				<br /><br />
+				Now summarize the conversation above. Do NOT call any tools.
 			</UserMessage>
 		</>;
 	}
@@ -980,7 +1057,6 @@ export class SummarizedConversationHistoryPropsBuilder {
 interface SummaryMessageProps extends BasePromptElementProps {
 	readonly summaryText: string;
 	readonly endpoint: IChatEndpoint;
-	readonly transcriptPath?: string;
 }
 
 class SummaryMessageElement extends PromptElement<SummaryMessageProps> {
@@ -989,7 +1065,6 @@ class SummaryMessageElement extends PromptElement<SummaryMessageProps> {
 			<Tag name='conversation-summary'>
 				{this.props.summaryText}
 			</Tag>
-			{this.props.transcriptPath && <><br />If you need specific details from before compaction (such as exact code snippets, error messages, tool results, or content you previously generated), use the {ToolName.ReadFile} tool to look up the full uncompacted conversation transcript at: {this.props.transcriptPath}</>}
 			{this.props.endpoint.family === 'gpt-4.1' && <Tag name='reminderInstructions'>
 				<DefaultOpenAIKeepGoingReminder />
 			</Tag>}

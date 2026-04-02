@@ -3,11 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ContentBlockParam, ImageBlockParam, MessageParam, TextBlockParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
+import type { ContentBlockParam, DocumentBlockParam, ImageBlockParam, MessageParam, TextBlockParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
 import { expect, suite, test } from 'vitest';
 import { AnthropicMessagesTool, CUSTOM_TOOL_SEARCH_NAME } from '../../../networking/common/anthropic';
-import { addToolsAndSystemCacheControl, rawMessagesToMessagesAPI } from '../../node/messagesApi';
+import { addToolsAndSystemCacheControl, buildToolInputSchema, rawMessagesToMessagesAPI } from '../../node/messagesApi';
 
 function assertContentArray(content: MessageParam['content']): ContentBlockParam[] {
 	expect(Array.isArray(content)).toBe(true);
@@ -298,6 +298,63 @@ suite('rawMessagesToMessagesAPI', function () {
 		});
 	});
 
+	test('converts document content part to Anthropic document block', function () {
+		const base64Data = 'JVBERi0xLjQKMSAwIG9iago8PC9UeXBlIC9DYXRhbG9n';
+		const messages: Raw.ChatMessage[] = [
+			{
+				role: Raw.ChatRole.User,
+				content: [{
+					type: Raw.ChatCompletionContentPartKind.Document,
+					documentData: { data: base64Data, mediaType: 'application/pdf' },
+				}],
+			},
+		];
+
+		const result = rawMessagesToMessagesAPI(messages);
+		const content = assertContentArray(result.messages[0].content);
+		const docBlock = findBlock<DocumentBlockParam>(content, 'document');
+		expect(docBlock).toBeDefined();
+		expect(docBlock!.source).toEqual({
+			type: 'base64',
+			media_type: 'application/pdf',
+			data: base64Data,
+		});
+	});
+
+	test('document content part in tool result is preserved', function () {
+		const base64Data = 'JVBERi0xLjQK';
+		const messages: Raw.ChatMessage[] = [
+			{
+				role: Raw.ChatRole.Assistant,
+				content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: '' }],
+				toolCalls: [{
+					id: 'toolu_pdf',
+					type: 'function',
+					function: { name: 'read_file', arguments: '{"path":"/tmp/doc.pdf"}' },
+				}],
+			},
+			{
+				role: Raw.ChatRole.Tool,
+				toolCallId: 'toolu_pdf',
+				content: [
+					{ type: Raw.ChatCompletionContentPartKind.Document, documentData: { data: base64Data, mediaType: 'application/pdf' } },
+				],
+			},
+		];
+
+		const result = rawMessagesToMessagesAPI(messages);
+		const toolResult = findToolResult(result.messages);
+		expect(toolResult).toBeDefined();
+		const content = toolResult!.content as DocumentBlockParam[];
+		expect(content).toHaveLength(1);
+		expect(content[0].type).toBe('document');
+		expect(content[0].source).toEqual({
+			type: 'base64',
+			media_type: 'application/pdf',
+			data: base64Data,
+		});
+	});
+
 	test('cache_control-only tool content does not produce empty inner content', function () {
 		const messages: Raw.ChatMessage[] = [
 			{
@@ -313,9 +370,32 @@ suite('rawMessagesToMessagesAPI', function () {
 
 		const toolResult = findToolResult(result.messages);
 		expect(toolResult).toBeDefined();
-		expect(toolResult!.cache_control).toEqual({ type: 'ephemeral' });
-		// The dummy whitespace-only text block should be filtered out
+		// Orphaned cache breakpoint with no content to attach to is silently dropped
+		expect(toolResult!.cache_control).toBeUndefined();
 		expect(toolResult!.content).toBeUndefined();
+	});
+
+	test('cache breakpoint before content defers cache_control to next block', function () {
+		const messages: Raw.ChatMessage[] = [
+			{
+				role: Raw.ChatRole.User,
+				content: [
+					{ type: Raw.ChatCompletionContentPartKind.CacheBreakpoint, cacheType: 'ephemeral' },
+					{ type: Raw.ChatCompletionContentPartKind.Text, text: 'hello world' },
+				],
+			},
+		];
+
+		const result = rawMessagesToMessagesAPI(messages);
+
+		expect(result.messages).toHaveLength(1);
+		const content = assertContentArray(result.messages[0].content);
+		expect(content).toHaveLength(1);
+		expect(content[0]).toEqual({
+			type: 'text',
+			text: 'hello world',
+			cache_control: { type: 'ephemeral' },
+		});
 	});
 });
 
@@ -518,5 +598,61 @@ suite('addToolsAndSystemCacheControl', function () {
 		addToolsAndSystemCacheControl(tools, messagesResult);
 
 		expect(system[0].cache_control).toEqual({ type: 'ephemeral' });
+	});
+});
+
+suite('buildToolInputSchema', function () {
+
+	test('returns default schema when input is undefined', function () {
+		const result = buildToolInputSchema(undefined);
+		expect(result).toEqual({ type: 'object', properties: {} });
+	});
+
+	test('strips $schema from the input', function () {
+		const result = buildToolInputSchema({
+			$schema: 'https://json-schema.org/draft/2020-12/schema',
+			type: 'object',
+			properties: { query: { type: 'string' } },
+			required: ['query'],
+		});
+		expect(result).toEqual({
+			type: 'object',
+			properties: { query: { type: 'string' } },
+			required: ['query'],
+		});
+		expect(result).not.toHaveProperty('$schema');
+	});
+
+	test('preserves $defs and additionalProperties', function () {
+		const defs = { Foo: { type: 'object', properties: { x: { type: 'number' } } } };
+		const result = buildToolInputSchema({
+			type: 'object',
+			properties: { foo: { $ref: '#/$defs/Foo' } },
+			$defs: defs,
+			additionalProperties: false,
+		});
+		expect(result.$defs).toEqual(defs);
+		expect(result.additionalProperties).toBe(false);
+	});
+
+	test('defaults properties to empty object when not provided', function () {
+		const result = buildToolInputSchema({ type: 'object' });
+		expect(result.properties).toEqual({});
+	});
+
+	test('overrides default properties when provided in schema', function () {
+		const props = { name: { type: 'string' } };
+		const result = buildToolInputSchema({ type: 'object', properties: props });
+		expect(result.properties).toEqual(props);
+	});
+
+	test('passes through a plain schema without $schema unchanged', function () {
+		const schema = {
+			type: 'object',
+			properties: { id: { type: 'number' } },
+			required: ['id'],
+		};
+		const result = buildToolInputSchema(schema);
+		expect(result).toEqual(schema);
 	});
 });

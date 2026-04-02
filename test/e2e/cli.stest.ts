@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { SessionOptions } from '@github/copilot/sdk';
+import type { SessionOptions } from '@github/copilot/sdk';
 import assert from 'assert';
 import * as fs from 'fs/promises';
 import * as http from 'http';
@@ -15,14 +15,14 @@ import { ILanguageModelServer, ILanguageModelServerConfig, LanguageModelServer }
 import { emptyWorkspaceInfo, IWorkspaceInfo } from '../../src/extension/chatSessions/common/workspaceInfo';
 import { ICustomSessionTitleService } from '../../src/extension/chatSessions/copilotcli/common/customSessionTitleService';
 import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../src/extension/chatSessions/copilotcli/common/delegationSummaryService';
-import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/chatSessions/copilotcli/node/copilotCli';
+import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/chatSessions/copilotcli/node/copilotCli';
 import { CopilotCLIImageSupport, ICopilotCLIImageSupport } from '../../src/extension/chatSessions/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLIPromptResolver } from '../../src/extension/chatSessions/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../src/extension/chatSessions/copilotcli/node/copilotcliSession';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../src/extension/chatSessions/copilotcli/node/copilotcliSessionService';
 import { CopilotCLISkills, ICopilotCLISkills } from '../../src/extension/chatSessions/copilotcli/node/copilotCLISkills';
 import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../src/extension/chatSessions/copilotcli/node/mcpHandler';
-import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../src/extension/chatSessions/copilotcli/node/userInputHelpers';
+import { IQuestion, IQuestionAnswer, IUserQuestionHandler } from '../../src/extension/chatSessions/copilotcli/node/userInputHelpers';
 import { ChatSummarizerProvider } from '../../src/extension/prompt/node/summarizer';
 import { MockChatResponseStream, TestChatRequest } from '../../src/extension/test/node/testHelpers';
 import { IToolsService } from '../../src/extension/tools/common/toolsService';
@@ -40,7 +40,6 @@ import { disposableTimeout, IntervalTimer } from '../../src/util/vs/base/common/
 import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
 import { Lazy } from '../../src/util/vs/base/common/lazy';
 import { DisposableStore, IReference } from '../../src/util/vs/base/common/lifecycle';
-import { Mutable } from '../../src/util/vs/base/common/types';
 import { URI } from '../../src/util/vs/base/common/uri';
 import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
@@ -94,7 +93,7 @@ function restoreEnvVariablesAfterTests() {
 function sessionOptionsFor(workingDirectory: Uri | undefined) {
 	return {
 		workingDirectory,
-		workspaceInfo: {
+		workspace: {
 			folder: workingDirectory,
 			repository: undefined,
 			worktree: undefined,
@@ -145,32 +144,31 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 	class TestCustomSessionTitleService implements ICustomSessionTitleService {
 		readonly _serviceBrand: undefined;
 		private readonly titles = new Map<string, string>();
-		getCustomSessionTitle(sessionId: string) {
+		async getCustomSessionTitle(sessionId: string) {
 			return this.titles.get(sessionId);
 		}
 		async setCustomSessionTitle(sessionId: string, title: string): Promise<void> {
 			this.titles.set(sessionId, title);
-		}
-		async removeCustomSessionTitle(sessionId: string): Promise<void> {
-			this.titles.delete(sessionId);
 		}
 		async generateSessionTitle(_sessionId: string, _request: { prompt?: string; command?: string }, _token: CancellationToken): Promise<string | undefined> {
 			return undefined;
 		}
 	}
 
-	class TestCopilotCLISessionOptions extends CopilotCLISessionOptions {
-		constructor(options: { model?: string; workingDirectory?: Uri; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers'] }, logger: ILogService, private readonly testOptions: Pick<SessionOptions, 'authInfo' | 'copilotUrl'>) {
-			super(options, logger);
+	class TestCopilotCLISessionService extends CopilotCLISessionService {
+		override async monitorSessionFiles() {
+			// Override to do nothing in tests
 		}
-		override toSessionOptions() {
-			const options = super.toSessionOptions();
-			const mutableOptions = options as Mutable<typeof options>;
-			mutableOptions.authInfo = this.testOptions.authInfo ?? options.authInfo;
-			mutableOptions.copilotUrl = this.testOptions.copilotUrl ?? options.copilotUrl;
+		protected override async createSessionsOptions(options: { model?: string; workingDirectory?: Uri; workspace: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; sessionId?: string; debugTargetSessionIds?: readonly string[] }) {
+			const testOptionsProvider = this.instantiationService.invokeFunction((accessor) => accessor.get(ITestSessionOptionsProvider));
+			const overrideOptions = await testOptionsProvider.getOptions();
+			const result = await super.createSessionsOptions({ ...options, agent: undefined });
+			const mutableOptions = result.sessionOptions as SessionOptions;
+			mutableOptions.authInfo = overrideOptions.authInfo ?? result.sessionOptions.authInfo;
+			mutableOptions.copilotUrl = overrideOptions.copilotUrl ?? result.sessionOptions.copilotUrl;
 			mutableOptions.enableStreaming = true;
 			mutableOptions.skipCustomInstructions = true;
-			return options;
+			return result;
 		}
 	}
 
@@ -240,21 +238,8 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 		constructor(
 		) {
 		}
-		async askUserQuestion(question: UserInputRequest, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
+		async askUserQuestion(question: IQuestion, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<IQuestionAnswer | undefined> {
 			return undefined;
-		}
-	}
-
-	class TestCopilotCLISessionService extends CopilotCLISessionService {
-		override async monitorSessionFiles() {
-			// Override to do nothing in tests
-		}
-		protected override async createSessionsOptions(options: { model?: string; workingDirectory?: Uri; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers'] }): Promise<CopilotCLISessionOptions> {
-			const testOptionsProvider = this.instantiationService.invokeFunction((accessor) => accessor.get(ITestSessionOptionsProvider));
-			const overrideOptions = await testOptionsProvider.getOptions();
-			const sessionOptions = new TestCopilotCLISessionOptions(options, this.logService, overrideOptions);
-
-			return sessionOptions;
 		}
 	}
 
@@ -507,7 +492,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				const session = await new Promise<IReference<ICopilotCLISession>>((resolve, reject) => {
 					const interval = disposables.add(new IntervalTimer());
 					interval.cancelAndSet(async () => {
-						const session = await sessionService.getSession(sessionId, { readonly: false, ...sessionOptionsFor(workingDirectory) }, CancellationToken.None);
+						const session = await sessionService.getSession({ sessionId, ...sessionOptionsFor(workingDirectory) }, CancellationToken.None);
 						if (session) {
 							interval.dispose();
 							resolve(session);

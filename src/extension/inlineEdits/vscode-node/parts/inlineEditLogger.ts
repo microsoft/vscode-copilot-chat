@@ -9,6 +9,7 @@ import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 
 export class InlineEditLogger extends Disposable {
 	private readonly _requests: InlineEditRequestLogContext[] = [];
+	private readonly _liveRequestIds = new Set<number>();
 
 	constructor(
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
@@ -16,7 +17,30 @@ export class InlineEditLogger extends Disposable {
 		super();
 	}
 
+	/**
+	 * Add a live log entry that appears immediately in the tree with dynamic content.
+	 * Content and icon are resolved on-demand from the logContext, and the entry
+	 * refreshes automatically as the logContext state changes.
+	 */
+	addLive(request: InlineEditRequestLogContext): void {
+		this._liveRequestIds.add(request.requestId);
+		this._requestLogger.addEntry({
+			type: LoggedRequestKind.MarkdownContentRequest,
+			debugName: request.getDebugName(),
+			icon: () => request.getIcon(),
+			startTimeMs: request.time,
+			markdownContent: () => request.toLogDocument(),
+			onDidChange: request.onDidChange,
+			isVisible: () => request.includeInLogTree,
+		});
+		this._pushRequest(request);
+	}
+
 	add(request: InlineEditRequestLogContext): void {
+		if (this._liveRequestIds.has(request.requestId)) {
+			return; // already added as a live entry
+		}
+
 		if (!request.includeInLogTree) {
 			return;
 		}
@@ -28,10 +52,16 @@ export class InlineEditLogger extends Disposable {
 			startTimeMs: request.time,
 			markdownContent: request.toLogDocument(),
 		});
-		this._requests.push(request);
+		this._pushRequest(request);
+	}
 
+	private _pushRequest(request: InlineEditRequestLogContext): void {
+		this._requests.push(request);
 		if (this._requests.length > 100) {
-			this._requests.shift();
+			const evicted = this._requests.shift();
+			if (evicted) {
+				this._liveRequestIds.delete(evicted.requestId);
+			}
 		}
 	}
 

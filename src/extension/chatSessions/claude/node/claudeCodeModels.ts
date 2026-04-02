@@ -38,6 +38,10 @@ export interface IClaudeCodeModels {
 	setDefaultModel(modelId: string | undefined): Promise<void>;
 	getModels(): Promise<ClaudeCodeModelInfo[]>;
 	/**
+	 * Gets the filtered list of Claude chat endpoints that support the Messages API.
+	 */
+	getEndpoints(): Promise<IChatEndpoint[]>;
+	/**
 	 * Maps an SDK model ID to the best matching endpoint model ID.
 	 * SDK model IDs are raw Anthropic API model IDs (e.g., 'claude-opus-4-5-20251101').
 	 * Returns undefined if no suitable match is found.
@@ -151,6 +155,10 @@ export class ClaudeCodeModels extends Disposable implements IClaudeCodeModels {
 		return endpoints.map(e => ({ id: e.model, name: e.name, multiplier: e.multiplier }));
 	}
 
+	public async getEndpoints(): Promise<IChatEndpoint[]> {
+		return this._getEndpoints();
+	}
+
 	private async _fetchAvailableEndpoints(): Promise<IChatEndpoint[]> {
 		try {
 			const endpoints = await this.endpointProvider.getAllChatEndpoints();
@@ -159,6 +167,7 @@ export class ClaudeCodeModels extends Disposable implements IClaudeCodeModels {
 			// and use the Messages API (required for Claude Code)
 			const claudeEndpoints = endpoints.filter(e =>
 				e.supportsToolCalls &&
+				e.showInModelPicker &&
 				(e.family?.toLowerCase().includes('claude') || e.model?.toLowerCase().includes('claude')) &&
 				e.apiType === 'messages'
 			);

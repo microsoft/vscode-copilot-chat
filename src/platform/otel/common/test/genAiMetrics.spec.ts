@@ -26,6 +26,7 @@ function createMockOTelService(): IOTelService & { recordMetric: ReturnType<type
 		emitLogRecord: vi.fn(),
 		flush: vi.fn(),
 		shutdown: vi.fn(),
+		injectCompletedSpan: vi.fn(),
 		onDidCompleteSpan: Event.None,
 		onDidEmitSpanEvent: Event.None,
 	};

@@ -953,7 +953,7 @@ Test prompt
 				// Sign out user after first call
 				mockOctoKitService.getCurrentAuthedUser = async () => undefined as any;
 			}
-			return originalGetCustomAgents.call(mockOctoKitService, owner, repo, options, { createIfNone: false });
+			return originalGetCustomAgents.call(mockOctoKitService, owner, repo, options, {});
 		};
 
 		await provider.provideCustomAgents({}, {} as any);

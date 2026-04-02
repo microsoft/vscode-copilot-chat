@@ -3,8 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as stream from 'stream';
-import * as undici from 'undici';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { Config, ConfigKey, ExperimentBasedConfig, ExperimentBasedConfigType, IConfigurationService } from '../../configuration/common/configurationService';
@@ -12,11 +10,11 @@ import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { FetchEvent, FetchOptions, FetchTelemetryEvent, HeadersImpl, IAbortController, IFetcherService, IHeaders, NO_FETCH_TELEMETRY, PaginationOptions, ReportFetchEvent, Response, safeGetHostname, WebSocketConnection, WebSocketConnectOptions } from '../common/fetcherService';
+import { FetchEvent, FetchOptions, FetchTelemetryEvent, IAbortController, IFetcherService, NO_FETCH_TELEMETRY, PaginationOptions, ReportFetchEvent, Response, safeGetHostname, WebSocketConnection, WebSocketConnectOptions } from '../common/fetcherService';
 import { IFetcher } from '../common/networking';
 import { fetchWithFallbacks } from '../node/fetcherFallback';
 import { NodeFetcher } from '../node/nodeFetcher';
-import { NodeFetchFetcher } from '../node/nodeFetchFetcher';
+import { createWebSocket, NodeFetchFetcher } from '../node/nodeFetchFetcher';
 import { ElectronFetcher } from './electronFetcher';
 
 export class FetcherService extends Disposable implements IFetcherService {
@@ -205,52 +203,6 @@ export class FetcherService extends Disposable implements IFetcherService {
 		const recognizing = this._getAvailableFetchers().find(f => f.isFetcherError(err));
 		return (recognizing ?? this._getAvailableFetchers()[0]).getUserMessageForFetcherError(err);
 	}
-}
-
-function createWebSocket(url: string, options?: WebSocketConnectOptions): WebSocketConnection {
-	const agent = new undici.Agent();
-	const originalDispatch = agent.dispatch;
-	let responseHeaders: IHeaders = new HeadersImpl({});
-	agent.dispatch = function (dispatchOptions: undici.Dispatcher.DispatchOptions, handler: undici.Dispatcher.DispatchHandler): boolean {
-		const origOnUpgrade = handler.onUpgrade;
-		if (origOnUpgrade) {
-			handler.onUpgrade = (statusCode: number, rawHeaders: Buffer[] | string[] | null, socket: stream.Duplex) => {
-				if (rawHeaders) {
-					responseHeaders = HeadersImpl.fromMap(parseRawUpgradeHeaders(rawHeaders));
-				}
-				return origOnUpgrade.call(handler, statusCode, rawHeaders, socket);
-			};
-		}
-		return originalDispatch.call(this, dispatchOptions, handler);
-	};
-
-	const webSocket = new WebSocket(url, {
-		headers: options?.headers,
-		dispatcher: agent as any,
-	});
-
-	webSocket.addEventListener('close', () => {
-		agent.destroy().catch(() => { });
-	});
-
-	return {
-		webSocket,
-		get responseHeaders() {
-			const wsResponseHeaders = (webSocket as { responseHeaders?: Record<string, string | string[] | undefined> }).responseHeaders;
-			return wsResponseHeaders ? new HeadersImpl(wsResponseHeaders) : responseHeaders;
-		}
-	};
-}
-
-function parseRawUpgradeHeaders(rawHeaders: readonly (Buffer | string)[]): Map<string, string> {
-	const headers = new Map<string, string>();
-	for (let i = 0; i + 1 < rawHeaders.length; i += 2) {
-		const name = rawHeaders[i].toString().toLowerCase();
-		const value = rawHeaders[i + 1].toString();
-		const existing = headers.get(name);
-		headers.set(name, existing !== undefined ? `${existing}, ${value}` : value);
-	}
-	return headers;
 }
 
 export function getShadowedConfig<T extends ExperimentBasedConfigType>(configurationService: IConfigurationService, experimentationService: IExperimentationService | undefined, configKey: Config<T>, expKey: ExperimentBasedConfig<T | undefined>): T {

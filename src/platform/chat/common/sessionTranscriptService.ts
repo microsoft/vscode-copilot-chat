@@ -238,6 +238,12 @@ export interface ISessionTranscriptService {
 	getTranscriptPath(sessionId: string): URI | undefined;
 
 	/**
+	 * Get the current number of lines in the transcript for a session.
+	 * Returns `undefined` if the session is not active.
+	 */
+	getLineCount(sessionId: string): number | undefined;
+
+	/**
 	 * Remove transcript files for sessions that are no longer active,
 	 * keeping at most `maxRetained` most-recent ended sessions.
 	 */
@@ -263,6 +269,7 @@ export class NullSessionTranscriptService implements ISessionTranscriptService {
 	async flush(): Promise<void> { }
 	async endSession(): Promise<void> { }
 	getTranscriptPath(): URI | undefined { return undefined; }
+	getLineCount(): number | undefined { return undefined; }
 	async cleanupOldTranscripts(): Promise<void> { }
 	isTranscriptUri(): boolean { return false; }
 }

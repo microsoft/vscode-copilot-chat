@@ -42,6 +42,7 @@ const MaxResultsCap = 200;
 
 export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolParams> {
 	public static readonly toolName = ToolName.FindTextInFiles;
+	public static readonly nonDeferred = true;
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
@@ -193,6 +194,7 @@ Then if you want to include those files you can call the tool again by setting "
 			maxResults: maxResults + 1,
 			useExcludeSettings: includeIgnoredFiles ? ExcludeSettingOptions.None : ExcludeSettingOptions.SearchAndFilesExclude,
 			useIgnoreFiles: includeIgnoredFiles ? { local: false, parent: false, global: false } : undefined,
+			caseInsensitive: true,
 		};
 
 		const searchResult = this.searchService.findTextInFiles2(

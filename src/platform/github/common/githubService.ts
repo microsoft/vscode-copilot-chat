@@ -18,11 +18,11 @@ import { addPullRequestCommentGraphQLRequest, AssignableActor, closePullRequest,
  */
 export interface AuthOptions {
 	/**
-	 * If true, prompts the user to sign in if no authentication token is available.
-	 * If false or undefined, fails silently without prompting.
-	 * @default false
+	 * If provided, prompts the user to sign in if no authentication token is available,
+	 * displaying the given detail message to explain why authentication is needed.
+	 * If undefined, fails silently without prompting.
 	 */
-	readonly createIfNone?: boolean;
+	readonly createIfNone?: { readonly detail: string };
 }
 
 export type IGetRepositoryInfoResponseData = Endpoints['GET /repos/{owner}/{repo}']['response']['data'];
@@ -338,6 +338,16 @@ export interface IOctoKitService {
 	closePullRequest(owner: string, repo: string, pullNumber: number, authOptions: AuthOptions): Promise<boolean>;
 
 	/**
+	 * Finds a pull request by its head branch name in a given repository.
+	 * @param owner The repository owner
+	 * @param repo The repository name
+	 * @param headBranch The head branch name to search for
+	 * @param authOptions - Authentication options. By default, uses silent auth and returns undefined if not authenticated.
+	 * @returns The matching pull request or undefined if not found
+	 */
+	findPullRequestByHeadBranch(owner: string, repo: string, headBranch: string, authOptions: AuthOptions): Promise<PullRequestSearchItem | undefined>;
+
+	/**
 	 * Get file content from a specific commit.
 	 * @param owner The repository owner
 	 * @param repo The repository name
@@ -456,10 +466,6 @@ export class BaseOctoKitService {
 		return this._makeGHAPIRequest('user', 'GET', token, undefined, undefined, 'github-rest-get-user');
 	}
 
-	async getTeamMembershipWithToken(teamId: number, token: string, username: string): Promise<any | undefined> {
-		return this._makeGHAPIRequest(`teams/${teamId}/memberships/${username}`, 'GET', token, undefined, undefined, 'github-rest-get-team-membership');
-	}
-
 	async getGitHubOutageStatus(): Promise<GitHubOutageStatus> {
 		const now = Date.now();
 		if (this._cachedOutageStatus && (now - this._cachedOutageStatus.timestamp) < BaseOctoKitService._outageStatusCacheTTL) {
@@ -504,6 +510,12 @@ export class BaseOctoKitService {
 	protected async getOpenPullRequestForUserWithToken(owner: string, repo: string, user: string, token: string) {
 		const query = `repo:${owner}/${repo} is:open involves:${user}`;
 		return makeSearchGraphQLRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, query);
+	}
+
+	protected async findPullRequestByHeadBranchWithToken(owner: string, repo: string, headBranch: string, token: string): Promise<PullRequestSearchItem | undefined> {
+		const query = `repo:${owner}/${repo} head:${headBranch} is:pr`;
+		const results = await makeSearchGraphQLRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, query, 5);
+		return results.find(pr => pr.headRefName === headBranch);
 	}
 
 	protected async addPullRequestCommentWithToken(pullRequestId: string, commentBody: string, token: string): Promise<PullRequestComment | null> {

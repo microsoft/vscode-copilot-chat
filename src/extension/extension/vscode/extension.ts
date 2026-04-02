@@ -9,6 +9,7 @@ import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { isProduction } from '../../../platform/env/common/packagejson';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ChatExtGlobalPerfMark, markChatExtGlobal } from '../../../util/common/performance';
 import { IInstantiationServiceBuilder, InstantiationServiceBuilder } from '../../../util/common/services';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotExtensionApi } from '../../api/vscode/extensionApi';
@@ -31,7 +32,7 @@ export interface IExtensionActivationConfiguration {
 }
 
 export async function baseActivate(configuration: IExtensionActivationConfiguration) {
-	performance.mark('code/chat/ext/willActivate');
+	markChatExtGlobal(ChatExtGlobalPerfMark.WillActivate);
 	const context = configuration.context;
 	if (context.extensionMode === ExtensionMode.Test && !configuration.forceActivation && !isScenarioAutomation) {
 		// FIXME Running in tests, don't activate the extension
@@ -66,14 +67,12 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 
 		// Await intialization of exp service. This ensure cache is fresh.
 		// It will then auto refresh every 30 minutes after that.
-		performance.mark('code/chat/ext/willInitExperiments');
 		await expService.hasTreatments();
 
 		// THIS is awaited because some contributions can block activation
 		// via `IExtensionContribution#activationBlocker`
 		const contributions = instantiationService.createInstance(ContributionCollection, configuration.contributions);
 		context.subscriptions.push(contributions);
-		performance.mark('code/chat/ext/willWaitForActivationBlockers');
 		await contributions.waitForActivationBlockers();
 	});
 
@@ -90,7 +89,7 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 			return instantiationService.createInstance(CopilotExtensionApi);
 		}
 	};
-	performance.mark('code/chat/ext/didActivate');
+	markChatExtGlobal(ChatExtGlobalPerfMark.DidActivate);
 	return result;
 }
 

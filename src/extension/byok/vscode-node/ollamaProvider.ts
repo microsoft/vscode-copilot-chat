@@ -7,6 +7,7 @@ import { IChatModelInformation } from '../../../platform/endpoint/common/endpoin
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ErrorUtils } from '../../../util/common/errors';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { byokKnownModelsToAPIInfo, resolveModelInfo } from '../common/byokProvider';
 import { OpenAIEndpoint } from '../node/openAIEndpoint';
@@ -96,7 +97,14 @@ export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaC
 			for (const model of models) {
 				let modelInfo = this._modelCache.get(`${ollamaBaseUrl}/${model.model}`);
 				if (!modelInfo) {
-					modelInfo = await this._getOllamaModelInfo(ollamaBaseUrl, model.model);
+					try {
+						modelInfo = await this._getOllamaModelInfo(ollamaBaseUrl, model.model);
+					} catch (e) {
+						const error = ErrorUtils.fromUnknown(e);
+						this._logService.error(error, 'ollamaProvider: failed to fetch Ollama model info');
+						this._logService.debug(`[ollamaProvider] Failed model info fetch for model=${model.model}`);
+						continue; // Skip this model but continue processing others
+					}
 					this._modelCache.set(`${ollamaBaseUrl}/${model.model}`, modelInfo);
 				}
 				this._knownModels[modelInfo.id] = {
@@ -153,6 +161,11 @@ export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaC
 	 * @returns true if version is supported, false otherwise
 	 */
 	private _isVersionSupported(currentVersion: string): boolean {
+		if (currentVersion === '0.0.0') {
+			// allow all dev versions through
+			return true;
+		}
+
 		// Simple version comparison: split by dots and compare numerically
 		const currentParts = currentVersion.split('.').map(n => parseInt(n, 10));
 		const minimumParts = MINIMUM_OLLAMA_VERSION.split('.').map(n => parseInt(n, 10));

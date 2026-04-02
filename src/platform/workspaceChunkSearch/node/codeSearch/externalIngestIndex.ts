@@ -7,10 +7,11 @@ import ingestUtils = require('@github/blackbird-external-ingest-utils');
 import * as l10n from '@vscode/l10n';
 import * as fs from 'node:fs';
 import sql from 'node:sqlite';
+import { toErrorMessage } from '../../../../util/common/errorMessage';
 import { Result } from '../../../../util/common/result';
 import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
-import { CancelablePromise, createCancelablePromise, Limiter, raceCancellationError } from '../../../../util/vs/base/common/async';
+import { CancelablePromise, createCancelablePromise, Limiter, raceCancellationError, timeout } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../../util/vs/base/common/errors';
 import { Emitter } from '../../../../util/vs/base/common/event';
@@ -38,7 +39,7 @@ import { IWorkspaceService } from '../../../workspace/common/workspaceService';
 import { StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings } from '../../common/workspaceChunkSearch';
 import { shouldPotentiallyIndexFile } from '../workspaceFileIndex';
 import { CodeSearchRepoStatus, TriggerIndexingError, TriggerRemoteIndexingError } from './codeSearchRepo';
-import { ExternalIngestFile, IExternalIngestClient } from './externalIngestClient';
+import { ExternalIngestFile, ExternalIngestRequestError, IExternalIngestClient } from './externalIngestClient';
 import { WorkspaceFolderIdMap } from './workspaceFolderIdMap';
 
 const debug = false;
@@ -91,6 +92,13 @@ export class ExternalIngestIndex extends Disposable {
 	 */
 	private readonly _codeSearchRepoRoots = new ResourceSet();
 
+	/**
+	 * Set of file URIs that should be force-included in external ingest,
+	 * even if they fall under code search repo roots.
+	 * Used for out-of-sync diff files that need to be re-indexed locally.
+	 */
+	private readonly _forceIncludeFiles = new ResourceSet();
+
 	private readonly _client: IExternalIngestClient;
 
 	private readonly _onDidChangeState = this._register(new Emitter<void>());
@@ -137,6 +145,7 @@ export class ExternalIngestIndex extends Disposable {
 
 	constructor(
 		client: IExternalIngestClient,
+		initialCodeSearchRoots: URI[],
 		@IEnvService private readonly _envService: IEnvService,
 		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
@@ -151,6 +160,10 @@ export class ExternalIngestIndex extends Disposable {
 
 		this._client = client;
 		this.workspaceFolderIdMap = new WorkspaceFolderIdMap(this._vsExtensionContext.workspaceState);
+
+		for (const root of initialCodeSearchRoots) {
+			this._codeSearchRepoRoots.add(root);
+		}
 
 		let dbPath: string;
 		if (debug || !this._vsExtensionContext.storageUri || this._vsExtensionContext.storageUri.scheme !== Schemas.file) {
@@ -241,6 +254,33 @@ export class ExternalIngestIndex extends Disposable {
 		this._logService.trace(`ExternalIngestIndex: Updated code search roots: ${roots.map(r => r.toString()).join(', ')}`);
 	}
 
+	/**
+	 * Updates the set of files that should always be considered for external ingest.
+	 *
+	 * This lets us index local-diff files that live under code-search repo roots,
+	 * so we can blend local updates with remote code-search results.
+	 */
+	public async updateForceIncludeFiles(files: readonly URI[], token: CancellationToken): Promise<void> {
+		await raceCancellationError(this.initialize(), token);
+
+		this._forceIncludeFiles.clear();
+		for (const file of files) {
+			this._forceIncludeFiles.add(file);
+		}
+
+		await raceCancellationError(
+			Promise.all(files.map(async file => {
+				if (await this.shouldTrackFile(file, token)) {
+					await this.tryAddOrUpdateFile(file);
+				} else {
+					this.delete(file);
+				}
+			})),
+			token);
+
+		this._logService.trace(`ExternalIngestIndex: Updated force-included files (${files.length})`);
+	}
+
 	private _initializePromise: Promise<void> | undefined;
 
 	async initialize(): Promise<void> {
@@ -308,10 +348,12 @@ export class ExternalIngestIndex extends Disposable {
 						"externalIngestIndex.updateIndex.success" : {
 							"owner": "mjbvz",
 							"comment": "Logged when external ingest index update completes successfully",
-							"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time taken to complete the update in milliseconds" }
+							"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time taken to complete the update in milliseconds" },
+							"totalFileCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of files in the index" },
+							"updatedFileCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of files that were updated" }
 						}
 					*/
-					this._telemetryService.sendMSFTTelemetryEvent('externalIngestIndex.updateIndex.success', undefined, { durationMs: sw.elapsed() });
+					this._telemetryService.sendMSFTTelemetryEvent('externalIngestIndex.updateIndex.success', undefined, { durationMs: sw.elapsed(), totalFileCount: result.val.totalFileCount, updatedFileCount: result.val.updatedFileCount });
 
 					return Result.ok(true);
 				} else {
@@ -367,26 +409,38 @@ export class ExternalIngestIndex extends Disposable {
 		return updatePromise;
 	}
 
-	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, inCallTracker: CallTracker, token: CancellationToken): Promise<readonly FileChunkAndScore[]> {
+	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, inCallTracker: CallTracker, token: CancellationToken): Promise<readonly FileChunkAndScore[] | undefined> {
 		const filesetName = this.getFilesetName();
 		if (!filesetName) {
-			return [];
+			return undefined;
 		}
 
 		const callTracker = inCallTracker.add('ExternalIngestIndex::search');
 		const sw = new StopWatch();
 
 		try {
-			const resolvedQuery = await query.resolveQuery(token);
+			const resolvedQuery = query.queryText;
 
-			await raceCancellationError(this.doIngest(callTracker, () => { }, token), token);
+			const ingestResult = await raceCancellationError(this.doIngest(callTracker, () => { }, token), token);
+			if (!ingestResult.isOk()) {
+				return undefined;
+			}
 
-			const searchResult = await raceCancellationError(this._client.searchFilesets(
-				filesetName,
-				resolvedQuery,
-				sizing.maxResultCountHint,
-				callTracker,
-				token), token);
+			const searchResult = await raceCancellationError(
+				(async () => {
+					try {
+						return await this._client.searchFilesets(filesetName, resolvedQuery, sizing.maxResultCountHint, callTracker, token);
+					} catch (err) {
+						if (err instanceof ExternalIngestRequestError && err.response.status === 404) {
+							// On the first index or a large workspace, there might be a slight delay on the service
+							// before the index is actually ready. Workaround by retrying just once after a short delay.
+							await raceCancellationError(timeout(2000), token);
+							return await this._client.searchFilesets(filesetName, resolvedQuery, sizing.maxResultCountHint, callTracker, token);
+						}
+						throw err;
+					}
+				})(),
+				token);
 
 			if (!searchResult || !searchResult.results) {
 				return [];
@@ -592,9 +646,12 @@ export class ExternalIngestIndex extends Disposable {
 		}
 
 		// Don't index files that are under a code search repo root
-		for (const root of this._codeSearchRepoRoots) {
-			if (isEqualOrParent(uri, root)) {
-				return false;
+		// (unless they are force-included as diff files)
+		if (!this._forceIncludeFiles.has(uri)) {
+			for (const root of this._codeSearchRepoRoots) {
+				if (isEqualOrParent(uri, root)) {
+					return false;
+				}
 			}
 		}
 
@@ -612,16 +669,20 @@ export class ExternalIngestIndex extends Disposable {
 		}
 
 		// Complete check based on document contents
-		const data = await this._readLimiter.queue(() => this._fileSystemService.readFile(uri));
-		if (!this._client.canIngestDocument(uri.fsPath, data)) {
+		try {
+			const data = await this._readLimiter.queue(() => this._fileSystemService.readFile(uri));
+			if (!this._client.canIngestDocument(uri.fsPath, data)) {
+				return Result.error(false);
+			}
+			const docSha = this.computeIngestDocShaFromContents(uri, data);
+			if (!docSha) {
+				return Result.error(false);
+			}
+			return Result.ok({ docSha });
+		} catch (err) {
+			this._logService.warn(`ExternalIngestIndex: Failed to read file for shouldIngest check, skipping file: ${uri.toString()}. Error: ${toErrorMessage(err, true)}`);
 			return Result.error(false);
 		}
-		const docSha = this.computeIngestDocShaFromContents(uri, data);
-		if (!docSha) {
-			return Result.error(false);
-		}
-
-		return Result.ok({ docSha });
 	}
 
 	private delete(uri: URI) {

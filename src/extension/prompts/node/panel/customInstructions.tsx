@@ -11,11 +11,9 @@ import { IFileSystemService } from '../../../../platform/filesystem/common/fileS
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { isUri } from '../../../../util/common/types';
 import { ResourceSet } from '../../../../util/vs/base/common/map';
-import { isString } from '../../../../util/vs/base/common/types';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatVariablesCollection, isPromptInstruction } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isCustomizationsIndex, isInstructionFile } from '../../../prompt/common/chatVariablesCollection';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { Tag } from '../base/tag';
 
@@ -64,7 +62,6 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 		super(props);
 	}
 	override async render(state: void, sizing: PromptSizing) {
-		performance.mark('code/chat/ext/willPrepareCustomInstructions');
 
 		const { includeCodeGenerationInstructions, includeTestGenerationInstructions, includeCodeFeedbackInstructions, includeCommitMessageGenerationInstructions, includePullRequestDescriptionGenerationInstructions, customIntroduction } = this.props;
 		const includeSystemMessageConflictWarning = this.props.includeSystemMessageConflictWarning ?? true;
@@ -76,14 +73,15 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 			const hasSeenContent = new Set();
 			if (this.props.chatVariables) {
 				for (const variable of this.props.chatVariables) {
-					if (isPromptInstruction(variable)) {
+					if (isCustomizationsIndex(variable)) {
 						let value = variable.value;
-						if (isString(value)) {
-							if (variable.reference.toolReferences?.length) {
-								value = await this.promptVariablesService.resolveToolReferencesInPrompt(value, variable.reference.toolReferences);
-							}
-							chunks.push(<TextChunk>{value}</TextChunk>);
-						} else if (isUri(value) && !hasSeen.has(value)) {
+						if (variable.reference.toolReferences?.length) {
+							value = await this.promptVariablesService.resolveToolReferencesInPrompt(value, variable.reference.toolReferences);
+						}
+						chunks.push(<TextChunk>{value}</TextChunk>);
+					} else if (isInstructionFile(variable)) {
+						const value = variable.value;
+						if (!hasSeen.has(value)) {
 							hasSeen.add(value);
 							const element = await this.createElementFromURI(value, variable.reference.toolReferences);
 							if (element && !hasSeenContent.has(element.content)) {
@@ -129,9 +127,6 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 				chunks.push(chunk);
 			}
 		}
-
-		performance.mark('code/chat/ext/didPrepareCustomInstructions');
-
 		if (chunks.length === 0) {
 			return undefined;
 		}
@@ -157,6 +152,10 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 			let content = new TextDecoder().decode(fileContents);
 			if (toolReferences && toolReferences.length > 0) {
 				content = await this.promptVariablesService.resolveToolReferencesInPrompt(content, toolReferences);
+			}
+			content = content.trim();
+			if (content.length === 0) {
+				return undefined;
 			}
 			const attrs: Record<string, string> = { filePath: this.promptPathRepresentationService.getFilePath(fileUri) };
 			const folders = this.workspaceService.getWorkspaceFolders();

@@ -52,6 +52,20 @@ export const ICustomInstructionsService = createServiceIdentifier<ICustomInstruc
 export interface IExtensionPromptFile {
 	uri: URI;
 	type: PromptsType;
+	extensionId?: string;
+}
+
+export const enum SkillStorage {
+	Extension = 'extension',
+	Internal = 'internal',
+	Personal = 'personal',
+	Workspace = 'workspace',
+}
+
+export interface ISkillInfo {
+	readonly skillName: string;
+	readonly skillFolderUri: URI;
+	readonly storage: SkillStorage;
 }
 
 export interface ICustomInstructionsService {
@@ -67,7 +81,7 @@ export interface ICustomInstructionsService {
 	isExternalInstructionsFolder(uri: URI): boolean;
 	isSkillFile(uri: URI): boolean;
 	isSkillMdFile(uri: URI): boolean;
-	getSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined;
+	getSkillInfo(uri: URI): ISkillInfo | undefined;
 
 	/**
 	 * Refreshes the cached extension prompt files by querying VS Code's extension prompt file provider.
@@ -77,7 +91,7 @@ export interface ICustomInstructionsService {
 	 */
 	refreshExtensionPromptFiles(): Promise<void>;
 	/** Gets skill info for extension-contributed skill files */
-	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined;
+	getExtensionSkillInfo(uri: URI): (ISkillInfo & { extensionId?: string }) | undefined;
 }
 
 export interface IInstructionIndexFile {
@@ -109,7 +123,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 
 	readonly _matchInstructionLocationsFromConfig: IObservable<(uri: URI) => boolean>;
 	readonly _matchInstructionLocationsFromExtensions: IObservable<(uri: URI) => boolean>;
-	readonly _matchInstructionLocationsFromSkills: IObservable<(uri: URI) => { skillName: string; skillFolderUri: URI } | undefined>;
+	readonly _matchInstructionLocationsFromSkills: IObservable<(uri: URI) => ISkillInfo | undefined>;
 
 	private _extensionPromptFilesCache: IExtensionPromptFile[] | undefined;
 	private readonly _onDidChangeExtensionPromptFilesCache = this._register(new Emitter<void>());
@@ -214,8 +228,11 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 					const workspaceSkillFolderUris = this.workspaceService.getWorkspaceFolders().flatMap(workspaceFolder =>
 						WORKSPACE_SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(workspaceFolder, folder))
 					);
-					// List of **/skills folder URIs
-					const topLevelSkillsFolderUris = [...personalSkillFolderUris, ...workspaceSkillFolderUris];
+					// Tagged list preserving the storage provenance for each folder
+					const taggedSkillFolderUris: { uri: URI; storage: SkillStorage }[] = [
+						...personalSkillFolderUris.map(uri => ({ uri, storage: SkillStorage.Personal as const })),
+						...workspaceSkillFolderUris.map(uri => ({ uri, storage: SkillStorage.Workspace as const })),
+					];
 
 					// Get additional skill locations from config
 					const configSkillLocationUris: URI[] = [];
@@ -245,7 +262,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 
 					return ((uri: URI) => {
 						// Check workspace and personal skill folders
-						for (const topLevelSkillFolderUri of topLevelSkillsFolderUris) {
+						for (const { uri: topLevelSkillFolderUri, storage } of taggedSkillFolderUris) {
 							if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, topLevelSkillFolderUri)) {
 								// Get the path segments relative to the skill folder
 								const relativePath = extUriBiasedIgnorePathCase.relativePath(topLevelSkillFolderUri, uri);
@@ -253,7 +270,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 									// The skill directory is the first path segment under the skill folder
 									const skillName = relativePath.split('/')[0];
 									const skillFolderUri = extUriBiasedIgnorePathCase.joinPath(topLevelSkillFolderUri, skillName);
-									return { skillName, skillFolderUri };
+									return { skillName, skillFolderUri, storage };
 								}
 							}
 						}
@@ -268,7 +285,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 										// The skill directory is the first path segment under the skill folder
 										const skillName = relativePath.split('/')[0];
 										const skillFolderUri = extUriBiasedIgnorePathCase.joinPath(locationUri, skillName);
-										return { skillName, skillFolderUri };
+										return { skillName, skillFolderUri, storage: SkillStorage.Workspace };
 									}
 								}
 							}
@@ -401,7 +418,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		});
 	}
 
-	public getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {
+	public getExtensionSkillInfo(uri: URI): (ISkillInfo & { extensionId?: string }) | undefined {
 		if (!this._extensionPromptFilesCache) {
 			return undefined;
 		}
@@ -410,7 +427,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 				const skillFolderUri = extUriBiasedIgnorePathCase.dirname(file.uri);
 				if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, skillFolderUri)) {
 					const skillName = extUriBiasedIgnorePathCase.basename(skillFolderUri);
-					return { skillName, skillFolderUri };
+					return { skillName, skillFolderUri, storage: SkillStorage.Extension, extensionId: file.extensionId };
 				}
 			}
 		}
@@ -472,11 +489,11 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		return skillInfo.skillName;
 	}
 
-	public getSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {
+	public getSkillInfo(uri: URI): ISkillInfo | undefined {
 		return this._matchInstructionLocationsFromSkills.get()(uri) || this.getChatInternalSkillInfo(uri);
 	}
 
-	private getChatInternalSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {
+	private getChatInternalSkillInfo(uri: URI): ISkillInfo | undefined {
 		if (uri.scheme !== 'vscode-chat-internal') {
 			return undefined;
 		}
@@ -485,7 +502,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		}
 		const skillFolderUri = extUriBiasedIgnorePathCase.dirname(uri);
 		const skillName = extUriBiasedIgnorePathCase.basename(skillFolderUri);
-		return { skillName, skillFolderUri };
+		return { skillName, skillFolderUri, storage: SkillStorage.Internal };
 	}
 }
 

@@ -17,16 +17,6 @@ export class CapturingToken {
 		 */
 		public readonly icon: string | undefined,
 		/**
-		 * Whether to flatten a single child request under this token.
-		 */
-		public readonly flattenSingleChild: boolean,
-		/**
-		 * When true, the parent tree item becomes clickable and acts as the main entry.
-		 * The main entry (identified by debugName starting with the token's label prefix) is
-		 * excluded from the children list and its content is shown when clicking the parent.
-		 */
-		public readonly promoteMainEntry: boolean = false,
-		/**
 		 * Optional pre-assigned subAgentInvocationId as session id for trajectory tracking.
 		 * When set, the trajectory will use this ID instead of generating a new one,
 		 * enabling explicit linking between parent tool calls and subagent trajectories.

@@ -123,8 +123,10 @@ export class ToolsService extends BaseToolsService {
 		const isMcpTool = String(name).includes('mcp_');
 		const toolInfo = this.tools.find(t => t.name === String(name));
 		const chatSessionId = getCurrentCapturingToken()?.chatSessionId;
+		const parentTraceContext = (options as { parentTraceContext?: { traceId: string; spanId: string } }).parentTraceContext;
 		const span = this._otelService.startSpan(`execute_tool ${name}`, {
 			kind: SpanKind.INTERNAL,
+			parentTraceContext,
 			attributes: {
 				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_TOOL,
 				[GenAiAttr.TOOL_NAME]: String(name),

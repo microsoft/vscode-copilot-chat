@@ -9,14 +9,12 @@ import { Disposable, MutableDisposable } from '../../../util/vs/base/common/life
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
-import { AgentCustomizationSkillProvider } from './agentCustomizationSkillProvider';
 import { AskAgentProvider } from './askAgentProvider';
 import { EditModeAgentProvider } from './editModeAgentProvider';
 import { ExploreAgentProvider } from './exploreAgentProvider';
 import { GitHubOrgCustomAgentProvider } from './githubOrgCustomAgentProvider';
 import { GitHubOrgInstructionsProvider } from './githubOrgInstructionsProvider';
 import { PlanAgentProvider } from './planAgentProvider';
-import { TroubleshootSkillProvider } from './troubleshootSkillProvider';
 
 export class PromptFileContribution extends Disposable implements IExtensionContribution {
 	readonly id = 'PromptFiles';
@@ -75,16 +73,6 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 				const githubOrgInstructionsProvider: vscode.ChatInstructionsProvider = instantiationService.createInstance(new SyncDescriptor(GitHubOrgInstructionsProvider));
 				this._register(vscode.chat.registerInstructionsProvider(githubOrgInstructionsProvider));
 			}
-		}
-
-		// Register skill provider for built-in agent customization skill
-		if ('registerSkillProvider' in vscode.chat) {
-			const agentCustomizationSkillProvider: vscode.ChatSkillProvider = instantiationService.createInstance(new SyncDescriptor(AgentCustomizationSkillProvider));
-			this._register(vscode.chat.registerSkillProvider(agentCustomizationSkillProvider));
-
-			// Enablement is controlled in core
-			const troubleshootSkillProvider: vscode.ChatSkillProvider = instantiationService.createInstance(new SyncDescriptor(TroubleshootSkillProvider));
-			this._register(vscode.chat.registerSkillProvider(troubleshootSkillProvider));
 		}
 	}
 }

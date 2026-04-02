@@ -156,8 +156,8 @@ class DocumentHistory {
 	}
 
 	public cleanUpHistory(): void {
-		const minuteMs = 60 * 1000;
-		const earliestTime = this.getNow() - 10 * minuteMs;
+		const windowSizeMs = 5 * 60 * 1000; // 5 minutes
+		const earliestTime = this.getNow() - windowSizeMs;
 		while (this._edits.length > 0 && this._edits[0].instant < earliestTime) {
 			const edit = this._edits.shift()!;
 			if (edit.kind === 'selections') {
