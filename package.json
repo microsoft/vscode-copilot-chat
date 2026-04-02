@@ -2773,10 +2773,24 @@
 				"category": "GitHub Copilot"
 			},
 			{
-				"command": "github.copilot.sessions.commitChanges",
-				"title": "%github.copilot.command.sessions.commitChanges%",
+				"command": "github.copilot.sessions.commit",
+				"title": "%github.copilot.command.sessions.commit%",
 				"enablement": "!chatSessionRequestInProgress",
 				"icon": "$(git-commit)",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.sessions.commitAndSync",
+				"title": "%github.copilot.command.sessions.commitAndSync%",
+				"enablement": "!chatSessionRequestInProgress",
+				"icon": "$(sync)",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.sessions.sync",
+				"title": "%github.copilot.command.sessions.sync%",
+				"enablement": "!chatSessionRequestInProgress",
+				"icon": "$(sync)",
 				"category": "GitHub Copilot"
 			},
 			{
@@ -4846,9 +4860,19 @@
 					"group": "init@1"
 				},
 				{
-					"command": "github.copilot.sessions.commitChanges",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && sessions.hasGitRepository",
+					"command": "github.copilot.sessions.commit",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && sessions.hasGitRepository && sessions.hasUncommittedChanges",
 					"group": "commit@1"
+				},
+				{
+					"command": "github.copilot.sessions.commitAndSync",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && sessions.hasGitRepository && sessions.hasUncommittedChanges",
+					"group": "commit@2"
+				},
+				{
+					"command": "github.copilot.sessions.sync",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && sessions.hasGitRepository && !sessions.hasUncommittedChanges && false",
+					"group": "sync@1"
 				},
 				{
 					"command": "github.copilot.chat.mergeCopilotCLIAgentSessionChanges.merge",
@@ -5219,7 +5243,15 @@
 					"when": "config.github.copilot.chat.tools.memory.enabled"
 				},
 				{
-					"command": "github.copilot.sessions.commitChanges",
+					"command": "github.copilot.sessions.commit",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.sessions.commitAndSync",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.sessions.sync",
 					"when": "false"
 				},
 				{

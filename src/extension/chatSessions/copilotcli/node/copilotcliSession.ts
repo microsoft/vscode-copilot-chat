@@ -48,10 +48,11 @@ export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact', 'pla
 
 export const builtinSlashSCommands = {
 	commit: '/commit',
+	sync: '/sync',
+	merge: '/merge',
 	createPr: '/create-pr',
 	createDraftPr: '/create-draft-pr',
 	updatePr: '/update-pr',
-	mergeChanges: '/merge-changes',
 };
 
 /**
