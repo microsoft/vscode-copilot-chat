@@ -196,7 +196,7 @@ export interface IMakeChatRequestOptions {
 	 * Options for the kind of request being made (e.g. subagent). Controls the X-Interaction-Type header.
 	 * See notes on each interface.
 	 */
-	requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions;
+	requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions | ISystemInitiatedRequestOptions;
 }
 
 export type IChatRequestTelemetryProperties = {
@@ -332,7 +332,7 @@ export interface INetworkRequestOptions {
 	readonly useFetcher?: FetcherId;
 	readonly canRetryOnce?: boolean;
 	readonly location?: ChatLocation;
-	readonly requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions;
+	readonly requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions | ISystemInitiatedRequestOptions;
 }
 
 /**
@@ -347,6 +347,14 @@ export interface IBackgroundRequestOptions {
  */
 export interface ISubagentRequestOptions {
 	readonly kind: 'subagent';
+}
+
+/**
+ * A system-initiated request is one triggered automatically by VS Code (e.g. terminal command completion)
+ * rather than by the user typing a message. Used to set a distinct X-Interaction-Type header for billing.
+ */
+export interface ISystemInitiatedRequestOptions {
+	readonly kind: 'system-initiated';
 }
 
 function networkRequest(
@@ -374,8 +382,10 @@ function networkRequest(
 		'conversation-subagent' :
 		options.requestKindOptions?.kind === 'background' ?
 			'conversation-background' :
-			intent === 'conversation-agent' ? intent :
-				intent;
+			options.requestKindOptions?.kind === 'system-initiated' ?
+				'conversation-system-initiated' :
+				intent === 'conversation-agent' ? intent :
+					intent;
 
 	const headers: ReqHeaders = {
 		Authorization: `Bearer ${secretKey}`,
