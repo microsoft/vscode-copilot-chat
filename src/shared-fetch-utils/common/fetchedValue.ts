@@ -59,7 +59,7 @@ export class FetchedValue<T> {
 	private _disposed = false;
 	private _keepCacheHotTimer: ReturnType<typeof setInterval> | undefined;
 
-	private readonly _fetch: () => Promise<T>;
+	private _fetch: (() => Promise<T>) | undefined;
 	private readonly _isStale: (value: T) => boolean;
 
 	constructor(options: FetchedValueOptions<T>) {
@@ -109,6 +109,7 @@ export class FetchedValue<T> {
 		this._disposed = true;
 		this._value = undefined;
 		this._inflightFetch = undefined;
+		this._fetch = undefined;
 		if (this._keepCacheHotTimer !== undefined) {
 			clearInterval(this._keepCacheHotTimer);
 			this._keepCacheHotTimer = undefined;
@@ -116,7 +117,8 @@ export class FetchedValue<T> {
 	}
 
 	private async _doFetch(): Promise<T> {
-		const newValue = await this._fetch();
+		this._throwIfDisposed();
+		const newValue = await this._fetch!();
 		this._throwIfDisposed();
 		this._value = newValue;
 		return newValue;

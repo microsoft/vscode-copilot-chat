@@ -4,19 +4,23 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { FetchMiddleware, HttpResponse, WindowStateProvider } from '../fetchTypes';
+import { cloneResponse } from '../httpResponse';
 
 /**
  * Prevents fetches while the window is inactive. When inactive and a
- * previous response is available, the cached response is returned without
- * hitting the network. When no cached response exists, the fetch proceeds
- * regardless of window state so the caller is never starved.
+ * previous response is available, a clone of the cached response is
+ * returned without hitting the network. When no cached response exists,
+ * the fetch proceeds regardless of window state so the caller is never
+ * starved.
  */
 export function windowActiveMiddleware(provider: WindowStateProvider): FetchMiddleware {
 	let lastResponse: HttpResponse | undefined;
 
 	return (next) => async (request) => {
 		if (!provider.isActive && lastResponse) {
-			return lastResponse;
+			const [returnCopy, keepCopy] = cloneResponse(lastResponse);
+			lastResponse = keepCopy;
+			return returnCopy;
 		}
 		const response = await next(request);
 		lastResponse = response;

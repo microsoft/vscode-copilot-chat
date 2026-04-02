@@ -37,7 +37,7 @@ const defaultRequest: HttpRequest = { url: 'https://api.test/data', headers: {} 
 
 describe('etagMiddleware', () => {
 	it('does not add conditional headers on first request', async () => {
-		const inner = stubFetch(makeResponse(200, { 'ETag': '"abc"' }, { ok: true }));
+		const inner = stubFetch(makeResponse(200, { 'ETag': '"abc"' }));
 		const fetch = etagMiddleware()(inner);
 
 		await fetch(defaultRequest);
@@ -48,7 +48,7 @@ describe('etagMiddleware', () => {
 	});
 
 	it('adds If-None-Match on subsequent requests', async () => {
-		const inner = stubFetch(makeResponse(200, { 'ETag': '"abc"' }, { ok: true }));
+		const inner = stubFetch(makeResponse(200, { 'ETag': '"abc"' }));
 		const fetch = etagMiddleware()(inner);
 
 		await fetch(defaultRequest);
@@ -73,7 +73,7 @@ describe('etagMiddleware', () => {
 	});
 
 	it('returns cached response on 304', async () => {
-		const original = makeResponse(200, { 'ETag': '"v1"' }, { data: 42 });
+		const original = makeResponse(200, { 'ETag': '"v1"' });
 		const notModified = makeResponse(304);
 		const inner = vi.fn<HttpFetchFn>()
 			.mockResolvedValueOnce(original)
@@ -84,13 +84,13 @@ describe('etagMiddleware', () => {
 		const first = await fetch(defaultRequest);
 		const second = await fetch(defaultRequest);
 
-		expect(first).toBe(original);
-		expect(second).toBe(original); // cached body returned on 304
+		expect(first.status).toBe(200);
+		expect(second.status).toBe(200); // cached response returned on 304
 	});
 
 	it('updates cache on new 200 response', async () => {
-		const v1 = makeResponse(200, { 'ETag': '"v1"' }, 'first');
-		const v2 = makeResponse(200, { 'ETag': '"v2"' }, 'second');
+		const v1 = makeResponse(200, { 'ETag': '"v1"' });
+		const v2 = makeResponse(200, { 'ETag': '"v2"' });
 		const inner = vi.fn<HttpFetchFn>()
 			.mockResolvedValueOnce(v1)
 			.mockResolvedValueOnce(v2);
@@ -100,7 +100,7 @@ describe('etagMiddleware', () => {
 		await fetch(defaultRequest);
 		const second = await fetch(defaultRequest);
 
-		expect(second).toBe(v2);
+		expect(second.status).toBe(200);
 	});
 });
 
@@ -291,7 +291,7 @@ describe('serverErrorBackoffMiddleware', () => {
 describe('windowActiveMiddleware', () => {
 	it('calls next when window is active', async () => {
 		const provider: WindowStateProvider = { isActive: true };
-		const inner = stubFetch(makeResponse(200, {}, 'data'));
+		const inner = stubFetch(makeResponse(200));
 		const fetch = windowActiveMiddleware(provider)(inner);
 
 		const result = await fetch(defaultRequest);
@@ -302,24 +302,24 @@ describe('windowActiveMiddleware', () => {
 	it('returns cached response when window is inactive', async () => {
 		const provider = { isActive: true };
 		const inner = vi.fn<HttpFetchFn>()
-			.mockResolvedValueOnce(makeResponse(200, {}, 'first'))
-			.mockResolvedValueOnce(makeResponse(200, {}, 'second'));
+			.mockResolvedValueOnce(makeResponse(200))
+			.mockResolvedValueOnce(makeResponse(200));
 		const fetch = windowActiveMiddleware(provider)(inner);
 
 		// First call (active) → caches
 		const first = await fetch(defaultRequest);
-		expect(first.body).toBe('first');
+		expect(first.status).toBe(200);
 
 		// Become inactive
 		provider.isActive = false;
 		const second = await fetch(defaultRequest);
-		expect(second.body).toBe('first'); // cached
+		expect(second.status).toBe(200); // cached
 		expect(inner).toHaveBeenCalledTimes(1);
 	});
 
 	it('fetches anyway when inactive with no cache', async () => {
 		const provider: WindowStateProvider = { isActive: false };
-		const inner = stubFetch(makeResponse(200, {}, 'data'));
+		const inner = stubFetch(makeResponse(200));
 		const fetch = windowActiveMiddleware(provider)(inner);
 
 		const result = await fetch(defaultRequest);
@@ -401,17 +401,17 @@ describe('createAdvancedFetch', () => {
 			request: defaultRequest,
 			httpFetch: async () => {
 				fetchCount++;
-				return makeResponse(200, {}, { n: fetchCount });
+				return makeResponse(fetchCount * 100);
 			},
-			parseResponse: (res) => (res.body as { n: number }).n,
+			parseResponse: (res) => res.status,
 			middleware: [windowActiveMiddleware(provider)],
 		});
 
 		// First call (inactive, no cache) → fetches
-		expect(await fetchFn()).toBe(1);
+		expect(await fetchFn()).toBe(100);
 
 		// Second call (still inactive) → returns cached response
-		expect(await fetchFn()).toBe(1);
+		expect(await fetchFn()).toBe(100);
 		expect(fetchCount).toBe(1);
 	});
 
@@ -422,8 +422,8 @@ describe('createAdvancedFetch', () => {
 
 		const fetchFn = createAdvancedFetch({
 			request: defaultRequest,
-			httpFetch: async () => makeResponse(200, {}, { ts: 999 }),
-			parseResponse: (res) => (res.body as { ts: number }).ts,
+			httpFetch: async () => makeResponse(999),
+			parseResponse: (res) => res.status,
 		});
 
 		const fv = new FetchedValue({
@@ -451,7 +451,7 @@ describe('full middleware stack', () => {
 	beforeEach(() => {
 		provider = { isActive: true };
 		authedRequest = { url: 'https://api.test/data', headers: { 'Authorization': 'Bearer tok-1' } };
-		inner = vi.fn<HttpFetchFn>().mockResolvedValue(makeResponse(200, { 'ETag': '"v1"' }, { ok: true }));
+		inner = vi.fn<HttpFetchFn>().mockResolvedValue(makeResponse(200, { 'ETag': '"v1"' }));
 
 		const composed = composeFetchMiddleware(
 			windowActiveMiddleware(provider),
@@ -476,7 +476,7 @@ describe('full middleware stack', () => {
 		// Become inactive
 		provider.isActive = false;
 		const res = await fetch(authedRequest);
-		expect(res.body).toEqual({ ok: true }); // cached
+		expect(res.status).toBe(200); // cached
 		expect(inner).toHaveBeenCalledTimes(1); // no additional call
 	});
 

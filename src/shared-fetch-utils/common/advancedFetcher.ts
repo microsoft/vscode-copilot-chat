@@ -37,7 +37,7 @@ export interface AdvancedFetchOptions<T> {
 	/**
 	 * Extracts the domain value `T` from a successful HTTP response.
 	 */
-	readonly parseResponse: (response: HttpResponse) => T;
+	readonly parseResponse: (response: HttpResponse) => Promise<T>;
 
 	/**
 	 * Middleware applied around the HTTP fetch in the order listed (first

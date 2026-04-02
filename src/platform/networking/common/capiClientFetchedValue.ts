@@ -33,10 +33,8 @@ export interface CapiClientFetchedValueOptions<T> {
 	 * `body` is the JSON-parsed object on success, the raw response text
 	 * when the body is not valid JSON (e.g. error pages), or `undefined`
 	 * when the response has no body (e.g. 204, 304 handled by etag cache).
-	 *
-	 * Defaults to `res.body as T` when omitted.
 	 */
-	readonly parseResponse?: (response: HttpResponse) => T;
+	readonly parseResponse: (response: HttpResponse) => Promise<T>;
 
 	/**
 	 * Determines whether the current cached value is stale and should be
@@ -82,7 +80,7 @@ export function createCapiClientFetchedValue<T>(
 	const {
 		request,
 		requestMetadata,
-		parseResponse = (res) => res.body as T,
+		parseResponse,
 		isStale,
 		keepCacheHot,
 	} = options;

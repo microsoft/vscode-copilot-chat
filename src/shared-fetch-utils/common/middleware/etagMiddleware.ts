@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { FetchMiddleware, HttpResponse } from '../fetchTypes';
+import { cloneResponse } from '../httpResponse';
 
 /**
  * Adds `If-None-Match` / `If-Modified-Since` conditional request headers
@@ -31,13 +32,9 @@ export function etagMiddleware(): FetchMiddleware {
 		const response = await next({ ...request, headers });
 
 		if (response.status === 304 && cachedResponse) {
-			// Tee the cached body so the cache retains a fresh copy
-			if (cachedResponse.body) {
-				const [returnStream, keepStream] = cachedResponse.body.tee();
-				cachedResponse = { ...cachedResponse, body: keepStream };
-				return { ...cachedResponse, body: returnStream };
-			}
-			return cachedResponse;
+			const [returnCopy, keepCopy] = cloneResponse(cachedResponse);
+			cachedResponse = keepCopy;
+			return returnCopy;
 		}
 
 		const etag = response.headers.get('etag') ?? undefined;
@@ -49,15 +46,12 @@ export function etagMiddleware(): FetchMiddleware {
 			cachedLastModified = lastModified;
 		}
 
-		// Only tee and cache when the server provided conditional headers,
+		// Only clone and cache when the server provided conditional headers,
 		// otherwise there is no point paying the cost of cloning the stream.
 		if (etag || lastModified) {
-			if (response.body) {
-				const [returnStream, cacheStream] = response.body.tee();
-				cachedResponse = { ...response, body: cacheStream };
-				return { ...response, body: returnStream };
-			}
-			cachedResponse = response;
+			const [returnCopy, cacheCopy] = cloneResponse(response);
+			cachedResponse = cacheCopy;
+			return returnCopy;
 		}
 
 		return response;

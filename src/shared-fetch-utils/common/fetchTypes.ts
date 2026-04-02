@@ -19,6 +19,8 @@ export interface HttpResponse {
 	readonly status: number;
 	readonly headers: HttpHeaders;
 	readonly body: ReadableStream<Uint8Array> | null;
+	json(): Promise<unknown>;
+	text(): Promise<string>;
 }
 
 /**
