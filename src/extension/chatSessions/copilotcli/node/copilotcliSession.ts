@@ -457,7 +457,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						return;
 					}
 					const actionDescriptions: Record<ActionType, string> = {
-						'autopilot': l10n.t('Auto-approve all tool calls and continue untill the task is done'),
+						'autopilot': l10n.t('Auto-approve all tool calls and continue until the task is done'),
 						'interactive': l10n.t('Let the agent continue in interactive mode, asking for user input and approval for each action.'),
 						'exit_only': l10n.t('Exit plan mode, but do not execute the plan. I will execute the plan myself after reviewing it.'),
 						'autopilot_fleet': l10n.t('Auto-approve all tool calls, including fleet management actions, and continue until the task is done.'),
