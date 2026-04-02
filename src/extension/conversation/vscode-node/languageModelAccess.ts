@@ -240,6 +240,19 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		const chatEndpoints = allEndpoints.filter(e => e.showInModelPicker || e.model === 'gpt-4o-mini');
 		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, allEndpoints);
 		chatEndpoints.push(autoEndpoint);
+
+		// Sort endpoints by vendor priority: OpenAI first, then Anthropic, then Gemini, then others.
+		// Auto endpoint is always first via its category order.
+		const getVendorPriority = (e: IChatEndpoint): number => {
+			if (e instanceof AutoChatEndpoint) { return -1; }
+			const provider = e.modelProvider.toLowerCase();
+			if (provider.includes('openai')) { return 0; }
+			if (provider.includes('anthropic')) { return 1; }
+			if (provider.includes('google')) { return 2; }
+			return 3;
+		};
+		chatEndpoints.sort((a, b) => getVendorPriority(a) - getVendorPriority(b));
+
 		let defaultChatEndpoint: IChatEndpoint;
 		const defaultExpModel = this._expService.getTreatmentVariable<string>('chat.defaultLanguageModel')?.replace('copilot/', '');
 		if (this._authenticationService.copilotToken?.isNoAuthUser || !defaultExpModel || defaultExpModel === AutoChatEndpoint.pseudoModelId) {
