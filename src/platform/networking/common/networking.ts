@@ -357,6 +357,21 @@ export interface ISystemInitiatedRequestOptions {
 	readonly kind: 'system-initiated';
 }
 
+/**
+ * Maps request kind options to the corresponding X-Interaction-Type header value.
+ * Returns `undefined` when no special request kind is set.
+ */
+export function getInteractionTypeForRequestKind(
+	requestKindOptions: IBackgroundRequestOptions | ISubagentRequestOptions | ISystemInitiatedRequestOptions | undefined,
+): string | undefined {
+	switch (requestKindOptions?.kind) {
+		case 'subagent': return 'conversation-subagent';
+		case 'background': return 'conversation-background';
+		case 'system-initiated': return 'conversation-system-initiated';
+		default: return undefined;
+	}
+}
+
 function networkRequest(
 	accessor: ServicesAccessor,
 	options: INetworkRequestOptions,
@@ -378,14 +393,7 @@ function networkRequest(
 		name: '',
 		version: '',
 	} satisfies IEndpoint : endpointOrUrl;
-	const agentInteractionType = options.requestKindOptions?.kind === 'subagent' ?
-		'conversation-subagent' :
-		options.requestKindOptions?.kind === 'background' ?
-			'conversation-background' :
-			options.requestKindOptions?.kind === 'system-initiated' ?
-				'conversation-system-initiated' :
-				intent === 'conversation-agent' ? intent :
-					intent;
+	const agentInteractionType = getInteractionTypeForRequestKind(options.requestKindOptions) ?? intent;
 
 	const headers: ReqHeaders = {
 		Authorization: `Bearer ${secretKey}`,
