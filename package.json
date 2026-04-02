@@ -6158,10 +6158,12 @@
 				"when": "config.github.copilot.chat.getSearchViewResultsSkill.enabled"
 			},
 			{
-				"path": "./assets/prompts/skills/troubleshoot/SKILL.md"
+				"path": "./assets/prompts/skills/troubleshoot/SKILL.md",
+				"when": "chatSessionType == 'local' || chatSessionType == 'copilotcli'"
 			},
 			{
-				"path": "./assets/prompts/skills/agent-customization/SKILL.md"
+				"path": "./assets/prompts/skills/agent-customization/SKILL.md",
+				"when": "chatSessionType == 'local' || chatSessionType == 'copilotcli'"
 			}
 		],
 		"terminal": {
