@@ -527,10 +527,9 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 				const model = asString(span.attributes[GenAiAttr.REQUEST_MODEL])
 					?? asString(span.attributes[GenAiAttr.RESPONSE_MODEL])
 					?? 'unknown';
-				const agentName = asString(span.attributes[GenAiAttr.AGENT_NAME]) ?? '';
 				const systemInstructions = asString(span.attributes[GenAiAttr.SYSTEM_INSTRUCTIONS]);
 				if (systemInstructions) {
-					const key = `${model}:${agentName}`;
+					const key = `${model}:${systemInstructions.length}`;
 					if (key !== session.systemPromptKey) {
 						const fileName = `system_prompt_${session.systemPromptIndex}.json`;
 						session.systemPromptKey = key;

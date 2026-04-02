@@ -171,6 +171,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private stopHookReason: string | undefined;
 	private additionalHookContext: string | undefined;
 	private stopHookUserInitiated = false;
+	private agentSpan: ISpanHandle | undefined;
+	private chatSessionIdForTools: string | undefined;
+	private toolsAvailableEmitted = false;
 
 	public appendAdditionalHookContext(context: string): void {
 		if (!context) {
@@ -696,15 +699,13 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<IToolCallLoopResult> {
-		let agentName = (this.options.request as { subAgentName?: string }).subAgentName
+		const agentName = (this.options.request as { subAgentName?: string }).subAgentName
 			?? (this.options.request as { participant?: string }).participant
 			?? 'GitHub Copilot Chat';
 
-		// Append custom mode name so debug logs can distinguish mode switches (e.g., Agent vs Plan)
+		// Extract custom mode name for debug logging (kept separate from agentName to avoid metric cardinality)
 		const modeInstructions = (this.options.request as { modeInstructions2?: { name?: string; isBuiltin?: boolean } }).modeInstructions2;
-		if (modeInstructions?.name && !modeInstructions.isBuiltin) {
-			agentName += `[${modeInstructions.name}]`;
-		}
+		const customModeName = modeInstructions?.name && !modeInstructions.isBuiltin ? modeInstructions.name : undefined;
 
 		// If this is a subagent request, look up the parent trace context stored by the parent agent's execute_tool span
 		// Try subAgentInvocationId first (unique per subagent, supports parallel), then request-level key
@@ -735,6 +736,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					[GenAiAttr.CONVERSATION_ID]: this.options.conversation.sessionId,
 					[CopilotChatAttr.SESSION_ID]: this.options.conversation.sessionId,
 					...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}),
+					...(customModeName ? { 'copilot_chat.mode_name': customModeName } : {}),
 					...workspaceMetadataToOTelAttributes(resolveWorkspaceOTelMetadata(this._gitService)),
 				},
 				parentTraceContext,
@@ -840,17 +842,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let stopHookActive = false;
 		const sessionId = this.options.conversation.sessionId;
 
-		// Emit tool definitions early so the debug logger can write tools_*.json
-		// before the first CHAT span completes inside runOne()
-		if (agentSpan) {
-			const initialTools = await this.getAvailableTools(outputStream, token);
-			if (initialTools.length > 0) {
-				agentSpan.addEvent('tools_available', {
-					toolDefinitions: JSON.stringify(initialTools.map(t => ({ type: 'function', name: t.name, description: t.description }))),
-					...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}),
-				});
-			}
-		}
+		// Store span context so runOne() can emit tools_available on first call
+		this.agentSpan = agentSpan;
+		this.chatSessionIdForTools = chatSessionId;
+		this.toolsAvailableEmitted = false;
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
@@ -1116,6 +1111,17 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	/** Runs a single iteration of the tool calling loop. */
 	public async runOne(outputStream: ChatResponseStream | undefined, iterationNumber: number, token: CancellationToken): Promise<IToolCallSingleResult> {
 		let availableTools = await this.getAvailableTools(outputStream, token);
+
+		// Emit tools_available on the agent span once, before the first CHAT span
+		// starts in fetch(). This lets the debug logger write tools_*.json early.
+		if (!this.toolsAvailableEmitted && this.agentSpan && availableTools.length > 0) {
+			this.toolsAvailableEmitted = true;
+			this.agentSpan.addEvent('tools_available', {
+				toolDefinitions: JSON.stringify(availableTools.map(t => ({ type: 'function', name: t.name, description: t.description }))),
+				...(this.chatSessionIdForTools ? { [CopilotChatAttr.CHAT_SESSION_ID]: this.chatSessionIdForTools } : {}),
+			});
+		}
+
 		const context = this.createPromptContext(availableTools, outputStream);
 		const isContinuation = context.isContinuation || false;
 		markChatExt(this.options.conversation.sessionId, ChatExtPerfMark.WillBuildPrompt);
