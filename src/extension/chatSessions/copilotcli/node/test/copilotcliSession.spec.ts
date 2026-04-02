@@ -27,7 +27,7 @@ import { IWorkspaceInfo } from '../../../common/workspaceInfo';
 import { FakeToolsService, ToolCall } from '../../common/copilotCLITools';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
-import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
+import { IQuestion, IQuestionAnswer, IUserQuestionHandler } from '../userInputHelpers';
 import { NullICopilotCLIImageSupport } from './testHelpers';
 
 vi.mock('../cliHelpers', async (importOriginal) => ({
@@ -171,6 +171,7 @@ describe('CopilotCLISession', () => {
 	let configurationService: IConfigurationService;
 	let chatSessionMetadataStore: MockChatSessionMetadataStore;
 	let authInfo: NonNullable<SessionOptions['authInfo']>;
+	let userQuestionAnswer: IQuestionAnswer | undefined;
 	beforeEach(async () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
@@ -190,6 +191,7 @@ describe('CopilotCLISession', () => {
 		await configurationService.setConfig(ConfigKey.Advanced.CLIPlanExitModeEnabled, true);
 		instaService = services.seal();
 		toolsService = new FakeToolsService();
+		userQuestionAnswer = undefined;
 	});
 
 	afterEach(() => {
@@ -201,8 +203,8 @@ describe('CopilotCLISession', () => {
 	async function createSession(): Promise<CopilotCLISession> {
 		class FakeUserQuestionHandler implements IUserQuestionHandler {
 			_serviceBrand: undefined;
-			async askUserQuestion(question: UserInputRequest, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
-				return undefined;
+			async askUserQuestion(question: IQuestion, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<IQuestionAnswer | undefined> {
+				return userQuestionAnswer;
 			}
 		}
 		return disposables.add(new CopilotCLISession(
@@ -689,7 +691,7 @@ describe('CopilotCLISession', () => {
 			const stream = new MockChatResponseStream();
 			session.attachStream(stream);
 
-			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { command: 'compact' }, [], undefined, authInfo, CancellationToken.None);
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { command: 'compact', prompt: '' }, [], undefined, authInfo, CancellationToken.None);
 
 			expect(sdkSession.currentMode).toBe('interactive');
 			expect(stream.output.join('\n')).toContain('Compacted conversation.');
@@ -1151,11 +1153,11 @@ describe('CopilotCLISession', () => {
 			expect(result.value).toEqual({ approved: false });
 		});
 
-		it('approves when user confirms via confirmation tool in non-autopilot mode', async () => {
+		it('approves when user confirms via user question handler in non-autopilot mode', async () => {
 			const result = { value: undefined as unknown };
 			const summary = 'Here is the plan';
 			setupSendWithExitPlanMode({ summary, actions: ['exit_only'] }, result);
-			toolsService.setConfirmationResult('yes');
+			userQuestionAnswer = { selected: ['exit_only'], freeText: null, skipped: false };
 			const session = await createSession();
 			const stream = new MockChatResponseStream();
 			session.attachStream(stream);
@@ -1164,14 +1166,12 @@ describe('CopilotCLISession', () => {
 			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
 
 			expect(result.value).toEqual({ approved: true, selectedAction: 'exit_only' });
-			expect(toolsService.invokeToolCalls).toHaveLength(1);
-			expect(toolsService.invokeToolCalls[0].input).toMatchObject({ message: summary });
 		});
 
 		it('sets autoApproveEdits when user confirms with autoApprove permission level', async () => {
 			const result = { value: undefined as unknown };
 			setupSendWithExitPlanMode({ summary: 'Here is the plan', actions: ['exit_only'] }, result);
-			toolsService.setConfirmationResult('yes');
+			userQuestionAnswer = { selected: ['exit_only'], freeText: null, skipped: false };
 			const session = await createSession();
 			session.setPermissionLevel('autoApprove');
 			const stream = new MockChatResponseStream();

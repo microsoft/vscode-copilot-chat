@@ -168,14 +168,17 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 				repositoryUri = vscode.Uri.file(worktreeProperties.repositoryPath);
 			} else {
 				const repoContext = await this.gitService.getRepository(selectedFolder);
+				const branchBase = repoContext?.headBranchName
+					? await this.gitService.getBranchBase(repoContext.rootUri, repoContext.headBranchName)
+					: undefined;
 
 				repositoryUri = repoContext?.rootUri;
 				repositoryProperties = repoContext
 					? {
 						repositoryPath: repoContext.rootUri.fsPath,
 						branchName: repoContext.headBranchName,
-						baseBranchName: repoContext.upstreamRemote && repoContext.upstreamBranchName
-							? `${repoContext.upstreamRemote}/${repoContext.upstreamBranchName}`
+						baseBranchName: branchBase && branchBase.remote && branchBase.name
+							? `${branchBase.remote}/${branchBase.name}`
 							: undefined,
 					} satisfies RepositoryProperties
 					: undefined;

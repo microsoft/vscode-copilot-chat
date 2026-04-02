@@ -154,6 +154,10 @@ export class MockGitService implements IGitService {
 		return Promise.resolve(undefined);
 	}
 
+	getBranchBase(_uri: URI, _name: string): Promise<Branch | undefined> {
+		return Promise.resolve(undefined);
+	}
+
 	getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]> {
 		return Promise.resolve([]);
 	}

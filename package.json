@@ -2773,10 +2773,24 @@
 				"category": "GitHub Copilot"
 			},
 			{
-				"command": "github.copilot.sessions.commitChanges",
-				"title": "%github.copilot.command.sessions.commitChanges%",
+				"command": "github.copilot.sessions.commit",
+				"title": "%github.copilot.command.sessions.commit%",
 				"enablement": "!chatSessionRequestInProgress",
 				"icon": "$(git-commit)",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.sessions.commitAndSync",
+				"title": "%github.copilot.command.sessions.commitAndSync%",
+				"enablement": "!chatSessionRequestInProgress",
+				"icon": "$(sync)",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.sessions.sync",
+				"title": "%github.copilot.command.sessions.sync%",
+				"enablement": "!chatSessionRequestInProgress",
+				"icon": "$(sync)",
 				"category": "GitHub Copilot"
 			},
 			{
@@ -4846,9 +4860,19 @@
 					"group": "init@1"
 				},
 				{
-					"command": "github.copilot.sessions.commitChanges",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && sessions.hasGitRepository",
+					"command": "github.copilot.sessions.commit",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && sessions.hasGitRepository && sessions.hasUncommittedChanges",
 					"group": "commit@1"
+				},
+				{
+					"command": "github.copilot.sessions.commitAndSync",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && sessions.hasGitRepository && sessions.hasUncommittedChanges",
+					"group": "commit@2"
+				},
+				{
+					"command": "github.copilot.sessions.sync",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && sessions.hasGitRepository && !sessions.hasUncommittedChanges && false",
+					"group": "sync@1"
 				},
 				{
 					"command": "github.copilot.chat.mergeCopilotCLIAgentSessionChanges.merge",
@@ -5219,7 +5243,15 @@
 					"when": "config.github.copilot.chat.tools.memory.enabled"
 				},
 				{
-					"command": "github.copilot.sessions.commitChanges",
+					"command": "github.copilot.sessions.commit",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.sessions.commitAndSync",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.sessions.sync",
 					"when": "false"
 				},
 				{
@@ -6060,6 +6092,16 @@
 					{
 						"name": "compact",
 						"description": "%github.copilot.command.cli.compact.description%"
+					},
+					{
+						"name": "plan",
+						"description": "%github.copilot.command.cli.plan.description%",
+						"when": "config.github.copilot.chat.cli.planExitMode.enabled"
+					},
+					{
+						"name": "fleet",
+						"description": "%github.copilot.command.cli.fleet.description%",
+						"when": "config.github.copilot.chat.cli.planExitMode.enabled"
 					}
 				],
 				"customAgentTarget": "github-copilot",
@@ -6237,7 +6279,7 @@
 		"@vscode/lsif-language-service": "^0.1.0-pre.4",
 		"@vscode/test-cli": "^0.0.11",
 		"@vscode/test-electron": "^2.5.2",
-		"@vscode/test-web": "^0.0.80",
+		"@vscode/test-web": "^0.0.71",
 		"@vscode/vsce": "3.6.0",
 		"agent-browser": "^0.16.3",
 		"copyfiles": "^2.4.1",

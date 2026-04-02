@@ -125,14 +125,6 @@ function emitCodeLine(line: string, uri: Uri, existingDocument: TextDocumentSnap
 	}
 }
 
-export async function processFullRewrite(uri: Uri, document: TextDocumentSnapshot | undefined, newContent: string, outputStream: MappedEditsResponseStream, token: CancellationToken, pushedLines: string[]): Promise<void> {
-	for (const line of newContent.split(/\r?\n/)) {
-		emitCodeLine(line, uri, document, outputStream, pushedLines, token);
-	}
-
-	await handleTrailingLines(uri, document, outputStream, pushedLines, token);
-}
-
 async function processFullRewriteStream(uri: Uri, existingDocument: TextDocumentSnapshot | undefined, inputStream: AsyncIterable<LineOfText>, outputStream: MappedEditsResponseStream, token: CancellationToken, pushedLines: string[] = []) {
 	for await (const line of inputStream) {
 		emitCodeLine(line.value, uri, existingDocument, outputStream, pushedLines, token);

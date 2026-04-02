@@ -853,7 +853,7 @@ export class CodeSearchChunkSearch extends Disposable {
 				return Result.error(result.err);
 			}
 
-			// If we are forcing external ingest only, we don't want to update the code search repos
+			// If we are forcing external ingest only, we don't care about code search repo states
 			if (externalIndexEnabled === 'force') {
 				return Result.ok(true);
 			}
@@ -864,21 +864,6 @@ export class CodeSearchChunkSearch extends Disposable {
 			status: entry.repo.status,
 		})), null, 4)} `);
 
-		const allRepos = Array.from(this._codeSearchRepos.values(), entry => entry.repo);
-		if (!allRepos.length) {
-			return Result.error(TriggerRemoteIndexingError.noGitRepos);
-		}
-
-		if (allRepos.every(repo => repo.status === CodeSearchRepoStatus.Resolving)) {
-			return Result.error(TriggerRemoteIndexingError.stillResolving);
-		}
-
-		if (allRepos.every(repo => repo.status === CodeSearchRepoStatus.NotResolvable)) {
-			return Result.error(TriggerRemoteIndexingError.noRemoteIndexableRepos);
-		}
-
-		const candidateRepos = allRepos.filter(repo => repo.status !== CodeSearchRepoStatus.NotResolvable && repo.status !== CodeSearchRepoStatus.Resolving);
-
 		const authToken = await this.getGithubAuthToken();
 		if (this._isDisposed) {
 			return Result.ok(true);
@@ -888,6 +873,20 @@ export class CodeSearchChunkSearch extends Disposable {
 			return Result.error(TriggerRemoteIndexingError.noValidAuthToken);
 		}
 
+		const allRepos = Array.from(this._codeSearchRepos.values(), entry => entry.repo);
+		if (!allRepos.length || allRepos.every(repo => repo.status === CodeSearchRepoStatus.NotResolvable)) {
+			if (externalIndexEnabled) {
+				return Result.ok(true);
+			} else {
+				return Result.error(TriggerRemoteIndexingError.notIndexable);
+			}
+		}
+
+		if (allRepos.every(repo => repo.status === CodeSearchRepoStatus.Resolving)) {
+			return Result.error(TriggerRemoteIndexingError.stillResolving);
+		}
+
+		const candidateRepos = allRepos.filter(repo => repo.status !== CodeSearchRepoStatus.NotResolvable && repo.status !== CodeSearchRepoStatus.Resolving);
 		if (candidateRepos.every(repo => repo.status === CodeSearchRepoStatus.Ready)) {
 			return Result.error(TriggerRemoteIndexingError.alreadyIndexed);
 		}

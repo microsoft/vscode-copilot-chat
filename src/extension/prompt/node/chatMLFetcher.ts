@@ -262,9 +262,18 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						?? (requestBody as Record<string, unknown>).system
 						?? (requestBody as Record<string, unknown>).instructions;
 					if (systemContent) {
-						const systemText = typeof systemContent === 'string'
-							? systemContent
-							: JSON.stringify(systemContent);
+						let systemText: string;
+						if (typeof systemContent === 'string') {
+							systemText = systemContent;
+						} else if (Array.isArray(systemContent)) {
+							// Anthropic format: array of content blocks — extract text only,
+							// dropping metadata like cache_control so the value is stable across turns.
+							systemText = (systemContent as Array<{ text?: string }>)
+								.map(b => b.text ?? '')
+								.join('\n');
+						} else {
+							systemText = JSON.stringify(systemContent);
+						}
 						otelInferenceSpan.setAttribute(GenAiAttr.SYSTEM_INSTRUCTIONS, systemText);
 					}
 				}
