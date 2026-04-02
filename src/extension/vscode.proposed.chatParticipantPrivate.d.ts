@@ -129,8 +129,10 @@ declare module 'vscode' {
 		readonly hasHooksEnabled: boolean;
 
 		/**
-		 * Whether the request was system-initiated (e.g. terminal completion notification)
-		 * rather than user-typed.
+		 * When true, this request was initiated by the system (e.g. a terminal
+		 * command completion notification) rather than by the user typing a
+		 * message. Extensions can use this to render the prompt differently
+		 * and skip billing.
 		 */
 		readonly isSystemInitiated?: boolean;
 	}
