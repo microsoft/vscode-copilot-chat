@@ -349,20 +349,6 @@ export interface ISubagentRequestOptions {
 	readonly kind: 'subagent';
 }
 
-/**
- * Maps request kind options to the corresponding X-Interaction-Type header value.
- * Returns `undefined` when no special request kind is set.
- */
-export function getInteractionTypeForRequestKind(
-	requestKindOptions: IBackgroundRequestOptions | ISubagentRequestOptions | undefined,
-): string | undefined {
-	switch (requestKindOptions?.kind) {
-		case 'subagent': return 'conversation-subagent';
-		case 'background': return 'conversation-background';
-		default: return undefined;
-	}
-}
-
 function networkRequest(
 	accessor: ServicesAccessor,
 	options: INetworkRequestOptions,
@@ -384,7 +370,12 @@ function networkRequest(
 		name: '',
 		version: '',
 	} satisfies IEndpoint : endpointOrUrl;
-	const agentInteractionType = getInteractionTypeForRequestKind(options.requestKindOptions) ?? intent;
+	const agentInteractionType = options.requestKindOptions?.kind === 'subagent' ?
+		'conversation-subagent' :
+		options.requestKindOptions?.kind === 'background' ?
+			'conversation-background' :
+			intent === 'conversation-agent' ? intent :
+				intent;
 
 	const headers: ReqHeaders = {
 		Authorization: `Bearer ${secretKey}`,
