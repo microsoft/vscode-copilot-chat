@@ -6091,8 +6091,7 @@
 		"chatAgents": [],
 		"chatPromptFiles": [
 			{
-				"path": "./assets/prompts/plan.prompt.md"
-			},
+				"path": "./assets/prompts/plan.prompt.md"			},
 			{
 				"path": "./assets/prompts/init.prompt.md"
 			},
@@ -6298,7 +6297,7 @@
 		"@anthropic-ai/claude-agent-sdk": "^0.2.81",
 		"@anthropic-ai/sdk": "^0.80.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
-		"@github/copilot": "^1.0.12",
+		"@github/copilot": "^1.0.15",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
