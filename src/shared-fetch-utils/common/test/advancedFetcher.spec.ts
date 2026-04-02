@@ -24,7 +24,22 @@ function makeResponse(status: number, headers: Record<string, string> = {}, body
 	for (const [k, v] of Object.entries(headers)) {
 		lower[k.toLowerCase()] = v;
 	}
-	return { status, headers: makeHeaders(lower), body };
+	const serialized = body !== null ? JSON.stringify(body) : null;
+	const bodyStream = serialized !== null
+		? new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(new TextEncoder().encode(serialized));
+				controller.close();
+			},
+		})
+		: null;
+	return {
+		status,
+		headers: makeHeaders(lower),
+		body: bodyStream,
+		async text() { return serialized ?? ''; },
+		async json() { return JSON.parse(await this.text()); },
+	};
 }
 
 function stubFetch(response: HttpResponse): HttpFetchFn {
@@ -371,7 +386,7 @@ describe('createAdvancedFetch', () => {
 		const fetchFn = createAdvancedFetch({
 			request: defaultRequest,
 			httpFetch: async () => makeResponse(200, {}, { name: 'test' }),
-			parseResponse: (res) => (res.body as { name: string }).name,
+			parseResponse: async (res) => ((await res.json()) as { name: string }).name,
 		});
 
 		const result = await fetchFn();
@@ -386,7 +401,7 @@ describe('createAdvancedFetch', () => {
 				return { url: `https://api.test/${callCount}`, headers: { 'X-Count': String(callCount) } };
 			},
 			httpFetch: async (req) => makeResponse(200, {}, { url: req.url }),
-			parseResponse: (res) => (res.body as { url: string }).url,
+			parseResponse: async (res) => ((await res.json()) as { url: string }).url,
 		});
 
 		expect(await fetchFn()).toBe('https://api.test/1');
@@ -403,7 +418,7 @@ describe('createAdvancedFetch', () => {
 				fetchCount++;
 				return makeResponse(fetchCount * 100);
 			},
-			parseResponse: (res) => res.status,
+			parseResponse: async (res) => res.status,
 			middleware: [windowActiveMiddleware(provider)],
 		});
 
@@ -423,7 +438,7 @@ describe('createAdvancedFetch', () => {
 		const fetchFn = createAdvancedFetch({
 			request: defaultRequest,
 			httpFetch: async () => makeResponse(999),
-			parseResponse: (res) => res.status,
+			parseResponse: async (res) => res.status,
 		});
 
 		const fv = new FetchedValue({

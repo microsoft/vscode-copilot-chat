@@ -22,7 +22,32 @@ import { ICAPIClientService } from '../../common/capiClient';
 import { AutomodeService } from '../automodeService';
 
 function createMockHeaders(entries: Record<string, string> = {}): { get(name: string): string | null } {
-	return { get: (name: string) => entries[name] ?? null };
+	const lower: Record<string, string> = {};
+	for (const [k, v] of Object.entries(entries)) {
+		lower[k.toLowerCase()] = v;
+	}
+	return { get: (name: string) => lower[name.toLowerCase()] ?? null };
+}
+
+/**
+ * Creates a mock response with a real stream-backed body so that middleware
+ * cloning (tee) works correctly. Token responses go through the middleware
+ * pipeline where {@link cloneResponse} reads the body stream.
+ */
+function makeMockTokenResponse(body: { available_models: string[]; expires_at: number; session_token: string }) {
+	const serialized = JSON.stringify(body);
+	return {
+		status: 200,
+		headers: createMockHeaders(),
+		body: new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.enqueue(new TextEncoder().encode(serialized));
+				controller.close();
+			},
+		}),
+		async text() { return serialized; },
+		async json() { return JSON.parse(serialized); },
+	};
 }
 
 describe('AutomodeService', () => {
@@ -68,16 +93,13 @@ describe('AutomodeService', () => {
 	}
 
 	function mockApiResponse(available_models: string[], session_token = 'test-token', expiresInSeconds = 3600): void {
-		(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
-			ok: true,
-			status: 200,
-			headers: createMockHeaders(),
-			json: vi.fn().mockResolvedValue({
+		(mockCAPIClientService.makeRequest as ReturnType<typeof vi.fn>).mockResolvedValue(
+			makeMockTokenResponse({
 				available_models,
 				expires_at: Math.floor(Date.now() / 1000) + expiresInSeconds,
 				session_token,
 			})
-		});
+		);
 	}
 
 	function enableRouter(): void {
@@ -91,16 +113,13 @@ describe('AutomodeService', () => {
 		mockChatEndpoint = createEndpoint('gpt-4o-mini', 'OpenAI');
 
 		mockCAPIClientService = {
-			makeRequest: vi.fn().mockResolvedValue({
-				ok: true,
-				status: 200,
-				headers: createMockHeaders(),
-				json: vi.fn().mockResolvedValue({
+			makeRequest: vi.fn().mockResolvedValue(
+				makeMockTokenResponse({
 					available_models: ['gpt-4o', 'gpt-4o-mini'],
 					expires_at: Math.floor(Date.now() / 1000) + 3600,
 					session_token: 'test-token'
 				})
-			})
+			)
 		} as unknown as ICAPIClientService;
 
 		mockAuthService = {
@@ -175,16 +194,13 @@ describe('AutomodeService', () => {
 						}))
 					});
 				}
-				return Promise.resolve({
-					ok: true,
-					status: 200,
-					headers: createMockHeaders(),
-					json: vi.fn().mockResolvedValue({
+				return Promise.resolve(
+					makeMockTokenResponse({
 						available_models: ['gpt-4o', 'gpt-4o-mini'],
 						expires_at: Math.floor(Date.now() / 1000) + 3600,
 						session_token: 'test-token'
 					})
-				});
+				);
 			});
 
 			automodeService = createService();
@@ -230,16 +246,13 @@ describe('AutomodeService', () => {
 						}))
 					});
 				}
-				return Promise.resolve({
-					ok: true,
-					status: 200,
-					headers: createMockHeaders(),
-					json: vi.fn().mockResolvedValue({
+				return Promise.resolve(
+					makeMockTokenResponse({
 						available_models: ['gpt-4o', 'gpt-4o-mini'],
 						expires_at: Math.floor(Date.now() / 1000) + 3600,
 						session_token: 'test-token'
 					})
-				});
+				);
 			});
 
 			automodeService = createService();
@@ -445,16 +458,13 @@ describe('AutomodeService', () => {
 						}))
 					});
 				}
-				return Promise.resolve({
-					ok: true,
-					status: 200,
-					headers: createMockHeaders(),
-					json: vi.fn().mockResolvedValue({
+				return Promise.resolve(
+					makeMockTokenResponse({
 						available_models,
 						expires_at: Math.floor(Date.now() / 1000) + 3600,
 						session_token,
 					})
-				});
+				);
 			});
 		}
 
@@ -467,16 +477,13 @@ describe('AutomodeService', () => {
 				if (opts?.type === RequestType.ModelRouter) {
 					return Promise.reject(new Error('Network error'));
 				}
-				return Promise.resolve({
-					ok: true,
-					status: 200,
-					headers: createMockHeaders(),
-					json: vi.fn().mockResolvedValue({
+				return Promise.resolve(
+					makeMockTokenResponse({
 						available_models: ['claude-sonnet', 'gpt-4o'],
 						expires_at: Math.floor(Date.now() / 1000) + 3600,
 						session_token: 'test-token',
 					})
-				});
+				);
 			});
 
 			automodeService = createService();
@@ -520,16 +527,13 @@ describe('AutomodeService', () => {
 						});
 					});
 				}
-				return Promise.resolve({
-					ok: true,
-					status: 200,
-					headers: createMockHeaders(),
-					json: vi.fn().mockResolvedValue({
+				return Promise.resolve(
+					makeMockTokenResponse({
 						available_models: ['claude-sonnet', 'gpt-4o'],
 						expires_at: Math.floor(Date.now() / 1000) + 3600,
 						session_token: 'test-token',
 					})
-				});
+				);
 			});
 
 			automodeService = createService();
@@ -706,16 +710,13 @@ describe('AutomodeService', () => {
 						}))
 					});
 				}
-				return Promise.resolve({
-					ok: true,
-					status: 200,
-					headers: createMockHeaders(),
-					json: vi.fn().mockResolvedValue({
+				return Promise.resolve(
+					makeMockTokenResponse({
 						available_models: ['claude-sonnet', 'gpt-4o'],
 						expires_at: Math.floor(Date.now() / 1000) + 3600,
 						session_token: 'test-token',
 					})
-				});
+				);
 			});
 
 			automodeService = createService();
