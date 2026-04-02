@@ -11,8 +11,8 @@ Keep your answers short and impersonal.
 You are a highly sophisticated automated coding agent with expert-level knowledge across many different programming languages and frameworks and software engineering tasks.
 The user will ask a question or ask you to perform a task. There is a selection of tools that let you perform actions or retrieve helpful context.
 By default, implement changes rather than only suggesting them. If the user's intent is unclear, infer the most useful likely action and proceed with using tools to discover missing details instead of guessing.
-Gather sufficient context to act confidently, then proceed to implementation. Avoid redundant searches for information already found. Once you have identified the relevant files and understand the code structure, proceed to implementation. Do not continue searching after you have enough to act. If multiple queries return overlapping results, you have sufficient context.
-Persist through genuine blockers, but do not over-explore when you already have enough information to proceed. When you encounter an error, diagnose and fix rather than retrying the same approach.
+Gather enough context to proceed confidently, then move to implementation. Persist through genuine blockers and continue working until the request is resolved, but do not over-explore when you already have sufficient information to act. If multiple searches return overlapping results, you have enough context.
+When a tool call fails or an approach is not working, try an alternative rather than retrying the same thing. Step back and consider a different strategy after two failed attempts.
 If your approach is blocked, do not attempt to brute force your way to the outcome. Consider alternative approaches or other ways you might unblock yourself.
 Avoid giving time estimates.
 
@@ -40,7 +40,7 @@ Avoid over-engineering. Only make changes that are directly requested or clearly
 
 </implementationDiscipline>
 <parallelizationStrategy>
-You may parallelize independent read-only operations when appropriate.
+You may parallelize independent read-only operations when appropriate. For context gathering, batch the reads you've already decided you need rather than searching speculatively. Get enough context to act, then proceed with implementation.
 
 </parallelizationStrategy>
 <toolUseInstructions>
@@ -119,8 +119,6 @@ Guidelines for session memory (`/memories/session/`):
 This is a test custom instruction file
 </instructions>
 
-
-[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -133,15 +131,6 @@ The user's current OS is: Linux
 I am working in a workspace with the following folders:
 - /workspace 
 </workspace_info>
-<userMemory>
-No user preferences or notes saved yet. Use the memory tool to store persistent notes under /memories/.
-</userMemory>
-<sessionMemory>
-Session memory (/memories/session/) is empty. No session notes have been created yet.
-</sessionMemory>
-<repoMemory>
-Repository memory (/memories/repo/) is empty. No workspace-scoped notes have been created yet.
-</repoMemory>
 
 
 [copilot_cache_control: { type: 'ephemeral' }]
@@ -150,16 +139,82 @@ Repository memory (/memories/repo/) is empty. No workspace-scoped notes have bee
 
 ### User
 ~~~md
-<attachments>
-<attachment id="file" filePath="/workspace/file.ts">
-line 1
-line 2
+<context>
+(Date removed from snapshot)
+</context>
+<reminderInstructions>
+Do NOT create markdown files to document changes unless requested.
 
-line 4
-line 5
-</attachment>
+</reminderInstructions>
+<userRequest>
+previous turn
+</userRequest>
 
-</attachments>
+~~~
+
+
+### Assistant
+~~~md
+response
+🛠️ insert_edit_into_file (tooluse_0) {
+  "filePath": "/workspace/file.ts",
+  "code": "// existing code...
+console.log('hi')"
+}
+🛠️ insert_edit_into_file (tooluse_1) {
+  "filePath": "/workspace/file.ts",
+  "code": "// existing code...
+console.log('hi')"
+}
+~~~
+
+
+### Tool
+~~~md
+🛠️ tooluse_0
+success
+~~~
+
+
+### Tool
+~~~md
+🛠️ tooluse_1
+success
+~~~
+
+
+### Assistant
+~~~md
+response 2
+🛠️ insert_edit_into_file (tooluse_2) {
+  "filePath": "/workspace/file.ts",
+  "code": "// existing code...
+console.log('hi')"
+}
+🛠️ insert_edit_into_file (tooluse_3) {
+  "filePath": "/workspace/file.ts",
+  "code": "// existing code...
+console.log('hi')"
+}
+~~~
+
+
+### Tool
+~~~md
+🛠️ tooluse_2
+success
+~~~
+
+
+### Tool
+~~~md
+🛠️ tooluse_3
+success
+~~~
+
+
+### User
+~~~md
 <context>
 (Date removed from snapshot)
 </context>
@@ -179,7 +234,12 @@ edit this file
 ### Assistant
 ~~~md
 ok
-🛠️ insert_edit_into_file (tooluse_1) {
+🛠️ insert_edit_into_file (tooluse_4) {
+  "filePath": "/workspace/file.ts",
+  "code": "// existing code...
+console.log('hi')"
+}
+🛠️ insert_edit_into_file (tooluse_5) {
   "filePath": "/workspace/file.ts",
   "code": "// existing code...
 console.log('hi')"
@@ -189,7 +249,46 @@ console.log('hi')"
 
 ### Tool
 ~~~md
-🛠️ tooluse_1
+🛠️ tooluse_4
+success
+~~~
+
+
+### Tool
+~~~md
+🛠️ tooluse_5
+success
+
+[copilot_cache_control: { type: 'ephemeral' }]
+~~~
+
+
+### Assistant
+~~~md
+ok
+🛠️ insert_edit_into_file (tooluse_6) {
+  "filePath": "/workspace/file.ts",
+  "code": "// existing code...
+console.log('hi')"
+}
+🛠️ insert_edit_into_file (tooluse_7) {
+  "filePath": "/workspace/file.ts",
+  "code": "// existing code...
+console.log('hi')"
+}
+~~~
+
+
+### Tool
+~~~md
+🛠️ tooluse_6
+success
+~~~
+
+
+### Tool
+~~~md
+🛠️ tooluse_7
 success
 
 [copilot_cache_control: { type: 'ephemeral' }]
