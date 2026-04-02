@@ -210,7 +210,7 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 							message: t('Out of date'),
 						},
 						details: {
-							message: `[${t`Update index`}](command:${buildRemoteIndexCommandId} "${t('Update codebase Index')}")`,
+							message: `[${t`Update index`}](command:${buildRemoteIndexCommandId} "${t('Update Codebase Index')}")`,
 							busy: false,
 						}
 					});
