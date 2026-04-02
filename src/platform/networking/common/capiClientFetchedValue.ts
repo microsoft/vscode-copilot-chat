@@ -17,8 +17,6 @@ import type { IEnvService } from '../../env/common/envService';
 export interface CapiClientFetchedValueOptions<T> {
 	/**
 	 * The request options passed to {@link ICAPIClientService.makeRequest}.
-	 * May be a static object, a synchronous factory, or an async factory
-	 * (useful when headers depend on runtime state such as an auth token).
 	 */
 	readonly request: (() => MakeRequestOptions | Promise<MakeRequestOptions>);
 
@@ -97,7 +95,7 @@ export function createCapiClientFetchedValue<T>(
 		},
 		httpFetch: async (httpRequest) => {
 			const response = await capiClientService.makeRequest<Response>({
-				...httpRequest.state,
+				...(httpRequest.state ?? {}),
 				method: httpRequest.method,
 				// Use the headers from the middleware pipeline (may include
 				// If-None-Match, If-Modified-Since, etc.)
