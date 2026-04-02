@@ -467,8 +467,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					event.data.actions;
 					try {
 						const userInputRequest: IQuestion = {
-							question: l10n.t('Approve this plan? [Plan.md](/Users/donjayamanne/development/vsc/vscode-copilot-chat/src/extension/chatSessions/copilotcli/node/copilotcliSession.ts)'),
-							header: l10n.t('Approve this plan? [Plan.md](/Users/donjayamanne/development/vsc/vscode-copilot-chat/src/extension/chatSessions/copilotcli/node/copilotcliSession.ts)'),
+							question: l10n.t('Approve this plan?'),
+							header: l10n.t('Approve this plan?'),
 							options: event.data.actions.map(a => ({ label: (actionDescriptions as Record<string, string>)[a] ?? a, recommended: a === event.data.recommendedAction })),
 							allowFreeformInput: true,
 						};
