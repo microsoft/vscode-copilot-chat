@@ -241,17 +241,19 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, allEndpoints);
 		chatEndpoints.push(autoEndpoint);
 
-		// Sort endpoints by vendor priority: OpenAI first, then Anthropic, then Gemini, then others.
+		// Experiment: sort endpoints by vendor priority (OpenAI, Anthropic, Gemini, others).
 		// Auto endpoint is always first via its category order.
-		const getVendorPriority = (e: IChatEndpoint): number => {
-			if (e instanceof AutoChatEndpoint) { return -1; }
-			const provider = e.modelProvider.toLowerCase();
-			if (provider.includes('openai')) { return 0; }
-			if (provider.includes('anthropic')) { return 1; }
-			if (provider.includes('google')) { return 2; }
-			return 3;
-		};
-		chatEndpoints.sort((a, b) => getVendorPriority(a) - getVendorPriority(b));
+		if (this._expService.getTreatmentVariable<boolean>('chat.modelPickerVendorOrdering')) {
+			const getVendorPriority = (e: IChatEndpoint): number => {
+				if (e instanceof AutoChatEndpoint) { return -1; }
+				const provider = e.modelProvider.toLowerCase();
+				if (provider.includes('openai')) { return 0; }
+				if (provider.includes('anthropic')) { return 1; }
+				if (provider.includes('google')) { return 2; }
+				return 3;
+			};
+			chatEndpoints.sort((a, b) => getVendorPriority(a) - getVendorPriority(b));
+		}
 
 		let defaultChatEndpoint: IChatEndpoint;
 		const defaultExpModel = this._expService.getTreatmentVariable<string>('chat.defaultLanguageModel')?.replace('copilot/', '');
