@@ -3770,20 +3770,6 @@
 							"clear-both"
 						]
 					},
-					"github.copilot.chat.anthropic.promptOptimization": {
-						"type": "string",
-						"default": "control",
-						"markdownDescription": "%github.copilot.config.anthropic.promptOptimization%",
-						"tags": [
-							"experimental",
-							"onExp"
-						],
-						"enum": [
-							"control",
-							"combined",
-							"split"
-						]
-					},
 					"github.copilot.chat.responsesApiReasoningSummary": {
 						"type": "string",
 						"default": "detailed",
@@ -4871,27 +4857,27 @@
 				},
 				{
 					"command": "github.copilot.sessions.sync",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && sessions.hasGitRepository && !sessions.hasUncommittedChanges && false",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && sessions.hasGitRepository && !sessions.hasUncommittedChanges",
 					"group": "sync@1"
 				},
 				{
 					"command": "github.copilot.chat.mergeCopilotCLIAgentSessionChanges.merge",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasGitRepository && !sessions.isMergeBaseBranchProtected && !sessions.hasPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasGitRepository && !sessions.isMergeBaseBranchProtected && !sessions.hasPullRequest && (sessions.hasUncommittedChanges || sessions.hasOutgoingChanges)",
 					"group": "merge@1"
 				},
 				{
 					"command": "github.copilot.chat.mergeCopilotCLIAgentSessionChanges.mergeAndSync",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasGitRepository && !sessions.isMergeBaseBranchProtected && !sessions.hasPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasGitRepository && !sessions.isMergeBaseBranchProtected && !sessions.hasPullRequest && (sessions.hasUncommittedChanges || sessions.hasOutgoingChanges)",
 					"group": "merge@2"
 				},
 				{
 					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasGitRepository && !sessions.hasPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasGitRepository && !sessions.hasPullRequest && (sessions.hasUncommittedChanges || sessions.hasOutgoingChanges)",
 					"group": "pull_request@1"
 				},
 				{
 					"command": "github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasGitRepository && !sessions.hasPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasGitRepository && !sessions.hasPullRequest && (sessions.hasUncommittedChanges || sessions.hasOutgoingChanges)",
 					"group": "pull_request@2"
 				},
 				{
@@ -6338,7 +6324,7 @@
 	},
 	"dependencies": {
 		"@anthropic-ai/claude-agent-sdk": "^0.2.81",
-		"@anthropic-ai/sdk": "^0.80.0",
+		"@anthropic-ai/sdk": "^0.81.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
 		"@github/copilot": "^1.0.12",
 		"@google/genai": "^1.22.0",
@@ -6359,7 +6345,7 @@
 		"@opentelemetry/sdk-trace-node": "^2.5.1",
 		"@opentelemetry/semantic-conventions": "^1.39.0",
 		"@sinclair/typebox": "^0.34.41",
-		"@vscode/copilot-api": "^0.2.18",
+		"@vscode/copilot-api": "^0.2.19",
 		"@vscode/extension-telemetry": "^1.5.1",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.8",
