@@ -62,7 +62,11 @@ export type CopilotCLISessionInput =
 	| { readonly prompt?: string; readonly command: CopilotCLICommand };
 
 function getPromptLabel(input: CopilotCLISessionInput): string {
-	return 'command' in input ? `/${input.command} ${input.prompt}` : input.prompt;
+	if ('command' in input) {
+		const prompt = input.prompt ?? '';
+		return prompt ? `/${input.command} ${prompt}` : `/${input.command}`;
+	}
+	return input.prompt;
 }
 
 export interface ICopilotCLISession extends IDisposable {
