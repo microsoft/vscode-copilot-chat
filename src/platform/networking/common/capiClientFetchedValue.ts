@@ -89,7 +89,7 @@ export function createCapiClientFetchedValue<T>(
 		request: async () => {
 			const currentRequestOpts = await request();
 			return {
-				url: '',
+				url: `capi:${requestMetadata.type}`,
 				headers: currentRequestOpts.headers ?? {},
 				method: currentRequestOpts.method ?? 'GET',
 				state: currentRequestOpts

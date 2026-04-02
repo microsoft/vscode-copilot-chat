@@ -52,16 +52,16 @@ export interface AdvancedFetchOptions<T> {
  *
  * @example
  * ```ts
- * const fetchConfig = createAdvancedFetch({
+ * const fetchConfig = createAdvancedFetch<ConfigType>({
  *     request: { url: 'https://api.example.com/config', headers: {} },
  *     httpFetch: async (req) => {
  *         const res = await fetcherService.fetch(req.url, {
  *             callSite: 'configFetch',
  *             headers: req.headers,
  *         });
- *         return { status: res.status, headers: res.headers, body: await res.json() };
+ *         return { status: res.status, headers: res.headers, body: res.body, json: () => res.json(), text: () => res.text() };
  *     },
- *     parseResponse: (res) => res.body as ConfigType,
+ *     parseResponse: async (res) => await res.json() as ConfigType,
  *     middleware: [
  *         windowActiveMiddleware(envService),
  *         etagMiddleware(),
