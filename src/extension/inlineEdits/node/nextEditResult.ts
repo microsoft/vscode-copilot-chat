@@ -34,7 +34,7 @@ export class NextEditResult implements INextEditResult {
 			edit?: StringReplacement;
 			documentBeforeEdits: StringText;
 			displayLocation?: INextEditDisplayLocation;
-			targetDocumentId?: DocumentId;
+			targetDocumentId: DocumentId;
 			action?: Command;
 			isFromCursorJump: boolean;
 			jumpToPosition?: Position;

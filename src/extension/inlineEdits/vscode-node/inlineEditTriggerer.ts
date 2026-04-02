@@ -189,6 +189,11 @@ export class InlineEditTriggerer extends Disposable {
 
 		const selectionLine = range.start.line;
 
+		if (this.nextEditProvider.consumeShouldSuppressSelectionChangeTrigger(doc.id, selectionLine, range.start.character)) {
+			logger.trace('Return: suppressed after NES acceptance');
+			return;
+		}
+
 		if (this._isSameLineCooldownActive(mostRecentChange, selectionLine, e.textEditor.document)) {
 			logger.trace('Return: same line cooldown');
 			return;

@@ -160,6 +160,10 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 
 	handleShown(suggestion: DiagnosticsNextEditResult): void { }
 
+	consumeShouldSuppressSelectionChangeTrigger(_docId: DocumentId, _cursorLine: number, _cursorColumn: number): boolean {
+		return false; // diagnostics NES doesn't need trigger suppression
+	}
+
 	handleAcceptance(docId: DocumentId, suggestion: DiagnosticsNextEditResult): void {
 		const completionResult = suggestion.result;
 		if (!completionResult) {

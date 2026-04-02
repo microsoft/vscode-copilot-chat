@@ -104,6 +104,12 @@ export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData 
 	lastRejectionTime: number;
 	lastTriggerTime: number;
 	lastOutcome: NesOutcome | undefined;
+	/**
+	 * If the last shown NES targets the given document and the cursor landed
+	 * at the expected position (the start of the edit's replace range, or the
+	 * jump-to position), consumes the suppress state and returns `true`.
+	 */
+	consumeShouldSuppressSelectionChangeTrigger(docId: DocumentId, cursorLine: number, cursorColumn: number): boolean;
 }
 
 interface ProcessedDoc {
@@ -147,6 +153,20 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	private _lastShownTime = 0;
 	/** The requestId of the last shown suggestion. We store only the requestId (not the object) to avoid preventing garbage collection. */
 	private _lastShownSuggestionId: number | undefined = undefined;
+
+	/**
+	 * Info about the last shown NES, used to suppress the selection-change
+	 * trigger that VS Code fires as a side-effect of acceptance / cursor jump.
+	 * Set in {@link handleShown}, consumed on the first matching check,
+	 * cleared on rejection/ignore.
+	 */
+	private _shownNesInfo: {
+		readonly targetDocumentId: DocumentId;
+		/** 0-based line where the cursor is expected to land. */
+		readonly expectedCursorLine: number;
+		/** 0-based column where the cursor is expected to land. */
+		readonly expectedCursorColumn: number;
+	} | undefined;
 
 	private _lastRejectionTime = 0;
 	public get lastRejectionTime() {
@@ -371,7 +391,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				logContext.markAsNoSuggestions();
 			} else {
 				telemetryBuilder.setStatus('emptyEditsButHasNextCursorPosition');
-				return new NextEditResult(logContext.requestId, req, { jumpToPosition: error.nextCursorPosition, documentBeforeEdits: documentAtInvocationTime, isFromCursorJump: false, isSubsequentEdit: false });
+				return new NextEditResult(logContext.requestId, req, { jumpToPosition: error.nextCursorPosition, documentBeforeEdits: documentAtInvocationTime, isFromCursorJump: false, isSubsequentEdit: false, targetDocumentId: docId });
 			}
 		}
 
@@ -972,6 +992,11 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		this._lastOutcome = undefined; // clear so that outcome is "pending" until resolved
 		this._scheduledSpeculativeRequest = null; // clear any previously scheduled speculative
 
+		// Track the shown NES so the triggerer can suppress the selection-change
+		// event that VS Code fires when the user accepts the NES or jumps to it.
+		this._shownNesInfo = NextEditProvider._computeShownNesInfo(suggestion);
+		this._logger.trace(`handleShown: _shownNesInfo=${this._shownNesInfo ? `doc=${this._shownNesInfo.targetDocumentId.uri}, line=${this._shownNesInfo.expectedCursorLine}, col=${this._shownNesInfo.expectedCursorColumn}` : 'none'}`);
+
 		// Trigger speculative request for the post-edit document state
 		const speculativeRequestsEnablement = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, this._expService);
 		if (speculativeRequestsEnablement === SpeculativeRequestsEnablement.On) {
@@ -1356,7 +1381,26 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		return shiftedSelection;
 	}
 
+	public consumeShouldSuppressSelectionChangeTrigger(docId: DocumentId, cursorLine: number, cursorColumn: number): boolean {
+		const info = this._shownNesInfo;
+		if (!info) {
+			return false;
+		}
+		if (info.targetDocumentId !== docId || info.expectedCursorLine !== cursorLine || info.expectedCursorColumn !== cursorColumn) {
+			console.log(
+				`consumeShouldSuppressSelectionChangeTrigger: not suppressing (doc=${docId.uri}, expectedLine=${info.expectedCursorLine}, expectedColumn=${info.expectedCursorColumn}, line=${cursorLine}, col=${cursorColumn})`
+			);
+			return false;
+		}
+		this._logger.trace(`consumeShouldSuppressSelectionChangeTrigger: suppressing (doc=${docId.uri}, line=${cursorLine}, col=${cursorColumn})`);
+		this._shownNesInfo = undefined;
+		return true;
+	}
+
 	public handleAcceptance(docId: DocumentId, suggestion: NextEditResult) {
+		// Re-arm suppression in case it was consumed between handleShown and now.
+		this._shownNesInfo = NextEditProvider._computeShownNesInfo(suggestion);
+		this._logger.trace(`handleAcceptance: _shownNesInfo=${this._shownNesInfo ? `doc=${this._shownNesInfo.targetDocumentId.uri}, line=${this._shownNesInfo.expectedCursorLine}, col=${this._shownNesInfo.expectedCursorColumn}` : 'none'}`);
 		this.runSnippy(docId, suggestion);
 		this._statelessNextEditProvider.handleAcceptance?.();
 		this._lastOutcome = NesOutcome.Accepted;
@@ -1371,6 +1415,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	}
 
 	public handleRejection(docId: DocumentId, suggestion: NextEditResult) {
+		this._shownNesInfo = undefined;
 		assertType(suggestion.result, '@ulugbekna: undefined edit cannot be rejected?');
 
 		// The user rejected the suggestion, so the speculative request (which
@@ -1393,6 +1438,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	}
 
 	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, supersededBy: INextEditResult | undefined): void {
+		this._shownNesInfo = undefined;
 		this._lastOutcome = NesOutcome.Ignored;
 
 		// Check if this was the last shown suggestion
@@ -1416,6 +1462,31 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	public clearCache() {
 		this._nextEditCache.clear();
 		this._rejectionCollector.clear();
+	}
+
+	/**
+	 * Computes the expected cursor position after the user accepts the shown
+	 * NES. Returns `undefined` for jump-to-position NES (no edit) and for
+	 * suggestions without a result, since those should not suppress triggers.
+	 */
+	private static _computeShownNesInfo(suggestion: NextEditResult): {
+		readonly targetDocumentId: DocumentId;
+		readonly expectedCursorLine: number;
+		readonly expectedCursorColumn: number;
+	} | undefined {
+		const result = suggestion.result;
+		if (!result?.edit) {
+			return undefined;
+		}
+
+		// Eliminate common prefix/suffix to find where the actual change starts.
+		const preciseEdit = result.edit.removeCommonSuffixPrefix(result.documentBeforeEdits.value);
+		const position = result.documentBeforeEdits.getTransformer().getPosition(preciseEdit.replaceRange.start);
+		return {
+			targetDocumentId: result.targetDocumentId,
+			expectedCursorLine: position.lineNumber - 1,   // 1-based → 0-based
+			expectedCursorColumn: position.column - 1,      // 1-based → 0-based
+		};
 	}
 }
 

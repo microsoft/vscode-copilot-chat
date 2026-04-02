@@ -42,6 +42,16 @@ suite('InlineEditTriggerer', () => {
 		public lastRejectionTime: number = Date.now();
 		public lastTriggerTime: number = Date.now();
 		public lastOutcome: NesOutcome | undefined = undefined;
+		public shownNesInfo: { targetDocumentId: DocumentId; expectedCursorLine: number; expectedCursorColumn: number } | undefined;
+
+		public consumeShouldSuppressSelectionChangeTrigger(docId: DocumentId, cursorLine: number, cursorColumn: number): boolean {
+			const info = this.shownNesInfo;
+			if (info && info.targetDocumentId === docId && info.expectedCursorLine === cursorLine && info.expectedCursorColumn === cursorColumn) {
+				this.shownNesInfo = undefined;
+				return true;
+			}
+			return false;
+		}
 	}
 
 	class MockVSCodeWorkspace {
@@ -1305,6 +1315,146 @@ suite('InlineEditTriggerer', () => {
 			triggerTextSelectionChange(textEditor, new Selection(0, 0, 0, 0));
 			assert.isAtLeast(firedEvents.length, count1 + 1,
 				'After text change, same line should trigger again');
+		});
+	});
+
+	// #endregion
+
+	// #region Post-acceptance trigger suppression
+
+	suite('Post-acceptance trigger suppression', () => {
+		test('No signal when NES target doc and cursor position match', () => {
+			const { document, textEditor } = createTextDocument(undefined, undefined, 'line1\nline2\nline3');
+			nextEditProvider.lastRejectionTime = Date.now() - TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN - 1;
+
+			triggerTextChange(document);
+			triggerTextSelectionChange(textEditor, new Selection(0, 0, 0, 0));
+			const countAfterFirst = firedEvents.length;
+			assert.isAtLeast(countAfterFirst, 1, 'First trigger should fire');
+
+			// Simulate: NES shown targeting this document, cursor expected at (2, 3)
+			nextEditProvider.shownNesInfo = {
+				targetDocumentId: DocumentId.create(document.uri.toString()),
+				expectedCursorLine: 2,
+				expectedCursorColumn: 3,
+			};
+
+			// Selection changes to the expected position
+			triggerTextSelectionChange(textEditor, new Selection(2, 3, 2, 3));
+
+			assert.strictEqual(firedEvents.length, countAfterFirst,
+				'Signal should not fire when doc and cursor position match');
+		});
+
+		test('Suppression is consumed and only suppresses once', () => {
+			const { document, textEditor } = createTextDocument(undefined, undefined, 'line1\nline2\nline3');
+			nextEditProvider.lastRejectionTime = Date.now() - TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN - 1;
+
+			triggerTextChange(document);
+			triggerTextSelectionChange(textEditor, new Selection(0, 0, 0, 0));
+			const countAfterFirst = firedEvents.length;
+
+			// Simulate NES shown
+			nextEditProvider.shownNesInfo = {
+				targetDocumentId: DocumentId.create(document.uri.toString()),
+				expectedCursorLine: 2,
+				expectedCursorColumn: 0,
+			};
+
+			// First selection change on matching position — suppressed
+			triggerTextSelectionChange(textEditor, new Selection(2, 0, 2, 0));
+			assert.strictEqual(firedEvents.length, countAfterFirst,
+				'First selection change after acceptance should be suppressed');
+
+			// Info should be consumed
+			assert.strictEqual(nextEditProvider.shownNesInfo, undefined,
+				'shownNesInfo should be consumed after match');
+
+			// Second selection change — NOT suppressed
+			triggerTextChange(document);
+			triggerTextSelectionChange(textEditor, new Selection(1, 0, 1, 0));
+			assert.isAtLeast(firedEvents.length, countAfterFirst + 1,
+				'Second selection change should trigger normally');
+		});
+
+		test('No suppression when cursor column does not match', () => {
+			const { document, textEditor } = createTextDocument(undefined, undefined, 'line1\nline2\nline3');
+			nextEditProvider.lastRejectionTime = Date.now() - TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN - 1;
+
+			triggerTextChange(document);
+			triggerTextSelectionChange(textEditor, new Selection(0, 0, 0, 0));
+			const countAfterFirst = firedEvents.length;
+
+			// NES expects cursor at (2, 3)
+			nextEditProvider.shownNesInfo = {
+				targetDocumentId: DocumentId.create(document.uri.toString()),
+				expectedCursorLine: 2,
+				expectedCursorColumn: 3,
+			};
+
+			// Cursor lands on correct line but wrong column
+			triggerTextSelectionChange(textEditor, new Selection(2, 0, 2, 0));
+
+			assert.isAtLeast(firedEvents.length, countAfterFirst + 1,
+				'Signal should fire when cursor column does not match');
+		});
+
+		test('No suppression when cursor line does not match', () => {
+			const { document, textEditor } = createTextDocument(undefined, undefined, 'line1\nline2\nline3');
+			nextEditProvider.lastRejectionTime = Date.now() - TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN - 1;
+
+			triggerTextChange(document);
+			triggerTextSelectionChange(textEditor, new Selection(0, 0, 0, 0));
+			const countAfterFirst = firedEvents.length;
+
+			// NES expects cursor at (2, 0)
+			nextEditProvider.shownNesInfo = {
+				targetDocumentId: DocumentId.create(document.uri.toString()),
+				expectedCursorLine: 2,
+				expectedCursorColumn: 0,
+			};
+
+			// Cursor lands on wrong line
+			triggerTextSelectionChange(textEditor, new Selection(1, 0, 1, 0));
+
+			assert.isAtLeast(firedEvents.length, countAfterFirst + 1,
+				'Signal should fire when cursor line does not match');
+		});
+
+		test('No suppression when NES target doc does not match', () => {
+			const doc1 = createTextDocument(undefined, Uri.file('file1.py'), 'line1\nline2');
+			const doc2 = createTextDocument(undefined, Uri.file('file2.py'), 'line1\nline2');
+			nextEditProvider.lastRejectionTime = Date.now() - TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN - 1;
+
+			// NES targets doc2 at (1, 0)
+			nextEditProvider.shownNesInfo = {
+				targetDocumentId: DocumentId.create(doc2.document.uri.toString()),
+				expectedCursorLine: 1,
+				expectedCursorColumn: 0,
+			};
+
+			// Selection change in doc1 at same position — should NOT be suppressed
+			triggerTextChange(doc1.document);
+			triggerTextSelectionChange(doc1.textEditor, new Selection(1, 0, 1, 0));
+
+			assert.isAtLeast(firedEvents.length, 1,
+				'Signal should fire when NES target doc does not match');
+			// Info should NOT be consumed since doc didn't match
+			assert.isDefined(nextEditProvider.shownNesInfo,
+				'shownNesInfo should not be consumed when doc does not match');
+		});
+
+		test('No suppression when no NES info is set', () => {
+			const { document, textEditor } = createTextDocument(undefined, undefined, 'line1\nline2');
+			nextEditProvider.lastRejectionTime = Date.now() - TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN - 1;
+
+			nextEditProvider.shownNesInfo = undefined;
+
+			triggerTextChange(document);
+			triggerTextSelectionChange(textEditor, new Selection(1, 0, 1, 0));
+
+			assert.isAtLeast(firedEvents.length, 1,
+				'Signal should fire normally when no NES info is set');
 		});
 	});
 
