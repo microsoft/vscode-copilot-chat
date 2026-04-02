@@ -6,6 +6,9 @@
 export interface HttpRequest {
 	readonly url: string;
 	readonly headers: Record<string, string>;
+	method?: 'GET' | 'POST' | 'PUT';
+	// Arbitrary state that can be passed through the middleware pipeline
+	state?: Record<string, unknown>;
 }
 
 export interface HttpHeaders {
@@ -15,7 +18,7 @@ export interface HttpHeaders {
 export interface HttpResponse {
 	readonly status: number;
 	readonly headers: HttpHeaders;
-	readonly body: unknown;
+	readonly body: ReadableStream<Uint8Array> | null;
 }
 
 /**

@@ -22,11 +22,11 @@ export function composeFetchMiddleware(...middlewares: readonly FetchMiddleware[
 
 export interface AdvancedFetchOptions<T> {
 	/**
-	 * The HTTP request to send. May be a static object or a function that
-	 * produces one at call time (useful when headers depend on runtime state
-	 * such as an auth token).
+	 * The HTTP request to send. May be a static object, a synchronous
+	 * factory, or an async factory (useful when headers depend on runtime
+	 * state such as an auth token).
 	 */
-	readonly request: HttpRequest | (() => HttpRequest);
+	readonly request: HttpRequest | (() => HttpRequest | Promise<HttpRequest>);
 
 	/**
 	 * The underlying HTTP transport. Callers typically bridge their own
@@ -81,7 +81,7 @@ export function createAdvancedFetch<T>(options: AdvancedFetchOptions<T>): () => 
 	const composedFetch = composeFetchMiddleware(...middleware)(httpFetch);
 
 	return async () => {
-		const request = typeof options.request === 'function' ? options.request() : options.request;
+		const request = typeof options.request === 'function' ? await options.request() : options.request;
 		const response = await composedFetch(request);
 		return parseResponse(response);
 	};

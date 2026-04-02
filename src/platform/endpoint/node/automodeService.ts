@@ -5,6 +5,7 @@
 
 import { RequestType } from '@vscode/copilot-api';
 import type { ChatRequest } from 'vscode';
+import { FetchedValue } from '../../../shared-fetch-utils/common/fetchedValue';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Disposable, DisposableMap } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -41,7 +42,7 @@ interface AutoModelCacheEntry {
 }
 
 class AutoModeTokenBank extends Disposable {
-	private readonly _fetchedValue;
+	private readonly _fetchedValue: FetchedValue<AutoModeAPIResponse>;
 	private _usedSinceLastFetch = false;
 
 	constructor(

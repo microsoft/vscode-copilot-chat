@@ -74,7 +74,6 @@ export class FetchedValue<T> {
 
 	/**
 	 * The current cached value, or `undefined` if no value has been fetched yet
-	 * (or the value has been {@link reset}).
 	 *
 	 * This is a synchronous accessor — it never triggers a fetch.
 	 */
