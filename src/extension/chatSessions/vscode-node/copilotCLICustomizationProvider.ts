@@ -5,21 +5,12 @@
 
 import * as vscode from 'vscode';
 import { INSTRUCTION_FILE_EXTENSION, SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
-import { INativeEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { basename } from '../../../util/vs/base/common/resources';
-import { URI } from '../../../util/vs/base/common/uri';
 import { IChatPromptFileService } from '../common/chatPromptFileService';
 import { ICopilotCLIAgents } from '../copilotcli/node/copilotCli';
-
-/** Workspace-relative prefixes the copilot-agent-runtime discovers. */
-const CLI_WORKSPACE_PREFIXES = ['.github/', '.copilot/', '.agents/'];
-
-/** Home-directory prefixes the copilot-agent-runtime discovers. */
-const CLI_HOME_PREFIXES = ['.copilot/', '.agents/'];
 
 export class CopilotCLICustomizationProvider extends Disposable implements vscode.ChatSessionCustomizationProvider {
 
@@ -41,8 +32,6 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 	constructor(
 		@IChatPromptFileService private readonly chatPromptFileService: IChatPromptFileService,
 		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@INativeEnvService private readonly envService: INativeEnvService,
 		@ILogService private readonly logService: ILogService,
 	) {
 		super();
@@ -82,55 +71,25 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 	}
 
 	/**
-	 * Collects instruction items from prompt files under CLI-recognized paths.
+	 * Collects all instruction items from the prompt file service.
 	 */
 	private getInstructionItems(): vscode.ChatSessionCustomizationItem[] {
-		return this.chatPromptFileService.instructions
-			.filter(i => this.isCLIPath(i.uri))
-			.map(i => ({
-				uri: i.uri,
-				type: vscode.ChatSessionCustomizationType.Instructions,
-				name: deriveNameFromUri(i.uri, INSTRUCTION_FILE_EXTENSION),
-			}));
+		return this.chatPromptFileService.instructions.map(i => ({
+			uri: i.uri,
+			type: vscode.ChatSessionCustomizationType.Instructions,
+			name: deriveNameFromUri(i.uri, INSTRUCTION_FILE_EXTENSION),
+		}));
 	}
 
 	/**
-	 * Collects skill items from prompt files under CLI-recognized paths.
+	 * Collects all skill items from the prompt file service.
 	 */
 	private getSkillItems(): vscode.ChatSessionCustomizationItem[] {
-		return this.chatPromptFileService.skills
-			.filter(s => this.isCLIPath(s.uri))
-			.map(s => ({
-				uri: s.uri,
-				type: vscode.ChatSessionCustomizationType.Skill,
-				name: deriveNameFromUri(s.uri, SKILL_FILENAME),
-			}));
-	}
-
-	private isCLIPath(uri: URI): boolean {
-		// Check workspace folder paths
-		const folders = this.workspaceService.getWorkspaceFolders();
-		for (const folder of folders) {
-			const folderPath = folder.path.endsWith('/') ? folder.path : folder.path + '/';
-			if (uri.path.startsWith(folderPath)) {
-				const relative = uri.path.slice(folderPath.length);
-				if (CLI_WORKSPACE_PREFIXES.some(prefix => relative.startsWith(prefix))) {
-					return true;
-				}
-			}
-		}
-
-		// Check home directory paths (e.g., ~/.copilot/skills/, ~/.agents/skills/)
-		const homePath = this.envService.userHome.path;
-		const homePrefix = homePath.endsWith('/') ? homePath : homePath + '/';
-		if (uri.path.startsWith(homePrefix)) {
-			const relative = uri.path.slice(homePrefix.length);
-			if (CLI_HOME_PREFIXES.some(prefix => relative.startsWith(prefix))) {
-				return true;
-			}
-		}
-
-		return false;
+		return this.chatPromptFileService.skills.map(s => ({
+			uri: s.uri,
+			type: vscode.ChatSessionCustomizationType.Skill,
+			name: deriveNameFromUri(s.uri, SKILL_FILENAME),
+		}));
 	}
 }
 
