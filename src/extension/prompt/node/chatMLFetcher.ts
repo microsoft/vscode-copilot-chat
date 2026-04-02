@@ -22,7 +22,7 @@ import { collectSingleLineErrorMessage, ILogService } from '../../../platform/lo
 import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { FinishedCallback, getRequestId, IResponseDelta, OptionalChatRequestParams, RequestId } from '../../../platform/networking/common/fetch';
 import { FetcherId, IFetcherService, Response } from '../../../platform/networking/common/fetcherService';
-import { getInteractionTypeForRequestKind, IBackgroundRequestOptions, IChatEndpoint, IEndpointBody, ISubagentRequestOptions, postRequest, stringifyUrlOrRequestMetadata } from '../../../platform/networking/common/networking';
+import { IBackgroundRequestOptions, IChatEndpoint, IEndpointBody, ISubagentRequestOptions, postRequest, stringifyUrlOrRequestMetadata } from '../../../platform/networking/common/networking';
 import { CAPIChatMessage, ChatCompletion, FilterReason, FinishedCompletionReason, rawMessageToCAPI } from '../../../platform/networking/common/openai';
 import { sendEngineMessagesTelemetry } from '../../../platform/networking/node/chatStream';
 import { CAPIWebSocketErrorEvent, IChatWebSocketManager, isCAPIWebSocketError } from '../../../platform/networking/node/chatWebSocketManager';
@@ -1044,7 +1044,11 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		requestKindOptions: IBackgroundRequestOptions | ISubagentRequestOptions | undefined,
 	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled }> {
 		const intent = locationToIntent(location);
-		const agentInteractionType = getInteractionTypeForRequestKind(requestKindOptions) ?? (intent === 'conversation-agent' ? intent : undefined);
+		const agentInteractionType = requestKindOptions?.kind === 'subagent' ?
+			'conversation-subagent' :
+			requestKindOptions?.kind === 'background' ?
+				'conversation-background' :
+				intent === 'conversation-agent' ? intent : undefined;
 		const additionalHeaders: Record<string, string> = {
 			'Authorization': `Bearer ${secretKey}`,
 			'X-Request-Id': ourRequestId,
