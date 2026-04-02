@@ -9,65 +9,6 @@ import { IEnvService } from '../../env/common/envService';
 import { IFetcherService, NO_FETCH_TELEMETRY } from '../../networking/common/fetcherService';
 import { LICENSE_AGREEMENT } from './licenseAgreement';
 
-
-// const copilotToken = new FetchedBackValue<T>();
-
-
-// // Maybe PollingFetcher?
-
-// // Handles retry after
-// // Err codes
-// class SmartFetcher() {
-// 	// etags
-// 	// 304
-
-// }
-
-// class FetchedValue<T> {
-
-// 	private _lastFetched: number | undefined;
-// 	private _lastSuccessfulFetch: number | undefined;
-
-// 	private _value: T | undefined;
-
-// 	constructor(
-// 		private _fetch: () => Promise<T>,
-// 		private _isStale: (value: T) => boolean
-// 	) {
-// 	}
-
-// 	get lastFetched(): number {
-// 		return this._lastSuccessfulFetch;
-// 	}
-
-// 	get value(): T | undefined {
-// 		return this._value;
-// 	}
-
-
-// 	resolve(): Promise<T> {
-// 		if (this._isStale(this._value)) {
-// 			// fetch here
-// 		} else {
-// 			return this.value;
-// 		}
-// 	}
-
-// }
-
-
-// const poller = this._register(new PollingFetcher(fetchCallback, interval: () => number | number));
-
-// //
-
-// pollFetcher(fetchCallBack(): () => Promise<void>, interval: () => number | number) {
-
-// }
-
-// fetchAsJson(fetcherServiec: IFetcherService, url: string, options ?: RequestInit): Promise < JSON | Error > {
-
-// }
-
 /**
  * Interface for CAPI client service
  */
