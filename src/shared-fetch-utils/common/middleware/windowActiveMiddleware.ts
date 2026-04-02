@@ -23,7 +23,8 @@ export function windowActiveMiddleware(provider: WindowStateProvider): FetchMidd
 			return returnCopy;
 		}
 		const response = await next(request);
-		lastResponse = response;
-		return response;
+		const [returnCopy, keepCopy] = cloneResponse(response);
+		lastResponse = keepCopy;
+		return returnCopy;
 	};
 }
