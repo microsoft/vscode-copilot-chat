@@ -1097,7 +1097,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
 			} else if (request.command && !request.prompt && !isNewSession) {
 				const input = (copilotCLICommands as readonly string[]).includes(request.command)
-					? { command: request.command as CopilotCLICommand }
+					? { command: request.command as CopilotCLICommand, prompt: '' }
 					: { prompt: `/${request.command}` };
 				await session.object.handleRequest(request, input, [], model, authInfo, token);
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
@@ -1109,7 +1109,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			} else {
 				// Construct the full prompt with references to be sent to CLI.
 				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.workspace, [], token);
-				await session.object.handleRequest(request, { prompt }, attachments, model, authInfo, token);
+				const input = (request.command && (copilotCLICommands as readonly string[]).includes(request.command))
+					? { command: request.command as CopilotCLICommand, prompt }
+					: { prompt: prompt };
+				await session.object.handleRequest(request, input, attachments, model, authInfo, token);
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
 			}
 

@@ -23,8 +23,7 @@ import { extUriBiasedIgnorePathCase, isEqual } from '../../../../util/vs/base/co
 import { truncate } from '../../../../util/vs/base/common/strings';
 import { ThemeIcon } from '../../../../util/vs/base/common/themables';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, LanguageModelTextPart, Uri } from '../../../../vscodeTypes';
-import { ToolName } from '../../../tools/common/toolNames';
+import { ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { IChatSessionMetadataStore } from '../../common/chatSessionMetadataStore';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
@@ -34,18 +33,18 @@ import { getCopilotCLISessionStateDir } from './cliHelpers';
 import type { CopilotCliBridgeSpanProcessor } from './copilotCliBridgeSpanProcessor';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
 import { PermissionRequest, requestPermission, requiresFileEditconfirmation } from './permissionHelpers';
-import { IUserQuestionHandler, UserInputRequest } from './userInputHelpers';
+import { IQuestion, IUserQuestionHandler } from './userInputHelpers';
 
 /**
  * Known commands that can be sent to a CopilotCLI session instead of a free-form prompt.
  */
-export type CopilotCLICommand = 'compact';
+export type CopilotCLICommand = 'compact' | 'plan' | 'fleet';
 
 /**
  * The set of all known CopilotCLI commands.  Used by callers that need to
  * distinguish a slash-command from a regular prompt at runtime.
  */
-export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact'] as const;
+export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact', 'plan', 'fleet'] as const;
 
 export const builtinSlashSCommands = {
 	commit: '/commit',
@@ -59,11 +58,15 @@ export const builtinSlashSCommands = {
  * Either a free-form prompt **or** a known command.
  */
 export type CopilotCLISessionInput =
-	| { readonly prompt: string; plan?: boolean }
-	| { readonly command: CopilotCLICommand };
+	| { readonly prompt: string }
+	| { readonly prompt?: string; readonly command: CopilotCLICommand };
 
 function getPromptLabel(input: CopilotCLISessionInput): string {
-	return 'prompt' in input ? input.prompt : `/${input.command}`;
+	if ('command' in input) {
+		const prompt = input.prompt ?? '';
+		return prompt ? `/${input.command} ${prompt}` : `/${input.command}`;
+	}
+	return input.prompt;
 }
 
 export interface ICopilotCLISession extends IDisposable {
@@ -421,12 +424,20 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			})));
 			if (shouldHandleExitPlanModeRequests) {
 				disposables.add(toDisposable(this._sdkSession.on('exit_plan_mode.requested', async (event) => {
+					type ActionType = Parameters<NonNullable<SessionOptions['onExitPlanMode']>>[0]['actions'][number];
 					if (this._permissionLevel === 'autopilot') {
 						this.logService.trace('[CopilotCLISession] Auto-approving exit plan mode in autopilot');
-						type ActionType = Parameters<NonNullable<SessionOptions['onExitPlanMode']>>[0]['actions'][number];
 						const choices: ActionType[] = (event.data.actions as ActionType[]) ?? [];
+						if (event.data.recommendedAction && choices.includes(event.data.recommendedAction as ActionType)) {
+							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, selectedAction: event.data.recommendedAction as ActionType, autoApproveEdits: true });
+							return;
+						}
 						if (choices.includes('autopilot')) {
 							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, selectedAction: 'autopilot', autoApproveEdits: true });
+							return;
+						}
+						if (choices.includes('autopilot_fleet')) {
+							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, selectedAction: 'autopilot_fleet', autoApproveEdits: true });
 							return;
 						}
 						if (choices.includes('interactive')) {
@@ -445,25 +456,39 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: false });
 						return;
 					}
-					const params = {
-						title: l10n.t('Approve this plan?'),
-						message: event.data.summary,
-						confirmationType: 'basic' as const,
+					const actionDescriptions: Record<ActionType, string> = {
+						'autopilot': l10n.t('Auto-approve all tool calls and continue until the task is done'),
+						'interactive': l10n.t('Let the agent continue in interactive mode, asking for user input and approval for each action.'),
+						'exit_only': l10n.t('Exit plan mode, but do not execute the plan. I will execute the plan myself after reviewing it.'),
+						'autopilot_fleet': l10n.t('Auto-approve all tool calls, including fleet management actions, and continue until the task is done.'),
 					};
 
-					let approved = true;
+					const approved = true;
+					event.data.actions;
 					try {
-						const result = await this._toolsService.invokeTool(ToolName.CoreConfirmationTool, {
-							input: params,
-							toolInvocationToken: this._toolInvocationToken,
-						}, CancellationToken.None);
-
-						const firstResultPart = result.content.at(0);
-						approved = firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes';
-						const autoApproveEdits = approved && this._permissionLevel === 'autoApprove' ? true : undefined;
-						if (approved) {
-							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved, selectedAction: 'exit_only', autoApproveEdits });
+						const userInputRequest: IQuestion = {
+							question: l10n.t('Approve this plan?'),
+							header: l10n.t('Approve this plan?'),
+							options: event.data.actions.map(a => ({ label: (actionDescriptions as Record<string, string>)[a] ?? a, recommended: a === event.data.recommendedAction })),
+							allowFreeformInput: true,
+						};
+						const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, this._toolInvocationToken as unknown as never, token);
+						flushPendingInvocationMessages();
+						if (!answer) {
+							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: false });
 							return;
+						}
+						if (answer.freeText) {
+							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: false, feedback: answer.freeText });
+						} else {
+							let selectedAction: ActionType = answer.selected[0] as ActionType;
+							Object.entries(actionDescriptions).forEach(([action, description]) => {
+								if (description === selectedAction) {
+									selectedAction = action as ActionType;
+								}
+							});
+							const autoApproveEdits = approved && this._permissionLevel === 'autoApprove' ? true : undefined;
+							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, selectedAction, autoApproveEdits });
 						}
 					} catch (error) {
 						this.logService.error(error, '[ConfirmationTool] Error showing confirmation tool for exit plan mode');
@@ -484,10 +509,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
 					return;
 				}
-				const userInputRequest: UserInputRequest = {
+				const userInputRequest: IQuestion = {
 					question: event.data.question,
-					choices: event.data.choices,
-					allowFreeform: event.data.allowFreeform,
+					options: (event.data.choices ?? []).map(c => ({ label: c })),
+					allowFreeformInput: event.data.allowFreeform,
+					header: event.data.question,
 				};
 				const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, this._toolInvocationToken as unknown as never, token);
 				flushPendingInvocationMessages();
@@ -495,7 +521,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
 					return;
 				}
-				this._sdkSession.respondToUserInput(event.data.requestId, answer);
+				if (answer.freeText) {
+					this._sdkSession.respondToUserInput(event.data.requestId, { answer: answer.freeText, wasFreeform: true });
+				} else {
+					this._sdkSession.respondToUserInput(event.data.requestId, { answer: answer.selected.join(', '), wasFreeform: false });
+				}
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('session.title_changed', (event) => {
 				this._title = event.data.title;
@@ -751,7 +781,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const prompt = getPromptLabel(input);
 		this._logRequest(prompt, this._lastUsedModel || '', attachments, logStartTime);
 
-		if ('command' in input) {
+		if ('command' in input && input.command !== 'plan') {
 			switch (input.command) {
 				case 'compact': {
 					this._stream?.progress(l10n.t('Compacting conversation...'));
@@ -765,20 +795,49 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					}
 					break;
 				}
+				case 'fleet': {
+					await this._startFleetAndWaitForIdle(input);
+					break;
+				}
 			}
 		} else {
-			if (input.plan) {
+			if ('command' in input && input.command === 'plan') {
 				this._sdkSession.currentMode = 'plan';
 			} else if (this._permissionLevel === 'autopilot') {
 				this._sdkSession.currentMode = 'autopilot';
 			} else {
 				this._sdkSession.currentMode = 'interactive';
 			}
-			const sendOptions: SendOptions = { prompt: input.prompt, attachments, agentMode: this._sdkSession.currentMode };
+			const sendOptions: SendOptions = { prompt: input.prompt ?? '', attachments, agentMode: this._sdkSession.currentMode };
 			if (steering) {
 				sendOptions.mode = 'immediate';
 			}
 			await this._sdkSession.send(sendOptions);
+		}
+	}
+
+	private async _startFleetAndWaitForIdle(input: CopilotCLISessionInput): Promise<void> {
+		const prompt = 'prompt' in input ? input.prompt : undefined;
+		try {
+			const promise = new Promise<void>((resolve) => {
+				const off = this._sdkSession.on('session.idle', () => {
+					resolve();
+					off();
+				});
+			});
+			if (this._permissionLevel === 'autopilot') {
+				this._sdkSession.currentMode = 'autopilot';
+			} else {
+				this._sdkSession.currentMode = 'interactive';
+			}
+			const result = await this._sdkSession.fleet.start({ prompt });
+			if (!result.started) {
+				this.logService.info('[CopilotCLISession] Fleet mode not started');
+				return;
+			}
+			await promise;
+		} catch (error) {
+			this.logService.error(`[CopilotCLISession] Fleet error: ${error}`);
 		}
 	}
 

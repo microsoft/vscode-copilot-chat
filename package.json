@@ -6060,6 +6060,16 @@
 					{
 						"name": "compact",
 						"description": "%github.copilot.command.cli.compact.description%"
+					},
+					{
+						"name": "plan",
+						"description": "%github.copilot.command.cli.plan.description%",
+						"when": "config.github.copilot.chat.cli.planExitMode.enabled"
+					},
+					{
+						"name": "fleet",
+						"description": "%github.copilot.command.cli.fleet.description%",
+						"when": "config.github.copilot.chat.cli.planExitMode.enabled"
 					}
 				],
 				"customAgentTarget": "github-copilot",
@@ -6237,7 +6247,7 @@
 		"@vscode/lsif-language-service": "^0.1.0-pre.4",
 		"@vscode/test-cli": "^0.0.11",
 		"@vscode/test-electron": "^2.5.2",
-		"@vscode/test-web": "^0.0.80",
+		"@vscode/test-web": "^0.0.71",
 		"@vscode/vsce": "3.6.0",
 		"agent-browser": "^0.16.3",
 		"copyfiles": "^2.4.1",
