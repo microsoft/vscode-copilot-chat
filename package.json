@@ -3770,20 +3770,6 @@
 							"clear-both"
 						]
 					},
-					"github.copilot.chat.anthropic.promptOptimization": {
-						"type": "string",
-						"default": "control",
-						"markdownDescription": "%github.copilot.config.anthropic.promptOptimization%",
-						"tags": [
-							"experimental",
-							"onExp"
-						],
-						"enum": [
-							"control",
-							"combined",
-							"split"
-						]
-					},
 					"github.copilot.chat.responsesApiReasoningSummary": {
 						"type": "string",
 						"default": "detailed",
