@@ -761,8 +761,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					span.setAttribute(GenAiAttr.REQUEST_MODEL, endpoint.model);
 				} catch { /* endpoint not available yet, will be set on response */ }
 
-				// Always capture user input message for the debug panel
-				{
+				// Capture user input message — gated by captureContent to prevent OTLP leakage
+				if (this._otelService.config.captureContent) {
 					const userMessage = this.turn.request.message;
 					span.setAttribute(GenAiAttr.INPUT_MESSAGES, truncateForOTel(JSON.stringify([
 						{ role: 'user', parts: [{ type: 'text', content: userMessage }] }
@@ -800,8 +800,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						[GenAiAttr.USAGE_OUTPUT_TOKENS]: totalOutputTokens,
 						...(lastResolvedModel ? { [GenAiAttr.RESPONSE_MODEL]: lastResolvedModel } : {}),
 					});
-					// Always capture agent output message and tool definitions for the debug panel
-					{
+					if (this._otelService.config.captureContent) {
 						const lastRound = result.toolCallRounds.at(-1);
 						if (lastRound?.response) {
 							const responseText = Array.isArray(lastRound.response) ? lastRound.response.join('') : lastRound.response;

@@ -278,8 +278,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					}
 				}
 
-				// Always capture full request content for the debug panel
-				if (otelInferenceSpan) {
+				// Capture full request content — gated by captureContent to prevent OTLP leakage
+				if (otelInferenceSpan && this._otelService.config.captureContent) {
 					const capiMessages = (requestBody.messages ?? requestBody.input) as ReadonlyArray<{ role?: string; content?: string | unknown[] }> | undefined;
 					if (capiMessages) {
 						// Normalize non-string content (Anthropic arrays, Responses API parts) to strings for OTel schema
