@@ -13,7 +13,7 @@ import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
 
 export interface RouterDecisionResponse {
-	predicted_label: 'needs_reasoning' | 'no_reasoning';
+	predicted_label: 'needs_reasoning' | 'no_reasoning' | 'fallback';
 	confidence: number;
 	latency_ms: number;
 	candidate_models: string[];
@@ -22,6 +22,12 @@ export interface RouterDecisionResponse {
 		no_reasoning: number;
 	};
 	sticky_override?: boolean;
+	routing_method?: string;
+	fallback?: boolean;
+	fallback_reason?: string;
+	hydra_scores?: Record<string, number>;
+	chosen_model?: string;
+	chosen_shortfall?: number;
 }
 
 export interface RoutingContextSignals {
@@ -48,7 +54,7 @@ export class RouterDecisionFetcher {
 	) {
 	}
 
-	async getRouterDecision(query: string, autoModeToken: string, availableModels: string[], stickyThreshold?: number, contextSignals?: RoutingContextSignals, conversationId?: string, vscodeRequestId?: string): Promise<RouterDecisionResponse> {
+	async getRouterDecision(query: string, autoModeToken: string, availableModels: string[], stickyThreshold?: number, contextSignals?: RoutingContextSignals, conversationId?: string, vscodeRequestId?: string, routingMethod?: string): Promise<RouterDecisionResponse> {
 		const startTime = Date.now();
 		const requestBody: Record<string, unknown> = { prompt: query, available_models: availableModels, ...contextSignals };
 		if (stickyThreshold !== undefined) {
@@ -79,7 +85,7 @@ export class RouterDecisionFetcher {
 		const text = await response.text();
 		const result: RouterDecisionResponse = JSON.parse(text);
 		const e2eLatencyMs = Date.now() - startTime;
-		this._logService.trace(`[RouterDecisionFetcher] Prediction: ${result.predicted_label}, (confidence: ${(result.confidence * 100).toFixed(1)}%, scores: needs_reasoning=${(result.scores.needs_reasoning * 100).toFixed(1)}%, no_reasoning=${(result.scores.no_reasoning * 100).toFixed(1)}%) (latency_ms: ${result.latency_ms}, e2e_latency_ms: ${e2eLatencyMs}, candidate models: ${result.candidate_models.join(', ')}, sticky_override: ${result.sticky_override ?? false})`);
+		this._logService.trace(`[RouterDecisionFetcher] Prediction: ${result.predicted_label}, (confidence: ${(result.confidence * 100).toFixed(1)}%, scores: needs_reasoning=${(result.scores.needs_reasoning * 100).toFixed(1)}%, no_reasoning=${(result.scores.no_reasoning * 100).toFixed(1)}%) (latency_ms: ${result.latency_ms}, e2e_latency_ms: ${e2eLatencyMs}, candidate models: ${result.candidate_models.join(', ')}, sticky_override: ${result.sticky_override ?? false}, routing_method: ${result.routing_method ?? 'n/a'}, fallback: ${result.fallback ?? false})`);
 
 		this._requestLogger.addEntry({
 			type: LoggedRequestKind.MarkdownContentRequest,
