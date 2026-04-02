@@ -313,6 +313,58 @@ describe('CopilotCLICustomizationProvider', () => {
 			const items = await provider.provideChatSessionCustomizations(undefined!);
 			expect(items).toHaveLength(3);
 		});
+
+		it('deduplicates CLI agents that resolve to the same file URI', async () => {
+			const fileUri = URI.file('/workspace/.github/agents/apple-docs.agent.md');
+			mockPromptFileService.setCustomAgents([{ uri: fileUri }]);
+			// Two CLI agents with different names that both normalize to 'appledocs'
+			mockCopilotCLIAgents.setAgents([
+				makeSweAgent('apple_docs', 'SDK agent'),
+				makeSweAgent('apple-docs', 'Prompt file agent'),
+			]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const agentItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Agent);
+			expect(agentItems).toHaveLength(1);
+			expect(agentItems[0].uri).toEqual(fileUri);
+		});
+
+		it('does not match CLI agents to files via prefix (exact only)', async () => {
+			const fileUri = URI.file('/workspace/.github/agents/test.agent.md');
+			mockPromptFileService.setCustomAgents([{ uri: fileUri }]);
+			// 'test_runner' normalizes to 'testrunner' which starts with 'test' but is not exact
+			mockCopilotCLIAgents.setAgents([makeSweAgent('test_runner', 'Runs tests')]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const agentItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Agent);
+			// test_runner gets synthetic URI (no match), test.agent.md added from unmatched files
+			expect(agentItems).toHaveLength(2);
+			expect(agentItems.find(a => a.uri.scheme === 'copilotcli')).toBeDefined();
+			expect(agentItems.find(a => a.uri.toString() === fileUri.toString())).toBeDefined();
+		});
+
+		it('filters unmatched file agents by isCLIPath', async () => {
+			// .claude/ is NOT a CLI path — should be filtered out
+			mockPromptFileService.setCustomAgents([
+				{ uri: URI.file('/workspace/.claude/agents/printer.md') },
+			]);
+			mockCopilotCLIAgents.setAgents([]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			expect(items).toHaveLength(0);
+		});
+
+		it('includes unmatched file agents from CLI paths', async () => {
+			mockPromptFileService.setCustomAgents([
+				{ uri: URI.file('/workspace/.github/agents/custom.agent.md') },
+			]);
+			mockCopilotCLIAgents.setAgents([]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const agentItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Agent);
+			expect(agentItems).toHaveLength(1);
+			expect(agentItems[0].name).toBe('custom');
+		});
 	});
 
 	describe('onDidChange', () => {
