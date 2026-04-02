@@ -196,7 +196,7 @@ export interface IMakeChatRequestOptions {
 	 * Options for the kind of request being made (e.g. subagent). Controls the X-Interaction-Type header.
 	 * See notes on each interface.
 	 */
-	requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions | ISystemInitiatedRequestOptions;
+	requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions;
 }
 
 export type IChatRequestTelemetryProperties = {
@@ -332,7 +332,7 @@ export interface INetworkRequestOptions {
 	readonly useFetcher?: FetcherId;
 	readonly canRetryOnce?: boolean;
 	readonly location?: ChatLocation;
-	readonly requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions | ISystemInitiatedRequestOptions;
+	readonly requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions;
 }
 
 /**
@@ -350,24 +350,15 @@ export interface ISubagentRequestOptions {
 }
 
 /**
- * A system-initiated request is one triggered automatically by VS Code (e.g. terminal command completion)
- * rather than by the user typing a message. Used to set a distinct X-Interaction-Type header for billing.
- */
-export interface ISystemInitiatedRequestOptions {
-	readonly kind: 'system-initiated';
-}
-
-/**
  * Maps request kind options to the corresponding X-Interaction-Type header value.
  * Returns `undefined` when no special request kind is set.
  */
 export function getInteractionTypeForRequestKind(
-	requestKindOptions: IBackgroundRequestOptions | ISubagentRequestOptions | ISystemInitiatedRequestOptions | undefined,
+	requestKindOptions: IBackgroundRequestOptions | ISubagentRequestOptions | undefined,
 ): string | undefined {
 	switch (requestKindOptions?.kind) {
 		case 'subagent': return 'conversation-subagent';
 		case 'background': return 'conversation-background';
-		case 'system-initiated': return 'conversation-system-initiated';
 		default: return undefined;
 	}
 }

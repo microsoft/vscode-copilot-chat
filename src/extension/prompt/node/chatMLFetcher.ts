@@ -22,7 +22,7 @@ import { collectSingleLineErrorMessage, ILogService } from '../../../platform/lo
 import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { FinishedCallback, getRequestId, IResponseDelta, OptionalChatRequestParams, RequestId } from '../../../platform/networking/common/fetch';
 import { FetcherId, IFetcherService, Response } from '../../../platform/networking/common/fetcherService';
-import { getInteractionTypeForRequestKind, IBackgroundRequestOptions, IChatEndpoint, IEndpointBody, ISubagentRequestOptions, ISystemInitiatedRequestOptions, postRequest, stringifyUrlOrRequestMetadata } from '../../../platform/networking/common/networking';
+import { getInteractionTypeForRequestKind, IBackgroundRequestOptions, IChatEndpoint, IEndpointBody, ISubagentRequestOptions, postRequest, stringifyUrlOrRequestMetadata } from '../../../platform/networking/common/networking';
 import { CAPIChatMessage, ChatCompletion, FilterReason, FinishedCompletionReason, rawMessageToCAPI } from '../../../platform/networking/common/openai';
 import { sendEngineMessagesTelemetry } from '../../../platform/networking/node/chatStream';
 import { CAPIWebSocketErrorEvent, IChatWebSocketManager, isCAPIWebSocketError } from '../../../platform/networking/node/chatWebSocketManager';
@@ -841,7 +841,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		telemetryProperties?: TelemetryProperties | undefined,
 		useFetcher?: FetcherId,
 		canRetryOnce?: boolean,
-		requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions | ISystemInitiatedRequestOptions,
+		requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions,
 	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number; suspendEventSeen?: boolean; resumeEventSeen?: boolean; otelSpan?: ISpanHandle }> {
 		const isPowerSaveBlockerEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.ChatRequestPowerSaveBlocker, this._experimentationService);
 		const blockerHandle = isPowerSaveBlockerEnabled && location !== ChatLocation.Other ? this._powerService.acquirePowerSaveBlocker() : undefined;
@@ -914,7 +914,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		telemetryProperties?: TelemetryProperties | undefined,
 		useFetcher?: FetcherId,
 		canRetryOnce?: boolean,
-		requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions | ISystemInitiatedRequestOptions,
+		requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions,
 	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number; otelSpan?: ISpanHandle }> {
 
 		if (cancellationToken.isCancellationRequested) {
@@ -1041,7 +1041,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		cancellationToken: CancellationToken,
 		userInitiatedRequest: boolean | undefined,
 		telemetryProperties: TelemetryProperties | undefined,
-		requestKindOptions: IBackgroundRequestOptions | ISubagentRequestOptions | ISystemInitiatedRequestOptions | undefined,
+		requestKindOptions: IBackgroundRequestOptions | ISubagentRequestOptions | undefined,
 	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled }> {
 		const intent = locationToIntent(location);
 		const agentInteractionType = getInteractionTypeForRequestKind(requestKindOptions) ?? (intent === 'conversation-agent' ? intent : undefined);
@@ -1215,7 +1215,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		telemetryProperties: TelemetryProperties | undefined,
 		useFetcher: FetcherId | undefined,
 		canRetryOnce: boolean | undefined,
-		requestKindOptions: IBackgroundRequestOptions | ISubagentRequestOptions | ISystemInitiatedRequestOptions | undefined,
+		requestKindOptions: IBackgroundRequestOptions | ISubagentRequestOptions | undefined,
 	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number }> {
 		// Generate unique ID to link input and output messages
 		const modelCallId = generateUuid();
@@ -1329,7 +1329,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		telemetryProperties?: TelemetryProperties,
 		useFetcher?: FetcherId,
 		canRetryOnce?: boolean,
-		requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions | ISystemInitiatedRequestOptions,
+		requestKindOptions?: IBackgroundRequestOptions | ISubagentRequestOptions,
 	): Promise<Response> {
 
 		// If request contains an image, we include this header.
