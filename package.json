@@ -4026,6 +4026,16 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.edits.batchReplaceStringDescriptions": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "Update tool descriptions to promote `multi_replace_string_in_file` as the primary multi-edit tool.",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.projectLabels.expanded": {
 						"type": "boolean",
 						"default": false,
