@@ -159,34 +159,22 @@ function getModelCapabilitiesDescription(endpoint: IChatEndpoint): string | unde
 	return undefined;
 }
 
-// Vendor base offsets for model picker ordering
-const VENDOR_PRIORITY_BASE: Record<string, number> = {
-	'openai': 100,
-	'anthropic': 200,
-	'google': 300,
-};
-const VENDOR_PRIORITY_OTHER = 400;
-
-// Featured models that should appear at the very top (after Auto)
-const FEATURED_MODEL_PRIORITY: Record<string, number> = {
-	'gpt-5.4': 0,
-	'gpt-5.4-mini': 1,
-	'claude-opus-4.6': 2,
-	'claude-sonnet-4.6': 3,
-};
-
 /**
  * Returns a numeric priority for ordering in the model picker.
- * Featured models get the lowest values (appear first), then
- * remaining models are grouped by vendor: OpenAI → Anthropic → Gemini → others.
+ * Lower values appear first. Top-level featuring remains controlled by
+ * VS Code's models control manifest; this priority only affects ordering.
  */
-function getVendorPriority(modelId: string, modelProvider: string): number {
-	const featured = FEATURED_MODEL_PRIORITY[modelId];
-	if (featured !== undefined) {
-		return featured;
+function getVendorPriority(modelProvider: string): number {
+	switch (modelProvider.toLowerCase()) {
+		case 'openai':
+			return 0;
+		case 'anthropic':
+			return 1;
+		case 'google':
+			return 2;
+		default:
+			return 3;
 	}
-	const vendor = modelProvider.toLowerCase();
-	return VENDOR_PRIORITY_BASE[vendor] ?? VENDOR_PRIORITY_OTHER;
 }
 
 export class LanguageModelAccess extends Disposable implements IExtensionContribution {
@@ -267,7 +255,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		}
 
 		const models: vscode.LanguageModelChatInformation[] = [];
-		const vendorOrderingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.ModelPickerVendorOrdering, this._expService);
+		const vendorOrderingEnabled = this._configurationService.getConfig(ConfigKey.ModelPickerVendorOrdering);
 		const allEndpoints = await this._endpointProvider.getAllChatEndpoints();
 		const chatEndpoints = allEndpoints.filter(e => e.showInModelPicker || e.model === 'gpt-4o-mini');
 		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, allEndpoints);
@@ -370,7 +358,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 					[ApiChatLocation.Editor]: endpoint instanceof AutoChatEndpoint, // inline chat gets 'Auto' by default
 				},
 				isUserSelectable: endpoint.showInModelPicker,
-				vendorPriority: vendorOrderingEnabled && !(endpoint instanceof AutoChatEndpoint) ? getVendorPriority(endpoint.model, endpoint.modelProvider) : undefined,
+				vendorPriority: vendorOrderingEnabled && !(endpoint instanceof AutoChatEndpoint) ? getVendorPriority(endpoint.modelProvider) : undefined,
 				capabilities: {
 					imageInput: endpoint instanceof AutoChatEndpoint ? true : endpoint.supportsVision,
 					toolCalling: endpoint.supportsToolCalls,
