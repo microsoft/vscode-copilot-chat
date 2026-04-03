@@ -3231,15 +3231,6 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.anthropic.thinking.forceExtendedThinking": {
-						"type": "boolean",
-						"markdownDescription": "%github.copilot.config.anthropic.thinking.forceExtendedThinking%",
-						"default": false,
-						"tags": [
-							"preview",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.backgroundCompaction": {
 						"type": "boolean",
 						"default": false,

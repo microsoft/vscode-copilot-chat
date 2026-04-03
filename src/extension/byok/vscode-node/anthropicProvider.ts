@@ -237,8 +237,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 			// Check if model supports adaptive thinking
 			const modelCapabilities = this._knownModels?.[model.id];
-			const forceNonAdaptive = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicForceExtendedThinking, this._experimentationService);
-			const supportsAdaptiveThinking = (modelCapabilities?.adaptiveThinking ?? false) && !forceNonAdaptive;
+			const supportsAdaptiveThinking = modelCapabilities?.adaptiveThinking ?? false;
 
 			// Build context management configuration
 			const thinkingEnabled = supportsAdaptiveThinking || (thinkingBudget ?? 0) > 0;
@@ -251,8 +250,6 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 			// Build betas array for beta API features (adaptive thinking doesn't need interleaved-thinking beta)
 			const betas: string[] = [];
 			if (thinkingBudget && !supportsAdaptiveThinking) {
-				betas.push('interleaved-thinking-2025-05-14');
-			} else if (forceNonAdaptive && (modelCapabilities?.adaptiveThinking ?? false)) {
 				betas.push('interleaved-thinking-2025-05-14');
 			}
 			if (hasMemoryTool || contextManagement) {
