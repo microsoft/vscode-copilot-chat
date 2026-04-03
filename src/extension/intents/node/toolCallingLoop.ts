@@ -890,100 +890,86 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 				// Inline summarization: the model responded with summary text only (no tool calls).
 				// Extract the summary, store it on the appropriate round, and continue the loop.
-				if (result.inlineSummarizationRequested && !result.round.toolCalls.length && result.response.type === ChatFetchResponseType.Success) {
-					const summaryText = extractInlineSummary(result.round.response);
-					if (summaryText) {
-						// Determine which round to mark as summarized.
-						// After push, toolCallRounds = [r0, ..., rK, summaryRound].
-						// Matching SummarizedConversationHistoryPropsBuilder.getProps() which
-						// excludes the last round so it renders verbatim after the summary:
-						// - 3+ rounds: mark rK-1, keep rK (the last real tool calls) verbatim
-						// - 2 rounds: mark rK (no room to preserve anything)
-						// - 1 round (summary only): fall back to history turns
-						const allCurrentRounds = this.toolCallRounds;
-						let summarizedToolCallRoundId: string | undefined;
-						if (allCurrentRounds.length > 2) {
-							// Preserve the last pre-summarization round verbatim
-							summarizedToolCallRoundId = allCurrentRounds[allCurrentRounds.length - 3].id;
-							allCurrentRounds[allCurrentRounds.length - 3].summary = summaryText;
-						} else if (allCurrentRounds.length > 1) {
-							summarizedToolCallRoundId = allCurrentRounds[allCurrentRounds.length - 2].id;
-							allCurrentRounds[allCurrentRounds.length - 2].summary = summaryText;
-						} else {
-							const history = this.options.conversation.turns.slice(0, -1);
-							const lastHistoryTurn = history.at(-1);
-							const lastHistoryRound = lastHistoryTurn?.rounds.at(-1);
-							if (lastHistoryRound) {
-								summarizedToolCallRoundId = lastHistoryRound.id;
-								lastHistoryRound.summary = summaryText;
-							}
-						}
+				if (result.inlineSummarizationRequested && !result.round.toolCalls.length) {
+					if (result.response.type !== ChatFetchResponseType.Success) {
+						this.inlineSummarizationProgressDeferred?.complete(undefined);
+						this.inlineSummarizationProgressDeferred = undefined;
+					} else {
+						const summaryText = extractInlineSummary(result.round.response);
+						if (summaryText) {
+							const summarizedRound = this.applySummaryToRound(summaryText);
 
-						if (summarizedToolCallRoundId) {
-							// Persist summary on the turn so normalizeSummariesOnRounds can restore it
-							const turn = this.turn;
-							const resolvedModel = result.response.type === ChatFetchResponseType.Success ? result.response.resolvedModel : undefined;
-							turn.addPendingSummary(summarizedToolCallRoundId, summaryText);
-							const inlineSummarizationMeta = new SummarizedConversationHistoryMetadata(
-								summarizedToolCallRoundId,
-								summaryText,
-								{
-									usage: result.response.type === ChatFetchResponseType.Success ? result.response.usage : undefined,
+							if (summarizedRound) {
+								// Persist summary on the turn so normalizeSummariesOnRounds can restore it
+								const turn = this.turn;
+								const resolvedModel = result.response.resolvedModel;
+								turn.addPendingSummary(summarizedRound, summaryText);
+								const inlineSummarizationMeta = new SummarizedConversationHistoryMetadata(
+									summarizedRound,
+									summaryText,
+									{
+										usage: result.response.usage,
+										model: resolvedModel,
+										summarizationMode: 'inline',
+										source: 'foreground',
+										outcome: 'success',
+									},
+								);
+								turn.setMetadata(inlineSummarizationMeta);
+
+								// Fire explicit telemetry event matching the existing summarization telemetry
+								/* __GDPR__
+									"summarizedConversationHistory" : {
+										"owner": "bhavyau",
+										"comment": "Tracks inline summarization",
+										"outcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The success state." },
+										"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model ID." },
+										"summarizationMode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The summarization mode." },
+										"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether background or foreground." },
+										"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Session id." },
+										"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Prompt tokens." },
+										"promptCacheTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Cached prompt tokens." },
+										"responseTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Output tokens." }
+									}
+								*/
+								const usage = result.response.usage;
+								this._telemetryService.sendMSFTTelemetryEvent('summarizedConversationHistory', {
+									outcome: 'success',
 									model: resolvedModel,
 									summarizationMode: 'inline',
 									source: 'foreground',
-									outcome: 'success',
-								},
-							);
-							turn.setMetadata(inlineSummarizationMeta);
+									conversationId: this.options.conversation.sessionId,
+								}, {
+									promptTokenCount: usage?.prompt_tokens,
+									promptCacheTokenCount: usage?.prompt_tokens_details?.cached_tokens,
+									responseTokenCount: usage?.completion_tokens,
+								});
 
-							// Fire explicit telemetry event matching the existing summarization telemetry
-							/* __GDPR__
-								"summarizedConversationHistory" : {
-									"owner": "bhavyau",
-									"comment": "Tracks inline summarization",
-									"outcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The success state." },
-									"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model ID." },
-									"summarizationMode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The summarization mode." },
-									"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether background or foreground." },
-									"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Session id." },
-									"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Prompt tokens." },
-									"promptCacheTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Cached prompt tokens." },
-									"responseTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Output tokens." }
-								}
-							*/
-							const usage = result.response.type === ChatFetchResponseType.Success ? result.response.usage : undefined;
-							this._telemetryService.sendMSFTTelemetryEvent('summarizedConversationHistory', {
-								outcome: 'success',
-								model: resolvedModel,
-								summarizationMode: 'inline',
-								source: 'foreground',
-								conversationId: this.options.conversation.sessionId,
-							}, {
-								promptTokenCount: usage?.prompt_tokens,
-								promptCacheTokenCount: usage?.prompt_tokens_details?.cached_tokens,
-								responseTokenCount: usage?.completion_tokens,
-							});
+								this._logService.info(`[ToolCallingLoop] Inline summarization extracted (${summaryText.length} chars, roundId=${summarizedRound}), continuing loop`);
 
-							this._logService.info(`[ToolCallingLoop] Inline summarization extracted (${summaryText.length} chars, roundId=${summarizedToolCallRoundId}), continuing loop`);
+								// Remove the summarization round — it served its purpose
+								// and shouldn't be rendered as an assistant message in
+								// subsequent iterations (otherwise the model sees both
+								// the compacted <conversation-summary> AND the raw
+								// <analysis>...<summary>...</summary> response).
+								this.toolCallRounds.pop();
 
-							// Remove the summarization round — it served its purpose
-							// and shouldn't be rendered as an assistant message in
-							// subsequent iterations (otherwise the model sees both
-							// the compacted <conversation-summary> AND the raw
-							// <analysis>...<summary>...</summary> response).
-							this.toolCallRounds.pop();
-
-							// Resolve the "Compacting conversation..." progress to show "Compacted conversation"
+								// Resolve the "Compacting conversation..." progress to show "Compacted conversation"
+								this.inlineSummarizationProgressDeferred?.complete(undefined);
+								this.inlineSummarizationProgressDeferred = undefined;
+								continue;
+							} else {
+								this._logService.warn(`[ToolCallingLoop] Inline summarization: no round found to store summary on`);
+								this.inlineSummarizationProgressDeferred?.complete(undefined);
+								this.inlineSummarizationProgressDeferred = undefined;
+								// Fall through to normal no-tool-calls handling (will break the loop)
+							}
+						} else {
+							this._logService.warn(`[ToolCallingLoop] Inline summarization requested but no summary extracted from response`);
 							this.inlineSummarizationProgressDeferred?.complete(undefined);
 							this.inlineSummarizationProgressDeferred = undefined;
-						} else {
-							this._logService.warn(`[ToolCallingLoop] Inline summarization: no round found to store summary on`);
+							// Fall through to normal no-tool-calls handling (will break the loop)
 						}
-						continue;
-					} else {
-						this._logService.warn(`[ToolCallingLoop] Inline summarization requested but no summary extracted from response`);
-						// Fall through to normal no-tool-calls handling (will break the loop)
 					}
 				}
 
@@ -1064,6 +1050,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					break;
 				}
 			} catch (e) {
+				this.inlineSummarizationProgressDeferred?.complete(undefined);
+				this.inlineSummarizationProgressDeferred = undefined;
 				if (isCancellationError(e) && lastResult) {
 					break;
 				}
@@ -1507,6 +1495,33 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private createInternalToolCallId(toolCallId: string): string {
 		// Note- if this code is ever removed, these IDs will still exist in persisted session metadata!
 		return toolCallId + `__vscode-${ToolCallingLoop.NextToolCallId++}`;
+	}
+
+	/**
+	 * Finds the appropriate round and applies the summary text to it.
+	 *
+	 * After the summary round is pushed, `toolCallRounds` looks like:
+	 *   [r0, ..., rK, summaryRound]
+	 *
+	 * We want to keep the last real tool-call round (rK) verbatim so the model
+	 * retains context of its most recent actions. The summary replaces everything
+	 * before rK.
+	 *
+	 * @returns The round ID that was marked with the summary, or `undefined` if
+	 *          no suitable round was found.
+	 */
+	private applySummaryToRound(summaryText: string): string | undefined {
+		const rounds = this.toolCallRounds;
+		if (rounds.length > 2) {
+			// 3+ rounds: mark the one before the last real round, preserving rK verbatim
+			rounds[rounds.length - 3].summary = summaryText;
+			return rounds[rounds.length - 3].id;
+		} else if (rounds.length > 1) {
+			// 2 rounds (one real + summaryRound): mark the real round
+			rounds[rounds.length - 2].summary = summaryText;
+			return rounds[rounds.length - 2].id;
+		}
+		return undefined;
 	}
 
 	private applyMessagePostProcessing(messages: Raw.ChatMessage[], options?: { stripOrphanedToolCalls?: boolean }): Raw.ChatMessage[] {

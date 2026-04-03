@@ -62,6 +62,8 @@ import { getAgentMaxRequests } from '../common/agentConfig';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
 
+const INLINE_SUMMARIZATION_BUDGET_EXPANSION = 1.15;
+
 function isResponsesCompactionContextManagementEnabled(endpoint: IChatEndpoint, configurationService: IConfigurationService, experimentationService: IExperimentationService): boolean {
 	return endpoint.apiType === 'responses'
 		&& configurationService.getExperimentBasedConfig(ConfigKey.ResponsesApiContextManagementEnabled, experimentationService)
@@ -582,16 +584,14 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		const renderWithInlineSummarization = async (reason: string, renderProps: AgentPromptProps = props): Promise<RenderPromptResult> => {
 			this.logService.debug(`[Agent] ${reason}, triggering inline summarization`);
 			try {
-				// Expand the budget by 15% so the summarization user message fits
-				// alongside the conversation that just exceeded the normal budget.
-				const expandedEndpoint = renderProps.endpoint.cloneWithTokenOverride(renderProps.endpoint.modelMaxPromptTokens * 1.15);
+				// Expand from the *base* endpoint (not renderProps.endpoint which may already be expanded)
+				const expandedEndpoint = endpoint.cloneWithTokenOverride(endpoint.modelMaxPromptTokens * INLINE_SUMMARIZATION_BUDGET_EXPANSION);
 				const renderer = PromptRenderer.create(this.instantiationService, expandedEndpoint, this.prompt, {
 					...renderProps,
 					endpoint: expandedEndpoint,
 					inlineSummarization: true,
 				});
-				const inlineResult = await renderer.render(progress, token);
-				return inlineResult;
+				return await renderer.render(progress, token);
 			} catch (e) {
 				this.logService.error(e, `[Agent] inline summarization render failed, falling back to separate-call summarization`);
 				return await renderWithSummarization(`inline summarization failed (${e instanceof Error ? e.message : e}), falling back`, renderProps);
@@ -601,13 +601,13 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		const contextLengthBefore = this._lastRenderTokenCount;
 
 		try {
-			const renderProps = proactiveInlineSummarization
-				? { ...props, inlineSummarization: true }
-				: props;
 			const renderEndpoint = proactiveInlineSummarization
-				? endpoint.cloneWithTokenOverride(endpoint.modelMaxPromptTokens * 1.15)
+				? endpoint.cloneWithTokenOverride(endpoint.modelMaxPromptTokens * INLINE_SUMMARIZATION_BUDGET_EXPANSION)
 				: endpoint;
-			const renderer = PromptRenderer.create(this.instantiationService, renderEndpoint, this.prompt, { ...renderProps, endpoint: renderEndpoint });
+			const renderProps: AgentPromptProps = proactiveInlineSummarization
+				? { ...props, endpoint: renderEndpoint, inlineSummarization: true }
+				: props;
+			const renderer = PromptRenderer.create(this.instantiationService, renderEndpoint, this.prompt, renderProps);
 			result = await renderer.render(progress, token);
 		} catch (e) {
 			if (e instanceof BudgetExceededError && summarizationEnabled) {
