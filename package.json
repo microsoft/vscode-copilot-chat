@@ -3034,15 +3034,6 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.modelPickerVendorOrdering": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "Enable vendor-prioritized ordering in the model picker (OpenAI → Anthropic → Gemini → others).",
-						"tags": [
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.customInstructionsInSystemMessage": {
 						"type": "boolean",
 						"default": true,
@@ -3363,6 +3354,15 @@
 							"onExp"
 						],
 						"markdownDescription": "%github.copilot.config.imageUpload.enabled%"
+					},
+					"github.copilot.chat.modelPickerVendorOrdering": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "Enable vendor-prioritized ordering in the model picker (OpenAI → Anthropic → Gemini → others).",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
 					},
 					"github.copilot.chat.codeGeneration.instructions": {
 						"markdownDeprecationMessage": "%github.copilot.config.codeGeneration.instructions.deprecated%",
