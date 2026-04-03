@@ -107,6 +107,7 @@ suite('RepoInfoTelemetry', () => {
 			commit: vi.fn(),
 			getRefs: vi.fn(),
 			getBranch: vi.fn(),
+			getBranchBase: vi.fn(),
 			isBranchProtected: vi.fn(),
 			push: vi.fn(),
 			exec: vi.fn(),

@@ -41,6 +41,11 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 					logService.debug('GitHubMcpDefinitionProvider: Configuration change affects GitHub MCP lockdown mode.');
 					return true;
 				}
+				// If they change the channel
+				if (e.affectsConfiguration(ConfigKey.GitHubMcpChannel.fullyQualifiedId)) {
+					logService.debug('GitHubMcpDefinitionProvider: Configuration change affects GitHub MCP channel.');
+					return true;
+				}
 				// If they change to GHE or GitHub.com
 				if (e.affectsConfiguration(ConfigKey.Shared.AuthProvider.fullyQualifiedId)) {
 					logService.debug('GitHubMcpDefinitionProvider: Configuration change affects GitHub auth provider.');
@@ -82,6 +87,10 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 		return this.configurationService.getConfig<boolean>(ConfigKey.GitHubMcpLockdown);
 	}
 
+	private get channel(): ConfigKey.GitHubMcpChannelValue {
+		return this.configurationService.getConfig<ConfigKey.GitHubMcpChannelValue>(ConfigKey.GitHubMcpChannel);
+	}
+
 	private get gheConfig(): string | undefined {
 		return this.configurationService.getNonExtensionConfig<string>(EnterpriseURLConfig);
 	}
@@ -101,6 +110,7 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 		const toolsets = this.toolsets.sort().join(',');
 		const readonly = this.readonly;
 		const lockdown = this.lockdown;
+		const channel = this.channel;
 		const isSignedIn = !!this.authenticationService.permissiveGitHubSession;
 
 		const basics = providerId === AuthProviderId.GitHubEnterprise
@@ -123,6 +133,10 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 			if (lockdown) {
 				headers['X-MCP-Lockdown'] = 'true';
 				version += '|lockdown';
+			}
+			if (channel === 'insiders') {
+				headers['X-MCP-Insiders'] = 'true';
+				version += '|insiders';
 			}
 		} else {
 			version = 'signedout';

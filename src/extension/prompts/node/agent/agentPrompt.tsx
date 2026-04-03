@@ -57,6 +57,14 @@ export interface AgentPromptProps extends GenericBasePromptElementProps {
 	readonly triggerSummarize?: boolean;
 
 	/**
+	 * When true, appends a summarization instruction as a user message in the
+	 * current agent loop iteration instead of making a separate LLM call.
+	 * The model outputs ONLY a summary (no tool calls) and the loop continues
+	 * with the compacted history on the next iteration.
+	 */
+	readonly inlineSummarization?: boolean;
+
+	/**
 	 * Enables cache breakpoints and summarization
 	 */
 	readonly enableCacheBreakpoints?: boolean;
@@ -143,6 +151,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				<SummarizedConversationHistory
 					flexGrow={1}
 					triggerSummarize={this.props.triggerSummarize}
+					inlineSummarization={this.props.inlineSummarization}
 					priority={900}
 					promptContext={this.props.promptContext}
 					location={this.props.location}
@@ -305,6 +314,8 @@ export interface AgentUserMessageProps extends BasePromptElementProps, AgentUser
 	readonly hasStopHookQuery?: boolean;
 	/** Additional context provided by SubagentStart hooks. */
 	readonly additionalHookContext?: string;
+	/** When true, this request was system-initiated (e.g. terminal completion notification) and should skip context/wrapping. */
+	readonly isSystemInitiated?: boolean;
 }
 
 export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint, customizations?: AgentUserMessageCustomizations): AgentUserMessageProps {
@@ -334,6 +345,7 @@ export function getUserMessagePropsFromAgentProps(agentProps: AgentPromptProps, 
 		editedFileEvents: agentProps.promptContext.editedFileEvents,
 		hasStopHookQuery: agentProps.promptContext.hasStopHookQuery,
 		additionalHookContext: agentProps.promptContext.additionalHookContext,
+		isSystemInitiated: agentProps.promptContext.request?.isSystemInitiated,
 		// TODO:@roblourens
 		sessionId: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionId,
 		sessionResource: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionResource,
@@ -363,6 +375,12 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 
 		if (this.props.isHistorical) {
 			this.logService.trace('Re-rendering historical user message');
+		}
+
+		// System-initiated messages (e.g. terminal completion notifications) are
+		// self-contained and should not be wrapped in <userRequest> or have context re-added.
+		if (this.props.isSystemInitiated) {
+			return <UserMessage>{this.props.request}</UserMessage>;
 		}
 
 		const query = await this.promptVariablesService.resolveToolReferencesInPrompt(this.props.request, this.props.toolReferences ?? []);

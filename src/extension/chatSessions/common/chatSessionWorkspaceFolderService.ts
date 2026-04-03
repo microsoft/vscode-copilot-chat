@@ -5,7 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { WorkspaceFolderEntry } from './chatSessionMetadataStore';
+import { RepositoryProperties, WorkspaceFolderEntry } from './chatSessionMetadataStore';
 import { ChatSessionWorktreeFile } from './chatSessionWorktreeService';
 
 export const IChatSessionWorkspaceFolderService = createServiceIdentifier<IChatSessionWorkspaceFolderService>('IChatSessionWorkspaceFolderService');
@@ -17,16 +17,11 @@ export const IChatSessionWorkspaceFolderService = createServiceIdentifier<IChatS
  */
 export interface IChatSessionWorkspaceFolderService {
 	readonly _serviceBrand: undefined;
-	getRecentFolders(): Promise<{ folder: vscode.Uri; lastAccessTime: number }[]>;
-	/**
-	 * Delete a recent folder from all tracked sessions.
-	 */
-	deleteRecentFolder(folder: vscode.Uri): Promise<void>;
 	deleteTrackedWorkspaceFolder(sessionId: string): Promise<void>;
 	/**
 	 * Track workspace folder selection for a session (for folders without git repos in multi-root workspaces)
 	 */
-	trackSessionWorkspaceFolder(sessionId: string, workspaceFolderUri: string, repositoryFolderUri?: string): Promise<void>;
+	trackSessionWorkspaceFolder(sessionId: string, workspaceFolderUri: string, repositoryProperties?: RepositoryProperties): Promise<void>;
 
 	/**
 	 * Get the workspace folder associated with a session (if a workspace folder without git repo was selected)
@@ -39,20 +34,22 @@ export interface IChatSessionWorkspaceFolderService {
 	getSessionWorkspaceFolderEntry(sessionId: string): Promise<WorkspaceFolderEntry | undefined>;
 
 	/**
-	 * Handle the completion of a request for a session.
-	 * @param workspaceFolderUri
+	 * Get the repository properties associated with a session.
 	 */
-	handleRequestCompleted(workspaceFolderUri: vscode.Uri): Promise<void>;
+	getRepositoryProperties(sessionId: string): Promise<RepositoryProperties | undefined>;
+
+	/**
+	 * Handle the completion of a request for a session.
+	 */
+	handleRequestCompleted(sessionId: string): Promise<void>;
 
 	/**
 	 * Get the changes in the workspace folder for a session.
-	 * @param workspaceFolderUri
 	 */
-	getWorkspaceChanges(workspaceFolderUri: vscode.Uri): Promise<readonly ChatSessionWorktreeFile[] | undefined>;
+	getWorkspaceChanges(sessionId: string): Promise<readonly ChatSessionWorktreeFile[] | undefined>;
 
 	/**
 	 * Clear the cached changes for a workspace folder.
-	 * @param workspaceFolderUri
 	 */
-	clearWorkspaceChanges(workspaceFolderUri: vscode.Uri): void;
+	clearWorkspaceChanges(sessionId: string): void;
 }

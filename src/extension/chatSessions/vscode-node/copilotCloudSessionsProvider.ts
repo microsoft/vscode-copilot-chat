@@ -2564,6 +2564,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 		const payload: RemoteAgentJobPayload = {
 			problem_statement: problemStatement,
+			event_content: prompt,
 			event_type: 'visual_studio_code_remote_agent_tool_invoked',
 			...(customAgentName && customAgentName !== DEFAULT_CUSTOM_AGENT_ID && { custom_agent: customAgentName }),
 			...(modelName && modelName !== DEFAULT_MODEL_ID && { model: modelName }),

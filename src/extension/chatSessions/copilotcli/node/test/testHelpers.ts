@@ -9,7 +9,7 @@ import { Event } from '../../../../../util/vs/base/common/event';
 import { Disposable, IDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../../util/vs/base/common/uuid';
-import { ICopilotCLIAgents } from '../copilotCli';
+import { CLIAgentInfo, ICopilotCLIAgents } from '../copilotCli';
 import { ICopilotCLIImageSupport } from '../copilotCLIImageSupport';
 import { ICopilotCLISkills } from '../copilotCLISkills';
 import { ICopilotCLIMCPHandler } from '../mcpHandler';
@@ -73,7 +73,7 @@ export class MockCliSdkSessionManager {
 export class NullCopilotCLIAgents implements ICopilotCLIAgents {
 	_serviceBrand: undefined;
 	readonly onDidChangeAgents: Event<void> = Event.None;
-	async getAgents(): Promise<SweCustomAgent[]> {
+	async getAgents(): Promise<readonly CLIAgentInfo[]> {
 		return [];
 	}
 	async getSessionAgent(_sessionId: string): Promise<string | undefined> {

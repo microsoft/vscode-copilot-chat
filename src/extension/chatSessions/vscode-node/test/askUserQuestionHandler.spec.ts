@@ -10,8 +10,8 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { LanguageModelTextPart, LanguageModelToolResult, LanguageModelToolResult2 } from '../../../../vscodeTypes';
 import { ICopilotTool } from '../../../tools/common/toolsRegistry';
 import { IToolsService } from '../../../tools/common/toolsService';
+import { IQuestion } from '../../copilotcli/node/userInputHelpers';
 import { IAnswerResult, UserQuestionHandler } from '../askUserQuestionHandler';
-import { UserInputRequest } from '../../copilotcli/node/userInputHelpers';
 
 function makeAskQuestionsTool(invokeResult: LanguageModelToolResult | undefined, resolveInput?: unknown): ICopilotTool<unknown> {
 	return {
@@ -39,10 +39,11 @@ function makeHandler(tool: ICopilotTool<unknown> | undefined) {
 
 const toolInvocationToken = {} as import('vscode').ChatParticipantToolToken;
 
-const question: UserInputRequest = {
+const question: IQuestion = {
+	header: 'What color?',
 	question: 'What color?',
-	choices: ['Red', 'Blue'],
-	allowFreeform: true,
+	options: [{ label: 'Red' }, { label: 'Blue' }],
+	allowFreeformInput: true,
 };
 
 describe('UserQuestionHandler', () => {
@@ -78,10 +79,10 @@ describe('UserQuestionHandler', () => {
 			const tool = makeAskQuestionsTool(new LanguageModelToolResult([new LanguageModelTextPart(JSON.stringify(answers))]));
 			const handler = makeHandler(tool);
 			const result = await handler.askUserQuestion(question, toolInvocationToken, CancellationToken.None);
-			expect(result).toEqual({ answer: 'Purple', wasFreeform: true });
+			expect(result).toEqual({ selected: [], freeText: 'Purple', skipped: false });
 		});
 
-		it('returns joined selections when choices are selected', async () => {
+		it('returns selections when choices are selected', async () => {
 			const answers: IAnswerResult = {
 				answers: {
 					'What color?': { selected: ['Red', 'Blue'], freeText: null, skipped: false }
@@ -90,7 +91,7 @@ describe('UserQuestionHandler', () => {
 			const tool = makeAskQuestionsTool(new LanguageModelToolResult([new LanguageModelTextPart(JSON.stringify(answers))]));
 			const handler = makeHandler(tool);
 			const result = await handler.askUserQuestion(question, toolInvocationToken, CancellationToken.None);
-			expect(result).toEqual({ answer: 'Red, Blue', wasFreeform: false });
+			expect(result).toEqual({ selected: ['Red', 'Blue'], freeText: null, skipped: false });
 		});
 
 		it('returns undefined when answer has no freeText and no selections', async () => {
