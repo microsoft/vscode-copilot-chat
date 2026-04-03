@@ -58,6 +58,8 @@ import { IEditToolLearningService } from '../../tools/common/editToolLearningSer
 import { ContributedToolName, ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
 import { applyPatch5Description } from '../../tools/node/applyPatchTool';
+import { multiReplaceStringPrimaryDescription } from '../../tools/node/multiReplaceStringTool';
+import { replaceStringBatchDescription } from '../../tools/node/replaceStringTool';
 import { getAgentMaxRequests } from '../common/agentConfig';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
@@ -153,6 +155,17 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 		const ap = tools.findIndex(t => t.name === ToolName.ApplyPatch);
 		if (ap !== -1) {
 			tools[ap] = { ...tools[ap], description: applyPatch5Description };
+		}
+	}
+
+	if (configurationService.getExperimentBasedConfig(ConfigKey.Advanced.BatchReplaceStringDescriptions, experimentationService)) {
+		const rs = tools.findIndex(t => t.name === ToolName.ReplaceString);
+		if (rs !== -1) {
+			tools[rs] = { ...tools[rs], description: replaceStringBatchDescription };
+		}
+		const mrs = tools.findIndex(t => t.name === ToolName.MultiReplaceString);
+		if (mrs !== -1) {
+			tools[mrs] = { ...tools[mrs], description: multiReplaceStringPrimaryDescription };
 		}
 	}
 
@@ -523,8 +536,50 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			}
 		}
 
+		// Render the prompt without summarization or cache breakpoints, using
+		// the original endpoint (not reduced for tools/safety buffer).
+		const renderWithoutSummarization = async (reason: string, renderProps: AgentPromptProps = props): Promise<RenderPromptResult> => {
+			this.logService.debug(`[Agent] ${reason}, rendering without summarization`);
+			const renderer = PromptRenderer.create(this.instantiationService, this.endpoint, this.prompt, {
+				...renderProps,
+				endpoint: this.endpoint,
+				enableCacheBreakpoints: false
+			});
+			try {
+				return await renderer.render(progress, token);
+			} catch (e) {
+				if (e instanceof BudgetExceededError) {
+					this.logService.error(e, `[Agent] fallback render failed due to budget exceeded`);
+					const maxTokens = this.endpoint.modelMaxPromptTokens;
+					throw new Error(`Unable to build prompt, modelMaxPromptTokens = ${maxTokens} (${e.message})`);
+				}
+				throw e;
+			}
+		};
+
 		// Helper function for synchronous summarization flow with fallbacks
 		const renderWithSummarization = async (reason: string, renderProps: AgentPromptProps = props): Promise<RenderPromptResult> => {
+			// Check if a previous foreground summarization already failed in this
+			// turn.  The metadata is set on the turn returned by getLatestTurn(),
+			// which is the same turn throughout a single buildPrompt call since
+			// the conversation doesn't advance mid-render.
+			const turn = promptContext.conversation?.getLatestTurn();
+			const previousForegroundSummary = turn?.getMetadata(SummarizedConversationHistoryMetadata);
+			if (previousForegroundSummary?.source === 'foreground' && previousForegroundSummary.outcome && previousForegroundSummary.outcome !== 'success') {
+				this.logService.debug(`[Agent] ${reason}, skipping repeated foreground summarization after prior failure (${previousForegroundSummary.outcome})`);
+				/* __GDPR__
+					"triggerSummarizeSkipped" : {
+						"owner": "bhavyau",
+						"comment": "Tracks when foreground summarization was skipped because a previous attempt already failed in this turn.",
+						"previousOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the previous failed summarization attempt." },
+						"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model ID." }
+					}
+				*/
+				this.telemetryService.sendMSFTTelemetryEvent('triggerSummarizeSkipped', { previousOutcome: previousForegroundSummary.outcome, model: renderProps.endpoint.model });
+				GenAiMetrics.incrementAgentSummarizationCount(this.otelService, 'skipped');
+				return renderWithoutSummarization(`skipping repeated foreground summarization after prior failure (${previousForegroundSummary.outcome})`, renderProps);
+			}
+
 			this.logService.debug(`[Agent] ${reason}, triggering summarization`);
 			try {
 				const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, {
@@ -559,22 +614,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 					},
 				));
 
-				// Something else went wrong, eg summarization failed, so render the prompt with no cache breakpoints, summarization, endpoint not reduced in size for tools or safety buffer
-				const renderer = PromptRenderer.create(this.instantiationService, this.endpoint, this.prompt, {
-					...renderProps,
-					endpoint: this.endpoint,
-					enableCacheBreakpoints: false
-				});
-				try {
-					return await renderer.render(progress, token);
-				} catch (e) {
-					if (e instanceof BudgetExceededError) {
-						this.logService.error(e, `[Agent] final render fallback failed due to budget exceeded`);
-						const maxTokens = this.endpoint.modelMaxPromptTokens;
-						throw new Error(`Unable to build prompt, modelMaxPromptTokens = ${maxTokens} (${e.message})`);
-					}
-					throw e;
-				}
+				return renderWithoutSummarization(`summarization failed (${errorKind})`, renderProps);
 			}
 		};
 

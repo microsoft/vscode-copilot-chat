@@ -20,6 +20,8 @@ export interface IMultiReplaceStringToolParams {
 	replacements: IAbstractReplaceStringInput[];
 }
 
+export const multiReplaceStringPrimaryDescription = 'This is the primary tool for making multiple edits to one or more files. Use this instead of calling replace_string_in_file repeatedly. It takes an array of replacement operations and applies them sequentially. Each replacement operation has the same parameters as replace_string_in_file: filePath, oldString, newString, and explanation. This tool is ideal when you need to make multiple edits across different files or multiple edits in the same file. The tool will provide a summary of successful and failed operations.';
+
 export class MultiReplaceStringTool extends AbstractReplaceStringTool<IMultiReplaceStringToolParams> {
 	public static toolName = ToolName.MultiReplaceString;
 	public static readonly nonDeferred = true;
