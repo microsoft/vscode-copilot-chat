@@ -531,6 +531,8 @@ class SkillAdherenceReminder extends PromptElement<SkillAdherenceReminderProps> 
 	constructor(
 		props: SkillAdherenceReminderProps,
 		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) {
 		super(props);
 	}
@@ -547,8 +549,12 @@ class SkillAdherenceReminder extends PromptElement<SkillAdherenceReminderProps> 
 			return undefined;
 		}
 
+		const loadSkillEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.LoadSkillToolEnabled, this.experimentationService);
+		const skillToolName = loadSkillEnabled ? ToolName.LoadSkill : ToolName.ReadFile;
+		const skillToolVerb = loadSkillEnabled ? 'load' : 'read';
+
 		return <Tag name='additional_skills_reminder'>
-			Always check if any skills apply to the user's request. If so, use the {ToolName.LoadSkill} tool to load the corresponding SKILL.md files. Multiple skill files may be needed for a single request. These files contain best practices built from testing that are needed for high-quality outputs.<br />
+			Always check if any skills apply to the user's request. If so, use the {skillToolName} tool to {skillToolVerb} the corresponding SKILL.md files. Multiple skill files may be needed for a single request. These files contain best practices built from testing that are needed for high-quality outputs.<br />
 		</Tag>;
 	}
 }

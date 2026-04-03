@@ -651,6 +651,7 @@ export namespace ConfigKey {
 		export const SearchSubagentToolCallLimit = defineSetting<number>('chat.searchSubagent.toolCallLimit', ConfigType.ExperimentBased, 4);
 
 		export const ExecutionSubagentToolEnabled = defineSetting<boolean>('chat.executionSubagent.enabled', ConfigType.ExperimentBased, false);
+		export const LoadSkillToolEnabled = defineSetting<boolean>('chat.loadSkill.enabled', ConfigType.ExperimentBased, false);
 		/** Model to use for the execution subagent */
 		export const ExecutionSubagentModel = defineSetting<string>('chat.executionSubagent.model', ConfigType.Simple, '');
 		/** Maximum number of tool calls the execution subagent can make */
