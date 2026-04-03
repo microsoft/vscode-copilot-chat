@@ -243,8 +243,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				// Tag span with debug name so orphaned spans (title, progressMessages, etc.) are identifiable
 				otelInferenceSpan?.setAttribute(GenAiAttr.AGENT_NAME, debugName);
 
-				// Extract and set structured prompt sections for the debug panel
-				if (otelInferenceSpan) {
+				// Extract and set structured prompt sections — gated by captureContent to prevent OTLP leakage
+				if (otelInferenceSpan && this._otelService.config.captureContent) {
 					// Support both Chat Completions API (messages) and Responses API (input) formats
 					const capiMessages = (requestBody.messages ?? requestBody.input) as ReadonlyArray<{ role?: string; content?: string | unknown[] }> | undefined;
 					// User request: last user-role message
@@ -391,8 +391,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 								: {}),
 						});
 					}
-					// Always capture response content for the debug panel
-					if (otelInferenceSpan && result.type === ChatFetchResponseType.Success) {
+					// Capture response content — gated by captureContent to prevent OTLP leakage
+					if (otelInferenceSpan && this._otelService.config.captureContent && result.type === ChatFetchResponseType.Success) {
 						const responseText = streamRecorder.deltas.map(d => d.text).join('');
 						const toolCalls = streamRecorder.deltas
 							.filter(d => d.copilotToolCalls?.length)
