@@ -898,7 +898,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						this.inlineSummarizationProgressDeferred = undefined;
 					} else {
 						const summaryText = extractInlineSummary(result.round.response);
-						if (summaryText) {
+						if (summaryText !== undefined) {
 							const summarizedRound = this.applySummaryToRound(summaryText);
 
 							if (summarizedRound) {
@@ -909,17 +909,19 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 								turn.addPendingSummary(summarizedRound, summaryText);
 
 								const history = this.options.conversation.turns.slice(0, -1);
+								// Exclude the summarization round from telemetry counts for parity with separate-call summarization
+								const toolCallRoundsForTelemetry = this.toolCallRounds.slice(0, -1);
 								const numRoundsInHistory = history.reduce((sum, t) => sum + t.rounds.length, 0);
-								const numRoundsInCurrentTurn = this.toolCallRounds.length;
+								const numRoundsInCurrentTurn = toolCallRoundsForTelemetry.length;
 								const numRounds = numRoundsInHistory + numRoundsInCurrentTurn;
-								const lastUsedTool = this.toolCallRounds.at(-1)?.toolCalls.at(-1)?.name
+								const lastUsedTool = toolCallRoundsForTelemetry.at(-1)?.toolCalls.at(-1)?.name
 									?? history.at(-1)?.rounds.at(-1)?.toolCalls.at(-1)?.name ?? 'none';
 
 								// Compute rounds since last summarization (same logic as ConversationHistorySummarizer)
 								let numRoundsSinceLastSummarization = -1;
-								for (let ri = this.toolCallRounds.length - 1; ri >= 0; ri--) {
-									if (this.toolCallRounds[ri].summary) {
-										numRoundsSinceLastSummarization = this.toolCallRounds.length - 1 - ri;
+								for (let ri = toolCallRoundsForTelemetry.length - 1; ri >= 0; ri--) {
+									if (toolCallRoundsForTelemetry[ri].summary) {
+										numRoundsSinceLastSummarization = toolCallRoundsForTelemetry.length - 1 - ri;
 										break;
 									}
 								}
@@ -1607,6 +1609,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				"turnIndex": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The index of the current turn." },
 				"curTurnRoundIndex": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The index of the current round within the current turn." },
 				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Prompt tokens." },
+				"promptCacheTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Cached prompt tokens." },
 				"responseTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Output tokens." }
 			}
 		*/
@@ -1624,6 +1627,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			turnIndex: history.length,
 			curTurnRoundIndex: numRoundsInCurrentTurn,
 			promptTokenCount: usage?.prompt_tokens,
+			promptCacheTokenCount: usage?.prompt_tokens_details?.cached_tokens,
 			responseTokenCount: usage?.completion_tokens,
 		});
 	}

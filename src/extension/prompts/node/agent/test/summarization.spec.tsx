@@ -498,7 +498,7 @@ suite('Inline Summarization Prompt', () => {
 		expect(summaryMeta).toBeUndefined();
 	});
 
-	test('triggerSummarize takes precedence over inlineSummarization', async () => {
+	test('inlineSummarization=true sets metadata when triggerSummarize is false', async () => {
 		const instaService = accessor.get(IInstantiationService);
 		const endpoint = instaService.createInstance(MockEndpoint, undefined);
 
