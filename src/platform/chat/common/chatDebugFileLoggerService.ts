@@ -130,6 +130,8 @@ export interface IChatDebugFileLoggerService {
  * A single JSONL debug log entry — the canonical debug event format.
  */
 export interface IDebugLogEntry {
+	/** Schema version. Absent or 1 = current schema. Bump on breaking changes. */
+	readonly v?: number;
 	/** Epoch ms timestamp */
 	readonly ts: number;
 	/** Duration in ms (0 for instant events) */

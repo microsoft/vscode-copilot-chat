@@ -983,8 +983,9 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		if (!session) {
 			return;
 		}
-		session.buffer.push(JSON.stringify(entry) + '\n');
-		this._onDidEmitEntry.fire({ sessionId, entry });
+		const versionedEntry = entry.v ? entry : { v: 1, ...entry };
+		session.buffer.push(JSON.stringify(versionedEntry) + '\n');
+		this._onDidEmitEntry.fire({ sessionId, entry: versionedEntry });
 	}
 
 	async readEntries(sessionId: string): Promise<IDebugLogEntry[]> {
