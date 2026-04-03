@@ -30,7 +30,7 @@ import { ToolName } from '../../../../tools/common/toolNames';
 import { PromptRenderer } from '../../base/promptRenderer';
 import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 import { PromptRegistry } from '../promptRegistry';
-import { ConversationHistorySummarizationPrompt, SummarizedConversationHistoryMetadata, SummarizedConversationHistoryPropsBuilder } from '../summarizedConversationHistory';
+import { ConversationHistorySummarizationPrompt, SummarizedConversationHistory, SummarizedConversationHistoryMetadata, SummarizedConversationHistoryPropsBuilder } from '../summarizedConversationHistory';
 
 suite('Agent Summarization', () => {
 	let accessor: ITestingServicesAccessor;
@@ -361,7 +361,7 @@ suite('Agent Summarization', () => {
 	test('FullSummarization - summary for previous turn, no tool call rounds', async () => testSummarizeWithNoRoundsInCurrentTurn(TestPromptType.FullSummarization));
 	test('SimpleSummarization - summary for previous turn, no tool call rounds', async () => testSummarizeWithNoRoundsInCurrentTurn(TestPromptType.SimpleSummarization));
 
-	async function createSummarizationTestContext() {
+	function createSummarizationTestContext() {
 		const instaService = accessor.get(IInstantiationService);
 		const endpoint = instaService.createInstance(MockEndpoint, undefined);
 
@@ -384,37 +384,38 @@ suite('Agent Summarization', () => {
 			conversation: testConversation,
 		};
 
-		const customizations = await PromptRegistry.resolveAllCustomizations(instaService, endpoint);
-		const props: AgentPromptProps = {
+		const historyProps = {
 			priority: 1,
 			endpoint,
 			location: ChatLocation.Panel,
 			promptContext,
+			maxToolResultLength: Infinity,
 			enableCacheBreakpoints: true,
 			triggerSummarize: true,
-			customizations,
 		};
 
-		return { instaService, endpoint, toolCallRounds, turn, testConversation, promptContext, props };
+		return { instaService, endpoint, toolCallRounds, turn, testConversation, promptContext, historyProps };
 	}
 
 	test('failed summarization throws from renderer (fallback is in agentIntent)', async () => {
-		// Return a huge summary that exceeds the budget → triggers 'Summary too large'
-		// in both Full and Simple modes. The PromptRenderer propagates the error;
+		// Keep the summary tiny-budgeted so the failure is immediate. The PromptRenderer propagates the error;
 		// the fallback to a no-cache-breakpoints render lives in agentIntent.ts's
 		// renderWithSummarization, not here.
-		chatResponse[0] = 'x'.repeat(500_000);
-		const { instaService, endpoint, props } = await createSummarizationTestContext();
+		chatResponse[0] = 'summary that is definitely too large for one token';
+		const { instaService, endpoint, historyProps } = createSummarizationTestContext();
 
-		const renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, props);
+		const renderer = PromptRenderer.create(instaService, endpoint, SummarizedConversationHistory, {
+			...historyProps,
+			maxSummaryTokens: 1,
+		});
 		await expect(renderer.render()).rejects.toThrow('Summary too large');
 	});
 
 	test('successful summarization records metadata on render result', async () => {
 		chatResponse[0] = 'summarized successfully!';
-		const { instaService, endpoint, props } = await createSummarizationTestContext();
+		const { instaService, endpoint, historyProps } = createSummarizationTestContext();
 
-		const renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, props);
+		const renderer = PromptRenderer.create(instaService, endpoint, SummarizedConversationHistory, historyProps);
 		const result = await renderer.render();
 
 		const summaryMeta = result.metadata.get(SummarizedConversationHistoryMetadata);
@@ -424,11 +425,14 @@ suite('Agent Summarization', () => {
 	});
 
 	test('failed summarization does not set round.summary', async () => {
-		chatResponse[0] = 'x'.repeat(500_000);
-		const { instaService, endpoint, toolCallRounds, props } = await createSummarizationTestContext();
+		chatResponse[0] = 'summary that is definitely too large for one token';
+		const { instaService, endpoint, toolCallRounds, historyProps } = createSummarizationTestContext();
 
-		const renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, props);
-		await expect(renderer.render()).rejects.toThrow();
+		const renderer = PromptRenderer.create(instaService, endpoint, SummarizedConversationHistory, {
+			...historyProps,
+			maxSummaryTokens: 1,
+		});
+		await expect(renderer.render()).rejects.toThrow('Summary too large');
 
 		// None of the rounds should have summary set since summarization failed
 		for (const round of toolCallRounds) {
