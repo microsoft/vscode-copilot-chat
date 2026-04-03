@@ -96,4 +96,25 @@ describe('FetchedValue', () => {
 		fetchedValue.dispose();
 		await expect(fetchedValue.resolve()).rejects.toThrow('disposed');
 	});
+
+	describe('when T includes undefined', () => {
+		it('does not re-fetch when the fetched value is undefined', async () => {
+			let undefinedFetchCount = 0;
+			const fv = new FetchedValue<string | undefined>({
+				fetch: async () => {
+					undefinedFetchCount++;
+					return undefined;
+				},
+				isStale: () => false,
+			});
+
+			const first = await fv.resolve();
+			expect(first).toBeUndefined();
+			expect(undefinedFetchCount).toBe(1);
+
+			const second = await fv.resolve();
+			expect(second).toBeUndefined();
+			expect(undefinedFetchCount).toBe(1); // should not re-fetch
+		});
+	});
 });
