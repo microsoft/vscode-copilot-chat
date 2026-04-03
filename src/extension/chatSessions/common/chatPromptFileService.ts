@@ -72,4 +72,15 @@ export interface IChatPromptFileService extends IDisposable {
 	 * The list of currently installed agent plugins.
 	 */
 	readonly plugins: readonly ChatResource[];
+
+	/**
+	 * An event that fires when the list of {@link promptFiles prompt files} changes.
+	 */
+	readonly onDidChangePromptFiles: Event<void>;
+
+	/**
+	 * The list of currently available prompt files. These are `.prompt.md` files
+	 * from all sources (workspace, user, and extension-provided).
+	 */
+	readonly promptFiles: readonly ChatResource[];
 }

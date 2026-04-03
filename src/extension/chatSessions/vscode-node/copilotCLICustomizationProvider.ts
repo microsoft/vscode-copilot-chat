@@ -6,7 +6,7 @@
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
-import { INSTRUCTION_FILE_EXTENSION, SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
+import { INSTRUCTION_FILE_EXTENSION, PROMPT_FILE_EXTENSION, SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService } from '../../../platform/promptFiles/common/promptsService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -32,6 +32,7 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 				vscode.ChatSessionCustomizationType.Instructions,
 				vscode.ChatSessionCustomizationType.Hook,
 				vscode.ChatSessionCustomizationType.Plugins,
+				vscode.ChatSessionCustomizationType.Prompt,
 			],
 		};
 	}
@@ -50,6 +51,7 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 		this._register(this.chatPromptFileService.onDidChangeSkills(() => this._onDidChange.fire()));
 		this._register(this.chatPromptFileService.onDidChangeHooks(() => this._onDidChange.fire()));
 		this._register(this.chatPromptFileService.onDidChangePlugins(() => this._onDidChange.fire()));
+		this._register(this.chatPromptFileService.onDidChangePromptFiles(() => this._onDidChange.fire()));
 		this._register(this.copilotCLIAgents.onDidChangeAgents(() => this._onDidChange.fire()));
 	}
 
@@ -59,6 +61,7 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 		const skills = this.getSkillItems();
 		const hooks = this.getHookItems();
 		const plugins = this.getPluginItems();
+		const prompts = this.getPromptFileItems();
 
 		this.logService.debug(`[CopilotCLICustomizationProvider] agents (${agents.length}): ${agents.map(a => a.name).join(', ') || '(none)'}`);
 		this.logService.debug(`[CopilotCLICustomizationProvider] instructions (${instructions.length}): ${instructions.map(i => i.name).join(', ') || '(none)'}`);
@@ -66,8 +69,9 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 		this.logService.debug(`[CopilotCLICustomizationProvider] hooks (${hooks.length}): ${hooks.map(h => h.name).join(', ') || '(none)'}`);
 
 		this.logService.debug(`[CopilotCLICustomizationProvider] plugins (${plugins.length}): ${plugins.map(p => p.name).join(', ') || '(none)'}`);
+		this.logService.debug(`[CopilotCLICustomizationProvider] prompts (${prompts.length}): ${prompts.map(p => p.name).join(', ') || '(none)'}`);
 
-		const items = [...agents, ...instructions, ...skills, ...hooks, ...plugins];
+		const items = [...agents, ...instructions, ...skills, ...hooks, ...plugins, ...prompts];
 		this.logService.debug(`[CopilotCLICustomizationProvider] total: ${items.length} items`);
 		return items;
 	}
@@ -190,6 +194,17 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 			name: basename(p.uri),
 		}));
 	}
+
+	/**
+	 * Collects all prompt file items from the prompt file service.
+	 */
+	private getPromptFileItems(): vscode.ChatSessionCustomizationItem[] {
+		return this.chatPromptFileService.promptFiles.map(p => ({
+			uri: p.uri,
+			type: vscode.ChatSessionCustomizationType.Prompt,
+			name: deriveNameFromUri(p.uri, PROMPT_FILE_EXTENSION),
+		}));
+	}
 }
 
 function deriveNameFromUri(uri: vscode.Uri, extensionOrFilename: string): string {
@@ -199,7 +214,7 @@ function deriveNameFromUri(uri: vscode.Uri, extensionOrFilename: string): string
 		const parts = uri.path.split('/');
 		return parts.length >= 2 ? parts[parts.length - 2] : filename;
 	}
-	if (filename.endsWith(extensionOrFilename)) {
+	if (filename.toLowerCase().endsWith(extensionOrFilename.toLowerCase())) {
 		return filename.slice(0, -extensionOrFilename.length);
 	}
 	return filename;

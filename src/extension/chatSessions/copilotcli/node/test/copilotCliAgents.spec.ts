@@ -51,11 +51,13 @@ class TestChatPromptFileService extends Disposable implements IChatPromptFileSer
 	readonly onDidChangeSkills: Event<void> = Event.None;
 	readonly onDidChangeHooks: Event<void> = Event.None;
 	readonly onDidChangePlugins: Event<void> = Event.None;
+	readonly onDidChangePromptFiles: Event<void> = Event.None;
 	readonly customAgents: readonly import('vscode').ChatResource[] = [];
 	readonly instructions: readonly import('vscode').ChatResource[] = [];
 	readonly skills: readonly import('vscode').ChatResource[] = [];
 	readonly hooks: readonly import('vscode').ChatResource[] = [];
 	readonly plugins: readonly import('vscode').ChatResource[] = [];
+	readonly promptFiles: readonly import('vscode').ChatResource[] = [];
 
 	constructor(private _customAgentPromptFiles: ParsedPromptFile[] = []) {
 		super();

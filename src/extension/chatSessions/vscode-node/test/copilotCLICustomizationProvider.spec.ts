@@ -66,30 +66,36 @@ class MockChatPromptFileService extends mock<IChatPromptFileService>() {
 	override readonly onDidChangeHooks = this._onDidChangeHooks.event;
 	private readonly _onDidChangePlugins = new Emitter<void>();
 	override readonly onDidChangePlugins = this._onDidChangePlugins.event;
+	private readonly _onDidChangePromptFiles = new Emitter<void>();
+	override readonly onDidChangePromptFiles = this._onDidChangePromptFiles.event;
 
 	private _customAgents: vscode.ChatResource[] = [];
 	private _instructions: vscode.ChatResource[] = [];
 	private _skills: vscode.ChatResource[] = [];
 	private _hooks: vscode.ChatResource[] = [];
 	private _plugins: vscode.ChatResource[] = [];
+	private _promptFiles: vscode.ChatResource[] = [];
 
 	override get customAgents(): readonly vscode.ChatResource[] { return this._customAgents; }
 	override get instructions(): readonly vscode.ChatResource[] { return this._instructions; }
 	override get skills(): readonly vscode.ChatResource[] { return this._skills; }
 	override get hooks(): readonly vscode.ChatResource[] { return this._hooks; }
 	override get plugins(): readonly vscode.ChatResource[] { return this._plugins; }
+	override get promptFiles(): readonly vscode.ChatResource[] { return this._promptFiles; }
 
 	setCustomAgents(agents: vscode.ChatResource[]) { this._customAgents = agents; }
 	setInstructions(instructions: vscode.ChatResource[]) { this._instructions = instructions; }
 	setSkills(skills: vscode.ChatResource[]) { this._skills = skills; }
 	setHooks(hooks: vscode.ChatResource[]) { this._hooks = hooks; }
 	setPlugins(plugins: vscode.ChatResource[]) { this._plugins = plugins; }
+	setPromptFiles(promptFiles: vscode.ChatResource[]) { this._promptFiles = promptFiles; }
 
 	fireCustomAgentsChanged() { this._onDidChangeCustomAgents.fire(); }
 	fireInstructionsChanged() { this._onDidChangeInstructions.fire(); }
 	fireSkillsChanged() { this._onDidChangeSkills.fire(); }
 	fireHooksChanged() { this._onDidChangeHooks.fire(); }
 	firePluginsChanged() { this._onDidChangePlugins.fire(); }
+	firePromptFilesChanged() { this._onDidChangePromptFiles.fire(); }
 
 	override dispose() {
 		this._onDidChangeCustomAgents.dispose();
@@ -97,6 +103,7 @@ class MockChatPromptFileService extends mock<IChatPromptFileService>() {
 		this._onDidChangeSkills.dispose();
 		this._onDidChangeHooks.dispose();
 		this._onDidChangePlugins.dispose();
+		this._onDidChangePromptFiles.dispose();
 	}
 }
 
@@ -174,15 +181,16 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(CopilotCLICustomizationProvider.metadata.iconId).toBe('worktree');
 		});
 
-		it('supports Agent, Skill, Instructions, Hook, and Plugins types', () => {
+		it('supports Agent, Skill, Instructions, Hook, Plugins, and Prompt types', () => {
 			const supported = CopilotCLICustomizationProvider.metadata.supportedTypes;
 			expect(supported).toBeDefined();
-			expect(supported).toHaveLength(5);
+			expect(supported).toHaveLength(6);
 			expect(supported).toContain(FakeChatSessionCustomizationType.Agent);
 			expect(supported).toContain(FakeChatSessionCustomizationType.Skill);
 			expect(supported).toContain(FakeChatSessionCustomizationType.Instructions);
 			expect(supported).toContain(FakeChatSessionCustomizationType.Hook);
 			expect(supported).toContain(FakeChatSessionCustomizationType.Plugins);
+			expect(supported).toContain(FakeChatSessionCustomizationType.Prompt);
 		});
 
 		it('only returns items whose type is in supportedTypes', async () => {
@@ -289,9 +297,10 @@ describe('CopilotCLICustomizationProvider', () => {
 			mockPromptFileService.setSkills([{ uri: URI.file('/workspace/.github/skills/c/SKILL.md') }]);
 			mockPromptFileService.setHooks([{ uri: URI.file('/workspace/.copilot/hooks/pre-commit.json') }]);
 			mockPromptFileService.setPlugins([{ uri: URI.file('/workspace/.copilot/plugins/my-plugin') }]);
+			mockPromptFileService.setPromptFiles([{ uri: URI.file('/workspace/.github/prompts/d.prompt.md') }]);
 
 			const items = await provider.provideChatSessionCustomizations(undefined!);
-			expect(items).toHaveLength(5);
+			expect(items).toHaveLength(6);
 		});
 
 		it('returns hooks with correct type and name', async () => {
@@ -332,6 +341,35 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(items[0].uri).toEqual(uri);
 			expect(items[0].type).toBe(FakeChatSessionCustomizationType.Plugins);
 			expect(items[0].name).toBe('lint-rules');
+		});
+
+		it('returns prompt files with correct type and name', async () => {
+			const uri = URI.file('/workspace/.github/prompts/summarize.prompt.md');
+			mockPromptFileService.setPromptFiles([{ uri }]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			expect(items).toHaveLength(1);
+			expect(items[0].uri).toBe(uri);
+			expect(items[0].type).toBe(FakeChatSessionCustomizationType.Prompt);
+			expect(items[0].name).toBe('summarize');
+		});
+
+		it('derives prompt file name by stripping .prompt.md extension', async () => {
+			const uri = URI.file('/workspace/.github/prompts/code-review.prompt.md');
+			mockPromptFileService.setPromptFiles([{ uri }]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			expect(items).toHaveLength(1);
+			expect(items[0].name).toBe('code-review');
+		});
+
+		it('handles case-insensitive extension stripping for prompt files', async () => {
+			const uri = URI.file('/workspace/.github/prompts/summarize.Prompt.MD');
+			mockPromptFileService.setPromptFiles([{ uri }]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			expect(items).toHaveLength(1);
+			expect(items[0].name).toBe('summarize');
 		});
 	});
 
@@ -498,6 +536,14 @@ describe('CopilotCLICustomizationProvider', () => {
 			disposables.add(provider.onDidChange(() => { fired = true; }));
 
 			mockPromptFileService.firePluginsChanged();
+			expect(fired).toBe(true);
+		});
+
+		it('fires when prompt files change', () => {
+			let fired = false;
+			disposables.add(provider.onDidChange(() => { fired = true; }));
+
+			mockPromptFileService.firePromptFilesChanged();
 			expect(fired).toBe(true);
 		});
 
