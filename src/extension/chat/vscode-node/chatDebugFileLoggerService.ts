@@ -104,7 +104,8 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	) {
 		super();
 
-		const enabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ChatDebugFileLogging, this._experimentationService);
+		const enabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ChatDebugFileLogging, this._experimentationService)
+			|| this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentDebugLogEnabled, this._experimentationService);
 		if (!enabled) {
 			/* __GDPR__
 				"chatDebugFileLogger.disabled" : {

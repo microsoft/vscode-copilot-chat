@@ -4614,6 +4614,7 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.chat.agentDebugLog.enabled%",
+						"deprecationMessage": "%github.copilot.config.chat.agentDebugLog.enabled.deprecated%",
 						"tags": [
 							"advanced",
 							"experimental"

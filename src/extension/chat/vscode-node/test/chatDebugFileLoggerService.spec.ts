@@ -146,8 +146,8 @@ class TestConfigurationService {
 	declare readonly _serviceBrand: undefined;
 	getConfig(key: { defaultValue: unknown }) { return key.defaultValue; }
 	getExperimentBasedConfig(key: { defaultValue: unknown }) {
-		if (key === ConfigKey.Advanced.ChatDebugFileLogging) {
-			return true; // Enable file logging for tests
+		if (key === ConfigKey.Advanced.AgentDebugLogEnabled || key === ConfigKey.Advanced.ChatDebugFileLogging) {
+			return true; // Enable debug logging for tests
 		}
 		return key.defaultValue;
 	}
