@@ -7,7 +7,10 @@ import type { SweCustomAgent } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IPromptsService, ParsedPromptFile, PromptFileParser } from '../../../../platform/promptFiles/common/promptsService';
+import { MockCustomInstructionsService } from '../../../../platform/test/common/testCustomInstructionsService';
 import { mock } from '../../../../util/common/test/simpleMock';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Emitter } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
@@ -105,10 +108,32 @@ class TestLogService extends mock<ILogService>() {
 	override debug() { }
 }
 
+class TestCustomInstructionsService extends MockCustomInstructionsService {
+	private _agentInstructions: URI[] = [];
+
+	setAgentInstructionUris(uris: URI[]) { this._agentInstructions = uris; }
+	override getAgentInstructions(): Promise<URI[]> { return Promise.resolve(this._agentInstructions); }
+}
+
+class TestPromptsService extends mock<IPromptsService>() {
+	private readonly parser = new PromptFileParser();
+	private _fileContents = new Map<string, string>();
+
+	/** Register content so parseFile returns a parsed result for the given URI. */
+	setFileContent(uri: URI, content: string) { this._fileContents.set(uri.toString(), content); }
+
+	override async parseFile(uri: URI, _token: CancellationToken): Promise<ParsedPromptFile> {
+		const content = this._fileContents.get(uri.toString()) ?? '';
+		return this.parser.parse(uri, content);
+	}
+}
+
 describe('CopilotCLICustomizationProvider', () => {
 	let disposables: DisposableStore;
 	let mockPromptFileService: MockChatPromptFileService;
 	let mockCopilotCLIAgents: MockCopilotCLIAgents;
+	let mockCustomInstructionsService: TestCustomInstructionsService;
+	let mockPromptsService: TestPromptsService;
 	let provider: CopilotCLICustomizationProvider;
 
 	let originalChatSessionCustomizationType: unknown;
@@ -119,9 +144,13 @@ describe('CopilotCLICustomizationProvider', () => {
 		disposables = new DisposableStore();
 		mockPromptFileService = disposables.add(new MockChatPromptFileService());
 		mockCopilotCLIAgents = disposables.add(new MockCopilotCLIAgents());
+		mockCustomInstructionsService = new TestCustomInstructionsService();
+		mockPromptsService = new TestPromptsService();
 		provider = disposables.add(new CopilotCLICustomizationProvider(
 			mockPromptFileService,
 			mockCopilotCLIAgents,
+			mockCustomInstructionsService,
+			mockPromptsService,
 			new TestLogService(),
 		));
 	});
@@ -214,7 +243,7 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(items[0].name).toBe('Code Review');
 		});
 
-		it('returns instructions', async () => {
+		it('returns instructions with on-demand groupKey when no applyTo pattern', async () => {
 			const uri = URI.file('/workspace/.github/copilot-instructions.md');
 			mockPromptFileService.setInstructions([{ uri }]);
 
@@ -222,6 +251,7 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(items).toHaveLength(1);
 			expect(items[0].uri).toBe(uri);
 			expect(items[0].type).toBe(FakeChatSessionCustomizationType.Instructions);
+			expect(items[0].groupKey).toBe('on-demand-instructions');
 		});
 
 		it('returns skills', async () => {
@@ -281,6 +311,131 @@ describe('CopilotCLICustomizationProvider', () => {
 			const items = await provider.provideChatSessionCustomizations(undefined!);
 			const hookItems = items.filter((i: vscode.ChatSessionCustomizationItem) => i.type === FakeChatSessionCustomizationType.Hook);
 			expect(hookItems).toHaveLength(2);
+		});
+	});
+
+	describe('instruction groupKeys and badges', () => {
+		it('uses agent-instructions groupKey for copilot-instructions.md files', async () => {
+			const uri = URI.file('/workspace/.github/copilot-instructions.md');
+			mockPromptFileService.setInstructions([{ uri }]);
+			mockCustomInstructionsService.setAgentInstructionUris([uri]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const instrItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Instructions);
+			expect(instrItems).toHaveLength(1);
+			expect(instrItems[0].groupKey).toBe('agent-instructions');
+			expect(instrItems[0].badge).toBeUndefined();
+		});
+
+		it('uses context-instructions groupKey with badge for instructions with applyTo pattern', async () => {
+			const uri = URI.file('/workspace/.github/style.instructions.md');
+			mockPromptFileService.setInstructions([{ uri }]);
+			mockPromptsService.setFileContent(uri, [
+				'---',
+				'applyTo: \'src/**/*.ts\'',
+				'---',
+				'Use TypeScript best practices.',
+			].join('\n'));
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const instrItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Instructions);
+			expect(instrItems).toHaveLength(1);
+			expect(instrItems[0].groupKey).toBe('context-instructions');
+			expect(instrItems[0].badge).toBe('src/**/*.ts');
+			expect(instrItems[0].badgeTooltip).toContain('src/**/*.ts');
+		});
+
+		it('uses "always added" badge when applyTo is **', async () => {
+			const uri = URI.file('/workspace/.github/global.instructions.md');
+			mockPromptFileService.setInstructions([{ uri }]);
+			mockPromptsService.setFileContent(uri, [
+				'---',
+				'applyTo: \'**\'',
+				'---',
+				'Global rules.',
+			].join('\n'));
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const instrItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Instructions);
+			expect(instrItems).toHaveLength(1);
+			expect(instrItems[0].groupKey).toBe('context-instructions');
+			expect(instrItems[0].badge).toBe('always added');
+			expect(instrItems[0].badgeTooltip).toContain('every interaction');
+		});
+
+		it('uses on-demand-instructions groupKey for instructions without applyTo', async () => {
+			const uri = URI.file('/workspace/.github/refactor.instructions.md');
+			mockPromptFileService.setInstructions([{ uri }]);
+			mockPromptsService.setFileContent(uri, [
+				'---',
+				'description: \'Refactoring guidelines\'',
+				'---',
+				'Prefer small functions.',
+			].join('\n'));
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const instrItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Instructions);
+			expect(instrItems).toHaveLength(1);
+			expect(instrItems[0].groupKey).toBe('on-demand-instructions');
+			expect(instrItems[0].badge).toBeUndefined();
+			expect(instrItems[0].description).toBe('Refactoring guidelines');
+		});
+
+		it('includes description from parsed header', async () => {
+			const uri = URI.file('/workspace/.github/testing.instructions.md');
+			mockPromptFileService.setInstructions([{ uri }]);
+			mockPromptsService.setFileContent(uri, [
+				'---',
+				'applyTo: \'**/*.spec.ts\'',
+				'description: \'Testing standards\'',
+				'---',
+				'Write unit tests with vitest.',
+			].join('\n'));
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const instrItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Instructions);
+			expect(instrItems).toHaveLength(1);
+			expect(instrItems[0].description).toBe('Testing standards');
+			expect(instrItems[0].badge).toBe('**/*.spec.ts');
+		});
+
+		it('categorizes mixed instructions correctly', async () => {
+			const agentUri = URI.file('/workspace/.github/copilot-instructions.md');
+			const contextUri = URI.file('/workspace/.github/style.instructions.md');
+			const onDemandUri = URI.file('/workspace/.github/refactor.instructions.md');
+			mockPromptFileService.setInstructions([{ uri: agentUri }, { uri: contextUri }, { uri: onDemandUri }]);
+			mockCustomInstructionsService.setAgentInstructionUris([agentUri]);
+			mockPromptsService.setFileContent(contextUri, '---\napplyTo: \'src/**\'\n---\nStyle rules.');
+			mockPromptsService.setFileContent(onDemandUri, '---\ndescription: Refactoring\n---\nRefactor tips.');
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const instrItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Instructions);
+			expect(instrItems).toHaveLength(3);
+
+			const agent = instrItems.find(i => i.groupKey === 'agent-instructions');
+			const context = instrItems.find(i => i.groupKey === 'context-instructions');
+			const onDemand = instrItems.find(i => i.groupKey === 'on-demand-instructions');
+
+			expect(agent).toBeDefined();
+			expect(agent!.uri).toBe(agentUri);
+
+			expect(context).toBeDefined();
+			expect(context!.badge).toBe('src/**');
+
+			expect(onDemand).toBeDefined();
+			expect(onDemand!.badge).toBeUndefined();
+		});
+
+		it('falls back to on-demand-instructions when file has no YAML header', async () => {
+			const uri = URI.file('/workspace/.github/plain.instructions.md');
+			mockPromptFileService.setInstructions([{ uri }]);
+			mockPromptsService.setFileContent(uri, 'Just plain text, no frontmatter.');
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const instrItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Instructions);
+			expect(instrItems).toHaveLength(1);
+			expect(instrItems[0].groupKey).toBe('on-demand-instructions');
+			expect(instrItems[0].badge).toBeUndefined();
 		});
 	});
 

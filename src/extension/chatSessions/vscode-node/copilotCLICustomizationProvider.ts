@@ -3,9 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
+import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { INSTRUCTION_FILE_EXTENSION, SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IPromptsService } from '../../../platform/promptFiles/common/promptsService';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { basename } from '../../../util/vs/base/common/resources';
@@ -33,6 +38,8 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 	constructor(
 		@IChatPromptFileService private readonly chatPromptFileService: IChatPromptFileService,
 		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
+		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
+		@IPromptsService private readonly promptsService: IPromptsService,
 		@ILogService private readonly logService: ILogService,
 	) {
 		super();
@@ -44,9 +51,9 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 		this._register(this.copilotCLIAgents.onDidChangeAgents(() => this._onDidChange.fire()));
 	}
 
-	async provideChatSessionCustomizations(_token: vscode.CancellationToken): Promise<vscode.ChatSessionCustomizationItem[]> {
+	async provideChatSessionCustomizations(token: vscode.CancellationToken): Promise<vscode.ChatSessionCustomizationItem[]> {
 		const agents = await this.getAgentItems();
-		const instructions = this.getInstructionItems();
+		const instructions = await this.getInstructionItems(token);
 		const skills = this.getSkillItems();
 		const hooks = this.getHookItems();
 
@@ -75,14 +82,75 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 	}
 
 	/**
-	 * Collects all instruction items from the prompt file service.
+	 * Collects all instruction items from the prompt file service,
+	 * categorizing them with groupKeys and badges matching the core
+	 * implementation:
+	 * - agent-instructions: copilot-instructions.md files
+	 * - context-instructions: files with an applyTo pattern (badge = pattern)
+	 * - on-demand-instructions: files without an applyTo pattern
 	 */
-	private getInstructionItems(): vscode.ChatSessionCustomizationItem[] {
-		return this.chatPromptFileService.instructions.map(i => ({
-			uri: i.uri,
-			type: vscode.ChatSessionCustomizationType.Instructions,
-			name: deriveNameFromUri(i.uri, INSTRUCTION_FILE_EXTENSION),
-		}));
+	private async getInstructionItems(token: CancellationToken): Promise<vscode.ChatSessionCustomizationItem[]> {
+		const agentInstructionUris = new Set(
+			(await this.customInstructionsService.getAgentInstructions()).map(uri => uri.toString())
+		);
+
+		const items: vscode.ChatSessionCustomizationItem[] = [];
+
+		for (const instruction of this.chatPromptFileService.instructions) {
+			const uri = instruction.uri;
+			const name = deriveNameFromUri(uri, INSTRUCTION_FILE_EXTENSION);
+
+			if (agentInstructionUris.has(uri.toString())) {
+				items.push({
+					uri,
+					type: vscode.ChatSessionCustomizationType.Instructions,
+					name,
+					groupKey: 'agent-instructions',
+				});
+				continue;
+			}
+
+			let pattern: string | undefined;
+			let description: string | undefined;
+			try {
+				const parsed = await this.promptsService.parseFile(uri, token);
+				pattern = parsed.header?.applyTo;
+				description = parsed.header?.description;
+			} catch (err) {
+				if (isCancellationError(err) || token.isCancellationRequested) {
+					throw err;
+				}
+				this.logService.debug(`[CopilotCLICustomizationProvider] failed to parse ${uri.toString()}: ${err}`);
+			}
+
+			if (pattern !== undefined) {
+				const badge = pattern === '**'
+					? l10n.t('always added')
+					: pattern;
+				const badgeTooltip = pattern === '**'
+					? l10n.t('This instruction is automatically included in every interaction.')
+					: l10n.t('This instruction is automatically included when files matching \'{0}\' are in context.', pattern);
+				items.push({
+					uri,
+					type: vscode.ChatSessionCustomizationType.Instructions,
+					name,
+					description,
+					groupKey: 'context-instructions',
+					badge,
+					badgeTooltip,
+				});
+			} else {
+				items.push({
+					uri,
+					type: vscode.ChatSessionCustomizationType.Instructions,
+					name,
+					description,
+					groupKey: 'on-demand-instructions',
+				});
+			}
+		}
+
+		return items;
 	}
 
 	/**
