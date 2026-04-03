@@ -62,4 +62,14 @@ export interface IChatPromptFileService extends IDisposable {
 	 * (workspace, user, and extension-provided).
 	 */
 	readonly hooks: readonly ChatResource[];
+
+	/**
+	 * An event that fires when the list of {@link plugins plugins} changes.
+	 */
+	readonly onDidChangePlugins: Event<void>;
+
+	/**
+	 * The list of currently installed agent plugins.
+	 */
+	readonly plugins: readonly ChatResource[];
 }

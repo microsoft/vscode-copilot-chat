@@ -35,11 +35,13 @@ class TestChatPromptFileService extends Disposable implements IChatPromptFileSer
 	readonly onDidChangeInstructions: Event<void> = Event.None;
 	readonly onDidChangeSkills: Event<void> = Event.None;
 	readonly onDidChangeHooks: Event<void> = Event.None;
+	readonly onDidChangePlugins: Event<void> = Event.None;
 	readonly customAgents: readonly ChatResource[] = [];
 	readonly customAgentPromptFiles: readonly ParsedPromptFile[] = [];
 	readonly instructions: readonly ChatResource[] = [];
 	skills: readonly ChatResource[] = [];
 	readonly hooks: readonly ChatResource[] = [];
+	readonly plugins: readonly ChatResource[] = [];
 }
 
 function createWorkspaceService(folders: URI[] = [URI.file('/workspace')]): IWorkspaceService {
