@@ -6339,8 +6339,8 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "^0.2.81",
-		"@anthropic-ai/sdk": "^0.81.0",
+		"@anthropic-ai/claude-agent-sdk": "^0.2.91",
+		"@anthropic-ai/sdk": "^0.82.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
 		"@github/copilot": "^1.0.12",
 		"@google/genai": "^1.22.0",
