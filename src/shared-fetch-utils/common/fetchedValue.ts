@@ -15,7 +15,7 @@ export interface FetchedValueOptions<T> {
 	 * Determines whether the current cached value is stale and should be re-fetched.
 	 * Called by {@link FetchedValue.resolve} to decide if a new fetch is needed.
 	 *
-	 * When `value` is `undefined` (no cached value), the value is always considered stale
+	 * Before the value has been fetched for the first time, the value is always considered stale
 	 * and this function is not called.
 	 */
 	isStale: (value: T) => boolean;
