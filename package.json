@@ -4361,16 +4361,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.agentHistorySummarizationCacheFriendly": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.agentHistorySummarizationCacheFriendly%",
-						"tags": [
-							"advanced",
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.agentHistorySummarizationInline": {
 						"type": "boolean",
 						"default": false,

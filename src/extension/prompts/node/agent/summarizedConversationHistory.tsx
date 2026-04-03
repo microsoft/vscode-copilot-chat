@@ -29,7 +29,6 @@ import { StopWatch } from '../../../../util/vs/base/common/stopwatch';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart2 } from '../../../../vscodeTypes';
-import { addCacheBreakpoints } from '../../../intents/node/cacheBreakpoints';
 import { ToolCallingLoop } from '../../../intents/node/toolCallingLoop';
 import { IResultMetadata } from '../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../../../prompt/common/intents';
@@ -39,9 +38,8 @@ import { NotebookSummary } from '../../../tools/node/notebookSummaryTool';
 import { renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { ChatToolCalls } from '../panel/toolCalling';
-import { AgentPrompt, AgentPromptProps, AgentUserMessage, AgentUserMessageCustomizations, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
+import { AgentUserMessage, AgentUserMessageCustomizations, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
 import { DefaultOpenAIKeepGoingReminder } from './openai/defaultOpenAIPrompt';
-import { PromptRegistry } from './promptRegistry';
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
@@ -582,7 +580,6 @@ class ConversationHistorySummarizer {
 		@ILogService private readonly logService: ILogService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IChatHookService private readonly chatHookService: IChatHookService,
 	) { }
 
@@ -671,23 +668,8 @@ class ConversationHistorySummarizer {
 
 		let summarizationPrompt: ChatMessage[];
 		const associatedRequestId = this.props.promptContext.conversation?.getLatestTurn().id;
-		const cacheFriendlyMode = this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentHistorySummarizationCacheFriendly, this.experimentationService);
-		let usedCacheFriendlyPrompt = false;
 		try {
-			if (mode === SummaryMode.Full && cacheFriendlyMode) {
-				const customizations = await PromptRegistry.resolveAllCustomizations(this.instantiationService, endpoint);
-				const props: CacheFriendlySummarizationPromptProps = {
-					...propsInfo.props,
-					triggerSummarize: false,
-					enableCacheBreakpoints: true,
-					customizations,
-				};
-				const expandedEndpoint = endpoint.cloneWithTokenOverride(endpoint.modelMaxPromptTokens * 1.15);
-				summarizationPrompt = (await renderPromptElement(this.instantiationService, expandedEndpoint, CacheFriendlySummarizationPrompt, props, undefined, this.token)).messages;
-				usedCacheFriendlyPrompt = true;
-			} else {
-				summarizationPrompt = (await renderPromptElement(this.instantiationService, endpoint, ConversationHistorySummarizationPrompt, { ...propsInfo.props, simpleMode: mode === SummaryMode.Simple }, undefined, this.token)).messages;
-			}
+			summarizationPrompt = (await renderPromptElement(this.instantiationService, endpoint, ConversationHistorySummarizationPrompt, { ...propsInfo.props, simpleMode: mode === SummaryMode.Simple }, undefined, this.token)).messages;
 			this.logInfo(`summarization prompt rendered in ${stopwatch.elapsed()}ms.`, mode);
 		} catch (e) {
 			const budgetExceeded = e instanceof BudgetExceededError;
@@ -717,22 +699,7 @@ class ConversationHistorySummarizer {
 				),
 			} : undefined;
 
-			if (usedCacheFriendlyPrompt) {
-				// Place cache breakpoints on the agent-loop prefix only (everything
-				// except the appended summarize instruction).  addCacheBreakpoints
-				// uses the last User message as the boundary between "current turn"
-				// and "history above", so running it on the full prompt (which ends
-				// with the summarize UserMessage) would shift that boundary and
-				// place breakpoints at different positions than the agent loop did —
-				// causing the Anthropic cache lookback to miss the agent loop's
-				// cached prefix.
-				const prefixMessages = summarizationPrompt.slice(0, -1);
-				addCacheBreakpoints(prefixMessages);
-			} else if (cacheFriendlyMode) {
-				addCacheBreakpoints(summarizationPrompt);
-			} else {
-				stripCacheBreakpoints(summarizationPrompt);
-			}
+			stripCacheBreakpoints(summarizationPrompt);
 
 			let messages = ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt);
 			// Gemini strictly requires every function_call to have a matching function_response.
@@ -924,42 +891,6 @@ class ConversationHistorySummarizer {
 			promptCacheTokenCount: usage?.prompt_tokens_details?.cached_tokens,
 			responseTokenCount: usage?.completion_tokens,
 		});
-	}
-}
-
-/**
- * Cache-friendly summarization prompt that shares the agent loop's prefix for prompt cache hits.
- *
- * Structure:
- * - AgentPrompt preamble + conversation history (byte-identical to the agent loop → cache hit)
- * - SummaryPrompt instructions (appended AFTER history to maximize prefix overlap)
- * - Final "Summarize..." user message
- *
- * The key insight: by placing SummaryPrompt after the history rather than before, the prefix
- * match with the preceding agent loop request extends through the entire conversation
- * (potentially 80k+ cached tokens instead of just ~17k for the preamble alone).
- */
-interface CacheFriendlySummarizationPromptProps extends AgentPromptProps {
-	readonly workingNotebook?: NotebookDocument;
-	readonly summarizationInstructions?: string;
-}
-
-class CacheFriendlySummarizationPrompt extends PromptElement<CacheFriendlySummarizationPromptProps> {
-	override async render(state: void, sizing: PromptSizing) {
-		return <>
-			<AgentPrompt {...this.props} />
-			{this.props.workingNotebook && <WorkingNotebookSummary priority={998} notebook={this.props.workingNotebook} />}
-			<UserMessage priority={1000}>
-				{SummaryPrompt}
-				{this.props.summarizationInstructions && <>
-					<br /><br />
-					## Additional instructions from the user:<br />
-					{this.props.summarizationInstructions}
-				</>}
-				<br /><br />
-				Now summarize the conversation above. Do NOT call any tools.
-			</UserMessage>
-		</>;
 	}
 }
 

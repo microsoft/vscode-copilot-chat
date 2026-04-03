@@ -584,7 +584,6 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			try {
 				// Expand the budget by 15% so the summarization user message fits
 				// alongside the conversation that just exceeded the normal budget.
-				// This matches the expansion used by CacheFriendlySummarizationPrompt.
 				const expandedEndpoint = renderProps.endpoint.cloneWithTokenOverride(renderProps.endpoint.modelMaxPromptTokens * 1.15);
 				const renderer = PromptRenderer.create(this.instantiationService, expandedEndpoint, this.prompt, {
 					...renderProps,
