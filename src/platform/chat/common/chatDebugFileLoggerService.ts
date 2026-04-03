@@ -5,6 +5,7 @@
 
 import { createServiceIdentifier } from '../../../util/common/services';
 import { decodeBase64 } from '../../../util/vs/base/common/buffer';
+import { Event } from '../../../util/vs/base/common/event';
 import { URI } from '../../../util/vs/base/common/uri';
 
 export const IChatDebugFileLoggerService = createServiceIdentifier<IChatDebugFileLoggerService>('IChatDebugFileLoggerService');
@@ -98,6 +99,55 @@ export interface IChatDebugFileLoggerService {
 	 * as `models.json` into each session directory when a session starts.
 	 */
 	setModelSnapshot(models: readonly unknown[]): void;
+
+	/**
+	 * Fired synchronously when an entry is buffered, before it is flushed to disk.
+	 * Subscribers receive the entry in real-time for live streaming.
+	 */
+	readonly onDidEmitEntry: Event<{ sessionId: string; entry: IDebugLogEntry }>;
+
+	/**
+	 * Read all entries for a session from disk + unflushed buffer.
+	 * Returns an empty array if the session has no log file yet.
+	 */
+	readEntries(sessionId: string): Promise<IDebugLogEntry[]>;
+
+	/**
+	 * Read the last `count` entries from a session's JSONL file + unflushed buffer.
+	 * Reads only the tail of the file for performance on large files.
+	 */
+	readTailEntries(sessionId: string, count: number): Promise<IDebugLogEntry[]>;
+
+	/**
+	 * Stream entries from a session's JSONL file line by line.
+	 * Calls `onEntry` for each parsed entry. Returns when all entries have been streamed.
+	 * Uses a streaming parser to avoid loading the entire file into memory.
+	 */
+	streamEntries(sessionId: string, onEntry: (entry: IDebugLogEntry) => void): Promise<void>;
+}
+
+/**
+ * A single JSONL debug log entry — the canonical debug event format.
+ */
+export interface IDebugLogEntry {
+	/** Epoch ms timestamp */
+	readonly ts: number;
+	/** Duration in ms (0 for instant events) */
+	readonly dur: number;
+	/** Chat session ID */
+	readonly sid: string;
+	/** Event type */
+	readonly type: 'session_start' | 'tool_call' | 'llm_request' | 'user_message' | 'agent_response' | 'subagent' | 'discovery' | 'error' | 'generic' | 'child_session_ref' | 'hook' | 'turn_start' | 'turn_end';
+	/** Descriptive name */
+	readonly name: string;
+	/** Span or event ID */
+	readonly spanId: string;
+	/** Parent span ID for hierarchy */
+	readonly parentSpanId?: string;
+	/** Status */
+	readonly status: 'ok' | 'error';
+	/** Type-specific attributes */
+	readonly attrs: Record<string, string | number | boolean | undefined>;
 }
 
 /**
@@ -116,4 +166,8 @@ export class NullChatDebugFileLoggerService implements IChatDebugFileLoggerServi
 	getSessionDirForResource(): URI | undefined { return undefined; }
 	setModelSnapshot(): void { }
 	readonly debugLogsDir: URI | undefined = undefined;
+	readonly onDidEmitEntry: Event<{ sessionId: string; entry: IDebugLogEntry }> = Event.None;
+	async readEntries(): Promise<IDebugLogEntry[]> { return []; }
+	async readTailEntries(): Promise<IDebugLogEntry[]> { return []; }
+	async streamEntries(): Promise<void> { }
 }

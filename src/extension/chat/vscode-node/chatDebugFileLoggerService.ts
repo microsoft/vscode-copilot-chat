@@ -5,7 +5,7 @@
 
 import * as fs from 'fs';
 import * as vscode from 'vscode';
-import { IChatDebugFileLoggerService, sessionResourceToId } from '../../../platform/chat/common/chatDebugFileLoggerService';
+import { IChatDebugFileLoggerService, IDebugLogEntry, sessionResourceToId } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
@@ -15,6 +15,7 @@ import { CopilotChatAttr, GenAiAttr, GenAiOperationName } from '../../../platfor
 import { ICompletedSpanData, IOTelService, ISpanEventData, SpanStatusCode } from '../../../platform/otel/common/otelService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -59,36 +60,21 @@ interface IActiveLogSession {
 	toolsIndex: number;
 	/** File name of the most recently written tools file (e.g., 'tools_0.json') */
 	currentToolsFile: string | undefined;
+	/** Pending tool definitions received before the session was promoted to hasOwnSpans */
+	pendingToolDefs: string | undefined;
 }
 
-/**
- * A single JSONL debug log entry.
- */
-interface IDebugLogEntry {
-	/** Epoch ms timestamp */
-	readonly ts: number;
-	/** Duration in ms (0 for instant events) */
-	readonly dur: number;
-	/** Chat session ID */
-	readonly sid: string;
-	/** Event type */
-	readonly type: 'session_start' | 'tool_call' | 'llm_request' | 'user_message' | 'agent_response' | 'subagent' | 'discovery' | 'error' | 'generic' | 'child_session_ref' | 'hook' | 'turn_start' | 'turn_end';
-	/** Descriptive name */
-	readonly name: string;
-	/** Span or event ID */
-	readonly spanId: string;
-	/** Parent span ID for hierarchy */
-	readonly parentSpanId?: string;
-	/** Status */
-	readonly status: 'ok' | 'error';
-	/** Type-specific attributes */
-	readonly attrs: Record<string, string | number | boolean | undefined>;
-}
+// IDebugLogEntry is imported from and defined in the platform layer.
+// Re-export for consumers that import from this file.
+export type { IDebugLogEntry } from '../../../platform/chat/common/chatDebugFileLoggerService';
 
 export class ChatDebugFileLoggerService extends Disposable implements IChatDebugFileLoggerService {
 	declare readonly _serviceBrand: undefined;
 
 	public readonly id = 'chatDebugFileLogger';
+
+	private readonly _onDidEmitEntry = this._register(new Emitter<{ sessionId: string; entry: IDebugLogEntry }>());
+	readonly onDidEmitEntry = this._onDidEmitEntry.event;
 
 	private readonly _activeSessions = new Map<string, IActiveLogSession>();
 	/** Maps child session ID → { parentSessionId, label } for child session routing */
@@ -291,6 +277,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			toolsKey: undefined,
 			toolsIndex: 0,
 			currentToolsFile: undefined,
+			pendingToolDefs: undefined,
 		};
 		this._activeSessions.set(sessionId, session);
 
@@ -361,7 +348,13 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	}
 
 	getLogPath(sessionId: string): URI | undefined {
-		return this._activeSessions.get(sessionId)?.uri;
+		const active = this._activeSessions.get(sessionId);
+		if (active) {
+			return active.uri;
+		}
+		// For historical sessions (after restart), construct the default path
+		const sessionDir = this.getSessionDir(sessionId);
+		return sessionDir ? URI.joinPath(sessionDir, 'main.jsonl') : undefined;
 	}
 
 	getSessionDir(sessionId: string): URI | undefined {
@@ -476,6 +469,14 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		if (this._modelSnapshot) {
 			this._enqueueModelSnapshotWrite(session);
 		}
+		// Write pending tool definitions that arrived before the session was promoted
+		if (session.pendingToolDefs) {
+			const fileName = `tools_${session.toolsIndex}.json`;
+			session.toolsIndex++;
+			session.currentToolsFile = fileName;
+			this._enqueueFileWrite(session, session.pendingToolDefs, fileName);
+			session.pendingToolDefs = undefined;
+		}
 	}
 
 	// ── OTel span handling ──
@@ -518,7 +519,36 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		//   1. startSession() is called explicitly, or
 		//   2. A child span references it via PARENT_CHAT_SESSION_ID
 		//      (handled in _ensureSession's child branch).
+		//   3. The session directory already exists on disk (resumed after restart).
 		this._ensureSession(sessionId);
+
+		// Auto-promote resumed sessions: if the session was just created with
+		// hasOwnSpans = false but has an existing JSONL directory from a previous
+		// extension lifecycle, promote it. This handles sessions continued after
+		// VS Code restart where title/categorization won't re-fire.
+		const session = this._activeSessions.get(sessionId);
+		if (session && !session.hasOwnSpans && !session.parentSessionId) {
+			const mainJsonl = URI.joinPath(session.sessionDir, 'main.jsonl');
+			try {
+				fs.accessSync(mainJsonl.fsPath);
+				// Directory exists from a previous run — this is a resumed session
+				session.hasOwnSpans = true;
+				session.dirEnsured = true;
+
+				// Find the next available indices for companion files to avoid
+				// overwriting ones from the previous run. Single readdir + scan.
+				try {
+					for (const f of fs.readdirSync(session.sessionDir.fsPath)) {
+						const spIdx = f.startsWith('system_prompt_') ? parseInt(f.slice(14), 10) : -1;
+						if (spIdx >= session.systemPromptIndex) { session.systemPromptIndex = spIdx + 1; }
+						const tIdx = f.startsWith('tools_') ? parseInt(f.slice(6), 10) : -1;
+						if (tIdx >= session.toolsIndex) { session.toolsIndex = tIdx + 1; }
+					}
+				} catch { /* readdir failed — indices stay at 0 */ }
+			} catch {
+				// No existing directory — leave as is
+			}
+		}
 
 		// Write system_prompt JSON when model or mode changes (before buffering so llm_request gets the file ref)
 		if (opName === GenAiOperationName.CHAT) {
@@ -536,16 +566,6 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 						session.systemPromptIndex++;
 						session.currentSystemPromptFile = fileName;
 						this._enqueueFileWrite(session, systemInstructions, fileName);
-						this._bufferEntry(sessionId, {
-							ts: span.startTime,
-							dur: 0,
-							sid: sessionId,
-							type: 'generic',
-							name: 'system_prompt_ref',
-							spanId: `sys-prompt-${span.spanId}`,
-							status: 'ok',
-							attrs: { file: fileName, model },
-						});
 					}
 				}
 			}
@@ -713,11 +733,19 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			return;
 		}
 
-		// Ensure session exists — tools_available fires early, before any span completes
-		this._ensureSession(sessionId);
-
+		// Do NOT create sessions from tools_available events — they can carry tool call IDs
+		// (e.g., toolu_xxx, call_xxx) as conversation IDs, which are not valid session IDs.
 		const session = this._activeSessions.get(sessionId);
 		if (!session || session.parentSessionId) {
+			return;
+		}
+
+		// If the session isn't promoted yet, cache the tools for later replay
+		if (!session.hasOwnSpans) {
+			const toolDefs = typeof event.attributes.toolDefinitions === 'string' ? event.attributes.toolDefinitions : undefined;
+			if (toolDefs) {
+				session.pendingToolDefs = toolDefs;
+			}
 			return;
 		}
 
@@ -726,24 +754,16 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			return;
 		}
 
-		// Use the current systemPromptKey to detect model/mode — tools change when the prompt changes
-		const key = session.systemPromptKey ?? 'unknown';
+		// Use the content length to detect changes. Different tool sets (from model
+		// or mode switches) will have different lengths. A false negative (same length,
+		// different content) just means we skip writing a redundant file — harmless.
+		const key = `tools:${toolDefs.length}`;
 		if (key !== session.toolsKey) {
 			const fileName = `tools_${session.toolsIndex}.json`;
 			session.toolsKey = key;
 			session.toolsIndex++;
 			session.currentToolsFile = fileName;
 			this._enqueueFileWrite(session, toolDefs, fileName);
-			this._bufferEntry(sessionId, {
-				ts: event.timestamp,
-				dur: 0,
-				sid: sessionId,
-				type: 'generic',
-				name: 'tools_ref',
-				spanId: `tools-${event.spanId}`,
-				status: 'ok',
-				attrs: { file: fileName },
-			});
 		}
 	}
 
@@ -960,6 +980,114 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			return;
 		}
 		session.buffer.push(JSON.stringify(entry) + '\n');
+		this._onDidEmitEntry.fire({ sessionId, entry });
+	}
+
+	async readEntries(sessionId: string): Promise<IDebugLogEntry[]> {
+		const entries: IDebugLogEntry[] = [];
+		await this.streamEntries(sessionId, entry => entries.push(entry));
+		return entries;
+	}
+
+	async readTailEntries(sessionId: string, count: number): Promise<IDebugLogEntry[]> {
+		const session = this._activeSessions.get(sessionId);
+		const logPath = session?.uri ?? this.getLogPath(sessionId);
+		let entries: IDebugLogEntry[] = [];
+
+		if (logPath) {
+			try {
+				const stat = await fs.promises.stat(logPath.fsPath);
+				// Start with a read size that should cover `count` entries.
+				// Average JSONL entry is ~1-2KB, so count * 4KB is generous.
+				const readSize = Math.min(stat.size, count * 4096);
+				const startOffset = Math.max(0, stat.size - readSize);
+
+				const fd = await fs.promises.open(logPath.fsPath, 'r');
+				try {
+					const buffer = Buffer.alloc(stat.size - startOffset);
+					const { bytesRead } = await fd.read(buffer, 0, buffer.length, startOffset);
+
+					const text = buffer.subarray(0, bytesRead).toString('utf-8');
+					const lines = text.split('\n');
+					// Skip the first line if we started mid-file (likely partial)
+					const startIdx = startOffset > 0 ? 1 : 0;
+					for (let i = startIdx; i < lines.length; i++) {
+						if (!lines[i]) { continue; }
+						try {
+							entries.push(JSON.parse(lines[i]) as IDebugLogEntry);
+						} catch { /* skip malformed */ }
+					}
+				} finally {
+					await fd.close();
+				}
+
+				// Keep only the last `count` entries
+				if (entries.length > count) {
+					entries = entries.slice(-count);
+				}
+			} catch {
+				// File may not exist — that's fine
+			}
+		}
+
+		// Append unflushed buffer entries
+		if (session) {
+			for (const line of session.buffer) {
+				try {
+					entries.push(JSON.parse(line) as IDebugLogEntry);
+				} catch { /* skip malformed */ }
+			}
+		}
+
+		return entries;
+	}
+
+	async streamEntries(sessionId: string, onEntry: (entry: IDebugLogEntry) => void): Promise<void> {
+		const session = this._activeSessions.get(sessionId);
+		const logPath = session?.uri ?? this.getLogPath(sessionId);
+
+		if (logPath) {
+			try {
+				await new Promise<void>((resolve, reject) => {
+					const stream = fs.createReadStream(logPath.fsPath, { encoding: 'utf-8' });
+					let partial = '';
+					stream.on('data', (chunk) => {
+						const text = typeof chunk === 'string' ? chunk : chunk.toString('utf-8');
+						partial += text;
+						const lines = partial.split('\n');
+						// Last element may be a partial line — keep it for next chunk
+						partial = lines.pop() ?? '';
+						for (const line of lines) {
+							if (!line) { continue; }
+							try {
+								onEntry(JSON.parse(line) as IDebugLogEntry);
+							} catch { /* skip malformed */ }
+						}
+					});
+					stream.on('end', () => {
+						// Process any remaining partial line
+						if (partial) {
+							try {
+								onEntry(JSON.parse(partial) as IDebugLogEntry);
+							} catch { /* skip malformed */ }
+						}
+						resolve();
+					});
+					stream.on('error', reject);
+				});
+			} catch {
+				// File may not exist — that's fine
+			}
+		}
+
+		// Append unflushed buffer entries
+		if (session) {
+			for (const line of session.buffer) {
+				try {
+					onEntry(JSON.parse(line) as IDebugLogEntry);
+				} catch { /* skip malformed */ }
+			}
+		}
 	}
 
 	private async _writeToFile(session: IActiveLogSession, content: string): Promise<void> {
