@@ -6119,43 +6119,50 @@
 		"chatAgents": [],
 		"chatPromptFiles": [
 			{
-				"path": "./assets/prompts/plan.prompt.md"
+				"path": "./assets/prompts/plan.prompt.md",
+				"when": "chatSessionType == 'local'"
 			},
 			{
-				"path": "./assets/prompts/init.prompt.md"
+				"path": "./assets/prompts/init.prompt.md",
+				"when": "chatSessionType == 'local'"
 			},
 			{
-				"path": "./assets/prompts/create-prompt.prompt.md"
+				"path": "./assets/prompts/create-prompt.prompt.md",
+				"when": "chatSessionType == 'local'"
 			},
 			{
-				"path": "./assets/prompts/create-instructions.prompt.md"
+				"path": "./assets/prompts/create-instructions.prompt.md",
+				"when": "chatSessionType == 'local'"
 			},
 			{
-				"path": "./assets/prompts/create-skill.prompt.md"
+				"path": "./assets/prompts/create-skill.prompt.md",
+				"when": "chatSessionType == 'local'"
 			},
 			{
-				"path": "./assets/prompts/create-agent.prompt.md"
+				"path": "./assets/prompts/create-agent.prompt.md",
+				"when": "chatSessionType == 'local'"
 			},
 			{
-				"path": "./assets/prompts/create-hook.prompt.md"
+				"path": "./assets/prompts/create-hook.prompt.md",
+				"when": "chatSessionType == 'local'"
 			}
 		],
 		"chatSkills": [
 			{
 				"path": "./assets/prompts/skills/project-setup-info-local/SKILL.md",
-				"when": "config.github.copilot.chat.projectSetupInfoSkill.enabled && !config.github.copilot.chat.newWorkspace.useContext7"
+				"when": "chatSessionType == 'local' && config.github.copilot.chat.projectSetupInfoSkill.enabled && !config.github.copilot.chat.newWorkspace.useContext7"
 			},
 			{
 				"path": "./assets/prompts/skills/project-setup-info-context7/SKILL.md",
-				"when": "config.github.copilot.chat.projectSetupInfoSkill.enabled && config.github.copilot.chat.newWorkspace.useContext7"
+				"when": "chatSessionType == 'local' && config.github.copilot.chat.projectSetupInfoSkill.enabled && config.github.copilot.chat.newWorkspace.useContext7"
 			},
 			{
 				"path": "./assets/prompts/skills/install-vscode-extension/SKILL.md",
-				"when": "config.github.copilot.chat.installExtensionSkill.enabled && config.github.copilot.chat.newWorkspaceCreation.enabled"
+				"when": "chatSessionType == 'local' && config.github.copilot.chat.installExtensionSkill.enabled && config.github.copilot.chat.newWorkspaceCreation.enabled"
 			},
 			{
 				"path": "./assets/prompts/skills/get-search-view-results/SKILL.md",
-				"when": "config.github.copilot.chat.getSearchViewResultsSkill.enabled"
+				"when": "chatSessionType == 'local' && config.github.copilot.chat.getSearchViewResultsSkill.enabled"
 			},
 			{
 				"path": "./assets/prompts/skills/troubleshoot/SKILL.md",
