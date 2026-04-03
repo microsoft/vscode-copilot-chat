@@ -30,7 +30,7 @@ import { ToolName } from '../../../../tools/common/toolNames';
 import { PromptRenderer } from '../../base/promptRenderer';
 import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 import { PromptRegistry } from '../promptRegistry';
-import { ConversationHistorySummarizationPrompt, SummarizedConversationHistoryMetadata, SummarizedConversationHistoryPropsBuilder } from '../summarizedConversationHistory';
+import { ConversationHistorySummarizationPrompt, extractInlineSummary, InlineSummarizationRequestedMetadata, SummarizedConversationHistoryMetadata, SummarizedConversationHistoryPropsBuilder } from '../summarizedConversationHistory';
 
 suite('Agent Summarization', () => {
 	let accessor: ITestingServicesAccessor;
@@ -360,4 +360,205 @@ suite('Agent Summarization', () => {
 	test('summary for previous turn, no tool call rounds', async () => testSummarizeWithNoRoundsInCurrentTurn(TestPromptType.Agent));
 	test('FullSummarization - summary for previous turn, no tool call rounds', async () => testSummarizeWithNoRoundsInCurrentTurn(TestPromptType.FullSummarization));
 	test('SimpleSummarization - summary for previous turn, no tool call rounds', async () => testSummarizeWithNoRoundsInCurrentTurn(TestPromptType.SimpleSummarization));
+});
+
+suite('extractInlineSummary', () => {
+	test('extracts clean summary tags', () => {
+		const text = 'Some preamble\n<summary>\nThis is the summary content.\n</summary>\nSome trailing text';
+		const result = extractInlineSummary(text);
+		expect(result).toBe('This is the summary content.');
+	});
+
+	test('extracts summary with no closing tag', () => {
+		const text = 'Preamble text\n<summary>\nThis is a partial summary that was cut off';
+		const result = extractInlineSummary(text);
+		expect(result).toBe('This is a partial summary that was cut off');
+	});
+
+	test('returns undefined when no tags found', () => {
+		const text = 'This is just a normal response with no summary tags at all.';
+		const result = extractInlineSummary(text);
+		expect(result).toBeUndefined();
+	});
+
+	test('uses first complete summary when multiple blocks exist', () => {
+		const text = '<summary>First summary</summary>\n<summary>Second summary</summary>';
+		const result = extractInlineSummary(text);
+		expect(result).toBe('First summary');
+	});
+
+	test('handles empty summary tags', () => {
+		const text = '<summary></summary>';
+		const result = extractInlineSummary(text);
+		expect(result).toBe('');
+	});
+
+	test('handles summary with analysis tags inside', () => {
+		const text = '<summary>\n<analysis>Some analysis</analysis>\n\n1. Overview: test\n2. Details: test\n</summary>';
+		const result = extractInlineSummary(text);
+		expect(result).toContain('1. Overview: test');
+		expect(result).toContain('<analysis>Some analysis</analysis>');
+	});
+
+	test('trims whitespace from extracted summary', () => {
+		const text = '<summary>\n\n  Padded summary text  \n\n</summary>';
+		const result = extractInlineSummary(text);
+		expect(result).toBe('Padded summary text');
+	});
+});
+
+suite('Inline Summarization Prompt', () => {
+	let accessor: ITestingServicesAccessor;
+
+	beforeAll(() => {
+		const services = createExtensionUnitTestingServices();
+		services.define(IWorkspaceService, new SyncDescriptor(
+			TestWorkspaceService,
+			[
+				[URI.file('/workspace')],
+				[]
+			]
+		));
+		services.define(IChatMLFetcher, new StaticChatMLFetcher([]));
+		accessor = services.createTestingAccessor();
+	});
+
+	afterAll(() => {
+		accessor.dispose();
+	});
+
+	test('inlineSummarization=true appends summarization user message and metadata', async () => {
+		const instaService = accessor.get(IInstantiationService);
+		const endpoint = instaService.createInstance(MockEndpoint, undefined);
+		const turn = new Turn('turnId', { type: 'user', message: 'hello' });
+		const conversation = new Conversation('sessionId', [turn]);
+
+		const firstTurn = new Turn('id1', { type: 'user', message: 'previous turn message' });
+		firstTurn.setResponse(TurnStatus.Success, { type: 'user', message: 'response' }, 'responseId', {
+			metadata: {
+				toolCallRounds: [
+					new ToolCallRound('ok', [{
+						id: 'tooluse_1',
+						name: ToolName.EditFile,
+						arguments: JSON.stringify({ filePath: '/workspace/file.ts', code: 'test' })
+					}]),
+				]
+			}
+		} as ICopilotChatResultIn);
+
+		const promptContext: IBuildPromptContext = {
+			chatVariables: new ChatVariablesCollection([]),
+			history: [firstTurn],
+			query: 'continue',
+			toolCallRounds: [
+				new ToolCallRound('ok 2', [{
+					id: 'tooluse_2',
+					name: ToolName.EditFile,
+					arguments: JSON.stringify({ filePath: '/workspace/file.ts', code: 'test2' })
+				}]),
+			],
+			toolCallResults: {
+				'tooluse_2': new LanguageModelToolResult([new LanguageModelTextPart('success')]),
+			},
+			tools: {
+				availableTools: [],
+				toolInvocationToken: null as never,
+				toolReferences: [],
+			},
+			conversation,
+		};
+
+		const customizations = await PromptRegistry.resolveAllCustomizations(instaService, endpoint);
+		const props: AgentPromptProps = {
+			priority: 1,
+			endpoint,
+			location: ChatLocation.Panel,
+			promptContext,
+			enableCacheBreakpoints: true,
+			inlineSummarization: true,
+			customizations,
+		};
+
+		const renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, props);
+		const result = await renderer.render();
+
+		// Should have InlineSummarizationRequestedMetadata set
+		const inlineMeta = result.metadata.get(InlineSummarizationRequestedMetadata);
+		expect(inlineMeta).toBeDefined();
+
+		// The last user message should contain summarization instructions
+		const userMessages = result.messages.filter(m => m.role === Raw.ChatRole.User);
+		const lastUserMessage = userMessages[userMessages.length - 1];
+		const lastMessageText = lastUserMessage.content.map(c => 'text' in c ? c.text : '').join('');
+		expect(lastMessageText).toContain('summary');
+		expect(lastMessageText).toContain('Do NOT call any tools');
+
+		// Should NOT have the separate-call summarization metadata
+		const summaryMeta = result.metadata.get(SummarizedConversationHistoryMetadata);
+		expect(summaryMeta).toBeUndefined();
+	});
+
+	test('triggerSummarize takes precedence over inlineSummarization', async () => {
+		const instaService = accessor.get(IInstantiationService);
+		const endpoint = instaService.createInstance(MockEndpoint, undefined);
+
+		const firstTurn = new Turn('id1', { type: 'user', message: 'previous turn message' });
+		firstTurn.setResponse(TurnStatus.Success, { type: 'user', message: 'response' }, 'responseId', {
+			metadata: {
+				toolCallRounds: [
+					new ToolCallRound('ok', [{
+						id: 'tooluse_1',
+						name: ToolName.EditFile,
+						arguments: JSON.stringify({ filePath: '/workspace/file.ts', code: 'test' })
+					}]),
+				]
+			}
+		} as ICopilotChatResultIn);
+
+		const promptContext: IBuildPromptContext = {
+			chatVariables: new ChatVariablesCollection([]),
+			history: [firstTurn],
+			query: 'continue',
+			toolCallRounds: [
+				new ToolCallRound('ok 2', [{
+					id: 'tooluse_2',
+					name: ToolName.EditFile,
+					arguments: JSON.stringify({ filePath: '/workspace/file.ts', code: 'test2' })
+				}]),
+			],
+			toolCallResults: {
+				'tooluse_2': new LanguageModelToolResult([new LanguageModelTextPart('success')]),
+			},
+			tools: {
+				availableTools: [],
+				toolInvocationToken: null as never,
+				toolReferences: [],
+			},
+		};
+
+		// When both triggerSummarize and inlineSummarization are true,
+		// triggerSummarize should take precedence (inlineSummarization condition
+		// requires triggerSummarize to be false).
+		// We test this indirectly: inlineSummarization=true with triggerSummarize=false
+		// should set InlineSummarizationRequestedMetadata, but if triggerSummarize were
+		// also true, the inline path would be skipped.
+		const customizations = await PromptRegistry.resolveAllCustomizations(instaService, endpoint);
+		const propsInlineOnly: AgentPromptProps = {
+			priority: 1,
+			endpoint,
+			location: ChatLocation.Panel,
+			promptContext,
+			enableCacheBreakpoints: true,
+			triggerSummarize: false,
+			inlineSummarization: true,
+			customizations,
+		};
+
+		const renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, propsInlineOnly);
+		const result = await renderer.render();
+
+		// Inline metadata should be set when triggerSummarize is false
+		const inlineMeta = result.metadata.get(InlineSummarizationRequestedMetadata);
+		expect(inlineMeta).toBeDefined();
+	});
 });

@@ -399,6 +399,8 @@ export interface SummarizedAgentHistoryProps extends BasePromptElementProps, Age
 	readonly location: ChatLocation;
 	readonly promptContext: IBuildPromptContext;
 	readonly triggerSummarize?: boolean;
+	/** When true, appends a summarization instruction in the agent loop instead of a separate LLM call. */
+	readonly inlineSummarization?: boolean;
 	readonly tools?: ReadonlyArray<LanguageModelToolInformation> | undefined;
 	readonly enableCacheBreakpoints?: boolean;
 	readonly workingNotebook?: NotebookDocument;
@@ -478,12 +480,18 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 			}
 		}
 
+		// Inline summarization: append instruction as a user message in the agent loop
+		// instead of making a separate LLM call. The model outputs only a summary.
+		const inlineSummarizationRequested = this.props.inlineSummarization && !this.props.triggerSummarize;
+
 		return <>
 			{historyMetadata && <meta value={historyMetadata} />}
+			{inlineSummarizationRequested && <meta value={new InlineSummarizationRequestedMetadata()} />}
 			<ConversationHistory
 				{...this.props}
 				promptContext={promptContext}
 				enableCacheBreakpoints={this.props.enableCacheBreakpoints} />
+			{inlineSummarizationRequested && <InlineSummarizationUserMessage priority={1000} endpoint={this.props.endpoint} />}
 		</>;
 	}
 
@@ -1070,4 +1078,69 @@ class SummaryMessageElement extends PromptElement<SummaryMessageProps> {
 			</Tag>}
 		</UserMessage>;
 	}
+}
+
+/**
+ * Metadata flag indicating that inline summarization was requested in this render.
+ * The caller (agentIntent) checks for this to know the model response should
+ * contain only a summary.
+ */
+export class InlineSummarizationRequestedMetadata extends PromptMetadata { }
+
+interface InlineSummarizationUserMessageProps extends BasePromptElementProps {
+	readonly endpoint: IChatEndpoint;
+}
+
+/**
+ * User message appended to the agent prompt when inline summarization is triggered.
+ * Instructs the model to output ONLY a summary wrapped in `<summary>` tags, with
+ * no tool calls. The summary is extracted from the response and stored on the round
+ * for the next iteration.
+ */
+class InlineSummarizationUserMessage extends PromptElement<InlineSummarizationUserMessageProps> {
+	override async render(state: void, sizing: PromptSizing) {
+		const isOpus = this.props.endpoint.model.startsWith('claude-opus');
+		return <UserMessage priority={1000}>
+			The conversation has grown too large for the context window and must be compacted now.<br />
+			<br />
+			{SummaryPrompt}
+			<br />
+			<br />
+			IMPORTANT: Output your summary wrapped in {'<summary>'} and {'</summary>'} tags. Do NOT call any tools. Your ONLY task right now is to produce a comprehensive summary of the conversation so far.<br />
+			{isOpus && <>
+				<br />
+				IMPORTANT: Do NOT call any tools. Your only task is to generate a text summary of the conversation. Do not attempt to execute any actions or make any tool calls.<br />
+			</>}
+		</UserMessage>;
+	}
+}
+
+/**
+ * Extracts an inline summary from the model's response text.
+ *
+ * Parsing strategy (multi-level fallback):
+ * 1. Clean `<summary>...</summary>` tags → extracts content between them
+ * 2. `<summary>` found but no closing tag → takes everything after `<summary>`
+ * 3. No tags found → returns undefined (caller falls back to separate-call summarization)
+ *
+ * @returns The extracted summary text, or `undefined` if no summary could be found.
+ */
+export function extractInlineSummary(responseText: string): string | undefined {
+	// 1. Try clean <summary>...</summary> extraction
+	const openTag = '<summary>';
+	const closeTag = '</summary>';
+	const openIdx = responseText.indexOf(openTag);
+	if (openIdx !== -1) {
+		const contentStart = openIdx + openTag.length;
+		const closeIdx = responseText.indexOf(closeTag, contentStart);
+		if (closeIdx !== -1) {
+			// Clean extraction
+			return responseText.substring(contentStart, closeIdx).trim();
+		}
+		// 2. Open tag but no closing tag — take everything after <summary>
+		return responseText.substring(contentStart).trim();
+	}
+
+	// 3. No tags found — cannot extract
+	return undefined;
 }

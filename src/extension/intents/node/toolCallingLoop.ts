@@ -47,7 +47,7 @@ import { ThinkingDataItem, ToolCallRound } from '../../prompt/common/toolCallRou
 import { IBuildPromptResult, IResponseProcessor } from '../../prompt/node/intents';
 import { PseudoStopStartResponseProcessor } from '../../prompt/node/pseudoStartStopConversationCallback';
 import { ResponseProcessorContext } from '../../prompt/node/responseProcessorContext';
-import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
+import { extractInlineSummary, InlineSummarizationRequestedMetadata, SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
 import { ToolFailureEncountered, ToolResultMetadata } from '../../prompts/node/panel/toolCalling';
 import { ToolName } from '../../tools/common/toolNames';
 import { IToolsService, ToolCallCancelledError } from '../../tools/common/toolsService';
@@ -354,6 +354,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private taskCompleted = false;
 	private autopilotStopHookActive = false;
 	private autopilotProgressDeferred: DeferredPromise<void> | undefined;
+	private inlineSummarizationProgressDeferred: DeferredPromise<void> | undefined;
 
 	/**
 	 * Autopilot stop hook — the model needs to call `task_complete` to signal it's done.
@@ -887,6 +888,105 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				this._sessionTranscriptService.logAssistantTurnEnd(sessionId, turnId);
 				agentSpan?.addEvent('turn_end', { turnId, ...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}) });
 
+				// Inline summarization: the model responded with summary text only (no tool calls).
+				// Extract the summary, store it on the appropriate round, and continue the loop.
+				if (result.inlineSummarizationRequested && !result.round.toolCalls.length && result.response.type === ChatFetchResponseType.Success) {
+					const summaryText = extractInlineSummary(result.round.response);
+					if (summaryText) {
+						// Determine which round to mark as summarized.
+						// After push, toolCallRounds = [r0, ..., rK, summaryRound].
+						// Matching SummarizedConversationHistoryPropsBuilder.getProps() which
+						// excludes the last round so it renders verbatim after the summary:
+						// - 3+ rounds: mark rK-1, keep rK (the last real tool calls) verbatim
+						// - 2 rounds: mark rK (no room to preserve anything)
+						// - 1 round (summary only): fall back to history turns
+						const allCurrentRounds = this.toolCallRounds;
+						let summarizedToolCallRoundId: string | undefined;
+						if (allCurrentRounds.length > 2) {
+							// Preserve the last pre-summarization round verbatim
+							summarizedToolCallRoundId = allCurrentRounds[allCurrentRounds.length - 3].id;
+							allCurrentRounds[allCurrentRounds.length - 3].summary = summaryText;
+						} else if (allCurrentRounds.length > 1) {
+							summarizedToolCallRoundId = allCurrentRounds[allCurrentRounds.length - 2].id;
+							allCurrentRounds[allCurrentRounds.length - 2].summary = summaryText;
+						} else {
+							const history = this.options.conversation.turns.slice(0, -1);
+							const lastHistoryTurn = history.at(-1);
+							const lastHistoryRound = lastHistoryTurn?.rounds.at(-1);
+							if (lastHistoryRound) {
+								summarizedToolCallRoundId = lastHistoryRound.id;
+								lastHistoryRound.summary = summaryText;
+							}
+						}
+
+						if (summarizedToolCallRoundId) {
+							// Persist summary on the turn so normalizeSummariesOnRounds can restore it
+							const turn = this.turn;
+							const resolvedModel = result.response.type === ChatFetchResponseType.Success ? result.response.resolvedModel : undefined;
+							turn.addPendingSummary(summarizedToolCallRoundId, summaryText);
+							const inlineSummarizationMeta = new SummarizedConversationHistoryMetadata(
+								summarizedToolCallRoundId,
+								summaryText,
+								{
+									usage: result.response.type === ChatFetchResponseType.Success ? result.response.usage : undefined,
+									model: resolvedModel,
+									summarizationMode: 'inline',
+									source: 'foreground',
+									outcome: 'success',
+								},
+							);
+							turn.setMetadata(inlineSummarizationMeta);
+
+							// Fire explicit telemetry event matching the existing summarization telemetry
+							/* __GDPR__
+								"summarizedConversationHistory" : {
+									"owner": "bhavyau",
+									"comment": "Tracks inline summarization",
+									"outcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The success state." },
+									"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model ID." },
+									"summarizationMode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The summarization mode." },
+									"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether background or foreground." },
+									"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Session id." },
+									"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Prompt tokens." },
+									"promptCacheTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Cached prompt tokens." },
+									"responseTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Output tokens." }
+								}
+							*/
+							const usage = result.response.type === ChatFetchResponseType.Success ? result.response.usage : undefined;
+							this._telemetryService.sendMSFTTelemetryEvent('summarizedConversationHistory', {
+								outcome: 'success',
+								model: resolvedModel,
+								summarizationMode: 'inline',
+								source: 'foreground',
+								conversationId: this.options.conversation.sessionId,
+							}, {
+								promptTokenCount: usage?.prompt_tokens,
+								promptCacheTokenCount: usage?.prompt_tokens_details?.cached_tokens,
+								responseTokenCount: usage?.completion_tokens,
+							});
+
+							this._logService.info(`[ToolCallingLoop] Inline summarization extracted (${summaryText.length} chars, roundId=${summarizedToolCallRoundId}), continuing loop`);
+
+							// Remove the summarization round — it served its purpose
+							// and shouldn't be rendered as an assistant message in
+							// subsequent iterations (otherwise the model sees both
+							// the compacted <conversation-summary> AND the raw
+							// <analysis>...<summary>...</summary> response).
+							this.toolCallRounds.pop();
+
+							// Resolve the "Compacting conversation..." progress to show "Compacted conversation"
+							this.inlineSummarizationProgressDeferred?.complete(undefined);
+							this.inlineSummarizationProgressDeferred = undefined;
+						} else {
+							this._logService.warn(`[ToolCallingLoop] Inline summarization: no round found to store summary on`);
+						}
+						continue;
+					} else {
+						this._logService.warn(`[ToolCallingLoop] Inline summarization requested but no summary extracted from response`);
+						// Fall through to normal no-tool-calls handling (will break the loop)
+					}
+				}
+
 				// If the model produced productive (non-task_complete) tool calls after being nudged,
 				// reset the stop hook flag and iteration count so it can be nudged again.
 				if (this.autopilotStopHookActive && result.round.toolCalls.length && !result.round.toolCalls.some(tc => tc.name === ToolCallingLoop.TASK_COMPLETE_TOOL_NAME)) {
@@ -1159,6 +1259,20 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		if (conversationSummary) {
 			this.turn.setMetadata(conversationSummary);
 		}
+		const inlineSummarizationRequested = !!effectiveBuildPromptResult.metadata.get(InlineSummarizationRequestedMetadata);
+
+		// Show "Compacting conversation..." progress during the inline summarization
+		// fetch. The deferred is resolved in _runLoop after the summary is extracted.
+		if (inlineSummarizationRequested) {
+			this.inlineSummarizationProgressDeferred?.complete(undefined);
+			const deferred = new DeferredPromise<void>();
+			this.inlineSummarizationProgressDeferred = deferred;
+			outputStream?.progress(l10n.t('Compacting conversation...'), async () => {
+				await deferred.p;
+				return l10n.t('Compacted conversation');
+			});
+		}
+
 		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
 		const tokenizer = endpoint.acquireTokenizer();
 		const promptTokenLength = await tokenizer.countMessagesTokens(effectiveBuildPromptResult.messages);
@@ -1194,11 +1308,14 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		this._logService.trace('Sending prompt to model');
 
-		const streamParticipants = outputStream ? [outputStream] : [];
+		// When inline summarization is requested, suppress streaming so the
+		// summary text (with <summary> tags) is not shown to the user.
+		const effectiveOutputStream = inlineSummarizationRequested ? undefined : outputStream;
+		const streamParticipants = effectiveOutputStream ? [effectiveOutputStream] : [];
 		let fetchStreamSource: FetchStreamSource | undefined;
 		let processResponsePromise: Promise<ChatResult | void> | undefined;
 		let stopEarly = false;
-		if (outputStream) {
+		if (effectiveOutputStream) {
 			this.options.streamParticipants?.forEach(fn => {
 				streamParticipants.push(fn(streamParticipants[streamParticipants.length - 1]));
 			});
@@ -1369,6 +1486,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
 				lastRequestMessages: effectiveBuildPromptResult.messages,
 				availableTools,
+				inlineSummarizationRequested,
 			};
 		}
 
@@ -1377,7 +1495,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
 			lastRequestMessages: effectiveBuildPromptResult.messages,
 			availableTools,
-			round: new ToolCallRound('', toolCalls, toolInputRetry)
+			round: new ToolCallRound('', toolCalls, toolInputRetry),
+			inlineSummarizationRequested,
 		};
 	}
 
@@ -1609,6 +1728,8 @@ export interface IToolCallSingleResult {
 	hadIgnoredFiles: boolean;
 	lastRequestMessages: Raw.ChatMessage[];
 	availableTools: readonly LanguageModelToolInformation[];
+	/** Set when the prompt included inline summarization instructions. */
+	inlineSummarizationRequested?: boolean;
 }
 
 export interface IToolCallLoopResult extends IToolCallSingleResult {

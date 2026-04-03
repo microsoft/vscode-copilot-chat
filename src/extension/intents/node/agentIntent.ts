@@ -17,9 +17,9 @@ import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { CUSTOM_TOOL_SEARCH_NAME, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
-import { IToolDeferralService } from '../../../platform/networking/common/toolDeferralService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { modelsWithoutResponsesContextManagement } from '../../../platform/networking/common/openai';
+import { IToolDeferralService } from '../../../platform/networking/common/toolDeferralService';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
 import { IOTelService } from '../../../platform/otel/common/otelService';
@@ -412,7 +412,9 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		const useTruncation = this.endpoint.apiType === 'responses' && this.configurationService.getConfig(ConfigKey.Advanced.UseResponsesApiTruncation);
 		const responsesCompactionContextManagementEnabled = isResponsesCompactionContextManagementEnabled(this.endpoint, this.configurationService, this.expService);
 		const summarizationEnabled = this.configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) && this.prompt === AgentPrompt && !responsesCompactionContextManagementEnabled;
-		const backgroundCompactionEnabled = summarizationEnabled && this.configurationService.getExperimentBasedConfig(ConfigKey.BackgroundCompaction, this.expService);
+		const inlineSummarizationEnabled = summarizationEnabled && this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentHistorySummarizationInline, this.expService);
+		// Disable background compaction when inline summarization is active — they solve the same problem
+		const backgroundCompactionEnabled = summarizationEnabled && !inlineSummarizationEnabled && this.configurationService.getExperimentBasedConfig(ConfigKey.BackgroundCompaction, this.expService);
 
 		// When tools are present, apply a 10% safety margin on the message portion
 		// to account for tokenizer discrepancies between our tool-token counter and
@@ -458,6 +460,26 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		const contextRatio = backgroundSummarizer && baseBudget > 0
 			? (this._lastRenderTokenCount + toolTokens) / baseBudget
 			: 0;
+
+		// ── Proactive inline summarization: pre-render check ──────────────
+		// Use _lastRenderTokenCount (from the previous iteration) to decide
+		// whether to append the summarize instruction *before* the main
+		// render, avoiding a wasteful double-render.
+		// Guard: skip when a summary was already stored on the current or
+		// most-recent history turn — _lastRenderTokenCount is stale from the
+		// summarization render and would falsely re-trigger.
+		let proactiveInlineSummarization = false;
+		if (inlineSummarizationEnabled && baseBudget > 0) {
+			const hasRecentSummary = promptContext.toolCallRounds?.some(r => r.summary)
+				|| promptContext.history.at(-1)?.rounds.some(r => r.summary);
+			if (!hasRecentSummary) {
+				const preRenderRatio = (this._lastRenderTokenCount + toolTokens) / baseBudget;
+				if (preRenderRatio >= 0.85) {
+					this.logService.debug(`[Agent] pre-render at ${(preRenderRatio * 100).toFixed(0)}% — proactively enabling inline summarization`);
+					proactiveInlineSummarization = true;
+				}
+			}
+		}
 
 		// Track whether we applied a summary in this iteration so we don't
 		// immediately re-trigger background compaction in the post-render check.
@@ -554,10 +576,39 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			}
 		};
 
+		// Helper function for inline summarization — appends summarize instruction
+		// as a user message in the agent loop instead of making a separate LLM call.
+		// Returns the render result with InlineSummarizationRequestedMetadata set.
+		const renderWithInlineSummarization = async (reason: string, renderProps: AgentPromptProps = props): Promise<RenderPromptResult> => {
+			this.logService.debug(`[Agent] ${reason}, triggering inline summarization`);
+			try {
+				// Expand the budget by 15% so the summarization user message fits
+				// alongside the conversation that just exceeded the normal budget.
+				// This matches the expansion used by CacheFriendlySummarizationPrompt.
+				const expandedEndpoint = renderProps.endpoint.cloneWithTokenOverride(renderProps.endpoint.modelMaxPromptTokens * 1.15);
+				const renderer = PromptRenderer.create(this.instantiationService, expandedEndpoint, this.prompt, {
+					...renderProps,
+					endpoint: expandedEndpoint,
+					inlineSummarization: true,
+				});
+				const inlineResult = await renderer.render(progress, token);
+				return inlineResult;
+			} catch (e) {
+				this.logService.error(e, `[Agent] inline summarization render failed, falling back to separate-call summarization`);
+				return await renderWithSummarization(`inline summarization failed (${e instanceof Error ? e.message : e}), falling back`, renderProps);
+			}
+		};
+
 		const contextLengthBefore = this._lastRenderTokenCount;
 
 		try {
-			const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, props);
+			const renderProps = proactiveInlineSummarization
+				? { ...props, inlineSummarization: true }
+				: props;
+			const renderEndpoint = proactiveInlineSummarization
+				? endpoint.cloneWithTokenOverride(endpoint.modelMaxPromptTokens * 1.15)
+				: endpoint;
+			const renderer = PromptRenderer.create(this.instantiationService, renderEndpoint, this.prompt, { ...renderProps, endpoint: renderEndpoint });
 			result = await renderer.render(progress, token);
 		} catch (e) {
 			if (e instanceof BudgetExceededError && summarizationEnabled) {
@@ -605,6 +656,8 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 						// Background compaction failed — fall back to synchronous summarization
 						result = await renderWithSummarization(`budget exceeded(${e.message}), background compaction failed`);
 					}
+				} else if (inlineSummarizationEnabled) {
+					result = await renderWithInlineSummarization(`budget exceeded(${e.message})`);
 				} else {
 					result = await renderWithSummarization(`budget exceeded(${e.message})`);
 				}
