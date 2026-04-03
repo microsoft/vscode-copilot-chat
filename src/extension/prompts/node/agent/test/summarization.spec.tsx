@@ -361,10 +361,7 @@ suite('Agent Summarization', () => {
 	test('FullSummarization - summary for previous turn, no tool call rounds', async () => testSummarizeWithNoRoundsInCurrentTurn(TestPromptType.FullSummarization));
 	test('SimpleSummarization - summary for previous turn, no tool call rounds', async () => testSummarizeWithNoRoundsInCurrentTurn(TestPromptType.SimpleSummarization));
 
-	test('failed summarization records failure metadata on turn', async () => {
-		// Return a huge summary that exceeds the budget → triggers 'Summary too large'
-		chatResponse[0] = 'x'.repeat(500_000);
-
+	async function createSummarizationTestContext() {
 		const instaService = accessor.get(IInstantiationService);
 		const endpoint = instaService.createInstance(MockEndpoint, undefined);
 
@@ -397,51 +394,26 @@ suite('Agent Summarization', () => {
 			triggerSummarize: true,
 			customizations,
 		};
-		const renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, props);
-		// Summarization should fail (summary too large) but the overall render should succeed
-		// because it falls back to a non-summarized render
-		const result = await renderer.render();
 
-		// The metadata should NOT record a successful summarization
-		const summaryMeta = result.metadata.get(SummarizedConversationHistoryMetadata);
-		expect(summaryMeta).toBeUndefined();
+		return { instaService, endpoint, toolCallRounds, turn, testConversation, promptContext, props };
+	}
+
+	test('failed summarization throws from renderer (fallback is in agentIntent)', async () => {
+		// Return a huge summary that exceeds the budget → triggers 'Summary too large'
+		// in both Full and Simple modes. The PromptRenderer propagates the error;
+		// the fallback to a no-cache-breakpoints render lives in agentIntent.ts's
+		// renderWithSummarization, not here.
+		chatResponse[0] = 'x'.repeat(500_000);
+		const { instaService, endpoint, props } = await createSummarizationTestContext();
+
+		const renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, props);
+		await expect(renderer.render()).rejects.toThrow('Summary too large');
 	});
 
 	test('successful summarization records metadata on render result', async () => {
 		chatResponse[0] = 'summarized successfully!';
+		const { instaService, endpoint, props } = await createSummarizationTestContext();
 
-		const instaService = accessor.get(IInstantiationService);
-		const endpoint = instaService.createInstance(MockEndpoint, undefined);
-
-		const toolCallRounds = [
-			new ToolCallRound('ok', [createEditFileToolCall(1)]),
-			new ToolCallRound('ok 2', [createEditFileToolCall(2)]),
-			new ToolCallRound('ok 3', [createEditFileToolCall(3)]),
-		];
-
-		const turn = new Turn('turnId', { type: 'user', message: 'hello' });
-		const testConversation = new Conversation('sessionId', [turn]);
-
-		const promptContext: IBuildPromptContext = {
-			chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
-			history: [],
-			query: 'edit this file',
-			toolCallRounds,
-			toolCallResults: createEditFileToolResult(1, 2, 3),
-			tools,
-			conversation: testConversation,
-		};
-
-		const customizations = await PromptRegistry.resolveAllCustomizations(instaService, endpoint);
-		const props: AgentPromptProps = {
-			priority: 1,
-			endpoint,
-			location: ChatLocation.Panel,
-			promptContext,
-			enableCacheBreakpoints: true,
-			triggerSummarize: true,
-			customizations,
-		};
 		const renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, props);
 		const result = await renderer.render();
 
@@ -453,41 +425,10 @@ suite('Agent Summarization', () => {
 
 	test('failed summarization does not set round.summary', async () => {
 		chatResponse[0] = 'x'.repeat(500_000);
+		const { instaService, endpoint, toolCallRounds, props } = await createSummarizationTestContext();
 
-		const instaService = accessor.get(IInstantiationService);
-		const endpoint = instaService.createInstance(MockEndpoint, undefined);
-
-		const toolCallRounds = [
-			new ToolCallRound('ok', [createEditFileToolCall(1)]),
-			new ToolCallRound('ok 2', [createEditFileToolCall(2)]),
-			new ToolCallRound('ok 3', [createEditFileToolCall(3)]),
-		];
-
-		const turn = new Turn('turnId', { type: 'user', message: 'hello' });
-		const testConversation = new Conversation('sessionId', [turn]);
-
-		const promptContext: IBuildPromptContext = {
-			chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
-			history: [],
-			query: 'edit this file',
-			toolCallRounds,
-			toolCallResults: createEditFileToolResult(1, 2, 3),
-			tools,
-			conversation: testConversation,
-		};
-
-		const customizations = await PromptRegistry.resolveAllCustomizations(instaService, endpoint);
-		const props: AgentPromptProps = {
-			priority: 1,
-			endpoint,
-			location: ChatLocation.Panel,
-			promptContext,
-			enableCacheBreakpoints: true,
-			triggerSummarize: true,
-			customizations,
-		};
 		const renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, props);
-		await renderer.render();
+		await expect(renderer.render()).rejects.toThrow();
 
 		// None of the rounds should have summary set since summarization failed
 		for (const round of toolCallRounds) {
