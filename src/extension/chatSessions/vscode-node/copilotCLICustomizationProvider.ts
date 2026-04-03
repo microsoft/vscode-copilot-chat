@@ -27,7 +27,7 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 				vscode.ChatSessionCustomizationType.Instructions,
 				vscode.ChatSessionCustomizationType.Hook,
 				vscode.ChatSessionCustomizationType.Plugins,
-			],
+			].filter((t): t is vscode.ChatSessionCustomizationType => t !== undefined),
 		};
 	}
 
