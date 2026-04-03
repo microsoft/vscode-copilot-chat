@@ -267,7 +267,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		}
 
 		const models: vscode.LanguageModelChatInformation[] = [];
-		const vendorOrderingEnabled = this._configurationService.getConfig(ConfigKey.ModelPickerVendorOrdering);
+		const vendorOrderingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.ModelPickerVendorOrdering, this._expService);
 		const allEndpoints = await this._endpointProvider.getAllChatEndpoints();
 		const chatEndpoints = allEndpoints.filter(e => e.showInModelPicker || e.model === 'gpt-4o-mini');
 		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, allEndpoints);
