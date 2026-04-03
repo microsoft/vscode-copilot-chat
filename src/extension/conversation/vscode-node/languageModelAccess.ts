@@ -358,13 +358,15 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 					[ApiChatLocation.Editor]: endpoint instanceof AutoChatEndpoint, // inline chat gets 'Auto' by default
 				},
 				isUserSelectable: endpoint.showInModelPicker,
-				vendorPriority: vendorOrderingEnabled && !(endpoint instanceof AutoChatEndpoint) ? getVendorPriority(endpoint.modelProvider) : undefined,
 				capabilities: {
 					imageInput: endpoint instanceof AutoChatEndpoint ? true : endpoint.supportsVision,
 					toolCalling: endpoint.supportsToolCalls,
 				},
 				...buildConfigurationSchema(endpoint),
 			};
+			if (vendorOrderingEnabled && !(endpoint instanceof AutoChatEndpoint)) {
+				(model as vscode.LanguageModelChatInformation & { vendorPriority?: number }).vendorPriority = getVendorPriority(endpoint.modelProvider);
+			}
 
 			models.push(model);
 
