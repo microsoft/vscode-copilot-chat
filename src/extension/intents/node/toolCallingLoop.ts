@@ -1285,7 +1285,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					type: 'function',
 				})),
 			},
-			userInitiatedRequest: (iterationNumber === 0 && !isContinuation && !this.options.request.subAgentInvocationId) || this.stopHookUserInitiated,
+			userInitiatedRequest: (iterationNumber === 0 && !isContinuation && !this.options.request.subAgentInvocationId && !this.options.request.isSystemInitiated) || this.stopHookUserInitiated,
 			enableThinking,
 			reasoningEffort,
 		}, token).finally(() => {

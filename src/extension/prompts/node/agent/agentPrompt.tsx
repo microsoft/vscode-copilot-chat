@@ -305,6 +305,8 @@ export interface AgentUserMessageProps extends BasePromptElementProps, AgentUser
 	readonly hasStopHookQuery?: boolean;
 	/** Additional context provided by SubagentStart hooks. */
 	readonly additionalHookContext?: string;
+	/** When true, this request was system-initiated (e.g. terminal completion notification) and should skip context/wrapping. */
+	readonly isSystemInitiated?: boolean;
 }
 
 export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint, customizations?: AgentUserMessageCustomizations): AgentUserMessageProps {
@@ -334,6 +336,7 @@ export function getUserMessagePropsFromAgentProps(agentProps: AgentPromptProps, 
 		editedFileEvents: agentProps.promptContext.editedFileEvents,
 		hasStopHookQuery: agentProps.promptContext.hasStopHookQuery,
 		additionalHookContext: agentProps.promptContext.additionalHookContext,
+		isSystemInitiated: agentProps.promptContext.request?.isSystemInitiated,
 		// TODO:@roblourens
 		sessionId: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionId,
 		sessionResource: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionResource,
@@ -363,6 +366,12 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 
 		if (this.props.isHistorical) {
 			this.logService.trace('Re-rendering historical user message');
+		}
+
+		// System-initiated messages (e.g. terminal completion notifications) are
+		// self-contained and should not be wrapped in <userRequest> or have context re-added.
+		if (this.props.isSystemInitiated) {
+			return <UserMessage>{this.props.request}</UserMessage>;
 		}
 
 		const query = await this.promptVariablesService.resolveToolReferencesInPrompt(this.props.request, this.props.toolReferences ?? []);
