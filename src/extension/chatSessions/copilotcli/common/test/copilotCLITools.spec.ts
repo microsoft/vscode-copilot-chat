@@ -12,7 +12,7 @@ import {
 	ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString
 } from '../../../../../vscodeTypes';
 import {
-	buildChatHistoryFromEvents, createCopilotCLIToolInvocation, enrichToolInvocationWithSubagentMetadata, extractCdPrefix, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, RequestIdDetails, stripReminders, ToolCall
+	buildChatHistoryFromEvents, createCopilotCLIToolInvocation, enrichToolInvocationWithSubagentMetadata, extractCdPrefix, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, parseTodoMarkdown, processToolExecutionComplete, processToolExecutionStart, RequestIdDetails, SqlTodoTracker, stripReminders, ToolCall
 } from '../copilotCLITools';
 import { IChatDelegationSummaryService } from '../delegationSummaryService';
 
@@ -1128,6 +1128,408 @@ describe('CopilotCLITools', () => {
 			// grep tool at level 3 also resolves to root L0
 			const grep = toolParts.find(p => p.toolCallId === 'grep-1')!;
 			expect(grep.subAgentInvocationId).toBe('L0');
+		});
+	});
+
+	describe('SqlTodoTracker', () => {
+		it('tracks INSERT INTO todos', () => {
+			const tracker = new SqlTodoTracker();
+			const changed = tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('user-auth', 'Create auth module', 'Implement JWT auth');`
+			);
+			expect(changed).toBe(true);
+			const list = tracker.getTodoList();
+			expect(list).toHaveLength(1);
+			expect(list[0].title).toBe('Create auth module');
+			expect(list[0].description).toBe('Implement JWT auth');
+			expect(list[0].status).toBe('not-started');
+		});
+
+		it('tracks INSERT with multiple rows', () => {
+			const tracker = new SqlTodoTracker();
+			const changed = tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('auth', 'Auth module', 'JWT'), ('api', 'API routes', 'REST endpoints');`
+			);
+			expect(changed).toBe(true);
+			expect(tracker.getTodoList()).toHaveLength(2);
+		});
+
+		it('tracks INSERT without description column', () => {
+			const tracker = new SqlTodoTracker();
+			const changed = tracker.processSqlQuery(
+				`INSERT INTO todos (id, title) VALUES ('auth', 'Auth module');`
+			);
+			expect(changed).toBe(true);
+			const list = tracker.getTodoList();
+			expect(list).toHaveLength(1);
+			expect(list[0].title).toBe('Auth module');
+			expect(list[0].description).toBe('');
+		});
+
+		it('tracks UPDATE single todo status to done', () => {
+			const tracker = new SqlTodoTracker();
+			tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('auth', 'Auth module', 'JWT');`
+			);
+			const changed = tracker.processSqlQuery(
+				`UPDATE todos SET status = 'done' WHERE id = 'auth';`
+			);
+			expect(changed).toBe(true);
+			const list = tracker.getTodoList();
+			expect(list[0].status).toBe('completed');
+		});
+
+		it('tracks UPDATE to in_progress', () => {
+			const tracker = new SqlTodoTracker();
+			tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('auth', 'Auth module', 'JWT');`
+			);
+			tracker.processSqlQuery(
+				`UPDATE todos SET status = 'in_progress' WHERE id = 'auth';`
+			);
+			expect(tracker.getTodoList()[0].status).toBe('in-progress');
+		});
+
+		it('tracks compound UPDATE statements (semicolon-separated)', () => {
+			const tracker = new SqlTodoTracker();
+			tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('a', 'Task A', ''), ('b', 'Task B', '');`
+			);
+			const changed = tracker.processSqlQuery(
+				`UPDATE todos SET status = 'done' WHERE id = 'a';
+UPDATE todos SET status = 'in_progress' WHERE id = 'b';`
+			);
+			expect(changed).toBe(true);
+			const list = tracker.getTodoList();
+			const a = list.find(t => t.title === 'Task A');
+			const b = list.find(t => t.title === 'Task B');
+			expect(a?.status).toBe('completed');
+			expect(b?.status).toBe('in-progress');
+		});
+
+		it('tracks UPDATE with IN clause', () => {
+			const tracker = new SqlTodoTracker();
+			tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('a', 'A', ''), ('b', 'B', ''), ('c', 'C', '');`
+			);
+			tracker.processSqlQuery(
+				`UPDATE todos SET status = 'done' WHERE id IN ('a', 'b');`
+			);
+			const list = tracker.getTodoList();
+			expect(list.find(t => t.title === 'A')?.status).toBe('completed');
+			expect(list.find(t => t.title === 'B')?.status).toBe('completed');
+			expect(list.find(t => t.title === 'C')?.status).toBe('not-started');
+		});
+
+		it('returns false for non-todo queries', () => {
+			const tracker = new SqlTodoTracker();
+			expect(tracker.processSqlQuery('SELECT * FROM sessions')).toBe(false);
+			expect(tracker.processSqlQuery('CREATE TABLE test_cases (id TEXT)')).toBe(false);
+		});
+
+		it('returns false for SELECT on todos', () => {
+			const tracker = new SqlTodoTracker();
+			expect(tracker.processSqlQuery(`SELECT * FROM todos WHERE status = 'pending'`)).toBe(false);
+		});
+
+		it('creates placeholder entry for UPDATE on unknown todo', () => {
+			const tracker = new SqlTodoTracker();
+			tracker.processSqlQuery(
+				`UPDATE todos SET status = 'done' WHERE id = 'unknown-task';`
+			);
+			const list = tracker.getTodoList();
+			expect(list).toHaveLength(1);
+			expect(list[0].title).toBe('unknown-task');
+			expect(list[0].status).toBe('completed');
+		});
+
+		it('handles escaped quotes in values', () => {
+			const tracker = new SqlTodoTracker();
+			tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('auth', 'Don''t forget auth', 'JWT isn''t easy');`
+			);
+			const list = tracker.getTodoList();
+			expect(list[0].title).toBe(`Don't forget auth`);
+			expect(list[0].description).toBe(`JWT isn't easy`);
+		});
+
+		it('does not confuse INSERT INTO todo_deps as todo items in compound statements', () => {
+			const tracker = new SqlTodoTracker();
+			const changed = tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES
+	  ('pull-latest', 'Pull latest', 'Pull the latest changes from the remote repository (git pull).'),
+	  ('check-swift-regen', 'Check if Swift package needs regeneration', 'Verify whether the Swift package needs to be regenerated.');
+INSERT INTO todo_deps (todo_id, depends_on) VALUES
+	  ('check-swift-regen', 'pull-latest');`
+			);
+			expect(changed).toBe(true);
+			const list = tracker.getTodoList();
+			expect(list).toHaveLength(2);
+			expect(list.find(t => t.title === 'Pull latest')).toBeDefined();
+			expect(list.find(t => t.title === 'Check if Swift package needs regeneration')).toBeDefined();
+			// Should NOT contain todo_deps data as todos
+			expect(list.find(t => t.title === 'depends_on')).toBeUndefined();
+			expect(list.find(t => t.title === 'pull-latest')).toBeUndefined();
+		});
+
+		it('handles parentheses inside quoted values', () => {
+			const tracker = new SqlTodoTracker();
+			tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('pull', 'Pull latest', 'Pull the latest changes (git pull).');`
+			);
+			const list = tracker.getTodoList();
+			expect(list).toHaveLength(1);
+			expect(list[0].description).toBe('Pull the latest changes (git pull).');
+		});
+
+		it('collects todos from multiple INSERT INTO todos statements', () => {
+			const tracker = new SqlTodoTracker();
+			const changed = tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('a', 'Task A', 'Desc A');
+INSERT INTO todos (id, title, description) VALUES ('b', 'Task B', 'Desc B');`
+			);
+			expect(changed).toBe(true);
+			const list = tracker.getTodoList();
+			expect(list).toHaveLength(2);
+			expect(list.find(t => t.title === 'Task A')).toBeDefined();
+			expect(list.find(t => t.title === 'Task B')).toBeDefined();
+		});
+
+		it('handles compound INSERT + UPDATE in single query', () => {
+			const tracker = new SqlTodoTracker();
+			const changed = tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('a', 'Task A', 'Desc A');
+UPDATE todos SET status = 'in_progress' WHERE id = 'a';`
+			);
+			expect(changed).toBe(true);
+			const list = tracker.getTodoList();
+			expect(list).toHaveLength(1);
+			expect(list[0].title).toBe('Task A');
+			expect(list[0].status).toBe('in-progress');
+		});
+
+		it('accumulates new todos alongside completed ones across multiple calls', () => {
+			const tracker = new SqlTodoTracker();
+			// First batch: 2 todos
+			tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('a', 'Task A', ''), ('b', 'Task B', '');`
+			);
+			// Complete both
+			tracker.processSqlQuery(`UPDATE todos SET status = 'done' WHERE id = 'a';`);
+			tracker.processSqlQuery(`UPDATE todos SET status = 'done' WHERE id = 'b';`);
+			expect(tracker.getTodoList()).toHaveLength(2);
+			expect(tracker.getTodoList().every(t => t.status === 'completed')).toBe(true);
+
+			// Second batch: add more todos
+			tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('c', 'Task C', ''), ('d', 'Task D', '');`
+			);
+			const list = tracker.getTodoList();
+			expect(list).toHaveLength(4);
+			expect(list.filter(t => t.status === 'completed')).toHaveLength(2);
+			expect(list.filter(t => t.status === 'not-started')).toHaveLength(2);
+
+			// Delete completed, keep new ones
+			tracker.processSqlQuery(`DELETE FROM todos WHERE status = 'done';`);
+			const remaining = tracker.getTodoList();
+			expect(remaining).toHaveLength(2);
+			expect(remaining.find(t => t.title === 'Task C')).toBeDefined();
+			expect(remaining.find(t => t.title === 'Task D')).toBeDefined();
+		});
+
+		it('handles DELETE FROM todos WHERE status', () => {
+			const tracker = new SqlTodoTracker();
+			tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('a', 'Task A', ''), ('b', 'Task B', '');`
+			);
+			tracker.processSqlQuery(`UPDATE todos SET status = 'done' WHERE id = 'a';`);
+			expect(tracker.getTodoList()).toHaveLength(2);
+
+			const changed = tracker.processSqlQuery(`DELETE FROM todos WHERE status = 'done';`);
+			expect(changed).toBe(true);
+			const list = tracker.getTodoList();
+			expect(list).toHaveLength(1);
+			expect(list[0].title).toBe('Task B');
+		});
+
+		it('handles DELETE FROM todos WHERE id', () => {
+			const tracker = new SqlTodoTracker();
+			tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('a', 'Task A', ''), ('b', 'Task B', '');`
+			);
+			const changed = tracker.processSqlQuery(`DELETE FROM todos WHERE id = 'a';`);
+			expect(changed).toBe(true);
+			expect(tracker.getTodoList()).toHaveLength(1);
+		});
+
+		it('handles DELETE FROM todos with no WHERE (delete all)', () => {
+			const tracker = new SqlTodoTracker();
+			tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('a', 'Task A', ''), ('b', 'Task B', '');`
+			);
+			const changed = tracker.processSqlQuery('DELETE FROM todos;');
+			expect(changed).toBe(true);
+			expect(tracker.getTodoList()).toHaveLength(0);
+		});
+
+		it('handles compound DELETE todo_deps + DELETE todos', () => {
+			const tracker = new SqlTodoTracker();
+			tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('a', 'Done', ''), ('b', 'Pending', '');`
+			);
+			tracker.processSqlQuery(`UPDATE todos SET status = 'done' WHERE id = 'a';`);
+
+			const changed = tracker.processSqlQuery(
+				`DELETE FROM todo_deps WHERE todo_id IN (SELECT id FROM todos WHERE status = 'done');
+DELETE FROM todos WHERE status = 'done';`
+			);
+			expect(changed).toBe(true);
+			const list = tracker.getTodoList();
+			expect(list).toHaveLength(1);
+			expect(list[0].title).toBe('Pending');
+		});
+
+		describe('rebuildFromSelectResult', () => {
+			it('rebuilds full state from SELECT result', () => {
+				const tracker = new SqlTodoTracker();
+				// Pre-existing state with only 1 todo
+				tracker.processSqlQuery(`INSERT INTO todos (id, title, description) VALUES ('a', 'Task A', 'Desc A');`);
+
+				const result = [
+					'2 row(s) returned:',
+					'',
+					'| id | title | description | status | created_at | updated_at |',
+					'| --- | --- | --- | --- | --- | --- |',
+					'| a | Task A | Desc A | done | 2026-01-01 | 2026-01-02 |',
+					'| b | Task B | Desc B | pending | 2026-01-01 | 2026-01-01 |',
+				].join('\n');
+
+				const rebuilt = tracker.rebuildFromSelectResult(result);
+				expect(rebuilt).toBe(true);
+				const list = tracker.getTodoList();
+				expect(list).toHaveLength(2);
+				expect(list.find(t => t.title === 'Task A')?.status).toBe('completed');
+				expect(list.find(t => t.title === 'Task B')?.status).toBe('not-started');
+			});
+
+			it('handles in_progress status from SELECT', () => {
+				const tracker = new SqlTodoTracker();
+				const result = [
+					'1 row(s) returned:',
+					'',
+					'| id | title | status |',
+					'| --- | --- | --- |',
+					'| x | Active task | in_progress |',
+				].join('\n');
+				tracker.rebuildFromSelectResult(result);
+				expect(tracker.getTodoList()[0].status).toBe('in-progress');
+			});
+
+			it('returns false for empty result when tracker has no state', () => {
+				const tracker = new SqlTodoTracker();
+				expect(tracker.rebuildFromSelectResult('Query returned 0 rows.')).toBe(false);
+			});
+
+			it('clears state and returns true for empty result when tracker has todos', () => {
+				const tracker = new SqlTodoTracker();
+				tracker.processSqlQuery(`INSERT INTO todos (id, title, description) VALUES ('a', 'Task A', '');`);
+				expect(tracker.getTodoList()).toHaveLength(1);
+
+				const rebuilt = tracker.rebuildFromSelectResult('Query returned 0 rows.');
+				expect(rebuilt).toBe(true);
+				expect(tracker.getTodoList()).toHaveLength(0);
+			});
+
+			it('returns false for result missing id/title columns', () => {
+				const tracker = new SqlTodoTracker();
+				const result = [
+					'| status | count |',
+					'| --- | --- |',
+					'| pending | 2 |',
+				].join('\n');
+				expect(tracker.rebuildFromSelectResult(result)).toBe(false);
+			});
+
+			it('clears old state and replaces with SELECT result', () => {
+				const tracker = new SqlTodoTracker();
+				tracker.processSqlQuery(`INSERT INTO todos (id, title, description) VALUES ('old', 'Old task', '');`);
+				expect(tracker.getTodoList()).toHaveLength(1);
+
+				const result = [
+					'1 row(s) returned:',
+					'',
+					'| id | title | description | status |',
+					'| --- | --- | --- | --- |',
+					'| new | New task | New desc | pending |',
+				].join('\n');
+				tracker.rebuildFromSelectResult(result);
+				const list = tracker.getTodoList();
+				expect(list).toHaveLength(1);
+				expect(list[0].title).toBe('New task');
+			});
+		});
+
+		it('maps blocked status to not-started', () => {
+			const tracker = new SqlTodoTracker();
+			tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('a', 'Task A', '');`);
+			tracker.processSqlQuery(
+				`UPDATE todos SET status = 'blocked' WHERE id = 'a';`);
+			expect(tracker.getTodoList()[0].status).toBe('not-started');
+		});
+
+		it('ignores INSERT with unknown status gracefully', () => {
+			const tracker = new SqlTodoTracker();
+			tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description, status) VALUES ('a', 'Task', 'Desc', 'custom_status');`);
+			expect(tracker.getTodoList()[0].status).toBe('not-started');
+		});
+
+		it('ignores UPDATE with unknown status', () => {
+			const tracker = new SqlTodoTracker();
+			tracker.processSqlQuery(
+				`INSERT INTO todos (id, title, description) VALUES ('a', 'Task A', '');`);
+			const changed = tracker.processSqlQuery(
+				`UPDATE todos SET status = 'unknown' WHERE id = 'a';`);
+			expect(changed).toBe(false);
+		});
+
+		it('ignores INSERT INTO unrelated tables', () => {
+			const tracker = new SqlTodoTracker();
+			expect(tracker.processSqlQuery(
+				`INSERT INTO test_cases (id, name) VALUES ('t1', 'test');`)).toBe(false);
+		});
+	});
+
+	describe('parseTodoMarkdown', () => {
+		it('parses basic markdown checklist', () => {
+			const { todoList } = parseTodoMarkdown('# Tasks\n- [ ] First task\n- [x] Done task\n- [>] In progress');
+			expect(todoList).toHaveLength(3);
+			expect(todoList[0].status).toBe('not-started');
+			expect(todoList[1].status).toBe('completed');
+			expect(todoList[2].status).toBe('in-progress');
+		});
+
+		it('extracts title from heading', () => {
+			const { title } = parseTodoMarkdown('# My Plan\n- [ ] Task');
+			expect(title).toBe('My Plan');
+		});
+
+		it('handles ordered list items', () => {
+			const { todoList } = parseTodoMarkdown('1. [x] Done\n2. [ ] Pending');
+			expect(todoList).toHaveLength(2);
+			expect(todoList[0].status).toBe('completed');
+			expect(todoList[1].status).toBe('not-started');
+		});
+
+		it('ignores code blocks', () => {
+			const { todoList } = parseTodoMarkdown('- [ ] Real task\n```\n- [x] Fake task\n```\n- [x] Another real task');
+			expect(todoList).toHaveLength(2);
+		});
+
+		it('handles empty input', () => {
+			const { todoList } = parseTodoMarkdown('');
+			expect(todoList).toHaveLength(0);
 		});
 	});
 });

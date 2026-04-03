@@ -28,7 +28,7 @@ import { IToolsService } from '../../../tools/common/toolsService';
 import { IChatSessionMetadataStore } from '../../common/chatSessionMetadataStore';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../../common/workspaceInfo';
-import { enrichToolInvocationWithSubagentMetadata, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, ToolCall, updateTodoList } from '../common/copilotCLITools';
+import { enrichToolInvocationWithSubagentMetadata, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, SqlTodoTracker, syncTodoListFromSqlResult, ToolCall, updateTodoList, updateTodoListFromSql } from '../common/copilotCLITools';
 import { getCopilotCLISessionStateDir } from './cliHelpers';
 import type { CopilotCliBridgeSpanProcessor } from './copilotCliBridgeSpanProcessor';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
@@ -93,6 +93,23 @@ export interface ICopilotCLISession extends IDisposable {
 	addUserMessage(content: string): void;
 	addUserAssistantMessage(content: string): void;
 	getSelectedModelId(): Promise<string | undefined>;
+}
+
+/**
+ * Module-level storage for SqlTodoTracker instances, keyed by SDK session ID.
+ * This survives CopilotCLISession recreations between turns.
+ */
+const sqlTodoTrackers = new Map<string, SqlTodoTracker>();
+function getSqlTodoTracker(sessionId: string): SqlTodoTracker {
+	let tracker = sqlTodoTrackers.get(sessionId);
+	if (!tracker) {
+		tracker = new SqlTodoTracker();
+		sqlTodoTrackers.set(sessionId, tracker);
+		console.log(`[SqlTodoTracker] Created and cached tracker for session ${sessionId}, instance: ${tracker.debugId}`);
+	} else {
+		console.log(`[SqlTodoTracker] Reusing cached tracker for session ${sessionId}, instance: ${tracker.debugId}`);
+	}
+	return tracker;
 }
 
 export class CopilotCLISession extends DisposableStore implements ICopilotCLISession {
@@ -594,8 +611,17 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						}
 
 						if ((event.data as ToolCall).toolName === 'update_todo') {
+							this.logService.trace(`[CopilotCLISession] update_todo tool call detected for toolCallId ${event.data.toolCallId}`);
 							updateTodoList(event, this._toolsService, request.toolInvocationToken, token).catch(error => {
 								this.logService.error(`[CopilotCLISession] Failed to invoke todo tool for toolCallId ${event.data.toolCallId}`, error);
+							});
+						}
+
+						if ((event.data as ToolCall).toolName === 'sql') {
+							const sqlArgs = (event.data as ToolCall).arguments as { query?: string; database?: string };
+							this.logService.trace(`[CopilotCLISession] SQL tool call detected, query: ${sqlArgs.query?.substring(0, 200)}, database: ${sqlArgs.database ?? 'session'}`);
+							updateTodoListFromSql(event, getSqlTodoTracker(this.sessionId), this._toolsService, request.toolInvocationToken, token).catch(error => {
+								this.logService.error(`[CopilotCLISession] Failed to update todo list from SQL for toolCallId ${event.data.toolCallId}`, error);
 							});
 						}
 					}
@@ -611,6 +637,15 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						this.logService.trace(`[CopilotCLISession] Captured pull request URL: ${pullRequestUrl}`);
 						GenAiMetrics.incrementPullRequestCount(this._otelService);
 					}
+				}
+
+				// Sync todo list from SQL SELECT results on the todos table
+				if (toolName === 'sql') {
+					const originalQuery = (toolCalls.get(event.data.toolCallId)?.arguments as { query?: string })?.query;
+					this.logService.trace(`[CopilotCLISession] SQL tool.execution_complete for toolCallId ${event.data.toolCallId}, success=${event.data.success}, hasResult=${!!event.data.result?.content}, originalQuery=${originalQuery?.substring(0, 100)}`);
+					syncTodoListFromSqlResult(event, originalQuery, getSqlTodoTracker(this.sessionId), this._toolsService, request.toolInvocationToken, token).catch(error => {
+						this.logService.error(`[CopilotCLISession] Failed to sync todo list from SQL result for toolCallId ${event.data.toolCallId}`, error);
+					});
 				}
 				// Log tool call to request logger
 				const eventError = event.data.error ? { ...event.data.error, code: event.data.error.code || '' } : undefined;
