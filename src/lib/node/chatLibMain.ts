@@ -12,7 +12,7 @@ import { CopilotTokenManagerImpl, ICompletionsCopilotTokenManager } from '../../
 import { ICompletionsCitationManager, IPCitationDetail, IPDocumentCitation } from '../../extension/completions-core/vscode-node/lib/src/citationManager';
 import { CompletionNotifier, ICompletionsNotifierService } from '../../extension/completions-core/vscode-node/lib/src/completionNotifier';
 import { ICompletionsObservableWorkspace } from '../../extension/completions-core/vscode-node/lib/src/completionsObservableWorkspace';
-import { BuildInfo, BuildType, DefaultsOnlyConfigProvider, EditorInfo, EditorPluginInfo, ICompletionsConfigProvider, ICompletionsEditorAndPluginInfo, InMemoryConfigProvider } from '../../extension/completions-core/vscode-node/lib/src/config';
+import { BuildInfo, BuildType, ConfigKeyType, DefaultsOnlyConfigProvider, EditorInfo, EditorPluginInfo, ICompletionsConfigProvider, ICompletionsEditorAndPluginInfo, InMemoryConfigProvider } from '../../extension/completions-core/vscode-node/lib/src/config';
 import { ICompletionsUserErrorNotifierService, UserErrorNotifier } from '../../extension/completions-core/vscode-node/lib/src/error/userErrorNotifier';
 import { Features } from '../../extension/completions-core/vscode-node/lib/src/experiments/features';
 import { ICompletionsFeaturesService } from '../../extension/completions-core/vscode-node/lib/src/experiments/featuresService';
@@ -67,7 +67,7 @@ import { IChatQuotaService } from '../../platform/chat/common/chatQuotaService';
 import { ChatQuotaService } from '../../platform/chat/common/chatQuotaServiceImpl';
 import { IConversationOptions } from '../../platform/chat/common/conversationOptions';
 import { IInteractionService, InteractionService } from '../../platform/chat/common/interactionService';
-import { ConfigKey, IConfigurationService } from '../../platform/configuration/common/configurationService';
+import { BaseConfig, Config, ConfigKey, ExperimentBasedConfig, ExperimentBasedConfigType, IConfigurationService } from '../../platform/configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { IDiffService } from '../../platform/diff/common/diffService';
 import { DiffServiceImpl } from '../../platform/diff/node/diffServiceImpl';
@@ -187,6 +187,7 @@ export interface INESProviderOptions {
 	 */
 	readonly waitForTreatmentVariables?: boolean;
 	readonly undesiredModelsManager?: IUndesiredModelsManager;
+	readonly configOverrides?: Map<ConfigKeyType, unknown>;
 }
 
 export interface INESResult {
@@ -352,7 +353,7 @@ class NESProvider extends Disposable implements INESProvider<NESResult> {
 function setupServices(options: INESProviderOptions) {
 	const { fetcher, copilotTokenManager, telemetrySender, logTarget } = options;
 	const builder = new InstantiationServiceBuilder();
-	builder.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
+	builder.define(IConfigurationService, new SyncDescriptor(OverridableConfigurationService, [options.configOverrides ?? new Map()]));
 	builder.define(IExperimentationService, new SyncDescriptor(SimpleExperimentationService, [options.waitForTreatmentVariables]));
 	builder.define(ISimulationTestContext, new SyncDescriptor(NulSimulationTestContext));
 	builder.define(IWorkspaceService, new SyncDescriptor(NullWorkspaceService));
@@ -392,7 +393,63 @@ function setupServices(options: INESProviderOptions) {
 	builder.define(ITerminalService, options.terminalService || new SyncDescriptor(NullTerminalService));
 	builder.define(ISimilarFilesContextService, new SyncDescriptor(NullSimilarFilesContextService));
 	builder.define(IEndpointProvider, new NullEndpointProvider());
+	const configProvider = new InMemoryConfigProvider(new DefaultsOnlyConfigProvider());
+	if (options.configOverrides) {
+		configProvider.setOverrides(options.configOverrides);
+	}
+	builder.define(ICompletionsConfigProvider, configProvider);
 	return builder.seal();
+}
+
+class OverridableConfigurationService extends DefaultsOnlyConfigurationService {
+	constructor(private readonly _overrides: Map<string, unknown>) {
+		super();
+	}
+
+	override getConfig<T>(key: Config<T>): T {
+		if (this._overrides.has(key.id)) {
+			const overriddenValue = this._overrides.get(key.id);
+			if (key.validator) {
+				const result = key.validator.validate(overriddenValue);
+				if (result.error) {
+					return super.getConfig(key);
+				}
+				return result.content;
+			}
+			return overriddenValue as T;
+		}
+		return super.getConfig(key);
+	}
+
+	override getExperimentBasedConfig<T extends ExperimentBasedConfigType>(key: ExperimentBasedConfig<T>, experimentationService: IExperimentationService): T {
+		if (this._overrides.has(key.id)) {
+			const overriddenValue = this._overrides.get(key.id);
+			if (key.validator) {
+				const result = key.validator.validate(overriddenValue);
+				if (result.error) {
+					return super.getExperimentBasedConfig(key, experimentationService);
+				}
+				return result.content;
+			}
+			return overriddenValue as T;
+		}
+		return super.getExperimentBasedConfig(key, experimentationService);
+	}
+
+	override inspectConfig<T>(key: BaseConfig<T>) {
+		if (this._overrides.has(key.id)) {
+			const overriddenValue = this._overrides.get(key.id);
+			if (key.validator) {
+				const result = key.validator.validate(overriddenValue);
+				if (result.error) {
+					return super.inspectConfig(key);
+				}
+				return { defaultValue: result.content };
+			}
+			return { defaultValue: overriddenValue as T };
+		}
+		return super.inspectConfig(key);
+	}
 }
 
 class NullSimilarFilesContextService implements ISimilarFilesContextService {
@@ -661,6 +718,7 @@ export interface IInlineCompletionsProviderOptions {
 	readonly endpointProvider: IEndpointProvider;
 	readonly capiClientService?: ICAPIClientService;
 	readonly citationHandler?: IInlineCompletionsCitationHandler;
+	readonly configOverrides?: Map<ConfigKeyType, unknown>;
 }
 
 export type IGetInlineCompletionsOptions = Exclude<Partial<GetGhostTextOptions>, 'promptOnly'> & {
@@ -754,7 +812,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 	builder.define(ILogService, new SyncDescriptor(LogServiceImpl, [[logTarget || new ConsoleLog(undefined, InternalLogLevel.Trace)]]));
 	builder.define(IIgnoreService, options.ignoreService || new NullIgnoreService());
 	builder.define(ITelemetryService, new SyncDescriptor(SimpleTelemetryService, [new UnwrappingTelemetrySender(telemetrySender)]));
-	builder.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
+	builder.define(IConfigurationService, new SyncDescriptor(OverridableConfigurationService, [options.configOverrides ?? new Map()]));
 	builder.define(IExperimentationService, new SyncDescriptor(SimpleExperimentationService, [options.waitForTreatmentVariables]));
 	builder.define(IEndpointProvider, options.endpointProvider);
 	builder.define(ICAPIClientService, options.capiClientService || new SyncDescriptor(CAPIClientImpl));
@@ -762,7 +820,11 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 	builder.define(ICompletionsTelemetryService, new SyncDescriptor(CompletionsTelemetryServiceBridge));
 	builder.define(ICompletionsRuntimeModeService, RuntimeMode.fromEnvironment(options.isRunningInTest ?? false));
 	builder.define(ICompletionsCacheService, new CompletionsCache());
-	builder.define(ICompletionsConfigProvider, new InMemoryConfigProvider(new DefaultsOnlyConfigProvider()));
+	const configProvider = new InMemoryConfigProvider(new DefaultsOnlyConfigProvider());
+	if (options.configOverrides) {
+		configProvider.setOverrides(options.configOverrides);
+	}
+	builder.define(ICompletionsConfigProvider, configProvider);
 	builder.define(ICompletionsLastGhostText, new LastGhostText());
 	builder.define(ICompletionsCurrentGhostText, new CurrentGhostText());
 	builder.define(ICompletionsSpeculativeRequestCache, new SpeculativeRequestCache());

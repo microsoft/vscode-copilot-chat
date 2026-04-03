@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import { createSha256Hash } from '../../../util/common/crypto';
 import { CallTracker, TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { raceCancellationError } from '../../../util/vs/base/common/async';
@@ -128,8 +129,8 @@ export class UrlChunkEmbeddingsIndex extends Disposable {
 		return chunksAndEmbeddings;
 	}
 
-	private async tryGetAuthToken(createIfNone = true): Promise<string | undefined> {
-		return (await this._authService.getGitHubSession('any', { createIfNone }))?.accessToken;
+	private async tryGetAuthToken(): Promise<string | undefined> {
+		return (await this._authService.getGitHubSession('any', { createIfNone: { detail: l10n.t('Sign in to GitHub to access URL chunk embeddings.') } }))?.accessToken;
 	}
 }
 

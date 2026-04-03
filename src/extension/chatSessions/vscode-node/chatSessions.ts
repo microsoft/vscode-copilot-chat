@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService, INativeEnvService } from '../../../platform/env/common/envService';
@@ -19,18 +20,20 @@ import { ServiceCollection } from '../../../util/vs/platform/instantiation/commo
 import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
 import { IExtensionContribution } from '../../common/contributions';
 import { prExtensionInstalledContextKey } from '../../contextKeys/vscode-node/contextKeys.contribution';
+import { GitBranchNameGenerator } from '../../prompt/node/gitBranch';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { IToolsService } from '../../tools/common/toolsService';
+import { IClaudeRuntimeDataService } from '../claude/common/claudeRuntimeDataService';
 import { ClaudeSessionUri } from '../claude/common/claudeSessionUri';
 import { ClaudeToolPermissionService, IClaudeToolPermissionService } from '../claude/common/claudeToolPermissionService';
 import { ClaudeAgentManager } from '../claude/node/claudeCodeAgent';
 import { ClaudeCodeModels, IClaudeCodeModels } from '../claude/node/claudeCodeModels';
 import { ClaudeCodeSdkService, IClaudeCodeSdkService } from '../claude/node/claudeCodeSdkService';
+import { ClaudeRuntimeDataService } from '../claude/node/claudeRuntimeDataService';
 import { ClaudeSessionStateService, IClaudeSessionStateService } from '../claude/node/claudeSessionStateService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../claude/node/sessionParser/claudeCodeSessionService';
 import { ClaudeSlashCommandService, IClaudeSlashCommandService } from '../claude/vscode-node/claudeSlashCommandService';
 import { IAgentSessionsWorkspace } from '../common/agentSessionsWorkspace';
-
 import { IChatPromptFileService } from '../common/chatPromptFileService';
 import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
@@ -59,8 +62,11 @@ import { ChatSessionWorkspaceFolderService } from './chatSessionWorkspaceFolderS
 import { ChatSessionWorktreeCheckpointService } from './chatSessionWorktreeCheckpointServiceImpl';
 import { ChatSessionWorktreeService } from './chatSessionWorktreeServiceImpl';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
+import { ClaudeCustomizationProvider } from './claudeCustomizationProvider';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionParticipant, registerCLIChatCommands } from './copilotCLIChatSessions';
 import { CopilotCLIChatSessionContentProvider as CopilotCLIChatSessionContentProviderV1, CopilotCLIChatSessionItemProvider as CopilotCLIChatSessionItemProviderV1, CopilotCLIChatSessionParticipant as CopilotCLIChatSessionParticipantV1, registerCLIChatCommands as registerCLIChatCommandsV1 } from './copilotCLIChatSessionsContribution';
+import { CopilotCLICustomizationProvider } from './copilotCLICustomizationProvider';
+import { CopilotCLIFolderMruService, ICopilotCLIFolderMruService } from './copilotCLIFolderMru';
 import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 import { ClaudeFolderRepositoryManager, CopilotCLIFolderRepositoryManager } from './folderRepositoryManagerImpl';
@@ -108,12 +114,18 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			[IPullRequestFileChangesService, new SyncDescriptor(PullRequestFileChangesService)],
 		));
 
-		const useController = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService).getConfig(ConfigKey.Advanced.CLISessionController));
+		const configKey = vscode.workspace.isAgentSessionsWorkspace
+			? ConfigKey.Advanced.CLISessionControllerForSessionsApp
+			: ConfigKey.Advanced.CLISessionController;
+		const useController = instantiationService.invokeFunction(accessor =>
+			accessor.get(IConfigurationService).getConfig(configKey)
+		);
 		const { sessionMetadata } = useController ? this.registerCopilotCLIServices(instantiationService, delegationSummary, logService) : this.registerCopilotCLIServicesV1(instantiationService, delegationSummary, logService);
 
 		// #region Claude Code Chat Sessions
 		const claudeAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
+				[IAgentSessionsWorkspace, new SyncDescriptor(AgentSessionsWorkspace)],
 				[IClaudeCodeSessionService, new SyncDescriptor(ClaudeCodeSessionService)],
 				[IClaudeCodeSdkService, new SyncDescriptor(ClaudeCodeSdkService)],
 				[IClaudeCodeModels, new SyncDescriptor(ClaudeCodeModels)],
@@ -126,6 +138,8 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[IChatSessionWorktreeCheckpointService, new SyncDescriptor(ChatSessionWorktreeCheckpointService)],
 				[IChatSessionWorkspaceFolderService, new SyncDescriptor(ChatSessionWorkspaceFolderService)],
 				[IFolderRepositoryManager, new SyncDescriptor(ClaudeFolderRepositoryManager)],
+				[IChatPromptFileService, new SyncDescriptor(ChatPromptFileService)],
+				[IClaudeRuntimeDataService, new SyncDescriptor(ClaudeRuntimeDataService)],
 			));
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
 		const claudeModels = claudeAgentInstaService.invokeFunction(accessor => accessor.get(IClaudeCodeModels));
@@ -134,6 +148,8 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const chatParticipant = vscode.chat.createChatParticipant(ClaudeSessionUri.scheme, chatSessionContentProvider.createHandler());
 		chatParticipant.iconPath = new vscode.ThemeIcon('claude');
 		this._register(vscode.chat.registerChatSessionContentProvider(ClaudeSessionUri.scheme, chatSessionContentProvider, chatParticipant));
+		const claudeCustomizationProvider = this._register(claudeAgentInstaService.createInstance(ClaudeCustomizationProvider));
+		this._register(vscode.chat.registerChatSessionCustomizationProvider(ClaudeSessionUri.scheme, ClaudeCustomizationProvider.metadata, claudeCustomizationProvider));
 
 		// #endregion
 
@@ -164,6 +180,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[ICustomSessionTitleService, new SyncDescriptor(CustomSessionTitleService)],
 				[ICopilotCLISkills, new SyncDescriptor(CopilotCLISkills)],
 				[IChatSessionMetadataStore, new SyncDescriptor(ChatSessionMetadataStore)],
+				[ICopilotCLIFolderMruService, new SyncDescriptor(CopilotCLIFolderMruService)],
 				...getServices()
 			));
 
@@ -173,12 +190,14 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const gitService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IGitService));
 		const sessionTracker = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionTracker));
 		const terminalIntegration = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLITerminalIntegration));
+		const branchNameGenerator = copilotcliAgentInstaService.createInstance(GitBranchNameGenerator);
 
 		const copilotcliChatSessionParticipant = this._register(copilotcliAgentInstaService.createInstance(
 			CopilotCLIChatSessionParticipant,
 			copilotcliChatSessionContentProvider,
 			promptResolver,
-			cloudSessionProvider
+			cloudSessionProvider,
+			branchNameGenerator,
 		));
 		const copilotCLISessionService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionService));
 		const copilotCLIWorktreeManagerService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatSessionWorktreeService));
@@ -187,6 +206,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const nativeEnvService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(INativeEnvService));
 		const fileSystemService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IFileSystemService));
 		const copilotModels = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLIModels));
+		const copilotCLIFolderMruService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLIFolderMruService));
 
 		this._register(copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionTracker)));
 		this._register(copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatPromptFileService)));
@@ -196,7 +216,9 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 
 		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
 		this._register(vscode.chat.registerChatSessionContentProvider(this.copilotcliSessionType, copilotcliChatSessionContentProvider, copilotcliParticipant));
-		this._register(registerCLIChatCommands(copilotCLISessionService, copilotCLIWorktreeManagerService, gitService, copilotCLIWorkspaceFolderSessions, copilotcliChatSessionContentProvider, folderRepositoryManager, nativeEnvService, fileSystemService, sessionTracker, terminalIntegration, logService));
+		const copilotcliCustomizationProvider = this._register(copilotcliAgentInstaService.createInstance(CopilotCLICustomizationProvider));
+		this._register(vscode.chat.registerChatSessionCustomizationProvider(this.copilotcliSessionType, CopilotCLICustomizationProvider.metadata, copilotcliCustomizationProvider));
+		this._register(registerCLIChatCommands(copilotCLISessionService, copilotCLIWorktreeManagerService, gitService, copilotCLIWorkspaceFolderSessions, copilotcliChatSessionContentProvider, folderRepositoryManager, copilotCLIFolderMruService, nativeEnvService, fileSystemService, sessionTracker, terminalIntegration, logService));
 		// #endregion
 
 		const sessionMetadata = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatSessionMetadataStore));
@@ -226,6 +248,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[ICustomSessionTitleService, new SyncDescriptor(CustomSessionTitleService)],
 				[ICopilotCLISkills, new SyncDescriptor(CopilotCLISkills)],
 				[IChatSessionMetadataStore, new SyncDescriptor(ChatSessionMetadataStore)],
+				[ICopilotCLIFolderMruService, new SyncDescriptor(CopilotCLIFolderMruService)],
 				...getServices()
 			));
 
@@ -252,6 +275,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const nativeEnvService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(INativeEnvService));
 		const fileSystemService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IFileSystemService));
 		const copilotModels = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLIModels));
+		const copilotFolderMruService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLIFolderMruService));
 
 		this._register(copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionTracker)));
 		this._register(copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatPromptFileService)));
@@ -261,7 +285,9 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 
 		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
 		this._register(vscode.chat.registerChatSessionContentProvider(this.copilotcliSessionType, copilotcliChatSessionContentProvider, copilotcliParticipant));
-		this._register(registerCLIChatCommandsV1(copilotcliSessionItemProvider, copilotCLISessionService, copilotCLIWorktreeManagerService, gitService, gitExtensionService, toolsService, copilotCLIWorkspaceFolderSessions, copilotcliChatSessionContentProvider, folderRepositoryManager, nativeEnvService, fileSystemService, logService));
+		const copilotcliCustomizationProvider = this._register(copilotcliAgentInstaService.createInstance(CopilotCLICustomizationProvider));
+		this._register(vscode.chat.registerChatSessionCustomizationProvider(this.copilotcliSessionType, CopilotCLICustomizationProvider.metadata, copilotcliCustomizationProvider));
+		this._register(registerCLIChatCommandsV1(copilotcliSessionItemProvider, copilotCLISessionService, copilotCLIWorktreeManagerService, gitService, gitExtensionService, toolsService, copilotCLIWorkspaceFolderSessions, copilotcliChatSessionContentProvider, folderRepositoryManager, copilotFolderMruService, nativeEnvService, fileSystemService, logService));
 		// #endregion
 
 		const sessionMetadata = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatSessionMetadataStore));
@@ -311,7 +337,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 						ctx.pullRequestDetails.repository.owner.login,
 						ctx.pullRequestDetails.repository.name,
 						ctx.pullRequestDetails.number,
-						{ createIfNone: true });
+						{ createIfNone: { detail: l10n.t('Sign in to GitHub to access Copilot cloud sessions.') } });
 					if (!success) {
 						this.logService.error(`${CLOSE_SESSION_PR_CMD}: Failed to close PR #${ctx.pullRequestDetails.number}`);
 					}

@@ -6,18 +6,15 @@
 import { promises as fs } from 'fs';
 import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { parseGitChangesRaw } from '../../../platform/git/vscode-node/utils';
 import { DiffChange } from '../../../platform/git/vscode/git';
 import { ILogService } from '../../../platform/log/common/logService';
-import { coalesce } from '../../../util/vs/base/common/arrays';
 import { SequencerByKey } from '../../../util/vs/base/common/async';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import * as path from '../../../util/vs/base/common/path';
-import { isEqual } from '../../../util/vs/base/common/resources';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { IChatSessionMetadataStore, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
+import { IChatSessionMetadataStore, RepositoryProperties, WorkspaceFolderEntry } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { ChatSessionWorktreeFile } from '../common/chatSessionWorktreeService';
 
@@ -28,10 +25,11 @@ import { ChatSessionWorktreeFile } from '../common/chatSessionWorktreeService';
 export class ChatSessionWorkspaceFolderService extends Disposable implements IChatSessionWorkspaceFolderService {
 	declare _serviceBrand: undefined;
 
-	private readonly workspaceFolderChanges = new ResourceMap<ChatSessionWorktreeFile[]>();
+	private static readonly EMPTY_TREE_OBJECT = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+
 	private readonly workspaceState = new Map<string, WorkspaceFolderEntry>();
-	private recentFolders: { folder: vscode.Uri; lastAccessTime: number }[] = [];
-	private readonly deletedFolders = new ResourceSet();
+	private readonly workspaceFolderChanges = new Map<string, ChatSessionWorktreeFile[]>();
+
 	private readonly workspaceChangesSequencer = new SequencerByKey<string>();
 
 	constructor(
@@ -43,40 +41,21 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 		super();
 	}
 
-	public async deleteRecentFolder(folder: vscode.Uri): Promise<void> {
-		this.recentFolders = this.recentFolders.filter(entry => !isEqual(entry.folder, folder));
-		this.deletedFolders.add(folder);
-	}
-
-	public async getRecentFolders(): Promise<{ folder: vscode.Uri; lastAccessTime: number }[]> {
-		const items = await this.metadataStore.getUsedWorkspaceFolders();
-		this.recentFolders = coalesce(items.map(item => {
-			if (!item.folderPath) {
-				return;
-			}
-			const folder = vscode.Uri.file(item.folderPath);
-			if (this.deletedFolders.has(folder)) {
-				return;
-			}
-			return {
-				folder,
-				lastAccessTime: item.timestamp
-			};
-		})).sort((a, b) => b.lastAccessTime - a.lastAccessTime);
-		return this.recentFolders;
-	}
 	async deleteTrackedWorkspaceFolder(sessionId: string): Promise<void> {
 		this.workspaceState.delete(sessionId);
 		await this.metadataStore.deleteSessionMetadata(sessionId);
 	}
 
-	async trackSessionWorkspaceFolder(sessionId: string, workspaceFolderUri: string): Promise<void> {
+	async trackSessionWorkspaceFolder(sessionId: string, workspaceFolderUri: string, repositoryProperties?: RepositoryProperties): Promise<void> {
 		const entry: WorkspaceFolderEntry = {
 			folderPath: workspaceFolderUri,
 			timestamp: Date.now()
 		};
 		this.workspaceState.set(sessionId, entry);
-		this.metadataStore.storeWorkspaceFolderInfo(sessionId, entry);
+		await this.metadataStore.storeWorkspaceFolderInfo(sessionId, entry);
+		if (repositoryProperties) {
+			await this.metadataStore.storeRepositoryProperties(sessionId, repositoryProperties);
+		}
 		this.logService.trace(`[ChatSessionWorkspaceFolderService] Tracked workspace folder ${workspaceFolderUri} for session ${sessionId}`);
 	}
 
@@ -88,128 +67,115 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 		return await this.metadataStore.getSessionWorkspaceFolder(sessionId);
 	}
 
-	async handleRequestCompleted(workspaceFolderUri: vscode.Uri): Promise<void> {
-		if (!vscode.workspace.isAgentSessionsWorkspace) {
-			// Stage all changes
-			await this.gitService.add(workspaceFolderUri, []);
+	async getSessionWorkspaceFolderEntry(sessionId: string): Promise<WorkspaceFolderEntry | undefined> {
+		const entry = this.workspaceState.get(sessionId);
+		if (entry) {
+			return entry;
 		}
-
-		// Clear changes cache
-		this.workspaceFolderChanges.delete(workspaceFolderUri);
+		return await this.metadataStore.getSessionWorkspaceFolderEntry(sessionId);
 	}
 
-	async getWorkspaceChanges(workspaceFolderUri: vscode.Uri): Promise<readonly ChatSessionWorktreeFile[] | undefined> {
-		return this.workspaceChangesSequencer.queue(workspaceFolderUri.toString(), async () => {
+	async getRepositoryProperties(sessionId: string): Promise<RepositoryProperties | undefined> {
+		return await this.metadataStore.getRepositoryProperties(sessionId);
+	}
 
-			const cachedChanges = this.workspaceFolderChanges.get(workspaceFolderUri);
+	async handleRequestCompleted(sessionId: string): Promise<void> {
+		// Clear changes cache
+		this.workspaceFolderChanges.delete(sessionId);
+	}
+
+	async getWorkspaceChanges(sessionId: string): Promise<readonly ChatSessionWorktreeFile[] | undefined> {
+		return this.workspaceChangesSequencer.queue(sessionId, async () => {
+
+			const cachedChanges = this.workspaceFolderChanges.get(sessionId);
 			if (cachedChanges) {
 				return cachedChanges;
 			}
 
-			const repository = await this.gitService.getRepository(workspaceFolderUri);
+			const repositoryProperties = await this.getRepositoryProperties(sessionId);
+			if (!repositoryProperties) {
+				this.logService.warn(`[ChatSessionWorkspaceFolderService][getWorkspaceChanges] No repository properties found for session ${sessionId}`);
+				return [];
+			}
+
+			const repository = await this.gitService.getRepository(vscode.Uri.file(repositoryProperties.repositoryPath));
 			if (!repository?.changes) {
 				return [];
 			}
 
-			// Workspace changes are handled differently in the Sessions app,
-			// where all changes remain in the working tree and are not being
-			// staged.
-			const changes = vscode.workspace.isAgentSessionsWorkspace
-				? await this.getWorkspaceChangesFromWorkingtree(repository)
-				: await this.getWorkspaceChangesFromIndex(repository);
+			// Check for untracked changes, only if the session branch matches the current branch
+			const hasUntrackedChanges = repositoryProperties.branchName === repository.headBranchName
+				? [
+					...repository.changes?.workingTree ?? [],
+					...repository.changes?.untrackedChanges ?? [],
+				].some(change => change.status === 7 /* UNTRACKED */)
+				: false;
 
-			this.workspaceFolderChanges.set(workspaceFolderUri, changes);
+			const diffChanges: DiffChange[] = [];
+
+			if (hasUntrackedChanges) {
+				// Tracked + untracked changes
+				const tmpDirName = `vscode-sessions-${generateUuid()}`;
+				const diffIndexFile = path.join(this.extensionContext.globalStorageUri.fsPath, tmpDirName, 'diff.index');
+
+				try {
+					// Create temp index file directory
+					await fs.mkdir(path.dirname(diffIndexFile), { recursive: true });
+
+					try {
+						// Populate temp index from HEAD, fall back to empty tree if no commits exist
+						await this.gitService.exec(repository.rootUri, ['read-tree', 'HEAD'], { GIT_INDEX_FILE: diffIndexFile });
+					} catch {
+						// Fall back to empty tree for repositories with no commits
+						await this.gitService.exec(repository.rootUri, ['read-tree', ChatSessionWorkspaceFolderService.EMPTY_TREE_OBJECT], { GIT_INDEX_FILE: diffIndexFile });
+					}
+
+					// Stage entire working directory into temp index
+					await this.gitService.exec(repository.rootUri, ['add', '-A', '--', '.'], { GIT_INDEX_FILE: diffIndexFile });
+
+					// Diff the temp index with the base branch
+					const result = repositoryProperties.baseBranchName
+						? await this.gitService.exec(repository.rootUri, ['diff', '--cached', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--merge-base', repositoryProperties.baseBranchName, '--'], { GIT_INDEX_FILE: diffIndexFile })
+						: await this.gitService.exec(repository.rootUri, ['diff', '--cached', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--'], { GIT_INDEX_FILE: diffIndexFile });
+					diffChanges.push(...parseGitChangesRaw(repository.rootUri.fsPath, result));
+				} catch (error) {
+					this.logService.error(`[ChatSessionWorkspaceFolderService][getWorkspaceChanges] Error while processing workspace changes: ${error}`);
+					return [];
+				} finally {
+					try {
+						await fs.rm(path.dirname(diffIndexFile), { recursive: true, force: true });
+					} catch (error) {
+						this.logService.error(`[ChatSessionWorkspaceFolderService][getWorkspaceChanges] Error while cleaning up temp index file: ${error}`);
+					}
+				}
+			} else {
+				// Tracked changes
+				const result = repositoryProperties.baseBranchName
+					? await this.gitService.exec(repository.rootUri, ['diff', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--merge-base', repositoryProperties.baseBranchName, '--'])
+					: await this.gitService.exec(repository.rootUri, ['diff', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--']);
+				diffChanges.push(...parseGitChangesRaw(repository.rootUri.fsPath, result));
+			}
+
+			const changes = diffChanges.map(change => ({
+				filePath: change.uri.fsPath,
+				originalFilePath: change.status !== 1 /* INDEX_ADDED */
+					? change.originalUri?.fsPath
+					: undefined,
+				modifiedFilePath: change.status !== 6 /* DELETED */
+					? change.uri.fsPath
+					: undefined,
+				statistics: {
+					additions: change.insertions,
+					deletions: change.deletions
+				}
+			} satisfies ChatSessionWorktreeFile));
+
+			this.workspaceFolderChanges.set(sessionId, changes);
 			return changes;
 		});
 	}
 
-	private async getWorkspaceChangesFromIndex(repository: RepoContext): Promise<ChatSessionWorktreeFile[]> {
-		if (!repository.changes) {
-			return [];
-		}
-
-		const changes: ChatSessionWorktreeFile[] = [];
-		for (const change of [...repository.changes.indexChanges, ...repository.changes.workingTree]) {
-			try {
-				const fileStats = await this.gitService.diffIndexWithHEADShortStats(change.uri);
-				changes.push({
-					filePath: change.uri.fsPath,
-					originalFilePath: change.status !== 1 /* INDEX_ADDED */
-						? change.originalUri?.fsPath
-						: undefined,
-					modifiedFilePath: change.status !== 2 /* INDEX_DELETED */
-						? change.uri.fsPath
-						: undefined,
-					statistics: {
-						additions: fileStats?.insertions ?? 0,
-						deletions: fileStats?.deletions ?? 0
-					}
-				} satisfies ChatSessionWorktreeFile);
-			} catch (error) { }
-		}
-
-		return changes;
-	}
-
-	private async getWorkspaceChangesFromWorkingtree(repository: RepoContext): Promise<ChatSessionWorktreeFile[]> {
-		// Check for untracked changes
-		const hasUntrackedChanges = [
-			...repository.changes?.workingTree ?? [],
-			...repository.changes?.untrackedChanges ?? [],
-		].some(change => change.status === 7 /* UNTRACKED */);
-
-		const diffChanges: DiffChange[] = [];
-
-		if (hasUntrackedChanges) {
-			// Tracked + untracked changes
-			const tmpDirName = `vscode-sessions-${generateUuid()}`;
-			const diffIndexFile = path.join(this.extensionContext.globalStorageUri.fsPath, tmpDirName, 'diff.index');
-
-			try {
-				// Create temp index file directory
-				await fs.mkdir(path.dirname(diffIndexFile), { recursive: true });
-
-				// Populate temp index from HEAD
-				await this.gitService.exec(repository.rootUri, ['read-tree', 'HEAD'], { GIT_INDEX_FILE: diffIndexFile });
-
-				// Stage entire working directory into temp index
-				await this.gitService.exec(repository.rootUri, ['add', '-A', '--', '.'], { GIT_INDEX_FILE: diffIndexFile });
-
-				// Diff the temp index with the base branch
-				const result = await this.gitService.exec(repository.rootUri, ['diff', '--cached', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--'], { GIT_INDEX_FILE: diffIndexFile });
-				diffChanges.push(...parseGitChangesRaw(repository.rootUri.fsPath, result));
-			} catch (error) {
-				this.logService.error(`[ChatSessionWorkspaceFolderService][getWorkspaceChangesFromWorkingtree] Error while processing workspace changes: ${error}`);
-				return [];
-			} finally {
-				try {
-					await fs.rm(path.dirname(diffIndexFile), { recursive: true, force: true });
-				} catch (error) {
-					this.logService.error(`[ChatSessionWorkspaceFolderService][getWorkspaceChangesFromWorkingtree] Error while cleaning up temp index file: ${error}`);
-				}
-			}
-		} else {
-			// Tracked changes
-			const result = await this.gitService.exec(repository.rootUri, ['diff', '--raw', '--numstat', '--diff-filter=ADMR', '-z', '--']);
-			diffChanges.push(...parseGitChangesRaw(repository.rootUri.fsPath, result));
-		}
-
-		return diffChanges.map(change => ({
-			filePath: change.uri.fsPath,
-			originalFilePath: change.status !== 1 /* INDEX_ADDED */
-				? change.originalUri?.fsPath
-				: undefined,
-			modifiedFilePath: change.status !== 6 /* DELETED */
-				? change.uri.fsPath
-				: undefined,
-			statistics: {
-				additions: change.insertions,
-				deletions: change.deletions
-			}
-		} satisfies ChatSessionWorktreeFile));
-	}
-
-	clearWorkspaceChanges(workspaceFolderUri: vscode.Uri): void {
-		this.workspaceFolderChanges.delete(workspaceFolderUri);
+	clearWorkspaceChanges(sessionId: string): void {
+		this.workspaceFolderChanges.delete(sessionId);
 	}
 }

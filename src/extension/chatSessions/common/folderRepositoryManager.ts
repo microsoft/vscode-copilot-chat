@@ -28,6 +28,7 @@ export interface InitializeFolderRepositoryOptions {
 	readonly isolation?: IsolationMode;
 	readonly stream: vscode.ChatResponseStream;
 	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
+	readonly newBranch?: Promise<string | undefined>;
 }
 
 /**
@@ -78,11 +79,6 @@ export interface FolderRepositoryMRUEntry {
 	 * Timestamp of last access (milliseconds since epoch).
 	 */
 	readonly lastAccessed: number;
-
-	/**
-	 * Whether this entry was used in an untitled session.
-	 */
-	readonly isUntitledSessionSelection: boolean;
 }
 
 export const IFolderRepositoryManager = createServiceIdentifier<IFolderRepositoryManager>('IFolderRepositoryManager');
@@ -137,6 +133,26 @@ export interface IFolderRepositoryManager {
 	): Promise<FolderRepositoryInfo>;
 
 	/**
+	 * Initialize all folders for a multi-root session as a batch.
+	 *
+	 * Unlike calling `initializeFolderRepository` per folder, this method:
+	 * 1. Resolves all folder/repo info in one pass
+	 * 2. Verifies trust for all folders together
+	 * 3. Collects uncommitted changes across ALL git repos
+	 * 4. Shows ONE combined prompt listing all repos with uncommitted changes
+	 * 5. Applies the same action (move/copy/skip/cancel) to all repos
+	 * 6. Creates worktrees for all git repos in parallel
+	 * 7. Migrates changes to all worktrees with the same action
+	 */
+	initializeMultiRootFolderRepositories(
+		sessionId: string,
+		primaryFolder: vscode.Uri,
+		additionalFolders: vscode.Uri[],
+		options: InitializeFolderRepositoryOptions,
+		token: vscode.CancellationToken
+	): Promise<{ primary: FolderRepositoryInfo; additional: FolderRepositoryInfo[] }>;
+
+	/**
 	 * Get repository information for a folder.
 	 *
 	 * Resolves whether the folder contains a git repository and returns
@@ -152,6 +168,7 @@ export interface IFolderRepositoryManager {
 	): Promise<{ repository: vscode.Uri | undefined; headBranchName: string | undefined }>;
 
 	/**
+	 * @deprecated
 	 * Get list of most recently used folders and repositories.
 	 *
 	 * This is used for empty workspaces to show a list of previously used
@@ -161,9 +178,4 @@ export interface IFolderRepositoryManager {
 	 *          limited to 10 items, with non-existent paths filtered out
 	 */
 	getFolderMRU(): Promise<FolderRepositoryMRUEntry[]>;
-
-	/**
-	 * Delete an entry from the MRU list.
-	 */
-	deleteMRUEntry(folder: vscode.Uri): Promise<void>;
 }

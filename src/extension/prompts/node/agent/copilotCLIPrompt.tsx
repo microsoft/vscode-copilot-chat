@@ -15,7 +15,7 @@ import { Schemas } from '../../../../util/vs/base/common/network';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatReferenceBinaryData, ChatRequest, FileType } from '../../../../vscodeTypes';
-import { ChatVariablesCollection, isPromptFile, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isPromptFile, isSessionReference, PromptVariable, sessionReferenceAttachmentAttrs } from '../../../prompt/common/chatVariablesCollection';
 import { renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { SummarizedDocumentLineNumberStyle } from '../inline/summarizedDocument/implementation';
@@ -133,6 +133,10 @@ export async function generateUserPrompt(request: ChatRequest, prompt: string | 
 async function renderResourceVariables(chatVariables: ChatVariablesCollection, fileSystemService: IFileSystemService, promptPathRepresentationService: IPromptPathRepresentationService): Promise<PromptElement[]> {
 	const elements: PromptElement[] = [];
 	await Promise.all(Array.from(chatVariables).map(async variable => {
+		if (isSessionReference(variable)) {
+			elements.push(<Tag name='attachment' attrs={sessionReferenceAttachmentAttrs(variable)} />);
+			return;
+		}
 		if (variable.value instanceof ChatReferenceBinaryData) {
 			if (variable.value.reference) {
 				const attrs: Record<string, string> = {};

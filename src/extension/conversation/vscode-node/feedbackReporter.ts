@@ -161,14 +161,12 @@ export class FeedbackReporter extends Disposable implements IFeedbackReporter {
 				"rankResultsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Count of the results from copilot search ranking." },
 				"combinedResultsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Count of combined results from copilot search." },
 				"chunkSearchDuration": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Duration of the chunk search" },
-				"llmFilteringDuration": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Duration of the LLM filtering" },
-				"strategy": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates the strategy used for the search." }
+				"llmFilteringDuration": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Duration of the LLM filtering" }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent('copilot.search.feedback', {
 			kind,
 			rankResult: SemanticSearchTextSearchProvider.feedBackTelemetry.rankResult,
-			strategy: SemanticSearchTextSearchProvider.feedBackTelemetry.strategy,
 		}, {
 			chunkCount: SemanticSearchTextSearchProvider.feedBackTelemetry.chunkCount,
 			rankResultsCount: SemanticSearchTextSearchProvider.feedBackTelemetry.rankResultsCount,

@@ -148,13 +148,14 @@ Prompt body`);
 		const result = await agents.getAgents();
 
 		expect(result).toHaveLength(1);
-		expect(result[0].name).toBe('MergeMe');
-		expect(result[0].displayName).toBe('MergeMe');
-		expect(result[0].description).toBe('Prompt description');
-		expect(result[0].tools).toBeNull();
-		expect(result[0].model).toBe('gpt-4.1');
-		expect(result[0].disableModelInvocation).toBe(true);
-		expect(await result[0].prompt()).toBe('Prompt body');
+		expect(result[0].agent.name).toBe('MergeMe');
+		expect(result[0].agent.displayName).toBe('MergeMe');
+		expect(result[0].agent.description).toBe('Prompt description');
+		expect(result[0].agent.tools).toBeNull();
+		expect(result[0].agent.model).toBe('gpt-4.1');
+		expect(result[0].agent.disableModelInvocation).toBe(true);
+		expect(await result[0].agent.prompt()).toBe('Prompt body');
+		expect(result[0].sourceUri.scheme).toBe('file');
 	});
 
 	it('derives agent name from filename when frontmatter name is missing', async () => {
@@ -169,10 +170,10 @@ Body`)]
 
 		const result = await agents.getAgents();
 		expect(result).toHaveLength(1);
-		expect(result[0].name).toBe('invalid');
-		expect(result[0].displayName).toBe('invalid');
-		expect(result[0].description).toBe('Missing name');
-		expect(result[0].tools).toEqual(['read_file']);
+		expect(result[0].agent.name).toBe('invalid');
+		expect(result[0].agent.displayName).toBe('invalid');
+		expect(result[0].agent.description).toBe('Missing name');
+		expect(result[0].agent.tools).toEqual(['read_file']);
 	});
 
 	it('refreshes cached agents when custom agents change', async () => {
@@ -193,8 +194,8 @@ description: Second prompt agent
 Second body`)]);
 		const second = await agents.getAgents();
 
-		expect(first.map(agent => agent.name)).toEqual(['First']);
-		expect(second.map(agent => agent.name)).toEqual(['Second']);
+		expect(first.map(a => a.agent.name)).toEqual(['First']);
+		expect(second.map(a => a.agent.name)).toEqual(['Second']);
 		expect(sdk.getPackage).toHaveBeenCalled();
 	});
 });

@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
+import { RepositoryProperties } from './chatSessionMetadataStore';
 import { ChatSessionWorktreeProperties } from './chatSessionWorktreeService';
 
 export interface IWorkspaceInfo {
@@ -18,6 +20,11 @@ export interface IWorkspaceInfo {
 	 * `undefined` if the folder is not a git repository.
 	 */
 	readonly repository: vscode.Uri | undefined;
+
+	/**
+	 * The git repository properties associated with this session.
+	 */
+	readonly repositoryProperties?: RepositoryProperties;
 
 	/**
 	 * The worktree path if a worktree was created for this session.
@@ -45,7 +52,32 @@ export function emptyWorkspaceInfo(): IWorkspaceInfo {
 	return {
 		folder: undefined,
 		repository: undefined,
+		repositoryProperties: undefined,
 		worktree: undefined,
 		worktreeProperties: undefined,
 	};
+}
+
+/**
+ * Given a file URI, finds which workspace (primary or additional) owns it.
+ * Returns the matching IWorkspaceInfo or undefined if no match.
+ */
+export function findOwningWorkspace(
+	file: vscode.Uri,
+	primaryWorkspace: IWorkspaceInfo,
+	additionalWorkspaces: IWorkspaceInfo[]
+): IWorkspaceInfo | undefined {
+	for (const ws of [primaryWorkspace, ...additionalWorkspaces]) {
+		const wd = getWorkingDirectory(ws);
+		if (wd && extUriBiasedIgnorePathCase.isEqualOrParent(file, wd)) {
+			return ws;
+		}
+		if (ws.folder && extUriBiasedIgnorePathCase.isEqualOrParent(file, ws.folder)) {
+			return ws;
+		}
+		if (ws.worktree && ws.repository && extUriBiasedIgnorePathCase.isEqualOrParent(file, ws.repository)) {
+			return ws;
+		}
+	}
+	return undefined;
 }

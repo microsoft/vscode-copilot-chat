@@ -334,9 +334,14 @@ export class InlineEditRequestLogContext {
 	}
 
 	public _prompt: string | undefined = undefined;
+	private _rawMessages: Raw.ChatMessage[] | undefined = undefined;
 
 	get prompt(): string | undefined {
 		return this._prompt;
+	}
+
+	get rawMessages(): Raw.ChatMessage[] | undefined {
+		return this._rawMessages;
 	}
 
 	setPrompt(prompt: string | Raw.ChatMessage[]) {
@@ -344,6 +349,7 @@ export class InlineEditRequestLogContext {
 		if (typeof prompt === 'string') {
 			this._prompt = prompt;
 		} else {
+			this._rawMessages = prompt;
 			this._prompt = stringifyChatMessages(prompt);
 		}
 		this.fireDidChange();

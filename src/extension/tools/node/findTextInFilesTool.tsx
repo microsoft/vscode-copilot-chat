@@ -42,6 +42,7 @@ const MaxResultsCap = 200;
 
 export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolParams> {
 	public static readonly toolName = ToolName.FindTextInFiles;
+	public static readonly nonDeferred = true;
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,

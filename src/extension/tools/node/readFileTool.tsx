@@ -5,13 +5,13 @@
 import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptReference } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
-import { IChatDebugFileLoggerService, sessionResourceToId } from '../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { IExtensionsService } from '../../../platform/extensions/common/extensionsService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
@@ -20,8 +20,9 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { getCachedSha256Hash } from '../../../util/common/crypto';
+import { hash } from '../../../util/vs/base/common/hash';
 import { clamp } from '../../../util/vs/base/common/numbers';
-import { dirname, extUriBiasedIgnorePathCase, joinPath } from '../../../util/vs/base/common/resources';
+import { dirname, extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult, Location, MarkdownString, Range } from '../../../vscodeTypes';
@@ -113,6 +114,7 @@ const getParamRanges = (params: ReadFileParams, snapshot: NotebookDocumentSnapsh
 
 export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 	public static toolName = ToolName.ReadFile;
+	public static readonly nonDeferred = true;
 	private _promptContext: IBuildPromptContext | undefined;
 
 	constructor(
@@ -127,7 +129,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
-		@IChatDebugFileLoggerService private readonly chatDebugFileLoggerService: IChatDebugFileLoggerService,
+		@IExtensionsService private readonly extensionsService: IExtensionsService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ReadFileParams>, token: vscode.CancellationToken) {
@@ -176,7 +178,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 			const documentSnapshot = await this.getSnapshot(uri);
 			ranges = getParamRanges(options.input, documentSnapshot);
 
-			void this.sendReadFileTelemetry('success', options, ranges, uri);
+			void this.sendReadFileTelemetry('success', options, ranges, uri, documentSnapshot);
 			const useCodeFences = this.configurationService.getExperimentBasedConfig<boolean>(ConfigKey.TeamInternal.ReadFileCodeFences, this.experimentationService);
 			return new LanguageModelToolResult([
 				new LanguageModelPromptTsxPart(
@@ -327,26 +329,10 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 			return this.workspaceService.openNotebookDocumentAndSnapshot(uri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model));
 		}
 
-		const snapshot = TextDocumentSnapshot.create(await this.workspaceService.openTextDocument(uri));
-
-		// Replace the session log placeholder for the troubleshoot skill
-		if (uri.scheme === 'copilot-skill' && uri.path.includes('/troubleshoot/')) {
-			const sessionResource = this._promptContext?.request?.sessionResource;
-			if (sessionResource) {
-				const chatSessionId = sessionResourceToId(sessionResource);
-				const logDir = this.chatDebugFileLoggerService.debugLogsDir;
-				if (logDir) {
-					const sessionLogDir = joinPath(logDir, chatSessionId);
-					const replaced = snapshot.getText().replaceAll('{{CURRENT_SESSION_LOG}}', () => this.promptPathRepresentationService.getFilePath(sessionLogDir));
-					return TextDocumentSnapshot.fromNewText(replaced, snapshot);
-				}
-			}
-		}
-
-		return snapshot;
+		return TextDocumentSnapshot.create(await this.workspaceService.openTextDocument(uri));
 	}
 
-	private async sendReadFileTelemetry(outcome: string, options: Pick<vscode.LanguageModelToolInvocationOptions<ReadFileParams>, 'model' | 'chatRequestId' | 'input'>, { start, end, truncated }: IParamRanges, uri: URI | undefined) {
+	private async sendReadFileTelemetry(outcome: string, options: Pick<vscode.LanguageModelToolInvocationOptions<ReadFileParams>, 'model' | 'chatRequestId' | 'input'>, { start, end, truncated }: IParamRanges, uri: URI | undefined, documentSnapshot?: TextDocumentSnapshot | NotebookDocumentSnapshot) {
 		const model = options.model && (await this.endpointProvider.getChatEndpoint(options.model)).model;
 		const extensionSkillInfo = uri && this.customInstructionsService.getExtensionSkillInfo(uri);
 		const skillInfo = extensionSkillInfo || (uri && this.customInstructionsService.getSkillInfo(uri));
@@ -378,13 +364,48 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				isEntireFile: isParamsV2(options.input) && options.input.offset === undefined && options.input.limit === undefined ? 'true' : 'false',
 				fileType,
 				nameField,
-				model
+				model,
 			},
 			{
 				linesRead: end - start,
 				truncated: truncated ? 1 : 0,
 			}
 		);
+
+		// Send separate skillContentRead event only for successful skill file reads.
+		// Reuses extensionSkillInfo/skillInfo already computed above.
+		// TODO: Add pluginNameHash and pluginVersion properties once vscode core's
+		// extensionPromptFileProvider command exposes IAgentPluginService metadata.
+		if (skillInfo && documentSnapshot && uri && this.customInstructionsService.isSkillMdFile(uri)) {
+			const content = documentSnapshot instanceof TextDocumentSnapshot ? documentSnapshot.getText() : '';
+			const extensionId = extensionSkillInfo?.extensionId ?? '';
+			const extensionVersion = extensionId ? this.extensionsService.getExtension(extensionId)?.packageJSON?.version ?? '' : '';
+			const contentHash = content ? String(hash(content)) : '';
+
+			// Plaintext properties shared by enhanced GH and internal MSFT events
+			const plaintextProps = {
+				skillName: skillInfo.skillName,
+				skillPath: uri.toString(),
+				extensionId,
+				extensionVersion,
+				skillStorage: skillInfo.storage,
+				contentHash,
+			};
+
+			this.telemetryService.sendGHTelemetryEvent('skillContentRead',
+				{
+					skillNameHash: String(hash(skillInfo.skillName)),
+					extensionIdHash: extensionId ? String(hash(extensionId)) : '',
+					extensionVersion: plaintextProps.extensionVersion,
+					skillStorage: plaintextProps.skillStorage,
+					contentHash,
+				}
+			);
+
+			this.telemetryService.sendEnhancedGHTelemetryEvent('skillContentRead', plaintextProps);
+
+			this.telemetryService.sendInternalMSFTTelemetryEvent('skillContentRead', plaintextProps);
+		}
 	}
 
 	async resolveInput(input: IReadFileParamsV1, promptContext: IBuildPromptContext): Promise<IReadFileParamsV1> {

@@ -17,6 +17,8 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 
 	readonly onDidChangeMcpServerDefinitions: Event<void>;
 
+	private _askedForAuth = false;
+
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
@@ -37,6 +39,11 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 				// If they change lockdown mode
 				if (e.affectsConfiguration(ConfigKey.GitHubMcpLockdown.fullyQualifiedId)) {
 					logService.debug('GitHubMcpDefinitionProvider: Configuration change affects GitHub MCP lockdown mode.');
+					return true;
+				}
+				// If they change the channel
+				if (e.affectsConfiguration(ConfigKey.GitHubMcpChannel.fullyQualifiedId)) {
+					logService.debug('GitHubMcpDefinitionProvider: Configuration change affects GitHub MCP channel.');
 					return true;
 				}
 				// If they change to GHE or GitHub.com
@@ -80,6 +87,10 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 		return this.configurationService.getConfig<boolean>(ConfigKey.GitHubMcpLockdown);
 	}
 
+	private get channel(): ConfigKey.GitHubMcpChannelValue {
+		return this.configurationService.getConfig<ConfigKey.GitHubMcpChannelValue>(ConfigKey.GitHubMcpChannel);
+	}
+
 	private get gheConfig(): string | undefined {
 		return this.configurationService.getNonExtensionConfig<string>(EnterpriseURLConfig);
 	}
@@ -99,6 +110,7 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 		const toolsets = this.toolsets.sort().join(',');
 		const readonly = this.readonly;
 		const lockdown = this.lockdown;
+		const channel = this.channel;
 		const isSignedIn = !!this.authenticationService.permissiveGitHubSession;
 
 		const basics = providerId === AuthProviderId.GitHubEnterprise
@@ -122,6 +134,10 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 				headers['X-MCP-Lockdown'] = 'true';
 				version += '|lockdown';
 			}
+			if (channel === 'insiders') {
+				headers['X-MCP-Insiders'] = 'true';
+				version += '|insiders';
+			}
 		} else {
 			version = 'signedout';
 		}
@@ -135,15 +151,26 @@ export class GitHubMcpDefinitionProvider implements McpServerDefinitionProvider<
 	}
 
 	async resolveMcpServerDefinition(server: McpHttpServerDefinition, token: CancellationToken): Promise<McpHttpServerDefinition> {
-		const session = await this.authenticationService.getGitHubSession('permissive', {
-			createIfNone: {
-				detail: l10n.t('Additional permissions are required to use GitHub MCP Server'),
-			},
-		});
-		if (!session) {
-			throw new Error('Authentication required');
+		const accessToken = this.authenticationService.permissiveGitHubSession?.accessToken;
+		if (accessToken) {
+			server.headers['Authorization'] = `Bearer ${accessToken}`;
+			return server;
 		}
-		server.headers['Authorization'] = `Bearer ${session.accessToken}`;
-		return server;
+
+		if (this._askedForAuth) {
+			throw new Error('User denied authentication. Cannot connect to GitHub MCP Server.');
+		}
+
+		try {
+			const session = await this.authenticationService.getGitHubSession('permissive', {
+				createIfNone: {
+					detail: l10n.t('Additional permissions are required to use GitHub MCP Server'),
+				},
+			});
+			server.headers['Authorization'] = `Bearer ${session.accessToken}`;
+			return server;
+		} finally {
+			this._askedForAuth = true;
+		}
 	}
 }

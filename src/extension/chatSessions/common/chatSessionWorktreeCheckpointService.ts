@@ -12,5 +12,10 @@ export interface IChatSessionWorktreeCheckpointService {
 
 	handleRequest(sessionId: string): Promise<void>;
 	handleRequestCompleted(sessionId: string, requestId: string): Promise<void>;
-	getWorktreeCheckpointSupport(sessionId: string): Promise<boolean>;
+
+	/** Create baseline checkpoints for additional worktrees at request start. */
+	handleAdditionalWorktreesRequest(sessionId: string): Promise<void>;
+
+	/** Create post-turn checkpoints for additional worktrees at request completion. */
+	handleAdditionalWorktreesRequestCompleted(sessionId: string, requestId: string): Promise<void>;
 }

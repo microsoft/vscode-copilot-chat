@@ -15,6 +15,11 @@ const HIDDEN_MODEL_A_HASHES = [
 	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95'
 ];
 
+
+const HIDDEN_MODEL_B_HASHES = [
+	'1f48b3271e760c69ab2b17dcae5f5c661fa5b644c5976a8a99b23e05ae3cb6d6'
+];
+
 const VSC_MODEL_HASHES_A = [
 	'6db59e9bfe6e2ce608c0ee0ade075c64e4d054f05305e3034481234703381bb5',
 ];
@@ -54,6 +59,10 @@ const HIDDEN_MODEL_J_HASHES: string[] = [
 	'5a81e6aa7556585ba7c569881d1103683adc9e0124ff7952df423afba2f167b5',
 ];
 
+const HIDDEN_FAMILY_H_HASHES: string[] = [
+	'70fcded3f255d368e868cc807d8838a62108bfa5c86ce7d37966f58cda229e33',
+];
+
 function getModelId(model: LanguageModelChat | IChatEndpoint): string {
 	return 'id' in model ? model.id : model.model;
 }
@@ -61,6 +70,11 @@ function getModelId(model: LanguageModelChat | IChatEndpoint): string {
 export function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
 	const h = getCachedSha256Hash(model.family);
 	return HIDDEN_MODEL_A_HASHES.includes(h);
+}
+
+export function isHiddenModelB(model: LanguageModelChat | IChatEndpoint | string) {
+	const h = getCachedSha256Hash(typeof model === 'string' ? model : model.family);
+	return HIDDEN_MODEL_B_HASHES.includes(h);
 }
 
 
@@ -77,6 +91,11 @@ export function isHiddenModelF(model: LanguageModelChat | IChatEndpoint) {
 export function isHiddenModelG(model: LanguageModelChat | IChatEndpoint) {
 	const family_hash = getCachedSha256Hash(model.family);
 	return family_hash === '0d90e0e579352b8502fc2a46b40961ee941adc26ce67c2b1438f0e4ea97d932f';
+}
+
+export function isHiddenFamilyH(model: LanguageModelChat | IChatEndpoint) {
+	const family_hash = getCachedSha256Hash(model.family);
+	return HIDDEN_FAMILY_H_HASHES.includes(family_hash);
 }
 
 
@@ -170,7 +189,8 @@ export function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint
 		|| isVSCModelA(model)
 		|| isVSCModelB(model)
 		|| isGpt52Family(model.family)
-		|| isGpt54(model);
+		|| isGpt54(model)
+		|| isHiddenModelB(model);
 }
 
 /**
@@ -182,21 +202,22 @@ export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat 
 		|| isGpt52CodexFamily(model.family)
 		|| isGpt53Codex(model.family)
 		|| isGpt52Family(model.family)
-		|| isGpt54(model);
+		|| isGpt54(model)
+		|| isHiddenModelB(model);
 }
 
 /**
  * Model supports replace_string_in_file as an edit tool.
  */
 export function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.toLowerCase().includes('gemini') || model.family.includes('grok-code') || modelSupportsMultiReplaceString(model) || isHiddenModelF(model) || isMinimaxFamily(model);
+	return model.family.toLowerCase().includes('gemini') || model.family.includes('grok-code') || modelSupportsMultiReplaceString(model) || isHiddenModelF(model) || isMinimaxFamily(model) || isHiddenFamilyH(model);
 }
 
 /**
  * Model supports multi_replace_string_in_file as an edit tool.
  */
 export function modelSupportsMultiReplaceString(model: LanguageModelChat | IChatEndpoint): boolean {
-	return isAnthropicFamily(model) || isHiddenModelE(model) || isVSCModelC(model);
+	return isAnthropicFamily(model) || isHiddenModelE(model) || isVSCModelC(model) || isMinimaxFamily(model) || isHiddenFamilyH(model);
 }
 
 /**
@@ -204,7 +225,7 @@ export function modelSupportsMultiReplaceString(model: LanguageModelChat | IChat
  * without needing insert_edit_into_file.
  */
 export function modelCanUseReplaceStringExclusively(model: LanguageModelChat | IChatEndpoint): boolean {
-	return isAnthropicFamily(model) || model.family.includes('grok-code') || isHiddenModelE(model) || model.family.toLowerCase().includes('gemini-3') || isVSCModelC(model) || isHiddenModelF(model) || isMinimaxFamily(model);
+	return isAnthropicFamily(model) || model.family.includes('grok-code') || isHiddenModelE(model) || model.family.toLowerCase().includes('gemini-3') || isVSCModelC(model) || isHiddenModelF(model) || isMinimaxFamily(model) || isHiddenFamilyH(model);
 }
 
 /**
