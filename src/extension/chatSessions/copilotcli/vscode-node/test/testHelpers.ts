@@ -237,9 +237,11 @@ export class MockChatPromptFileService extends Disposable implements IChatPrompt
 	customAgents: ChatResource[] = [];
 	instructions: ChatResource[] = [];
 	skills: ChatResource[] = [];
+	hooks: ChatResource[] = [];
 	private readonly _onDidChangeCustomAgents = this._register(new Emitter<void>());
 	private readonly _onDidChangeInstructions = this._register(new Emitter<void>());
 	private readonly _onDidChangeSkills = this._register(new Emitter<void>());
+	private readonly _onDidChangeHooks = this._register(new Emitter<void>());
 
 	get onDidChangeCustomAgents() {
 		return this._onDidChangeCustomAgents.event;
@@ -251,6 +253,10 @@ export class MockChatPromptFileService extends Disposable implements IChatPrompt
 
 	get onDidChangeSkills() {
 		return this._onDidChangeSkills.event;
+	}
+
+	get onDidChangeHooks() {
+		return this._onDidChangeHooks.event;
 	}
 	get customAgentPromptFiles() {
 		return [];

@@ -50,4 +50,16 @@ export interface IChatPromptFileService extends IDisposable {
 	 * from all sources (workspace, user, and extension-provided).
 	 */
 	readonly skills: readonly ChatResource[];
+
+	/**
+	 * An event that fires when the list of {@link hooks hooks} changes.
+	 */
+	readonly onDidChangeHooks: Event<void>;
+
+	/**
+	 * The list of currently available hook configuration files.
+	 * These are JSON files that define lifecycle hooks from all sources
+	 * (workspace, user, and extension-provided).
+	 */
+	readonly hooks: readonly ChatResource[];
 }

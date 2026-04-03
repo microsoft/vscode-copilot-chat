@@ -25,6 +25,7 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 				vscode.ChatSessionCustomizationType.Agent,
 				vscode.ChatSessionCustomizationType.Skill,
 				vscode.ChatSessionCustomizationType.Instructions,
+				vscode.ChatSessionCustomizationType.Hook,
 			],
 		};
 	}
@@ -39,6 +40,7 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 		this._register(this.chatPromptFileService.onDidChangeCustomAgents(() => this._onDidChange.fire()));
 		this._register(this.chatPromptFileService.onDidChangeInstructions(() => this._onDidChange.fire()));
 		this._register(this.chatPromptFileService.onDidChangeSkills(() => this._onDidChange.fire()));
+		this._register(this.chatPromptFileService.onDidChangeHooks(() => this._onDidChange.fire()));
 		this._register(this.copilotCLIAgents.onDidChangeAgents(() => this._onDidChange.fire()));
 	}
 
@@ -46,12 +48,14 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 		const agents = await this.getAgentItems();
 		const instructions = this.getInstructionItems();
 		const skills = this.getSkillItems();
+		const hooks = this.getHookItems();
 
 		this.logService.debug(`[CopilotCLICustomizationProvider] agents (${agents.length}): ${agents.map(a => a.name).join(', ') || '(none)'}`);
 		this.logService.debug(`[CopilotCLICustomizationProvider] instructions (${instructions.length}): ${instructions.map(i => i.name).join(', ') || '(none)'}`);
 		this.logService.debug(`[CopilotCLICustomizationProvider] skills (${skills.length}): ${skills.map(s => s.name).join(', ') || '(none)'}`);
+		this.logService.debug(`[CopilotCLICustomizationProvider] hooks (${hooks.length}): ${hooks.map(h => h.name).join(', ') || '(none)'}`);
 
-		const items = [...agents, ...instructions, ...skills];
+		const items = [...agents, ...instructions, ...skills, ...hooks];
 		this.logService.debug(`[CopilotCLICustomizationProvider] total: ${items.length} items`);
 		return items;
 	}
@@ -89,6 +93,18 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 			uri: s.uri,
 			type: vscode.ChatSessionCustomizationType.Skill,
 			name: deriveNameFromUri(s.uri, SKILL_FILENAME),
+		}));
+	}
+
+	/**
+	 * Collects all hook items from the prompt file service.
+	 * Each item is a hook configuration file (JSON).
+	 */
+	private getHookItems(): vscode.ChatSessionCustomizationItem[] {
+		return this.chatPromptFileService.hooks.map(h => ({
+			uri: h.uri,
+			type: vscode.ChatSessionCustomizationType.Hook,
+			name: basename(h.uri).replace(/\.json$/i, ''),
 		}));
 	}
 }
