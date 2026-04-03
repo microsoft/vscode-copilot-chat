@@ -109,7 +109,8 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 		return this.chatPromptFileService.hooks.map(h => ({
 			uri: h.uri,
 			type: vscode.ChatSessionCustomizationType.Hook,
-			name: basename(h.uri).replace(/\.json$/i, ''),		}));
+			name: basename(h.uri).replace(/\.json$/i, ''),
+		}));
 	}
 
 	/**	 * Collects all plugin items from the prompt file service.
