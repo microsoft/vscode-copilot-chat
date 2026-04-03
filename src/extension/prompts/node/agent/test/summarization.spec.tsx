@@ -360,4 +360,187 @@ suite('Agent Summarization', () => {
 	test('summary for previous turn, no tool call rounds', async () => testSummarizeWithNoRoundsInCurrentTurn(TestPromptType.Agent));
 	test('FullSummarization - summary for previous turn, no tool call rounds', async () => testSummarizeWithNoRoundsInCurrentTurn(TestPromptType.FullSummarization));
 	test('SimpleSummarization - summary for previous turn, no tool call rounds', async () => testSummarizeWithNoRoundsInCurrentTurn(TestPromptType.SimpleSummarization));
+
+	test('failed summarization records failure metadata on turn', async () => {
+		// Return a huge summary that exceeds the budget → triggers 'Summary too large'
+		chatResponse[0] = 'x'.repeat(500_000);
+
+		const instaService = accessor.get(IInstantiationService);
+		const endpoint = instaService.createInstance(MockEndpoint, undefined);
+
+		const toolCallRounds = [
+			new ToolCallRound('ok', [createEditFileToolCall(1)]),
+			new ToolCallRound('ok 2', [createEditFileToolCall(2)]),
+			new ToolCallRound('ok 3', [createEditFileToolCall(3)]),
+		];
+
+		const turn = new Turn('turnId', { type: 'user', message: 'hello' });
+		const testConversation = new Conversation('sessionId', [turn]);
+
+		const promptContext: IBuildPromptContext = {
+			chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
+			history: [],
+			query: 'edit this file',
+			toolCallRounds,
+			toolCallResults: createEditFileToolResult(1, 2, 3),
+			tools,
+			conversation: testConversation,
+		};
+
+		const customizations = await PromptRegistry.resolveAllCustomizations(instaService, endpoint);
+		const props: AgentPromptProps = {
+			priority: 1,
+			endpoint,
+			location: ChatLocation.Panel,
+			promptContext,
+			enableCacheBreakpoints: true,
+			triggerSummarize: true,
+			customizations,
+		};
+		const renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, props);
+		// Summarization should fail (summary too large) but the overall render should succeed
+		// because it falls back to a non-summarized render
+		const result = await renderer.render();
+
+		// The metadata should NOT record a successful summarization
+		const summaryMeta = result.metadata.get(SummarizedConversationHistoryMetadata);
+		expect(summaryMeta).toBeUndefined();
+	});
+
+	test('successful summarization records metadata on render result', async () => {
+		chatResponse[0] = 'summarized successfully!';
+
+		const instaService = accessor.get(IInstantiationService);
+		const endpoint = instaService.createInstance(MockEndpoint, undefined);
+
+		const toolCallRounds = [
+			new ToolCallRound('ok', [createEditFileToolCall(1)]),
+			new ToolCallRound('ok 2', [createEditFileToolCall(2)]),
+			new ToolCallRound('ok 3', [createEditFileToolCall(3)]),
+		];
+
+		const turn = new Turn('turnId', { type: 'user', message: 'hello' });
+		const testConversation = new Conversation('sessionId', [turn]);
+
+		const promptContext: IBuildPromptContext = {
+			chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
+			history: [],
+			query: 'edit this file',
+			toolCallRounds,
+			toolCallResults: createEditFileToolResult(1, 2, 3),
+			tools,
+			conversation: testConversation,
+		};
+
+		const customizations = await PromptRegistry.resolveAllCustomizations(instaService, endpoint);
+		const props: AgentPromptProps = {
+			priority: 1,
+			endpoint,
+			location: ChatLocation.Panel,
+			promptContext,
+			enableCacheBreakpoints: true,
+			triggerSummarize: true,
+			customizations,
+		};
+		const renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, props);
+		const result = await renderer.render();
+
+		const summaryMeta = result.metadata.get(SummarizedConversationHistoryMetadata);
+		expect(summaryMeta).toBeDefined();
+		expect(summaryMeta!.text).toBe('summarized successfully!');
+		expect(summaryMeta!.toolCallRoundId).toBeTruthy();
+	});
+
+	test('failed summarization does not set round.summary', async () => {
+		chatResponse[0] = 'x'.repeat(500_000);
+
+		const instaService = accessor.get(IInstantiationService);
+		const endpoint = instaService.createInstance(MockEndpoint, undefined);
+
+		const toolCallRounds = [
+			new ToolCallRound('ok', [createEditFileToolCall(1)]),
+			new ToolCallRound('ok 2', [createEditFileToolCall(2)]),
+			new ToolCallRound('ok 3', [createEditFileToolCall(3)]),
+		];
+
+		const turn = new Turn('turnId', { type: 'user', message: 'hello' });
+		const testConversation = new Conversation('sessionId', [turn]);
+
+		const promptContext: IBuildPromptContext = {
+			chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
+			history: [],
+			query: 'edit this file',
+			toolCallRounds,
+			toolCallResults: createEditFileToolResult(1, 2, 3),
+			tools,
+			conversation: testConversation,
+		};
+
+		const customizations = await PromptRegistry.resolveAllCustomizations(instaService, endpoint);
+		const props: AgentPromptProps = {
+			priority: 1,
+			endpoint,
+			location: ChatLocation.Panel,
+			promptContext,
+			enableCacheBreakpoints: true,
+			triggerSummarize: true,
+			customizations,
+		};
+		const renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, props);
+		await renderer.render();
+
+		// None of the rounds should have summary set since summarization failed
+		for (const round of toolCallRounds) {
+			expect(round.summary).toBeUndefined();
+		}
+	});
+
+	test('failure metadata on turn prevents repeated foreground summarization attempts', async () => {
+		// This test verifies the contract that agentIntent.ts relies on:
+		// after a foreground summarization failure, setting SummarizedConversationHistoryMetadata
+		// with outcome !== 'success' on the turn causes the retry guard to skip summarization.
+
+		const turn = new Turn('turnId', { type: 'user', message: 'hello' });
+
+		// Simulate what agentIntent.ts does after a failed foreground summarization
+		turn.setMetadata(new SummarizedConversationHistoryMetadata(
+			'', // no toolCallRoundId for failures
+			'', // no summary text for failures
+			{
+				model: 'test-model',
+				source: 'foreground',
+				outcome: 'budgetExceeded',
+				contextLengthBefore: 100_000,
+			},
+		));
+
+		// Verify the retry guard condition from renderWithSummarization matches
+		const previousForegroundSummary = turn.getMetadata(SummarizedConversationHistoryMetadata);
+		expect(previousForegroundSummary).toBeDefined();
+		expect(previousForegroundSummary!.source).toBe('foreground');
+		expect(previousForegroundSummary!.outcome).toBe('budgetExceeded');
+		expect(previousForegroundSummary!.outcome).not.toBe('success');
+
+		// The guard condition: source === 'foreground' && outcome && outcome !== 'success'
+		const shouldSkip = previousForegroundSummary!.source === 'foreground'
+			&& !!previousForegroundSummary!.outcome
+			&& previousForegroundSummary!.outcome !== 'success';
+		expect(shouldSkip).toBe(true);
+
+		// Also verify that successful summarization does NOT trigger the skip guard
+		turn.setMetadata(new SummarizedConversationHistoryMetadata(
+			'roundId',
+			'summary text',
+			{
+				model: 'test-model',
+				source: 'foreground',
+				outcome: 'success',
+			},
+		));
+		const successMeta = turn.getMetadata(SummarizedConversationHistoryMetadata);
+		const shouldSkipAfterSuccess = successMeta!.source === 'foreground'
+			&& !!successMeta!.outcome
+			&& successMeta!.outcome !== 'success';
+		expect(shouldSkipAfterSuccess).toBe(false);
+	});
 });

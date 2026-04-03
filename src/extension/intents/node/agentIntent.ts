@@ -501,6 +501,27 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 
 		// Helper function for synchronous summarization flow with fallbacks
 		const renderWithSummarization = async (reason: string, renderProps: AgentPromptProps = props): Promise<RenderPromptResult> => {
+			const turn = promptContext.conversation?.getLatestTurn();
+			const previousForegroundSummary = turn?.getMetadata(SummarizedConversationHistoryMetadata);
+			if (previousForegroundSummary?.source === 'foreground' && previousForegroundSummary.outcome && previousForegroundSummary.outcome !== 'success') {
+				this.logService.debug(`[Agent] ${reason}, skipping repeated foreground summarization after prior failure (${previousForegroundSummary.outcome})`);
+				const renderer = PromptRenderer.create(this.instantiationService, this.endpoint, this.prompt, {
+					...renderProps,
+					endpoint: this.endpoint,
+					enableCacheBreakpoints: false
+				});
+				try {
+					return await renderer.render(progress, token);
+				} catch (e) {
+					if (e instanceof BudgetExceededError) {
+						this.logService.error(e, `[Agent] repeated foreground compaction fallback failed due to budget exceeded`);
+						const maxTokens = this.endpoint.modelMaxPromptTokens;
+						throw new Error(`Unable to build prompt, modelMaxPromptTokens = ${maxTokens} (${e.message})`);
+					}
+					throw e;
+				}
+			}
+
 			this.logService.debug(`[Agent] ${reason}, triggering summarization`);
 			try {
 				const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, {
