@@ -421,23 +421,11 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		if (await checkFileExists(successfulPlaceholder)) {
 			return;
 		}
-
-		if (this.isBuiltInCopilotExtension()) {
-			throw new Error(`[CopilotCLISDK] Missing built-in copilot shim marker at ${successfulPlaceholder}. Packaging must materialize shims for built-in copilot.`);
-		}
-
 		await Promise.all([
 			ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot, this.logService),
 			ensureRipgrepShim(this.extensionContext.extensionPath, this.envService.appRoot, this.logService)
 		]);
 		await fs.writeFile(successfulPlaceholder, 'Shims created successfully');
-	}
-
-	private isBuiltInCopilotExtension(): boolean {
-		const builtInCopilotPath = path.resolve(this.envService.appRoot, 'extensions', 'copilot').toLowerCase();
-		const extensionPath = path.resolve(this.extensionContext.extensionPath).toLowerCase();
-
-		return extensionPath === builtInCopilotPath || extensionPath.startsWith(`${builtInCopilotPath}${path.sep}`);
 	}
 
 	public async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
