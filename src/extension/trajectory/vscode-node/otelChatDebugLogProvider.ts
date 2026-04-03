@@ -340,6 +340,10 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		const sessionDir = this._fileLogger.getSessionDir(entry.sid);
 		const readCompanionFile = sessionDir
 			? async (fileName: string): Promise<string | undefined> => {
+				// Validate fileName to prevent path traversal
+				if (fileName.includes('..') || fileName.includes('/') || fileName.includes('\\')) {
+					return undefined;
+				}
 				try {
 					const fileUri = URI.joinPath(sessionDir, fileName);
 					const raw = await fs.promises.readFile(fileUri.fsPath, 'utf-8');
@@ -360,16 +364,29 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	/**
 	 * Scan the JSONL file on disk to find an entry by event ID.
 	 * Used as a fallback when the entry was evicted from the LRU cache.
+	 * Tracks restart boundaries to match the correct run when spanIds are reused.
 	 */
 	private async _findEntryOnDisk(sessionId: string, eventId: string): Promise<IDebugLogEntry | undefined> {
 		// The eventId may have a run suffix (e.g., "0000000000000001:r1").
-		// Strip the suffix to get the raw spanId for matching.
-		const colonIdx = eventId.indexOf(':r');
-		const rawSpanId = colonIdx >= 0 ? eventId.slice(0, colonIdx) : eventId;
+		const runMatch = /:r(\d+)$/.exec(eventId);
+		const rawSpanId = runMatch ? eventId.slice(0, runMatch.index) : eventId;
+		const targetRunIndex = runMatch ? parseInt(runMatch[1], 10) : 0;
 
 		let found: IDebugLogEntry | undefined;
+		let runIndex = 0;
+		const seenSpanIds = new Set<string>();
+
 		await this._fileLogger.streamEntries(sessionId, entry => {
-			if (!found && entry.spanId === rawSpanId) {
+			if (found) { return; }
+
+			// Track restart boundaries to find the correct run
+			if (seenSpanIds.has(entry.spanId)) {
+				runIndex++;
+				seenSpanIds.clear();
+			}
+			seenSpanIds.add(entry.spanId);
+
+			if (entry.spanId === rawSpanId && runIndex === targetRunIndex) {
 				found = entry;
 			}
 		});

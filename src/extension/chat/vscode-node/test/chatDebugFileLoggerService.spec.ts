@@ -522,4 +522,69 @@ describe('ChatDebugFileLoggerService', () => {
 		const content = await fs.promises.readFile(modelsPath, 'utf-8');
 		expect(content).toBe('"sentinel"');
 	});
+
+	it('readEntries returns entries from flushed JSONL and unflushed buffer', async () => {
+		await service.startSession('session-read');
+		otelService.fireSpan(makeToolCallSpan('session-read', 'tool_a'));
+		await service.flush('session-read');
+
+		// Fire another span without flushing — it should be in the buffer
+		otelService.fireSpan(makeToolCallSpan('session-read', 'tool_b'));
+
+		const entries = await service.readEntries('session-read');
+		const toolEntries = entries.filter(e => e.type === 'tool_call');
+		expect(toolEntries.length).toBe(2);
+		expect(toolEntries[0].name).toBe('tool_a');
+		expect(toolEntries[1].name).toBe('tool_b');
+	});
+
+	it('readEntries returns empty array for unknown session', async () => {
+		const entries = await service.readEntries('nonexistent-session');
+		expect(entries).toEqual([]);
+	});
+
+	it('readTailEntries returns last N entries from a flushed session', async () => {
+		await service.startSession('session-tail');
+		for (let i = 0; i < 5; i++) {
+			otelService.fireSpan(makeToolCallSpan('session-tail', `tool_${i}`));
+		}
+		await service.flush('session-tail');
+
+		const entries = await service.readTailEntries('session-tail', 2);
+		const toolEntries = entries.filter(e => e.type === 'tool_call');
+		// Should return the last 2 tool entries
+		expect(toolEntries.length).toBe(2);
+		expect(toolEntries[0].name).toBe('tool_3');
+		expect(toolEntries[1].name).toBe('tool_4');
+	});
+
+	it('streamEntries calls onEntry for each parsed line', async () => {
+		await service.startSession('session-stream');
+		otelService.fireSpan(makeToolCallSpan('session-stream', 'tool_x'));
+		otelService.fireSpan(makeChatSpan('session-stream', 'gpt-4o', 100, 50));
+		await service.flush('session-stream');
+
+		const types: string[] = [];
+		await service.streamEntries('session-stream', entry => {
+			types.push(entry.type);
+		});
+		expect(types).toContain('tool_call');
+		expect(types).toContain('llm_request');
+	});
+
+	it('onDidEmitEntry fires for each buffered entry', async () => {
+		await service.startSession('session-emit');
+		const emitted: Array<{ sessionId: string; type: string }> = [];
+		const sub = service.onDidEmitEntry(({ sessionId, entry }) => {
+			emitted.push({ sessionId, type: entry.type });
+		});
+
+		otelService.fireSpan(makeToolCallSpan('session-emit', 'tool_y'));
+
+		sub.dispose();
+
+		const toolEvents = emitted.filter(e => e.type === 'tool_call');
+		expect(toolEvents.length).toBe(1);
+		expect(toolEvents[0].sessionId).toBe('session-emit');
+	});
 });

@@ -62,6 +62,8 @@ interface IActiveLogSession {
 	currentToolsFile: string | undefined;
 	/** Pending tool definitions received before the session was promoted to hasOwnSpans */
 	pendingToolDefs: string | undefined;
+	/** Whether we've already checked disk for a previous session directory (prevents repeated sync FS calls) */
+	resumeChecked: boolean;
 }
 
 // IDebugLogEntry is imported from and defined in the platform layer.
@@ -278,6 +280,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			toolsIndex: 0,
 			currentToolsFile: undefined,
 			pendingToolDefs: undefined,
+			resumeChecked: false,
 		};
 		this._activeSessions.set(sessionId, session);
 
@@ -527,7 +530,8 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		// extension lifecycle, promote it. This handles sessions continued after
 		// VS Code restart where title/categorization won't re-fire.
 		const session = this._activeSessions.get(sessionId);
-		if (session && !session.hasOwnSpans && !session.parentSessionId) {
+		if (session && !session.hasOwnSpans && !session.parentSessionId && !session.resumeChecked) {
+			session.resumeChecked = true;
 			const mainJsonl = URI.joinPath(session.sessionDir, 'main.jsonl');
 			try {
 				fs.accessSync(mainJsonl.fsPath);
