@@ -95,25 +95,32 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 	 * - on-demand-instructions: files without an applyTo pattern
 	 */
 	private async getInstructionItems(token: CancellationToken): Promise<vscode.ChatSessionCustomizationItem[]> {
-		const agentInstructionUris = new Set(
-			(await this.customInstructionsService.getAgentInstructions()).map(uri => uri.toString())
-		);
+		const agentInstructionUriList = await this.customInstructionsService.getAgentInstructions();
 
 		const items: vscode.ChatSessionCustomizationItem[] = [];
+		const seenUris = new Set<string>();
+
+		// Emit agent instruction files (AGENTS.md, CLAUDE.md, copilot-instructions.md)
+		// that come from customInstructionsService but may not appear in
+		// chatPromptFileService.instructions.
+		for (const uri of agentInstructionUriList) {
+			seenUris.add(uri.toString());
+			items.push({
+				uri,
+				type: vscode.ChatSessionCustomizationType.Instructions,
+				name: basename(uri),
+				groupKey: 'agent-instructions',
+			});
+		}
 
 		for (const instruction of this.chatPromptFileService.instructions) {
 			const uri = instruction.uri;
-			const name = deriveNameFromUri(uri, INSTRUCTION_FILE_EXTENSION);
 
-			if (agentInstructionUris.has(uri.toString())) {
-				items.push({
-					uri,
-					type: vscode.ChatSessionCustomizationType.Instructions,
-					name,
-					groupKey: 'agent-instructions',
-				});
-				continue;
+			if (seenUris.has(uri.toString())) {
+				continue; // already emitted as agent instruction
 			}
+
+			const name = deriveNameFromUri(uri, INSTRUCTION_FILE_EXTENSION);
 
 			let pattern: string | undefined;
 			let description: string | undefined;
