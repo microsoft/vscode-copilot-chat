@@ -355,6 +355,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private autopilotStopHookActive = false;
 	private autopilotProgressDeferred: DeferredPromise<void> | undefined;
 	private inlineSummarizationProgressDeferred: DeferredPromise<void> | undefined;
+	/** Set to true before calling fetch() when the current iteration is an inline summarization request. */
+	protected _isInlineSummarizationRequest = false;
 
 	/**
 	 * Autopilot stop hook — the model needs to call `task_complete` to signal it's done.
@@ -903,21 +905,53 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 								// Persist summary on the turn so normalizeSummariesOnRounds can restore it
 								const turn = this.turn;
 								const resolvedModel = result.response.resolvedModel;
+								const usage = result.response.usage;
 								turn.addPendingSummary(summarizedRound, summaryText);
+
+								const history = this.options.conversation.turns.slice(0, -1);
+								const numRoundsInHistory = history.reduce((sum, t) => sum + t.rounds.length, 0);
+								const numRoundsInCurrentTurn = this.toolCallRounds.length;
+								const numRounds = numRoundsInHistory + numRoundsInCurrentTurn;
+								const lastUsedTool = this.toolCallRounds.at(-1)?.toolCalls.at(-1)?.name
+									?? history.at(-1)?.rounds.at(-1)?.toolCalls.at(-1)?.name ?? 'none';
+
+								// Compute rounds since last summarization (same logic as ConversationHistorySummarizer)
+								let numRoundsSinceLastSummarization = -1;
+								for (let ri = this.toolCallRounds.length - 1; ri >= 0; ri--) {
+									if (this.toolCallRounds[ri].summary) {
+										numRoundsSinceLastSummarization = this.toolCallRounds.length - 1 - ri;
+										break;
+									}
+								}
+								if (numRoundsSinceLastSummarization === -1) {
+									let count = numRoundsInCurrentTurn;
+									outerLoop: for (let ti = history.length - 1; ti >= 0; ti--) {
+										for (let ri = history[ti].rounds.length - 1; ri >= 0; ri--) {
+											if (history[ti].rounds[ri].summary) {
+												numRoundsSinceLastSummarization = count;
+												break outerLoop;
+											}
+											count++;
+										}
+									}
+								}
+
 								const inlineSummarizationMeta = new SummarizedConversationHistoryMetadata(
 									summarizedRound,
 									summaryText,
 									{
-										usage: result.response.usage,
+										usage,
 										model: resolvedModel,
 										summarizationMode: 'inline',
+										numRounds,
+										numRoundsSinceLastSummarization,
 										source: 'foreground',
 										outcome: 'success',
 									},
 								);
 								turn.setMetadata(inlineSummarizationMeta);
 
-								// Fire explicit telemetry event matching the existing summarization telemetry
+								// Fire telemetry matching the existing summarizedConversationHistory event
 								/* __GDPR__
 									"summarizedConversationHistory" : {
 										"owner": "bhavyau",
@@ -927,23 +961,39 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 										"summarizationMode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The summarization mode." },
 										"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether background or foreground." },
 										"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Session id." },
+										"chatRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat request ID." },
+										"lastUsedTool": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The last tool used before summarization." },
+										"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request ID from the summarization call." },
+										"numRounds": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total tool call rounds." },
+										"numRoundsSinceLastSummarization": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Rounds since last summarization." },
+										"turnIndex": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The index of the current turn." },
+										"curTurnRoundIndex": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The index of the current round within the current turn." },
+										"isDuringToolCalling": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether this was triggered during tool calling." },
 										"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Prompt tokens." },
 										"promptCacheTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Cached prompt tokens." },
 										"responseTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Output tokens." }
 									}
 								*/
-								const usage = result.response.usage;
 								this._telemetryService.sendMSFTTelemetryEvent('summarizedConversationHistory', {
 									outcome: 'success',
 									model: resolvedModel,
 									summarizationMode: 'inline',
 									source: 'foreground',
 									conversationId: this.options.conversation.sessionId,
+									chatRequestId: turn.id,
+									lastUsedTool,
+									requestId: result.response.requestId,
 								}, {
+									numRounds,
+									numRoundsSinceLastSummarization,
+									turnIndex: history.length,
+									curTurnRoundIndex: numRoundsInCurrentTurn,
+									isDuringToolCalling: numRoundsInCurrentTurn > 0 ? 1 : 0,
 									promptTokenCount: usage?.prompt_tokens,
 									promptCacheTokenCount: usage?.prompt_tokens_details?.cached_tokens,
 									responseTokenCount: usage?.completion_tokens,
 								});
+								GenAiMetrics.incrementAgentSummarizationCount(this._otelService, 'success');
 
 								this._logService.info(`[ToolCallingLoop] Inline summarization extracted (${summaryText.length} chars, roundId=${summarizedRound}), continuing loop`);
 
@@ -960,12 +1010,16 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 								continue;
 							} else {
 								this._logService.warn(`[ToolCallingLoop] Inline summarization: no round found to store summary on`);
+								this._sendInlineSummarizationFailureTelemetry('noRoundFound', result.response);
+								GenAiMetrics.incrementAgentSummarizationCount(this._otelService, 'failed');
 								this.inlineSummarizationProgressDeferred?.complete(undefined);
 								this.inlineSummarizationProgressDeferred = undefined;
 								// Fall through to normal no-tool-calls handling (will break the loop)
 							}
 						} else {
 							this._logService.warn(`[ToolCallingLoop] Inline summarization requested but no summary extracted from response`);
+							this._sendInlineSummarizationFailureTelemetry('extractionFailed', result.response);
+							GenAiMetrics.incrementAgentSummarizationCount(this._otelService, 'failed');
 							this.inlineSummarizationProgressDeferred?.complete(undefined);
 							this.inlineSummarizationProgressDeferred = undefined;
 							// Fall through to normal no-tool-calls handling (will break the loop)
@@ -1345,6 +1399,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const enableThinking = !shouldDisableThinking;
 		let phase: string | undefined;
 		let compaction: OpenAIContextManagementResponse | undefined;
+		this._isInlineSummarizationRequest = inlineSummarizationRequested;
 		markChatExt(this.options.conversation.sessionId, ChatExtPerfMark.WillFetch);
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(effectiveBuildPromptResult.messages, { stripOrphanedToolCalls: isGeminiFamily(endpoint) }),
@@ -1522,6 +1577,55 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			return rounds[rounds.length - 2].id;
 		}
 		return undefined;
+	}
+
+	/**
+	 * Fires a `summarizedConversationHistory` telemetry event for inline summarization failures,
+	 * matching the format of the existing `ConversationHistorySummarizer.sendSummarizationTelemetry()`.
+	 */
+	private _sendInlineSummarizationFailureTelemetry(detailedOutcome: string, response: ChatResponse): void {
+		const history = this.options.conversation.turns.slice(0, -1);
+		const numRoundsInHistory = history.reduce((sum, t) => sum + t.rounds.length, 0);
+		const numRoundsInCurrentTurn = this.toolCallRounds.length;
+		const resolvedModel = response.type === ChatFetchResponseType.Success ? response.resolvedModel : undefined;
+		const requestId = response.type === ChatFetchResponseType.Success ? response.requestId : '';
+		const usage = response.type === ChatFetchResponseType.Success ? response.usage : undefined;
+
+		/* __GDPR__
+			"summarizedConversationHistory" : {
+				"owner": "bhavyau",
+				"comment": "Tracks inline summarization failure",
+				"outcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The success state." },
+				"detailedOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Detailed failure reason." },
+				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model ID." },
+				"summarizationMode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The summarization mode." },
+				"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether background or foreground." },
+				"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Session id." },
+				"chatRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat request ID." },
+				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request ID from the summarization call." },
+				"numRounds": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total tool call rounds." },
+				"turnIndex": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The index of the current turn." },
+				"curTurnRoundIndex": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The index of the current round within the current turn." },
+				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Prompt tokens." },
+				"responseTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Output tokens." }
+			}
+		*/
+		this._telemetryService.sendMSFTTelemetryEvent('summarizedConversationHistory', {
+			outcome: 'failed',
+			detailedOutcome,
+			model: resolvedModel,
+			summarizationMode: 'inline',
+			source: 'foreground',
+			conversationId: this.options.conversation.sessionId,
+			chatRequestId: this.turn.id,
+			requestId,
+		}, {
+			numRounds: numRoundsInHistory + numRoundsInCurrentTurn,
+			turnIndex: history.length,
+			curTurnRoundIndex: numRoundsInCurrentTurn,
+			promptTokenCount: usage?.prompt_tokens,
+			responseTokenCount: usage?.completion_tokens,
+		});
 	}
 
 	private applyMessagePostProcessing(messages: Raw.ChatMessage[], options?: { stripOrphanedToolCalls?: boolean }): Raw.ChatMessage[] {
