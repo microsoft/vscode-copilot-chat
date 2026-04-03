@@ -47,14 +47,14 @@ interface IActiveLogSession {
 	hasOwnSpans: boolean;
 	/** Whether models.json has already been written to this session's directory */
 	modelSnapshotWritten: boolean;
-	/** Model name of the last-written system prompt (undefined = none written yet) */
-	systemPromptModel: string | undefined;
+	/** Key identifying the last-written system prompt: model + agent/mode name (undefined = none written yet) */
+	systemPromptKey: string | undefined;
 	/** Index of the next system_prompt file to write */
 	systemPromptIndex: number;
 	/** File name of the most recently written system prompt (e.g., 'system_prompt_0.json') */
 	currentSystemPromptFile: string | undefined;
-	/** Model name of the last-written tools file (undefined = none written yet) */
-	toolsModel: string | undefined;
+	/** Key identifying the last-written tools file: model + agent/mode name (undefined = none written yet) */
+	toolsKey: string | undefined;
 	/** Index of the next tools file to write */
 	toolsIndex: number;
 	/** File name of the most recently written tools file (e.g., 'tools_0.json') */
@@ -285,10 +285,10 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			label: childInfo?.label,
 			hasOwnSpans,
 			modelSnapshotWritten: false,
-			systemPromptModel: undefined,
+			systemPromptKey: undefined,
 			systemPromptIndex: 0,
 			currentSystemPromptFile: undefined,
-			toolsModel: undefined,
+			toolsKey: undefined,
 			toolsIndex: 0,
 			currentToolsFile: undefined,
 		};
@@ -520,18 +520,19 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		//      (handled in _ensureSession's child branch).
 		this._ensureSession(sessionId);
 
-		// Write system_prompt JSON when model changes (before buffering so llm_request gets the file ref)
+		// Write system_prompt JSON when model or mode changes (before buffering so llm_request gets the file ref)
 		if (opName === GenAiOperationName.CHAT) {
 			const session = this._activeSessions.get(sessionId);
 			if (session && session.hasOwnSpans && !session.parentSessionId) {
 				const model = asString(span.attributes[GenAiAttr.REQUEST_MODEL])
 					?? asString(span.attributes[GenAiAttr.RESPONSE_MODEL])
 					?? 'unknown';
-				if (model !== session.systemPromptModel) {
-					const systemInstructions = asString(span.attributes[GenAiAttr.SYSTEM_INSTRUCTIONS]);
-					if (systemInstructions) {
+				const systemInstructions = asString(span.attributes[GenAiAttr.SYSTEM_INSTRUCTIONS]);
+				if (systemInstructions) {
+					const key = `${model}:${systemInstructions.length}`;
+					if (key !== session.systemPromptKey) {
 						const fileName = `system_prompt_${session.systemPromptIndex}.json`;
-						session.systemPromptModel = model;
+						session.systemPromptKey = key;
 						session.systemPromptIndex++;
 						session.currentSystemPromptFile = fileName;
 						this._enqueueFileWrite(session, systemInstructions, fileName);
@@ -550,42 +551,15 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			}
 		}
 
-		// Write tools JSON when model changes on INVOKE_AGENT spans (tool definitions live on agent span)
-		if (opName === GenAiOperationName.INVOKE_AGENT && !span.parentSpanId) {
-			const session = this._activeSessions.get(sessionId);
-			if (session && session.hasOwnSpans && !session.parentSessionId) {
-				const model = asString(span.attributes[GenAiAttr.REQUEST_MODEL])
-					?? asString(span.attributes[GenAiAttr.RESPONSE_MODEL])
-					?? 'unknown';
-				if (model !== session.toolsModel) {
-					const toolDefs = asString(span.attributes[GenAiAttr.TOOL_DEFINITIONS]);
-					if (toolDefs) {
-						const fileName = `tools_${session.toolsIndex}.json`;
-						session.toolsModel = model;
-						session.toolsIndex++;
-						session.currentToolsFile = fileName;
-						this._enqueueFileWrite(session, toolDefs, fileName);
-						this._bufferEntry(sessionId, {
-							ts: span.startTime,
-							dur: 0,
-							sid: sessionId,
-							type: 'generic',
-							name: 'tools_ref',
-							spanId: `tools-${span.spanId}`,
-							status: 'ok',
-							attrs: { file: fileName, model },
-						});
-					}
-				}
-			}
-		}
-
 		if (entry) {
-			// Attach current system prompt file reference to llm_request entries
+			// Attach current system prompt and tools file references to llm_request entries
 			if (entry.type === 'llm_request') {
 				const session = this._activeSessions.get(sessionId);
 				if (session?.currentSystemPromptFile) {
 					entry.attrs.systemPromptFile = session.currentSystemPromptFile;
+				}
+				if (session?.currentToolsFile) {
+					entry.attrs.toolsFile = session.currentToolsFile;
 				}
 			}
 			this._bufferEntry(sessionId, entry);
@@ -621,6 +595,11 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	private _onSpanEvent(event: ISpanEventData): void {
 		if (event.eventName === 'turn_start' || event.eventName === 'turn_end') {
 			this._onTurnBoundaryEvent(event);
+			return;
+		}
+
+		if (event.eventName === 'tools_available') {
+			this._onToolsAvailableEvent(event);
 			return;
 		}
 
@@ -723,6 +702,49 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			status: 'ok',
 			attrs: { turnId },
 		});
+	}
+
+	private _onToolsAvailableEvent(event: ISpanEventData): void {
+		const sessionId = typeof event.attributes[CopilotChatAttr.CHAT_SESSION_ID] === 'string'
+			? event.attributes[CopilotChatAttr.CHAT_SESSION_ID] as string
+			: (event.parentSpanId ? this._spanSessionIndex.get(event.parentSpanId) : undefined);
+
+		if (!sessionId) {
+			return;
+		}
+
+		// Ensure session exists — tools_available fires early, before any span completes
+		this._ensureSession(sessionId);
+
+		const session = this._activeSessions.get(sessionId);
+		if (!session || session.parentSessionId) {
+			return;
+		}
+
+		const toolDefs = typeof event.attributes.toolDefinitions === 'string' ? event.attributes.toolDefinitions : undefined;
+		if (!toolDefs) {
+			return;
+		}
+
+		// Use the current systemPromptKey to detect model/mode — tools change when the prompt changes
+		const key = session.systemPromptKey ?? 'unknown';
+		if (key !== session.toolsKey) {
+			const fileName = `tools_${session.toolsIndex}.json`;
+			session.toolsKey = key;
+			session.toolsIndex++;
+			session.currentToolsFile = fileName;
+			this._enqueueFileWrite(session, toolDefs, fileName);
+			this._bufferEntry(sessionId, {
+				ts: event.timestamp,
+				dur: 0,
+				sid: sessionId,
+				type: 'generic',
+				name: 'tools_ref',
+				spanId: `tools-${event.spanId}`,
+				status: 'ok',
+				attrs: { file: fileName },
+			});
+		}
 	}
 
 	// ── Core debug event handling (discovery, skill loading, etc.) ──

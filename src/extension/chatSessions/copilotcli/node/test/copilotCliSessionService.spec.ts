@@ -40,7 +40,7 @@ import { ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker } from '../copilotcliSessionService';
 import { CopilotCLIMCPHandler } from '../mcpHandler';
-import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../userInputHelpers';
+import { IQuestion, IQuestionAnswer, IUserQuestionHandler } from '../userInputHelpers';
 import { MockCliSdkSession, MockCliSdkSessionManager, MockSkillLocations, NullCopilotCLIAgents, NullICopilotCLIImageSupport } from './testHelpers';
 
 // Re-export for backward compatibility with other spec files
@@ -62,8 +62,6 @@ class NullAgentSessionsWorkspace implements IAgentSessionsWorkspace {
 }
 
 class NullChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFolderService>() {
-	override getRecentFolders = vi.fn(async () => []);
-	override deleteRecentFolder = vi.fn(async () => { });
 	override deleteTrackedWorkspaceFolder = vi.fn(async () => { });
 	override trackSessionWorkspaceFolder = vi.fn(async () => { });
 	override getSessionWorkspaceFolder = vi.fn(async () => undefined);
@@ -131,7 +129,7 @@ describe('CopilotCLISessionService', () => {
 		}();
 		class FakeUserQuestionHandler implements IUserQuestionHandler {
 			_serviceBrand: undefined;
-			async askUserQuestion(question: UserInputRequest, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
+			async askUserQuestion(question: IQuestion, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<IQuestionAnswer | undefined> {
 				return undefined;
 			}
 		}
@@ -149,7 +147,7 @@ describe('CopilotCLISessionService', () => {
 						}
 					}();
 				}
-				return disposables.add(new CopilotCLISession(workspaceInfo, agentName, sdkSession, logService, workspaceService, new MockChatSessionMetadataStore(), instantiationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' }))));
+				return disposables.add(new CopilotCLISession(workspaceInfo, agentName, sdkSession, [], logService, workspaceService, new MockChatSessionMetadataStore(), instantiationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), new FakeToolsService(), new FakeUserQuestionHandler(), accessor.get(IConfigurationService), new NoopOTelService(resolveOTelConfig({ env: {}, extensionVersion: '0.0.0', sessionId: 'test' }))));
 			}
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);

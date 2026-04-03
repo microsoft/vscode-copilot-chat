@@ -4,10 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { afterAll, beforeAll, expect, suite, test } from 'vitest';
-import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
+import { ICustomInstructionsService, SkillStorage } from '../../../../platform/customInstructions/common/customInstructionsService';
+import { IExtensionsService } from '../../../../platform/extensions/common/extensionsService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
+import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
+import { ITelemetryService, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../../platform/telemetry/common/telemetry';
 import { MockCustomInstructionsService } from '../../../../platform/test/common/testCustomInstructionsService';
+import { TestExtensionsService } from '../../../../platform/test/common/testExtensionsService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -705,6 +709,243 @@ suite('ReadFile', () => {
 			// Should contain the original text, not hex
 			expect(text).toContain('Hello, world!');
 			expect(text).not.toContain('00000000');
+
+			testAccessor.dispose();
+		});
+	});
+
+	suite('skill provenance telemetry', () => {
+		class CapturingTelemetryService extends NullTelemetryService {
+			readonly events: { eventName: string; properties?: TelemetryEventProperties; measurements?: TelemetryEventMeasurements }[] = [];
+			readonly enhancedEvents: { eventName: string; properties?: TelemetryEventProperties }[] = [];
+			readonly internalEvents: { eventName: string; properties?: TelemetryEventProperties }[] = [];
+
+			override sendGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void {
+				this.events.push({ eventName, properties, measurements });
+			}
+
+			override sendEnhancedGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties): void {
+				this.enhancedEvents.push({ eventName, properties });
+			}
+
+			override sendInternalMSFTTelemetryEvent(eventName: string, properties?: TelemetryEventProperties): void {
+				this.internalEvents.push({ eventName, properties });
+			}
+
+			override sendMSFTTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void {
+				this.events.push({ eventName, properties, measurements });
+			}
+		}
+
+		test('should send separate skillContentRead event with skillStorage=local for workspace skill files', async () => {
+			const skillContent = '# My Skill\nDo something useful.';
+			const skillUri = URI.file('/workspace/.github/skills/my-skill/SKILL.md');
+			const testDoc = createTextDocumentData(skillUri, skillContent, 'markdown').document;
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], [testDoc]]
+			));
+
+			const mockCustomInstructions = new MockCustomInstructionsService();
+			mockCustomInstructions.setSkillFiles([skillUri]);
+			services.define(ICustomInstructionsService, mockCustomInstructions);
+
+			const telemetry = new CapturingTelemetryService();
+			services.define(ITelemetryService, telemetry);
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: skillUri.fsPath };
+			await readFileTool.invoke({ input, toolInvocationToken: null as never }, CancellationToken.None);
+
+			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
+			expect(event).toBeDefined();
+			expect(event!.properties!.skillStorage).toBe(SkillStorage.Workspace);
+			expect(event!.properties!.skillNameHash).not.toBe('');
+			expect(event!.properties!.extensionIdHash).toBe('');
+			expect(event!.properties!.extensionVersion).toBe('');
+			expect(event!.properties!.contentHash).not.toBe('');
+
+			const enhanced = telemetry.enhancedEvents.find(e => e.eventName === 'skillContentRead');
+			expect(enhanced).toBeDefined();
+			expect(enhanced!.properties!.skillName).toBe('my-skill');
+			expect(enhanced!.properties!.skillPath).toBe(skillUri.toString());
+			expect(enhanced!.properties!.extensionId).toBe('');
+			expect(enhanced!.properties!.extensionVersion).toBe('');
+			expect(enhanced!.properties!.skillStorage).toBe(SkillStorage.Workspace);
+			expect(enhanced!.properties!.contentHash).not.toBe('');
+
+			const internal = telemetry.internalEvents.find(e => e.eventName === 'skillContentRead');
+			expect(internal).toBeDefined();
+			expect(internal!.properties!.skillName).toBe('my-skill');
+			expect(internal!.properties!.skillPath).toBe(skillUri.toString());
+			expect(internal!.properties!.extensionId).toBe('');
+			expect(internal!.properties!.skillStorage).toBe(SkillStorage.Workspace);
+			expect(internal!.properties!.contentHash).not.toBe('');
+
+			testAccessor.dispose();
+		});
+
+		test('should send skillStorage=user for personal skill files', async () => {
+			const skillContent = '# Personal Skill';
+			// NullNativeEnvService uses /home/testuser as userHome
+			const skillUri = URI.file('/home/testuser/.copilot/skills/personal-skill/SKILL.md');
+			const testDoc = createTextDocumentData(skillUri, skillContent, 'markdown').document;
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], [testDoc]]
+			));
+
+			const mockCustomInstructions = new MockCustomInstructionsService();
+			mockCustomInstructions.setSkillFiles([skillUri], SkillStorage.Personal);
+			services.define(ICustomInstructionsService, mockCustomInstructions);
+
+			const telemetry = new CapturingTelemetryService();
+			services.define(ITelemetryService, telemetry);
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: skillUri.fsPath };
+			await readFileTool.invoke({ input, toolInvocationToken: null as never }, CancellationToken.None);
+
+			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
+			expect(event).toBeDefined();
+			expect(event!.properties!.skillStorage).toBe(SkillStorage.Personal);
+
+			testAccessor.dispose();
+		});
+
+		test('should send skillStorage=extension with extensionIdHash and extensionVersion', async () => {
+			const skillContent = '# Extension Skill';
+			const skillUri = URI.file('/extensions/publisher.my-ext/skills/ext-skill/SKILL.md');
+			const testDoc = createTextDocumentData(skillUri, skillContent, 'markdown').document;
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], [testDoc]]
+			));
+
+			const mockCustomInstructions = new MockCustomInstructionsService();
+			mockCustomInstructions.setSkillFiles([skillUri]);
+			mockCustomInstructions.setExtensionSkillInfos([{
+				uri: skillUri,
+				skillName: 'ext-skill',
+				skillFolderUri: URI.file('/extensions/publisher.my-ext/skills/ext-skill'),
+				extensionId: 'publisher.my-ext',
+			}]);
+			services.define(ICustomInstructionsService, mockCustomInstructions);
+
+			const extensionsService = new TestExtensionsService();
+			extensionsService.addExtension({
+				id: 'publisher.my-ext',
+				packageJSON: { version: '1.2.3' },
+			} as any);
+			services.define(IExtensionsService, extensionsService);
+
+			const telemetry = new CapturingTelemetryService();
+			services.define(ITelemetryService, telemetry);
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: skillUri.fsPath };
+			await readFileTool.invoke({ input, toolInvocationToken: null as never }, CancellationToken.None);
+
+			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
+			expect(event).toBeDefined();
+			expect(event!.properties!.skillStorage).toBe(SkillStorage.Extension);
+			expect(event!.properties!.extensionIdHash).not.toBe('');
+			expect(event!.properties!.extensionVersion).toBe('1.2.3');
+			expect(event!.properties!.contentHash).not.toBe('');
+
+			const enhanced = telemetry.enhancedEvents.find(e => e.eventName === 'skillContentRead');
+			expect(enhanced).toBeDefined();
+			expect(enhanced!.properties!.skillName).toBe('ext-skill');
+			expect(enhanced!.properties!.skillPath).toBe(skillUri.toString());
+			expect(enhanced!.properties!.extensionId).toBe('publisher.my-ext');
+			expect(enhanced!.properties!.extensionVersion).toBe('1.2.3');
+			expect(enhanced!.properties!.skillStorage).toBe(SkillStorage.Extension);
+			expect(enhanced!.properties!.contentHash).not.toBe('');
+
+			const internal = telemetry.internalEvents.find(e => e.eventName === 'skillContentRead');
+			expect(internal).toBeDefined();
+			expect(internal!.properties!.skillName).toBe('ext-skill');
+			expect(internal!.properties!.extensionId).toBe('publisher.my-ext');
+			expect(internal!.properties!.extensionVersion).toBe('1.2.3');
+			expect(internal!.properties!.skillStorage).toBe(SkillStorage.Extension);
+			expect(internal!.properties!.contentHash).not.toBe('');
+
+			testAccessor.dispose();
+		});
+
+		test('should send skillStorage=internal for vscode-chat-internal scheme', async () => {
+			const skillContent = '# Internal Skill';
+			const skillUri = URI.from({ scheme: 'vscode-chat-internal', path: '/skills/internal-skill/SKILL.md' });
+			const testDoc = createTextDocumentData(skillUri, skillContent, 'markdown').document;
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], [testDoc]]
+			));
+
+			const mockCustomInstructions = new MockCustomInstructionsService();
+			mockCustomInstructions.setSkillFiles([skillUri], SkillStorage.Internal);
+			services.define(ICustomInstructionsService, mockCustomInstructions);
+
+			const telemetry = new CapturingTelemetryService();
+			services.define(ITelemetryService, telemetry);
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: skillUri.toString() };
+			await readFileTool.invoke({ input, toolInvocationToken: null as never }, CancellationToken.None);
+
+			const event = telemetry.events.find(e => e.eventName === 'skillContentRead');
+			expect(event).toBeDefined();
+			expect(event!.properties!.skillStorage).toBe(SkillStorage.Internal);
+
+			testAccessor.dispose();
+		});
+
+		test('should not send skillContentRead for non-skill files', async () => {
+			const telemetry = new CapturingTelemetryService();
+			const services = createExtensionUnitTestingServices();
+			services.define(ITelemetryService, telemetry);
+
+			const testDoc = createTextDocumentData(URI.file('/workspace/file.ts'), 'line 1\nline 2', 'ts').document;
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[[URI.file('/workspace')], [testDoc]]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = { filePath: '/workspace/file.ts' };
+			await readFileTool.invoke({ input, toolInvocationToken: null as never }, CancellationToken.None);
+
+			const skillEvent = telemetry.events.find(e => e.eventName === 'skillContentRead');
+			expect(skillEvent).toBeUndefined();
+
+			const enhancedSkillEvent = telemetry.enhancedEvents.find(e => e.eventName === 'skillContentRead');
+			expect(enhancedSkillEvent).toBeUndefined();
+
+			const internalSkillEvent = telemetry.internalEvents.find(e => e.eventName === 'skillContentRead');
+			expect(internalSkillEvent).toBeUndefined();
+
+			// readFileToolInvoked should still fire
+			const readEvent = telemetry.events.find(e => e.eventName === 'readFileToolInvoked');
+			expect(readEvent).toBeDefined();
+			expect(readEvent!.properties!.fileType).toBe('');
 
 			testAccessor.dispose();
 		});

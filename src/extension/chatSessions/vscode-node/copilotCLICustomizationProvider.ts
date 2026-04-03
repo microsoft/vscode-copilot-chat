@@ -3,29 +3,19 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
-import { AGENT_FILE_EXTENSION, INSTRUCTION_FILE_EXTENSION, SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
-import { INativeEnvService } from '../../../platform/env/common/envService';
+import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
+import { INSTRUCTION_FILE_EXTENSION, SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
 import { ILogService } from '../../../platform/log/common/logService';
-import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { IPromptsService } from '../../../platform/promptFiles/common/promptsService';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { basename } from '../../../util/vs/base/common/resources';
-import { URI } from '../../../util/vs/base/common/uri';
 import { IChatPromptFileService } from '../common/chatPromptFileService';
 import { ICopilotCLIAgents } from '../copilotcli/node/copilotCli';
-
-/**
- * Workspace-relative path prefixes that are relevant to Copilot CLI.
- * Matches the copilot-agent-runtime discovery paths for skills, instructions, and agents.
- */
-const CLI_SUBPATHS = ['.github/', '.copilot/', '.agents/'];
-
-/**
- * Home-directory relative path prefixes for Copilot CLI customizations.
- * Matches the copilot-agent-runtime personal skill/instruction directories.
- */
-const CLI_HOME_SUBPATHS = ['.copilot/', '.agents/'];
 
 export class CopilotCLICustomizationProvider extends Disposable implements vscode.ChatSessionCustomizationProvider {
 
@@ -36,15 +26,21 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 		return {
 			label: 'Copilot CLI',
 			iconId: 'worktree',
-			unsupportedTypes: [vscode.ChatSessionCustomizationType.Hook, vscode.ChatSessionCustomizationType.Prompt],
+			supportedTypes: [
+				vscode.ChatSessionCustomizationType.Agent,
+				vscode.ChatSessionCustomizationType.Skill,
+				vscode.ChatSessionCustomizationType.Instructions,
+				vscode.ChatSessionCustomizationType.Hook,
+				vscode.ChatSessionCustomizationType.Plugins,
+			],
 		};
 	}
 
 	constructor(
 		@IChatPromptFileService private readonly chatPromptFileService: IChatPromptFileService,
 		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@INativeEnvService private readonly envService: INativeEnvService,
+		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
+		@IPromptsService private readonly promptsService: IPromptsService,
 		@ILogService private readonly logService: ILogService,
 	) {
 		super();
@@ -52,90 +48,147 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 		this._register(this.chatPromptFileService.onDidChangeCustomAgents(() => this._onDidChange.fire()));
 		this._register(this.chatPromptFileService.onDidChangeInstructions(() => this._onDidChange.fire()));
 		this._register(this.chatPromptFileService.onDidChangeSkills(() => this._onDidChange.fire()));
+		this._register(this.chatPromptFileService.onDidChangeHooks(() => this._onDidChange.fire()));
+		this._register(this.chatPromptFileService.onDidChangePlugins(() => this._onDidChange.fire()));
 		this._register(this.copilotCLIAgents.onDidChangeAgents(() => this._onDidChange.fire()));
 	}
 
-	async provideChatSessionCustomizations(_token: vscode.CancellationToken): Promise<vscode.ChatSessionCustomizationItem[]> {
-		const items: vscode.ChatSessionCustomizationItem[] = [];
+	async provideChatSessionCustomizations(token: vscode.CancellationToken): Promise<vscode.ChatSessionCustomizationItem[]> {
+		const agents = await this.getAgentItems();
+		const instructions = await this.getInstructionItems(token);
+		const skills = this.getSkillItems();
+		const hooks = this.getHookItems();
+		const plugins = this.getPluginItems();
 
-		// Build a file URI lookup from prompt file agents for cross-referencing
-		const fileAgentLookup = new Map<string, URI>();
-		for (const agent of this.chatPromptFileService.customAgents) {
-			const name = deriveNameFromUri(agent.uri, AGENT_FILE_EXTENSION);
-			fileAgentLookup.set(name.toLowerCase(), agent.uri);
-		}
+		this.logService.debug(`[CopilotCLICustomizationProvider] agents (${agents.length}): ${agents.map(a => a.name).join(', ') || '(none)'}`);
+		this.logService.debug(`[CopilotCLICustomizationProvider] instructions (${instructions.length}): ${instructions.map(i => i.name).join(', ') || '(none)'}`);
+		this.logService.debug(`[CopilotCLICustomizationProvider] skills (${skills.length}): ${skills.map(s => s.name).join(', ') || '(none)'}`);
+		this.logService.debug(`[CopilotCLICustomizationProvider] hooks (${hooks.length}): ${hooks.map(h => h.name).join(', ') || '(none)'}`);
 
-		// Agents: use ICopilotCLIAgents as the primary source (includes SDK + prompt file agents).
-		// Cross-reference with chatPromptFileService.customAgents for file URIs when available.
-		const cliAgents = await this.copilotCLIAgents.getAgents();
-		const agentItems: vscode.ChatSessionCustomizationItem[] = [];
-		for (const agent of cliAgents) {
-			const fileUri = fileAgentLookup.get(agent.name.toLowerCase());
-			agentItems.push({
-				uri: fileUri ?? URI.from({ scheme: 'copilotcli', path: `/agents/${agent.name}` }),
-				type: vscode.ChatSessionCustomizationType.Agent,
-				name: agent.displayName || agent.name,
-				description: agent.description,
-				groupKey: fileUri ? undefined : 'Built-in',
-			});
-		}
-		items.push(...agentItems);
-		this.logService.debug(`[CopilotCLICustomizationProvider] agents (${agentItems.length}): ${agentItems.map(a => a.name).join(', ') || '(none)'}`);
+		this.logService.debug(`[CopilotCLICustomizationProvider] plugins (${plugins.length}): ${plugins.map(p => p.name).join(', ') || '(none)'}`);
 
-		const instructionItems: vscode.ChatSessionCustomizationItem[] = [];
-		for (const instruction of this.chatPromptFileService.instructions) {
-			if (this.isCLIPath(instruction.uri)) {
-				instructionItems.push({
-					uri: instruction.uri,
-					type: vscode.ChatSessionCustomizationType.Instructions,
-					name: deriveNameFromUri(instruction.uri, INSTRUCTION_FILE_EXTENSION),
-				});
-			}
-		}
-		items.push(...instructionItems);
-		this.logService.debug(`[CopilotCLICustomizationProvider] instructions (${instructionItems.length}): ${instructionItems.map(i => i.name).join(', ') || '(none)'}`);
-
-		const skillItems: vscode.ChatSessionCustomizationItem[] = [];
-		for (const skill of this.chatPromptFileService.skills) {
-			if (this.isCLIPath(skill.uri)) {
-				skillItems.push({
-					uri: skill.uri,
-					type: vscode.ChatSessionCustomizationType.Skill,
-					name: deriveNameFromUri(skill.uri, SKILL_FILENAME),
-				});
-			}
-		}
-		items.push(...skillItems);
-		this.logService.debug(`[CopilotCLICustomizationProvider] skills (${skillItems.length}): ${skillItems.map(s => s.name).join(', ') || '(none)'}`);
-
+		const items = [...agents, ...instructions, ...skills, ...hooks, ...plugins];
 		this.logService.debug(`[CopilotCLICustomizationProvider] total: ${items.length} items`);
 		return items;
 	}
 
-	private isCLIPath(uri: URI): boolean {
-		// Check workspace folder paths
-		const folders = this.workspaceService.getWorkspaceFolders();
-		for (const folder of folders) {
-			const folderPath = folder.path.endsWith('/') ? folder.path : folder.path + '/';
-			if (uri.path.startsWith(folderPath)) {
-				const relative = uri.path.slice(folderPath.length);
-				if (CLI_SUBPATHS.some(prefix => relative.startsWith(prefix))) {
-					return true;
+	/**
+	 * Builds agent items from ICopilotCLIAgents, which already merges SDK
+	 * and prompt-file agents with source URIs.
+	 */
+	private async getAgentItems(): Promise<vscode.ChatSessionCustomizationItem[]> {
+		const agentInfos = await this.copilotCLIAgents.getAgents();
+		return agentInfos.map(({ agent, sourceUri }) => ({
+			uri: sourceUri,
+			type: vscode.ChatSessionCustomizationType.Agent,
+			name: agent.displayName || agent.name,
+			description: agent.description,
+		}));
+	}
+
+	/**
+	 * Collects all instruction items from the prompt file service,
+	 * categorizing them with groupKeys and badges matching the core
+	 * implementation:
+	 * - agent-instructions: copilot-instructions.md files
+	 * - context-instructions: files with an applyTo pattern (badge = pattern)
+	 * - on-demand-instructions: files without an applyTo pattern
+	 */
+	private async getInstructionItems(token: CancellationToken): Promise<vscode.ChatSessionCustomizationItem[]> {
+		const agentInstructionUris = new Set(
+			(await this.customInstructionsService.getAgentInstructions()).map(uri => uri.toString())
+		);
+
+		const items: vscode.ChatSessionCustomizationItem[] = [];
+
+		for (const instruction of this.chatPromptFileService.instructions) {
+			const uri = instruction.uri;
+			const name = deriveNameFromUri(uri, INSTRUCTION_FILE_EXTENSION);
+
+			if (agentInstructionUris.has(uri.toString())) {
+				items.push({
+					uri,
+					type: vscode.ChatSessionCustomizationType.Instructions,
+					name,
+					groupKey: 'agent-instructions',
+				});
+				continue;
+			}
+
+			let pattern: string | undefined;
+			let description: string | undefined;
+			try {
+				const parsed = await this.promptsService.parseFile(uri, token);
+				pattern = parsed.header?.applyTo;
+				description = parsed.header?.description;
+			} catch (err) {
+				if (isCancellationError(err) || token.isCancellationRequested) {
+					throw err;
 				}
+				this.logService.debug(`[CopilotCLICustomizationProvider] failed to parse ${uri.toString()}: ${err}`);
+			}
+
+			if (pattern !== undefined) {
+				const badge = pattern === '**'
+					? l10n.t('always added')
+					: pattern;
+				const badgeTooltip = pattern === '**'
+					? l10n.t('This instruction is automatically included in every interaction.')
+					: l10n.t('This instruction is automatically included when files matching \'{0}\' are in context.', pattern);
+				items.push({
+					uri,
+					type: vscode.ChatSessionCustomizationType.Instructions,
+					name,
+					description,
+					groupKey: 'context-instructions',
+					badge,
+					badgeTooltip,
+				});
+			} else {
+				items.push({
+					uri,
+					type: vscode.ChatSessionCustomizationType.Instructions,
+					name,
+					description,
+					groupKey: 'on-demand-instructions',
+				});
 			}
 		}
 
-		// Check home directory paths (e.g., ~/.copilot/skills/, ~/.agents/skills/)
-		const homePath = this.envService.userHome.path;
-		const homePrefix = homePath.endsWith('/') ? homePath : homePath + '/';
-		if (uri.path.startsWith(homePrefix)) {
-			const relative = uri.path.slice(homePrefix.length);
-			if (CLI_HOME_SUBPATHS.some(prefix => relative.startsWith(prefix))) {
-				return true;
-			}
-		}
+		return items;
+	}
 
-		return false;
+	/**
+	 * Collects all skill items from the prompt file service.
+	 */
+	private getSkillItems(): vscode.ChatSessionCustomizationItem[] {
+		return this.chatPromptFileService.skills.map(s => ({
+			uri: s.uri,
+			type: vscode.ChatSessionCustomizationType.Skill,
+			name: deriveNameFromUri(s.uri, SKILL_FILENAME),
+		}));
+	}
+
+	/**
+	 * Collects all hook items from the prompt file service.
+	 * Each item is a hook configuration file (JSON).
+	 */
+	private getHookItems(): vscode.ChatSessionCustomizationItem[] {
+		return this.chatPromptFileService.hooks.map(h => ({
+			uri: h.uri,
+			type: vscode.ChatSessionCustomizationType.Hook,
+			name: basename(h.uri).replace(/\.json$/i, ''),
+		}));
+	}
+
+	/**	 * Collects all plugin items from the prompt file service.
+	 */
+	private getPluginItems(): vscode.ChatSessionCustomizationItem[] {
+		return this.chatPromptFileService.plugins.map(p => ({
+			uri: p.uri,
+			type: vscode.ChatSessionCustomizationType.Plugins,
+			name: basename(p.uri),
+		}));
 	}
 }
 

@@ -33,6 +33,7 @@ import { ICopilotCLISession } from '../../copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionService } from '../../copilotcli/node/copilotcliSessionService';
 import { ICopilotCLISessionTracker } from '../../copilotcli/vscode-node/copilotCLISessionTracker';
 import { CopilotCLIChatSessionContentProvider } from '../copilotCLIChatSessions';
+import { ICopilotCLIFolderMruService } from '../copilotCLIFolderMru';
 import { ICopilotCLITerminalIntegration } from '../copilotCLITerminalIntegration';
 vi.mock('../copilotCLIShim.ps1', () => ({ default: '# mock powershell script' }));
 
@@ -115,7 +116,6 @@ class TestFolderRepositoryManager extends mock<IFolderRepositoryManager>() {
 	}));
 	override getRepositoryInfo = vi.fn(async () => ({ repository: undefined, headBranchName: undefined }));
 	override getFolderMRU = vi.fn(async () => []);
-	override deleteMRUEntry = vi.fn(async () => { });
 }
 
 class TestGitService extends mock<IGitService>() {
@@ -181,6 +181,7 @@ function createProvider() {
 	const logService = new class extends mock<ILogService>() {
 		declare readonly _serviceBrand: undefined;
 		override trace = vi.fn();
+		override debug = vi.fn();
 		override error = vi.fn();
 	}();
 
@@ -200,7 +201,8 @@ function createProvider() {
 		workspaceFolderService,
 		octoKitService,
 		logService,
-		new class extends mock<IAgentSessionsWorkspace>() { override get isAgentSessionsWorkspace() { return false; } }
+		new class extends mock<IAgentSessionsWorkspace>() { override get isAgentSessionsWorkspace() { return false; } },
+		new (mock<ICopilotCLIFolderMruService>())(),
 	);
 
 	return {

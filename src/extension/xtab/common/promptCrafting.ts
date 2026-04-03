@@ -84,7 +84,7 @@ ${PromptTags.EDIT_HISTORY.end}`;
 			break;
 		case PromptingStrategy.PatchBased02: {
 			const currentDocument = promptPieces.currentDocument;
-			const cursorLine = currentDocument.lines[currentDocument.cursorLineOffset];
+			const cursorLine = currentDocument.lineWithCursor();
 			const cursorLineWithTag = cursorLine.substring(0, currentDocument.cursorPosition.column - 1) + PromptTags.CURSOR + cursorLine.substring(currentDocument.cursorPosition.column - 1);
 			const lineNumberZeroBased = currentDocument.cursorPosition.lineNumber - 1;
 			let lineNumbering: string;

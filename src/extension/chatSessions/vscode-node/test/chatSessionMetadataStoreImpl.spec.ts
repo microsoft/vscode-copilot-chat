@@ -755,9 +755,6 @@ describe('ChatSessionMetadataStore', () => {
 			);
 			expect(bulkWrites).toHaveLength(0);
 
-			// Store should still function with empty data
-			const folders = await store.getUsedWorkspaceFolders();
-			expect(folders).toEqual([]);
 			store.dispose();
 		});
 	});
@@ -1024,62 +1021,6 @@ describe('ChatSessionMetadataStore', () => {
 			const store = await createStore();
 			const folder = await store.getSessionWorkspaceFolder('session-empty');
 			expect(folder).toBeUndefined();
-			store.dispose();
-		});
-	});
-
-	// ──────────────────────────────────────────────────────────────────────────
-	// getUsedWorkspaceFolders
-	// ──────────────────────────────────────────────────────────────────────────
-	describe('getUsedWorkspaceFolders', () => {
-		it('should return empty array when no workspace folders exist', async () => {
-			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
-
-			const store = await createStore();
-			const folders = await store.getUsedWorkspaceFolders();
-			expect(folders).toEqual([]);
-			store.dispose();
-		});
-
-		it('should return deduplicated workspace folders', async () => {
-			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
-				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
-				'session-2': { workspaceFolder: { folderPath: Uri.file('/workspace/b').fsPath, timestamp: 200 } },
-			}));
-
-			const store = await createStore();
-			const folders = await store.getUsedWorkspaceFolders();
-			expect(folders).toHaveLength(2);
-			const paths = folders.map(f => f.folderPath);
-			expect(paths).toContain(Uri.file('/workspace/a').fsPath);
-			expect(paths).toContain(Uri.file('/workspace/b').fsPath);
-			store.dispose();
-		});
-
-		it('should use latest timestamp when multiple sessions point to same folder', async () => {
-			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
-				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/shared').fsPath, timestamp: 100 } },
-				'session-2': { workspaceFolder: { folderPath: Uri.file('/workspace/shared').fsPath, timestamp: 300 } },
-				'session-3': { workspaceFolder: { folderPath: Uri.file('/workspace/shared').fsPath, timestamp: 200 } },
-			}));
-
-			const store = await createStore();
-			const folders = await store.getUsedWorkspaceFolders();
-			expect(folders).toHaveLength(1);
-			expect(folders[0].timestamp).toBe(300);
-			store.dispose();
-		});
-
-		it('should ignore sessions with only worktree properties', async () => {
-			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
-				'session-wt': { worktreeProperties: makeWorktreeV1Props() },
-				'session-folder': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
-			}));
-
-			const store = await createStore();
-			const folders = await store.getUsedWorkspaceFolders();
-			expect(folders).toHaveLength(1);
-			expect(folders[0].folderPath).toBe(Uri.file('/workspace/a').fsPath);
 			store.dispose();
 		});
 	});
@@ -1856,35 +1797,6 @@ describe('ChatSessionMetadataStore', () => {
 				'[ChatSessionMetadataStore] Initialization failed: ',
 				expect.any(Error),
 			);
-			store.dispose();
-		});
-
-		it('should handle bulk file with invalid JSON gracefully', async () => {
-			mockFs.mockFile(BULK_METADATA_FILE, 'not-valid-json{{{');
-
-			// This will fail to parse, fall through to global state migration path
-			const store = await createStore();
-
-			// Should still function — store returns empty data
-			const folders = await store.getUsedWorkspaceFolders();
-			expect(folders).toEqual([]);
-			store.dispose();
-		});
-
-		it('should dispose ThrottledDelayer on dispose', async () => {
-			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
-			const store = await createStore();
-
-			// Should not throw
-			store.dispose();
-		});
-
-		it('should work correctly when globalState returns empty objects for both keys', async () => {
-			// globalState.get returns default {} for both keys
-			const store = await createStore();
-
-			const folders = await store.getUsedWorkspaceFolders();
-			expect(folders).toEqual([]);
 			store.dispose();
 		});
 	});

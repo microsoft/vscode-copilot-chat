@@ -152,6 +152,7 @@ type RequestPanelTelemetryProperties = RequestTelemetryProperties & {
 	parentRequestId: string | undefined;
 	vscodeRequestId: string | undefined;
 	slashCommand: string;
+	isSystemInitiated: string;
 };
 
 type RequestTelemetryMeasurements = {
@@ -717,7 +718,8 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 				"mode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat mode used for this request (e.g., ask, edit, agent, custom)." },
 				"parentRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The parent request id if this request is from a subagent." },
 				"vscodeRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The VS Code chat request id, for joining with VS Code telemetry events." },
-				"slashCommand": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The slash command used by the user, if any (e.g. troubleshoot, explain). Empty if no slash command was used." }
+				"slashCommand": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The slash command used by the user, if any (e.g. troubleshoot, explain). Empty if no slash command was used." },
+				"isSystemInitiated": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was system-initiated (e.g. terminal completion notification) rather than user-typed." }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('panel.request', {
@@ -737,7 +739,8 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			mode: this._getModeNameForTelemetry(),
 			parentRequestId: this._request.parentRequestId,
 			vscodeRequestId: this._request.id,
-			slashCommand: getSlashCommandForTelemetry(this._request, URI.from(this._extensionContext.extensionUri))
+			slashCommand: getSlashCommandForTelemetry(this._request, URI.from(this._extensionContext.extensionUri)),
+			isSystemInitiated: String(!!this._request.isSystemInitiated)
 		} satisfies RequestPanelTelemetryProperties, {
 			turn: this._conversation.turns.length,
 			round: roundIndex,
