@@ -5,6 +5,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FetchedValue, FetchedValueOptions } from '../fetchedValue';
+import { FetchBlockedError } from '../fetchTypes';
 
 interface TestToken {
 	value: string;
@@ -89,6 +90,35 @@ describe('FetchedValue', () => {
 		});
 
 		await expect(fv.resolve()).rejects.toThrow('network failure');
+		expect(fv.value).toBeUndefined();
+	});
+
+	it('FetchBlockedError returns cached value when one exists', async () => {
+		let shouldBlock = false;
+		const fv = new FetchedValue<TestToken>({
+			fetch: async () => {
+				if (shouldBlock) {
+					throw new FetchBlockedError('blocked', 5000);
+				}
+				return { value: 'good-value', expiresAt: Date.now() + 60_000 };
+			},
+			isStale: () => true,
+		});
+		await fv.resolve();
+		expect(fv.value!.value).toBe('good-value');
+
+		shouldBlock = true;
+		const result = await fv.resolve();
+		expect(result.value).toBe('good-value');
+	});
+
+	it('FetchBlockedError propagates when no cached value exists', async () => {
+		const fv = new FetchedValue<TestToken>({
+			fetch: async () => { throw new FetchBlockedError('blocked', 5000); },
+			isStale: () => true,
+		});
+
+		await expect(fv.resolve()).rejects.toThrow('blocked');
 		expect(fv.value).toBeUndefined();
 	});
 

@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { FetchBlockedError } from './fetchTypes';
+
 export interface FetchedValueOptions<T> {
 	/**
 	 * The async function that fetches the value from the network.
@@ -120,11 +122,18 @@ export class FetchedValue<T> {
 
 	private async _doFetch(): Promise<T> {
 		this._throwIfDisposed();
-		const newValue = await this._fetch!();
-		this._throwIfDisposed();
-		this._value = newValue;
-		this._hasFetched = true;
-		return newValue;
+		try {
+			const newValue = await this._fetch!();
+			this._throwIfDisposed();
+			this._value = newValue;
+			this._hasFetched = true;
+			return newValue;
+		} catch (err) {
+			if (err instanceof FetchBlockedError && this._hasFetched) {
+				return this._value as T;
+			}
+			throw err;
+		}
 	}
 
 	private _throwIfDisposed(): void {
