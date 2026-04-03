@@ -2266,7 +2266,9 @@ export function registerCLIChatCommands(
 		}
 
 		let branchName: string | undefined;
+		let worktreePath: string | undefined;
 		let baseBranchName: string | undefined;
+		let baseWorktreePath: string | undefined;
 
 		try {
 			const sessionId = SessionIdForCLI.parse(resource);
@@ -2284,8 +2286,10 @@ export function registerCLIChatCommands(
 		}
 
 		const contextValueSegments: string[] = [];
-		contextValueSegments.push('source branch name: ' + branchName);
-		contextValueSegments.push('target branch name: ' + baseBranchName);
+		contextValueSegments.push(`source branch name: ${branchName}`);
+		contextValueSegments.push(`source worktree path: ${worktreePath}`);
+		contextValueSegments.push(`target branch name: ${baseBranchName}`);
+		contextValueSegments.push(`target worktree path: ${baseWorktreePath}`);
 
 		const prompt = syncWithRemote
 			? `${builtinSlashSCommands.merge} and ${builtinSlashSCommands.sync}`
