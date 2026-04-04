@@ -6297,7 +6297,7 @@
 		"copyfiles": "^2.4.1",
 		"csv-parse": "^6.0.0",
 		"dotenv": "^17.2.0",
-		"electron": "^39.8.4",
+		"electron": "^39.8.5",
 		"esbuild": "^0.25.6",
 		"eslint": "^9.30.0",
 		"eslint-import-resolver-typescript": "^4.4.4",

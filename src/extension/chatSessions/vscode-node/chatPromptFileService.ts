@@ -48,13 +48,17 @@ export class ChatPromptFileService extends Disposable implements IChatPromptFile
 			this._onDidChangeSkills.fire();
 		}));
 
-		this._register(vscode.chat.onDidChangeHooks(() => {
-			this._onDidChangeHooks.fire();
-		}));
+		if (vscode.chat.onDidChangeHooks) {
+			this._register(vscode.chat.onDidChangeHooks(() => {
+				this._onDidChangeHooks.fire();
+			}));
+		}
 
-		this._register(vscode.chat.onDidChangePlugins(() => {
-			this._onDidChangePlugins.fire();
-		}));
+		if (vscode.chat.onDidChangePlugins) {
+			this._register(vscode.chat.onDidChangePlugins(() => {
+				this._onDidChangePlugins.fire();
+			}));
+		}
 		this.triggerRefreshCustomAgents();
 	}
 
@@ -75,11 +79,11 @@ export class ChatPromptFileService extends Disposable implements IChatPromptFile
 	}
 
 	get hooks(): readonly vscode.ChatResource[] {
-		return vscode.chat.hooks;
+		return vscode.chat.hooks ?? [];
 	}
 
 	get plugins(): readonly vscode.ChatResource[] {
-		return vscode.chat.plugins;
+		return vscode.chat.plugins ?? [];
 	}
 
 	override dispose(): void {
