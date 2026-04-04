@@ -7,7 +7,6 @@ import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import type * as vscode from 'vscode';
-import type { Uri } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../../platform/env/common/envService';
@@ -20,18 +19,15 @@ import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { basename } from '../../../../util/vs/base/common/resources';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { IChatCustomAgentsService } from '../../common/chatCustomAgentsService';
-import { getWorkingDirectory, IWorkspaceInfo } from '../../common/workspaceInfo';
+import { IChatPromptFileService } from '../../common/chatPromptFileService';
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
 import { ensureRipgrepShim } from './ripgrepShim';
-import { URI } from '../../../../util/vs/base/common/uri';
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 const COPILOT_CLI_REQUEST_MAP_KEY = 'github.copilot.cli.requestMap';
-// Store last used Agent per workspace.
-const COPILOT_CLI_AGENT_MEMENTO_KEY = 'github.copilot.cli.customAgent';
 // Store last used Agent for a Session.
 const COPILOT_CLI_SESSION_AGENTS_MEMENTO_KEY = 'github.copilot.cli.sessionAgents';
 /**
@@ -39,67 +35,6 @@ const COPILOT_CLI_SESSION_AGENTS_MEMENTO_KEY = 'github.copilot.cli.sessionAgents
  * Left here for backward compatibility (for state stored by older versions of Chat extension).
  */
 export const COPILOT_CLI_DEFAULT_AGENT_ID = '___vscode_default___';
-
-export class CopilotCLISessionOptions {
-	public readonly workspaceInfo: IWorkspaceInfo;
-	private readonly model?: string;
-	private readonly agent?: SweCustomAgent;
-	private readonly customAgents?: SweCustomAgent[];
-	private readonly mcpServers?: SessionOptions['mcpServers'];
-	private readonly copilotUrl?: string;
-	private readonly skillLocations?: Uri[];
-	constructor(options: { model?: string; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[]; copilotUrl?: string; skillLocations?: Uri[] }, private readonly logService: ILogService) {
-		this.workspaceInfo = options.workspaceInfo;
-		this.model = options.model;
-		this.mcpServers = options.mcpServers;
-		this.agent = options.agent;
-		this.customAgents = options.customAgents;
-		this.copilotUrl = options.copilotUrl;
-		this.skillLocations = options.skillLocations;
-	}
-
-	public get agentName(): string | undefined {
-		return this.agent?.name;
-	}
-
-	public toSessionOptions(): Readonly<SessionOptions> {
-		const allOptions: SessionOptions = {
-			clientName: 'vscode',
-		};
-
-		const workingDirectory = getWorkingDirectory(this.workspaceInfo);
-		if (workingDirectory) {
-			allOptions.workingDirectory = workingDirectory.fsPath;
-		}
-		if (this.model) {
-			allOptions.model = this.model as unknown as SessionOptions['model'];
-		}
-		if (this.mcpServers && Object.keys(this.mcpServers).length > 0) {
-			allOptions.mcpServers = this.mcpServers;
-			this.logService.info(`[CopilotCLISession] Passing ${Object.keys(this.mcpServers).length} MCP server(s) to SDK: [${Object.keys(this.mcpServers).join(', ')}]`);
-			for (const [id, cfg] of Object.entries(this.mcpServers)) {
-				this.logService.info(`[CopilotCLISession]   ${id}: type=${cfg.type}`);
-			}
-		} else {
-			this.logService.info('[CopilotCLISession] No MCP servers to pass to SDK');
-		}
-		if (this.skillLocations) {
-			allOptions.skillDirectories = this.skillLocations.map(uri => uri.fsPath);
-		}
-		if (this.agent) {
-			allOptions.selectedCustomAgent = this.agent;
-		}
-		if (this.customAgents) {
-			allOptions.customAgents = this.customAgents;
-		}
-		allOptions.enableStreaming = true;
-		if (this.copilotUrl) {
-			allOptions.copilotUrl = this.copilotUrl;
-		}
-		allOptions.sessionCapabilities = new Set(['plan-mode', 'memory', 'cli-documentation', 'ask-user', 'interactive-mode', 'system-notifications']);
-		return allOptions as Readonly<SessionOptions>;
-	}
-}
 
 export interface CopilotCLIModelInfo {
 	readonly id: string;
@@ -240,14 +175,18 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 	}
 }
 
+/** An agent with its source URI preserved for UI and cross-referencing. */
+export interface CLIAgentInfo {
+	readonly agent: Readonly<SweCustomAgent>;
+	/** File URI for prompt-file agents, synthetic `copilotcli:` URI for SDK-only agents. */
+	readonly sourceUri: URI;
+}
+
 export interface ICopilotCLIAgents {
 	readonly _serviceBrand: undefined;
 	readonly onDidChangeAgents: Event<void>;
-	getDefaultAgent(): Promise<string>;
 	resolveAgent(agentId: string): Promise<SweCustomAgent | undefined>;
-	setDefaultAgent(agent: string | undefined): Promise<void>;
-	getAgents(): Promise<Readonly<SweCustomAgent>[]>;
-	trackSessionAgent(sessionId: string, agent: string | undefined): Promise<void>;
+	getAgents(): Promise<readonly CLIAgentInfo[]>;
 	getSessionAgent(sessionId: string): Promise<string | undefined>;
 }
 
@@ -256,11 +195,11 @@ export const ICopilotCLIAgents = createServiceIdentifier<ICopilotCLIAgents>('ICo
 export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	declare _serviceBrand: undefined;
 	private sessionAgents: Record<string, { agentId?: string; createdDateTime: number }> = {};
-	private _agentsPromise?: Promise<Readonly<SweCustomAgent>[]>;
+	private _agentsPromise?: Promise<readonly CLIAgentInfo[]>;
 	private readonly _onDidChangeAgents = this._register(new Emitter<void>());
 	readonly onDidChangeAgents: Event<void> = this._onDidChangeAgents.event;
 	constructor(
-		@IChatCustomAgentsService private readonly chatCustomAgentsService: IChatCustomAgentsService,
+		@IChatPromptFileService private readonly chatPromptFileService: IChatPromptFileService,
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
@@ -268,7 +207,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	) {
 		super();
 		void this.getAgents();
-		this._register(this.chatCustomAgentsService.onDidChangeCustomAgents(() => {
+		this._register(this.chatPromptFileService.onDidChangeCustomAgents(() => {
 			this._refreshAgents();
 		}));
 		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => {
@@ -313,38 +252,22 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 			return agentId;
 		}
 		const agents = await this.getAgents();
-		return agents.find(agent => agent.name.toLowerCase() === agentId)?.name;
+		return agents.find(a => a.agent.name.toLowerCase() === agentId)?.agent.name;
 	}
 
-	async getDefaultAgent(): Promise<string> {
-		const agentId = this.extensionContext.workspaceState.get<string>(COPILOT_CLI_AGENT_MEMENTO_KEY, '').toLowerCase();
-		if (!agentId || agentId === COPILOT_CLI_DEFAULT_AGENT_ID) {
-			return '';
-		}
-
-		const agents = await this.getAgents();
-		return agents.find(agent => agent.name.toLowerCase() === agentId)?.name ?? '';
-	}
-	async setDefaultAgent(agent: string | undefined): Promise<void> {
-		await this.extensionContext.workspaceState.update(COPILOT_CLI_AGENT_MEMENTO_KEY, agent);
-	}
-	async trackUsedAgent(sessionId: string, agent: string | undefined): Promise<void> {
-		await this.extensionContext.workspaceState.update(COPILOT_CLI_AGENT_MEMENTO_KEY, agent);
-	}
 	async resolveAgent(agentId: string): Promise<SweCustomAgent | undefined> {
-		for (const promptFile of this.chatCustomAgentsService.getCustomAgents()) {
+		for (const promptFile of this.chatPromptFileService.customAgentPromptFiles) {
 			if (agentId === promptFile.uri.toString()) {
-				return this.toCustomAgent(promptFile);
+				return this.toCustomAgent(promptFile)?.agent;
 			}
 		}
 		const customAgents = await this.getAgents();
 		agentId = agentId.toLowerCase();
-		const agent = customAgents.find(agent => agent.name.toLowerCase() === agentId || agent.displayName?.toLowerCase() === agentId);
-		// Return a clone to allow mutations (to tools, etc).
-		return agent ? this.cloneAgent(agent) : undefined;
+		const match = customAgents.find(a => a.agent.name.toLowerCase() === agentId || a.agent.displayName?.toLowerCase() === agentId);
+		return match ? this.cloneAgent(match.agent) : undefined;
 	}
 
-	async getAgents(): Promise<Readonly<SweCustomAgent>[]> {
+	async getAgents(): Promise<readonly CLIAgentInfo[]> {
 		// Cache the promise to avoid concurrent fetches
 		if (!this._agentsPromise) {
 			this._agentsPromise = this.getAgentsImpl().catch((error) => {
@@ -354,23 +277,26 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 			});
 		}
 
-		return this._agentsPromise;
+		return this._agentsPromise.then(infos => infos.map(i => ({ agent: this.cloneAgent(i.agent), sourceUri: i.sourceUri })));
 	}
 
-	async getAgentsImpl(): Promise<Readonly<SweCustomAgent>[]> {
-		const mergedAgents = new Map<string, SweCustomAgent>();
+	async getAgentsImpl(): Promise<readonly CLIAgentInfo[]> {
+		const merged = new Map<string, CLIAgentInfo>();
 		for (const agent of await this.getSDKAgents()) {
-			mergedAgents.set(agent.name.toLowerCase(), this.cloneAgent(agent));
+			merged.set(agent.name.toLowerCase(), {
+				agent: this.cloneAgent(agent),
+				sourceUri: URI.from({ scheme: 'copilotcli', path: `/agents/${agent.name}` }),
+			});
 		}
-		for (const promptFile of this.chatCustomAgentsService.getCustomAgents()) {
-			const agent = this.toCustomAgent(promptFile);
-			if (!agent) {
+		for (const promptFile of this.chatPromptFileService.customAgentPromptFiles) {
+			const info = this.toCustomAgent(promptFile);
+			if (!info) {
 				continue;
 			}
-			mergedAgents.set(agent.name.toLowerCase(), agent);
+			merged.set(info.agent.name.toLowerCase(), info);
 		}
 
-		return [...mergedAgents.values()].map(agent => this.cloneAgent(agent));
+		return [...merged.values()];
 	}
 
 	private async getSDKAgents(): Promise<Readonly<SweCustomAgent>[]> {
@@ -385,7 +311,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		return agents.map(agent => this.cloneAgent(agent));
 	}
 
-	private toCustomAgent(promptFile: ParsedPromptFile): SweCustomAgent | undefined {
+	private toCustomAgent(promptFile: ParsedPromptFile): CLIAgentInfo | undefined {
 		const agentName = getAgentFileNameFromFilePath(promptFile.uri);
 		const headerName = promptFile.header?.name?.trim();
 		const name = headerName === undefined || headerName === '' ? agentName : headerName;
@@ -397,13 +323,16 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		const model = promptFile.header?.model?.[0];
 
 		return {
-			name,
-			displayName: name,
-			description: promptFile.header?.description ?? '',
-			tools: tools.length > 0 ? tools : null,
-			prompt: async () => promptFile.body?.getContent() ?? '',
-			disableModelInvocation: promptFile.header?.disableModelInvocation ?? false,
-			...(model ? { model } : {}),
+			agent: {
+				name,
+				displayName: name,
+				description: promptFile.header?.description ?? '',
+				tools: tools.length > 0 ? tools : null,
+				prompt: async () => promptFile.body?.getContent() ?? '',
+				disableModelInvocation: promptFile.header?.disableModelInvocation ?? false,
+				...(model ? { model } : {}),
+			},
+			sourceUri: promptFile.uri,
 		};
 	}
 

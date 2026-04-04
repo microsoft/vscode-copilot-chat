@@ -23,9 +23,9 @@ export function register(accessor: ServicesAccessor): IDisposable {
 	disposableStore.add(vscode.commands.registerCommand(buildRemoteIndexCommandId, onlyRunOneAtATime(async () => {
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Window,
-			title: t`Building remote workspace index`,
+			title: t`Building codebase index`,
 		}, async (progress, token) => {
-			const triggerResult = await workspaceChunkSearch.triggerRemoteIndexing(
+			const triggerResult = await workspaceChunkSearch.triggerIndexing(
 				'manual',
 				(message) => progress.report({ message }),
 				new TelemetryCorrelationId('BuildRemoteIndexCommand'),
@@ -34,12 +34,12 @@ export function register(accessor: ServicesAccessor): IDisposable {
 
 			if (triggerResult.isError()) {
 				if (triggerResult.err.id !== TriggerRemoteIndexingError.alreadyIndexed.id) {
-					vscode.window.showWarningMessage(t`Could not build remote workspace index. ` + '\n\n' + triggerResult.err.userMessage);
+					vscode.window.showWarningMessage(t`Could not build codebase index. ` + '\n\n' + triggerResult.err.userMessage);
 					return;
 				}
 			}
 
-			vscode.window.showInformationMessage(t`Remote workspace index ready to use.`);
+			vscode.window.showInformationMessage(t`Codebase index ready to use.`);
 		});
 	})));
 
@@ -61,7 +61,7 @@ export function register(accessor: ServicesAccessor): IDisposable {
 			const document = await vscode.workspace.openTextDocument({ language: 'markdown' });
 			const editor = await vscode.window.showTextDocument(document);
 
-			await appendText(editor, '# Workspace Index Diagnostics\n');
+			await appendText(editor, '# Codebase Index Diagnostics\n');
 			await appendText(editor, 'Tracked file count: ' + workspaceFileIndex.fileCount + '\n\n');
 
 			await appendText(editor, '## All tracked files\n');

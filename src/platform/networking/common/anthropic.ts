@@ -25,7 +25,7 @@ export interface AnthropicMessagesTool {
 		required?: string[];
 	};
 	defer_loading?: boolean;
-	cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+	cache_control?: { type: 'ephemeral' };
 }
 
 export interface ToolReference {
@@ -82,43 +82,6 @@ export const TOOL_SEARCH_SUPPORTED_MODELS = [
 	'claude-opus-4.5',
 	'claude-opus-4.6',
 ] as const;
-
-export const nonDeferredToolNames = new Set([
-	// Read/navigate
-	'read_file',
-	'list_dir',
-	// Search
-	'grep_search',
-	'semantic_search',
-	'file_search',
-	// Edit
-	'replace_string_in_file',
-	'multi_replace_string_in_file',
-	'insert_edit_into_file',
-	'apply_patch',
-	'create_file',
-	// Terminal
-	'run_in_terminal',
-	'get_terminal_output',
-	// Other high-usage tools
-	'get_errors',
-	'manage_todo_list',
-	// Subagent tools
-	'runSubagent',
-	'search_subagent',
-	'execution_subagent',
-	// Testing
-	'runTests',
-	// Misc
-	'ask_questions',
-	'switch_agent',
-	'memory',
-	'task_complete',
-	// Custom tool search (must always be available so the model can search for deferred tools)
-	CUSTOM_TOOL_SEARCH_NAME,
-	'view_image',
-	'fetch_webpage'
-]);
 
 /**
  * Context management types for Anthropic Messages API
@@ -342,22 +305,6 @@ export function buildContextManagement(
  * @param thinkingEnabled Whether extended thinking is enabled
  * @returns The context_management object to include in the request, or undefined if disabled
  */
-/**
- * Returns true when extended (1 hour) prompt cache TTL should be used.
- * Only available for the Claude Opus 4.6 1M context model behind an experimental setting.
- */
-export function isExtendedCacheTtlEnabled(
-	endpoint: IChatEndpoint | string,
-	configurationService: IConfigurationService,
-	experimentationService: IExperimentationService,
-): boolean {
-	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
-	if (!effectiveModelId.toLowerCase().startsWith('claude-opus-4.6-1m')) {
-		return false;
-	}
-	return configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AnthropicExtendedCacheTtl, experimentationService);
-}
-
 export function getContextManagementFromConfig(
 	configurationService: IConfigurationService,
 	experimentationService: IExperimentationService,

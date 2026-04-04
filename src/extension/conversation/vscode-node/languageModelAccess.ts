@@ -81,7 +81,8 @@ function buildConfigurationSchema(endpoint: IChatEndpoint): { configurationSchem
 							case 'none': return vscode.l10n.t('No reasoning applied');
 							case 'low': return vscode.l10n.t('Faster responses with less reasoning');
 							case 'medium': return vscode.l10n.t('Balanced reasoning and speed');
-							case 'high': return vscode.l10n.t('Maximum reasoning depth');
+							case 'high': return vscode.l10n.t('Greater reasoning depth but slower');
+							case 'xhigh': return vscode.l10n.t('Maximum reasoning depth but slower');
 							default: return level;
 						}
 					}),

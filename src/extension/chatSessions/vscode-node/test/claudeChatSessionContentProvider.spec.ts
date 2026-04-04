@@ -91,25 +91,19 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 
 	private readonly _untitledFolders = new Map<string, vscode.Uri>();
 	private _mruEntries: FolderRepositoryMRUEntry[] = [];
-	private _lastUsedFolderIdInUntitledWorkspace: string | undefined;
 
 	setMRUEntries(entries: FolderRepositoryMRUEntry[]): void {
 		this._mruEntries = entries;
 	}
 
 	setLastUsedFolderIdInUntitledWorkspace(id: string | undefined): void {
-		this._lastUsedFolderIdInUntitledWorkspace = id;
 	}
 
-	setUntitledSessionFolder(sessionId: string, folderUri: vscode.Uri): void {
+	setNewSessionFolder(sessionId: string, folderUri: vscode.Uri): void {
 		this._untitledFolders.set(sessionId, folderUri);
 	}
 
-	getUntitledSessionFolder(sessionId: string): vscode.Uri | undefined {
-		return this._untitledFolders.get(sessionId);
-	}
-
-	deleteUntitledSessionFolder(sessionId: string): void {
+	deleteNewSessionFolder(sessionId: string): void {
 		this._untitledFolders.delete(sessionId);
 	}
 
@@ -121,18 +115,16 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 		return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined };
 	}
 
+	async initializeMultiRootFolderRepositories(): Promise<{ primary: { folder: undefined; repository: undefined; worktree: undefined; worktreeProperties: undefined; trusted: undefined }; additional: never[] }> {
+		return { primary: { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined }, additional: [] };
+	}
+
 	async getRepositoryInfo(): Promise<{ repository: undefined; headBranchName: undefined }> {
 		return { repository: undefined, headBranchName: undefined };
 	}
 
 	async getFolderMRU(): Promise<FolderRepositoryMRUEntry[]> {
 		return this._mruEntries;
-	}
-
-	async deleteMRUEntry(): Promise<void> { }
-
-	getLastUsedFolderIdInUntitledWorkspace(): string | undefined {
-		return this._lastUsedFolderIdInUntitledWorkspace;
 	}
 }
 
@@ -461,8 +453,8 @@ describe('ChatSessionContentProvider', () => {
 			const mruFolder = URI.file('/recent/project');
 			const mruRepo = URI.file('/recent/repo');
 			mockFolderRepositoryManager.setMRUEntries([
-				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: true },
-				{ folder: mruRepo, repository: mruRepo, lastAccessed: Date.now() - 1000, isUntitledSessionSelection: false },
+				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now() },
+				{ folder: mruRepo, repository: mruRepo, lastAccessed: Date.now() - 1000 },
 			]);
 
 			const options = await emptyWorkspaceProvider.provideChatSessionProviderOptions();
@@ -485,7 +477,7 @@ describe('ChatSessionContentProvider', () => {
 		it('getFolderInfoForSession uses MRU fallback when no selection', async () => {
 			const mruFolder = URI.file('/recent/project');
 			mockFolderRepositoryManager.setMRUEntries([
-				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: true },
+				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now() },
 			]);
 
 			const folderInfo = await emptyWorkspaceProvider.getFolderInfoForSession('test-session');
@@ -503,7 +495,7 @@ describe('ChatSessionContentProvider', () => {
 			const mruFolder = URI.file('/recent/project');
 			const selectedFolder = URI.file('/selected/project');
 			mockFolderRepositoryManager.setMRUEntries([
-				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: true },
+				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now() },
 			]);
 
 			seedSessionItem('test-session');

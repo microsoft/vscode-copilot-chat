@@ -7,8 +7,8 @@ import ingestUtils = require('@github/blackbird-external-ingest-utils');
 import * as l10n from '@vscode/l10n';
 import * as fs from 'node:fs';
 import sql from 'node:sqlite';
-import { Result } from '../../../../util/common/result';
 import { toErrorMessage } from '../../../../util/common/errorMessage';
+import { Result } from '../../../../util/common/result';
 import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { CancelablePromise, createCancelablePromise, Limiter, raceCancellationError, timeout } from '../../../../util/vs/base/common/async';
@@ -92,6 +92,13 @@ export class ExternalIngestIndex extends Disposable {
 	 */
 	private readonly _codeSearchRepoRoots = new ResourceSet();
 
+	/**
+	 * Set of file URIs that should be force-included in external ingest,
+	 * even if they fall under code search repo roots.
+	 * Used for out-of-sync diff files that need to be re-indexed locally.
+	 */
+	private readonly _forceIncludeFiles = new ResourceSet();
+
 	private readonly _client: IExternalIngestClient;
 
 	private readonly _onDidChangeState = this._register(new Emitter<void>());
@@ -138,6 +145,7 @@ export class ExternalIngestIndex extends Disposable {
 
 	constructor(
 		client: IExternalIngestClient,
+		initialCodeSearchRoots: URI[],
 		@IEnvService private readonly _envService: IEnvService,
 		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
@@ -152,6 +160,10 @@ export class ExternalIngestIndex extends Disposable {
 
 		this._client = client;
 		this.workspaceFolderIdMap = new WorkspaceFolderIdMap(this._vsExtensionContext.workspaceState);
+
+		for (const root of initialCodeSearchRoots) {
+			this._codeSearchRepoRoots.add(root);
+		}
 
 		let dbPath: string;
 		if (debug || !this._vsExtensionContext.storageUri || this._vsExtensionContext.storageUri.scheme !== Schemas.file) {
@@ -240,6 +252,33 @@ export class ExternalIngestIndex extends Disposable {
 		}
 
 		this._logService.trace(`ExternalIngestIndex: Updated code search roots: ${roots.map(r => r.toString()).join(', ')}`);
+	}
+
+	/**
+	 * Updates the set of files that should always be considered for external ingest.
+	 *
+	 * This lets us index local-diff files that live under code-search repo roots,
+	 * so we can blend local updates with remote code-search results.
+	 */
+	public async updateForceIncludeFiles(files: readonly URI[], token: CancellationToken): Promise<void> {
+		await raceCancellationError(this.initialize(), token);
+
+		this._forceIncludeFiles.clear();
+		for (const file of files) {
+			this._forceIncludeFiles.add(file);
+		}
+
+		await raceCancellationError(
+			Promise.all(files.map(async file => {
+				if (await this.shouldTrackFile(file, token)) {
+					await this.tryAddOrUpdateFile(file);
+				} else {
+					this.delete(file);
+				}
+			})),
+			token);
+
+		this._logService.trace(`ExternalIngestIndex: Updated force-included files (${files.length})`);
 	}
 
 	private _initializePromise: Promise<void> | undefined;
@@ -380,7 +419,7 @@ export class ExternalIngestIndex extends Disposable {
 		const sw = new StopWatch();
 
 		try {
-			const resolvedQuery = await query.resolveQuery(token);
+			const resolvedQuery = query.queryText;
 
 			const ingestResult = await raceCancellationError(this.doIngest(callTracker, () => { }, token), token);
 			if (!ingestResult.isOk()) {
@@ -607,9 +646,12 @@ export class ExternalIngestIndex extends Disposable {
 		}
 
 		// Don't index files that are under a code search repo root
-		for (const root of this._codeSearchRepoRoots) {
-			if (isEqualOrParent(uri, root)) {
-				return false;
+		// (unless they are force-included as diff files)
+		if (!this._forceIncludeFiles.has(uri)) {
+			for (const root of this._codeSearchRepoRoots) {
+				if (isEqualOrParent(uri, root)) {
+					return false;
+				}
 			}
 		}
 

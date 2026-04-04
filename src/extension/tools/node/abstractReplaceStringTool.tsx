@@ -16,6 +16,9 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { IAlternativeNotebookContentEditGenerator, NotebookEditGenerationTelemtryOptions, NotebookEditGenrationSource } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { emitEditSurvivalEvent } from '../../../platform/otel/common/genAiEvents';
+import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITelemetryService, multiplexProperties } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -82,6 +85,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		@IConfigurationService protected readonly configurationService: IConfigurationService,
 		@IEditToolLearningService private readonly editToolLearningService: IEditToolLearningService,
 		@ILogService private readonly logService: ILogService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) { }
 
 	public abstract invoke(options: vscode.LanguageModelToolInvocationOptions<T>, token: vscode.CancellationToken): Promise<LanguageModelToolResult>;
@@ -348,13 +352,21 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 						res.telemetryService.sendGHTelemetryEvent('replaceString/trackEditSurvival', {
 							headerRequestId: this._promptContext?.requestId,
 							requestSource: 'agent',
-							mapper: 'stringReplaceTool'
+							mapper: 'stringReplaceTool',
+							headBranchName: res.workspace?.headBranchName,
+							headCommitHash: res.workspace?.headCommitHash,
+							remoteUrl: res.workspace?.remoteUrl,
+							fileRelativePath: res.workspace?.fileRelativePath,
 						}, {
 							survivalRateFourGram: res.fourGram,
 							survivalRateNoRevert: res.noRevert,
 							timeDelayMs: res.timeDelayMs,
 							didBranchChange: res.didBranchChange ? 1 : 0,
 						});
+
+						emitEditSurvivalEvent(this._otelService, 'replace_string', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, this._promptContext?.requestId ?? '', res.workspace);
+						GenAiMetrics.recordEditSurvivalFourGram(this._otelService, 'replace_string', res.fourGram, res.timeDelayMs);
+						GenAiMetrics.recordEditSurvivalNoRevert(this._otelService, 'replace_string', res.noRevert, res.timeDelayMs);
 					});
 				});
 

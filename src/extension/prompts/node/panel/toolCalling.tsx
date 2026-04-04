@@ -21,6 +21,7 @@ import { IFileSystemService } from '../../../../platform/filesystem/common/fileS
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { IImageService } from '../../../../platform/image/common/imageService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IOTelService } from '../../../../platform/otel/common/otelService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { toErrorMessage } from '../../../../util/common/errorMessage';
@@ -195,6 +196,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	const promptContext: IBuildPromptContext = accessor.get(IBuildPromptContext);
 	const sessionTranscriptService = accessor.get(ISessionTranscriptService);
 	const chatHookService = accessor.get(IChatHookService);
+	const otelService = accessor.get(IOTelService);
 	const tool = toolsService.getTool(props.toolCall.name);
 
 	async function getToolResult(sizing: PromptSizing) {
@@ -254,6 +256,10 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 					}
 
 					const subAgentInvocationId = promptContext.request?.subAgentInvocationId;
+					// Capture the active trace context (from the invoke_agent span) so that
+					// the execute_tool span is properly parented even when async context
+					// propagation doesn't carry the active span.
+					const parentTraceContext = otelService.getActiveTraceContext();
 					const invocationOptions: LanguageModelToolInvocationOptions<unknown> = {
 						input: inputObj,
 						toolInvocationToken: props.toolInvocationToken,
@@ -269,6 +275,8 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 							updatedInput: hookResult.updatedInput,
 						} : undefined,
 					};
+					// Attach trace context for span parenting (not in the VS Code API type)
+					(invocationOptions as { parentTraceContext?: { traceId: string; spanId: string } }).parentTraceContext = parentTraceContext;
 
 					const transcriptSessionId = promptContext.conversation?.sessionId;
 					if (transcriptSessionId) {
@@ -447,12 +455,25 @@ enum ToolInvocationOutcome {
 
 export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToken?: string, urlOrRequestMetadata?: string | RequestMetadata, logService?: ILogService, imageService?: IImageService) {
 	if (isImageDataPart(part)) {
-		const base64 = Buffer.from(part.data).toString('base64');
-		let imageSource = `data:${part.mimeType};base64,${base64}`;
+		let imageData: Uint8Array = part.data;
+		let mimeType = part.mimeType;
+
+		if (imageService) {
+			try {
+				const resized = await imageService.resizeImage(imageData, mimeType);
+				imageData = resized.data;
+				mimeType = resized.mimeType;
+			} catch (error) {
+				logService?.warn(`Image resize failed, using original: ${error}`);
+			}
+		}
+
+		const base64 = Buffer.from(imageData).toString('base64');
+		let imageSource = `data:${mimeType};base64,${base64}`;
 		const isChatRequest = typeof urlOrRequestMetadata !== 'string' && (urlOrRequestMetadata?.type === RequestType.ChatCompletions || urlOrRequestMetadata?.type === RequestType.ChatMessages);
 		if (githubToken && isChatRequest && imageService) {
 			try {
-				const uri = await imageService.uploadChatImageAttachment(part.data, 'tool-result-image', part.mimeType ?? 'image/png', githubToken);
+				const uri = await imageService.uploadChatImageAttachment(imageData, 'tool-result-image', mimeType ?? 'image/png', githubToken);
 				if (uri) {
 					imageSource = uri.toString();
 				}
@@ -463,7 +484,7 @@ export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToke
 			}
 		}
 
-		return <Image src={imageSource} mimeType={part.mimeType} />;
+		return <Image src={imageSource} mimeType={mimeType} />;
 	}
 }
 
@@ -671,6 +692,10 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 	}
 
 	protected async onImage(part: LanguageModelDataPart, _imageIndex?: number) {
+		if (!this.endpoint.supportsVision) {
+			return '[Image content is not available because vision is not supported by the current model or is disabled by your organization.]';
+		}
+
 		const githubToken = (await this.authService.getGitHubSession('any', { silent: true }))?.accessToken;
 		const uploadsEnabled = this.configurationService && this.experimentationService
 			? this.configurationService.getExperimentBasedConfig(ConfigKey.EnableChatImageUpload, this.experimentationService)

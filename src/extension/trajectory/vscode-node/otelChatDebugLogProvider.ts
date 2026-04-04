@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IOTelService, type ICompletedSpanData, type ISpanEventData } from '../../../platform/otel/common/otelService';
+import { decodeSessionId } from '../../../platform/otel/common/sessionUtils';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -25,24 +26,6 @@ import {
 	wrapInResourceSpans,
 	type ChatDebugLogExport,
 } from './otlpFormatConversion';
-
-/**
- * Decode a VS Code chat session resource URI to extract the raw session ID.
- * The URI is typically `vscode-chat-session://local/<base64EncodedSessionId>`.
- * For `copilotcli://` and `claude-code://` URIs the session ID is used directly in the path.
- */
-function decodeSessionId(sessionResource: vscode.Uri): string {
-	if (sessionResource.scheme === 'copilotcli' || sessionResource.scheme === 'claude-code') {
-		return sessionResource.path.replace(/^\//, '');
-	}
-	const pathSegment = sessionResource.path.replace(/^\//, '').split('/').pop() || '';
-	if (pathSegment) {
-		try {
-			return Buffer.from(pathSegment, 'base64').toString('utf-8');
-		} catch { /* not base64, use as-is */ }
-	}
-	return sessionResource.toString();
-}
 
 let nextCoreEventId = 1;
 

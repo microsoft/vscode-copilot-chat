@@ -11,10 +11,16 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
+import { ResourceSet } from '../../../../util/vs/base/common/map';
+import { Schemas } from '../../../../util/vs/base/common/network';
 import { isAbsolute } from '../../../../util/vs/base/common/path';
+import {
+	dirname
+} from '../../../../util/vs/base/common/resources';
 import { isObject } from '../../../../util/vs/base/common/types';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { IChatPromptFileService } from '../../common/chatPromptFileService';
 
 export interface ICopilotCLISkills {
 	readonly _serviceBrand: undefined;
@@ -31,13 +37,14 @@ export class CopilotCLISkills extends Disposable implements ICopilotCLISkills {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@INativeEnvService private readonly envService: INativeEnvService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IChatPromptFileService private readonly chatPromptFileService: IChatPromptFileService,
 	) {
 		super();
 	}
 
 	public getSkillsLocations(): Uri[] {
 		// Get additional skill locations from config
-		const configSkillLocationUris: URI[] = [];
+		const configSkillLocationUris = new ResourceSet();
 		const locations = this.configurationService.getNonExtensionConfig<Record<string, boolean>>(SKILLS_LOCATION_KEY);
 		const userHome = this.envService.userHome;
 		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
@@ -50,17 +57,23 @@ export class CopilotCLISkills extends Disposable implements ICopilotCLISkills {
 				}
 				// Expand ~/ to user home directory
 				if (location.startsWith('~/')) {
-					configSkillLocationUris.push(URI.joinPath(userHome, location.substring(2)));
+					configSkillLocationUris.add(URI.joinPath(userHome, location.substring(2)));
 				} else if (isAbsolute(location)) {
-					configSkillLocationUris.push(URI.file(location));
+					configSkillLocationUris.add(URI.file(location));
 				} else {
 					// Relative path - join to each workspace folder
 					for (const workspaceFolder of workspaceFolders) {
-						configSkillLocationUris.push(URI.joinPath(workspaceFolder, location));
+						configSkillLocationUris.add(URI.joinPath(workspaceFolder, location));
 					}
 				}
 			}
 		}
-		return configSkillLocationUris;
+		this.chatPromptFileService.skills
+			.filter(s => s.uri.scheme === Schemas.file)
+			.map(s => s.uri)
+			.map(uri => dirname(dirname(uri)))
+			.forEach(uri => configSkillLocationUris.add(uri));
+
+		return Array.from(configSkillLocationUris);
 	}
 }

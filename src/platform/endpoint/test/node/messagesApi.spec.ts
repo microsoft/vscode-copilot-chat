@@ -7,7 +7,7 @@ import type { ContentBlockParam, DocumentBlockParam, ImageBlockParam, MessagePar
 import { Raw } from '@vscode/prompt-tsx';
 import { expect, suite, test } from 'vitest';
 import { AnthropicMessagesTool, CUSTOM_TOOL_SEARCH_NAME } from '../../../networking/common/anthropic';
-import { addToolsAndSystemCacheControl, rawMessagesToMessagesAPI } from '../../node/messagesApi';
+import { addToolsAndSystemCacheControl, buildToolInputSchema, rawMessagesToMessagesAPI } from '../../node/messagesApi';
 
 function assertContentArray(content: MessageParam['content']): ContentBlockParam[] {
 	expect(Array.isArray(content)).toBe(true);
@@ -370,9 +370,32 @@ suite('rawMessagesToMessagesAPI', function () {
 
 		const toolResult = findToolResult(result.messages);
 		expect(toolResult).toBeDefined();
-		expect(toolResult!.cache_control).toEqual({ type: 'ephemeral' });
-		// The dummy whitespace-only text block should be filtered out
+		// Orphaned cache breakpoint with no content to attach to is silently dropped
+		expect(toolResult!.cache_control).toBeUndefined();
 		expect(toolResult!.content).toBeUndefined();
+	});
+
+	test('cache breakpoint before content defers cache_control to next block', function () {
+		const messages: Raw.ChatMessage[] = [
+			{
+				role: Raw.ChatRole.User,
+				content: [
+					{ type: Raw.ChatCompletionContentPartKind.CacheBreakpoint, cacheType: 'ephemeral' },
+					{ type: Raw.ChatCompletionContentPartKind.Text, text: 'hello world' },
+				],
+			},
+		];
+
+		const result = rawMessagesToMessagesAPI(messages);
+
+		expect(result.messages).toHaveLength(1);
+		const content = assertContentArray(result.messages[0].content);
+		expect(content).toHaveLength(1);
+		expect(content[0]).toEqual({
+			type: 'text',
+			text: 'hello world',
+			cache_control: { type: 'ephemeral' },
+		});
 	});
 });
 
@@ -576,114 +599,60 @@ suite('addToolsAndSystemCacheControl', function () {
 
 		expect(system[0].cache_control).toEqual({ type: 'ephemeral' });
 	});
-
-	test('propagates cacheTtl to last tool and last system block', function () {
-		const tools = [makeTool('read_file'), makeTool('edit_file')];
-		const system: TextBlockParam[] = [makeSystemBlock('You are a helpful assistant.')];
-		const messagesResult = { messages: makeMessages(), system };
-
-		addToolsAndSystemCacheControl(tools, messagesResult, '1h');
-
-		expect(tools[1].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
-		expect(system[0].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
-	});
-
-	test('propagates cacheTtl with 5m value', function () {
-		const tools = [makeTool('read_file')];
-		const system: TextBlockParam[] = [makeSystemBlock('System prompt')];
-		const messagesResult = { messages: makeMessages(), system };
-
-		addToolsAndSystemCacheControl(tools, messagesResult, '5m');
-
-		expect(tools[0].cache_control).toEqual({ type: 'ephemeral', ttl: '5m' });
-		expect(system[0].cache_control).toEqual({ type: 'ephemeral', ttl: '5m' });
-	});
-
-	test('does not add ttl when cacheTtl is undefined', function () {
-		const tools = [makeTool('read_file')];
-		const system: TextBlockParam[] = [makeSystemBlock('System prompt')];
-		const messagesResult = { messages: makeMessages(), system };
-
-		addToolsAndSystemCacheControl(tools, messagesResult);
-
-		expect(tools[0].cache_control).toEqual({ type: 'ephemeral' });
-		expect(tools[0].cache_control).not.toHaveProperty('ttl');
-	});
 });
 
-suite('rawMessagesToMessagesAPI with cacheTtl', function () {
+suite('buildToolInputSchema', function () {
 
-	test('propagates cacheTtl to cache_control on tool_result blocks', function () {
-		const messages: Raw.ChatMessage[] = [
-			{
-				role: Raw.ChatRole.User,
-				content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'Read my file' }],
-			},
-			{
-				role: Raw.ChatRole.Assistant,
-				content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'I will read the file.' }],
-				toolCalls: [{
-					id: 'toolu_test123',
-					type: 'function',
-					function: { name: 'read_file', arguments: '{"path":"/tmp/test.txt"}' },
-				}],
-			},
-			{
-				role: Raw.ChatRole.Tool,
-				toolCallId: 'toolu_test123',
-				content: [
-					{ type: Raw.ChatCompletionContentPartKind.Text, text: 'Hello world' },
-					{ type: Raw.ChatCompletionContentPartKind.CacheBreakpoint, cacheType: 'ephemeral' },
-				],
-			},
-		];
-
-		const result = rawMessagesToMessagesAPI(messages, undefined, '1h');
-
-		const toolResult = findToolResult(result.messages);
-		expect(toolResult).toBeDefined();
-		expect(toolResult!.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+	test('returns default schema when input is undefined', function () {
+		const result = buildToolInputSchema(undefined);
+		expect(result).toEqual({ type: 'object', properties: {} });
 	});
 
-	test('propagates cacheTtl to cache_control on message content blocks', function () {
-		const messages: Raw.ChatMessage[] = [
-			{
-				role: Raw.ChatRole.User,
-				content: [
-					{ type: Raw.ChatCompletionContentPartKind.Text, text: 'Hello' },
-					{ type: Raw.ChatCompletionContentPartKind.CacheBreakpoint, cacheType: 'ephemeral' },
-				],
-			},
-		];
-
-		const result = rawMessagesToMessagesAPI(messages, undefined, '1h');
-
-		const content = assertContentArray(result.messages[0].content);
-		const cachedBlock = content.find(b => 'cache_control' in b && b.cache_control);
-		expect(cachedBlock).toBeDefined();
-		expect((cachedBlock as any).cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+	test('strips $schema from the input', function () {
+		const result = buildToolInputSchema({
+			$schema: 'https://json-schema.org/draft/2020-12/schema',
+			type: 'object',
+			properties: { query: { type: 'string' } },
+			required: ['query'],
+		});
+		expect(result).toEqual({
+			type: 'object',
+			properties: { query: { type: 'string' } },
+			required: ['query'],
+		});
+		expect(result).not.toHaveProperty('$schema');
 	});
 
-	test('propagates cacheTtl to system blocks', function () {
-		const messages: Raw.ChatMessage[] = [
-			{
-				role: Raw.ChatRole.System,
-				content: [
-					{ type: Raw.ChatCompletionContentPartKind.Text, text: 'You are helpful.' },
-					{ type: Raw.ChatCompletionContentPartKind.CacheBreakpoint, cacheType: 'ephemeral' },
-				],
-			},
-			{
-				role: Raw.ChatRole.User,
-				content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'Hi' }],
-			},
-		];
+	test('preserves $defs and additionalProperties', function () {
+		const defs = { Foo: { type: 'object', properties: { x: { type: 'number' } } } };
+		const result = buildToolInputSchema({
+			type: 'object',
+			properties: { foo: { $ref: '#/$defs/Foo' } },
+			$defs: defs,
+			additionalProperties: false,
+		});
+		expect(result.$defs).toEqual(defs);
+		expect(result.additionalProperties).toBe(false);
+	});
 
-		const result = rawMessagesToMessagesAPI(messages, undefined, '1h');
+	test('defaults properties to empty object when not provided', function () {
+		const result = buildToolInputSchema({ type: 'object' });
+		expect(result.properties).toEqual({});
+	});
 
-		expect(result.system).toBeDefined();
-		const cachedSystemBlock = result.system!.find(b => b.cache_control);
-		expect(cachedSystemBlock).toBeDefined();
-		expect(cachedSystemBlock!.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+	test('overrides default properties when provided in schema', function () {
+		const props = { name: { type: 'string' } };
+		const result = buildToolInputSchema({ type: 'object', properties: props });
+		expect(result.properties).toEqual(props);
+	});
+
+	test('passes through a plain schema without $schema unchanged', function () {
+		const schema = {
+			type: 'object',
+			properties: { id: { type: 'number' } },
+			required: ['id'],
+		};
+		const result = buildToolInputSchema(schema);
+		expect(result).toEqual(schema);
 	});
 });
