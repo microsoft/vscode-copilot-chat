@@ -510,6 +510,10 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				this._persistSummaryOnTurn(bgResult, promptContext, this._lastRenderTokenCount);
 				this._sendBackgroundCompactionTelemetry('preRender', 'applied', contextRatio, promptContext);
 				summaryAppliedThisIteration = true;
+			} else {
+				this.logService.warn(`[Agent] background compaction state was Completed but consumeAndReset returned no result`);
+				this._sendBackgroundCompactionTelemetry('preRender', 'noResult', contextRatio, promptContext);
+				this._recordBackgroundCompactionFailure(promptContext, 'preRender');
 			}
 		}
 
@@ -531,8 +535,14 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				this._sendBackgroundCompactionTelemetry('preRenderBlocked', 'applied', contextRatio, promptContext);
 				summaryAppliedThisIteration = true;
 			} else {
-				this.logService.debug(`[Agent] background compaction finished but produced no usable result`);
+				this.logService.debug(`[Agent] background compaction finished but produced no usable result — will attempt foreground summarization if budget exceeded`);
 				this._sendBackgroundCompactionTelemetry('preRenderBlocked', 'noResult', contextRatio, promptContext);
+				this._recordBackgroundCompactionFailure(promptContext, 'preRenderBlocked');
+				// Don't attempt a foreground fallback here — the main render below
+				// will either succeed (context estimate was pessimistic) or throw
+				// BudgetExceededError, which the catch block handles with foreground
+				// summarization. Short-circuiting here would skip the main render
+				// unnecessarily when it might still fit.
 			}
 		}
 
@@ -582,8 +592,10 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 
 			this.logService.debug(`[Agent] ${reason}, triggering summarization`);
 			try {
-				const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, {
+				const renderer = PromptRenderer.create(this.instantiationService, this.endpoint, this.prompt, {
 					...renderProps,
+					endpoint: this.endpoint,
+					promptContext: this._buildSummarizationPromptContext(renderProps.promptContext),
 					triggerSummarize: true,
 				});
 				return await renderer.render(progress, token);
@@ -692,6 +704,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 					} else {
 						this.logService.debug(`[Agent] background compaction produced no usable result after budget exceeded — falling back to synchronous summarization`);
 						this._sendBackgroundCompactionTelemetry(budgetExceededTrigger, 'noResult', contextRatio, promptContext);
+						this._recordBackgroundCompactionFailure(promptContext, budgetExceededTrigger);
 						// Background compaction failed — fall back to synchronous summarization
 						result = await renderWithSummarization(`budget exceeded(${e.message}), background compaction failed`);
 					}
@@ -758,8 +771,15 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 					result = await reRenderer.render(progress, token);
 					this._lastRenderTokenCount = result.tokenCount;
 				} else {
-					this.logService.debug(`[Agent] post-render background compaction finished but produced no usable result`);
+					this.logService.debug(`[Agent] post-render background compaction finished but produced no usable result — falling back to foreground summarization`);
 					this._sendBackgroundCompactionTelemetry('postRenderBlocked', 'noResult', postRenderRatio, promptContext);
+					this._recordBackgroundCompactionFailure(promptContext, 'postRenderBlocked');
+					try {
+						result = await renderWithSummarization('post-render background compaction noResult fallback');
+						this._lastRenderTokenCount = result.tokenCount;
+					} catch (e) {
+						this.logService.error(e, `[Agent] post-render foreground summarization fallback also failed — using original render result`);
+					}
 				}
 			} else if (postRenderRatio >= 0.80 && (backgroundSummarizer.state === BackgroundSummarizationState.Idle || backgroundSummarizer.state === BackgroundSummarizationState.Failed)) {
 				// At ≥ 80% with no running compaction (or a previous failure) — kick off background work.
@@ -846,8 +866,10 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				toolCallResults: props.promptContext.toolCallResults ? { ...props.promptContext.toolCallResults } : undefined,
 			}
 		};
-		const bgRenderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, {
+		const bgRenderer = PromptRenderer.create(this.instantiationService, this.endpoint, this.prompt, {
 			...snapshotProps,
+			endpoint: this.endpoint,
+			promptContext: this._buildSummarizationPromptContext(snapshotProps.promptContext),
 			triggerSummarize: true,
 			summarizationSource: 'background',
 		});
@@ -953,6 +975,48 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				source: 'background',
 				outcome: 'success',
 				contextLengthBefore,
+			},
+		));
+	}
+
+	/**
+	 * Build a promptContext for summarization that filters availableTools to
+	 * non-deferred tools when Anthropic tool search is enabled. Deferred tool
+	 * schemas are unnecessary in the summarization prompt (which uses
+	 * tool_choice: 'none') and can push the prompt over the token budget.
+	 */
+	private _buildSummarizationPromptContext(promptContext: IBuildPromptContext): IBuildPromptContext {
+		if (!promptContext.tools?.availableTools) {
+			return promptContext;
+		}
+		const toolSearchEnabled = isAnthropicToolSearchEnabled(this.endpoint, this.configurationService);
+		if (!toolSearchEnabled) {
+			return promptContext;
+		}
+		const nonDeferredTools = promptContext.tools.availableTools.filter(t => this.toolDeferralService.isNonDeferredTool(t.name));
+		return {
+			...promptContext,
+			tools: {
+				...promptContext.tools,
+				availableTools: nonDeferredTools,
+			},
+		};
+	}
+
+	/**
+	 * Record a background compaction failure on the current turn's metadata,
+	 * matching how foreground compaction records its failures.
+	 */
+	private _recordBackgroundCompactionFailure(promptContext: IBuildPromptContext, trigger: string): void {
+		const turn = promptContext.conversation?.getLatestTurn();
+		turn?.setMetadata(new SummarizedConversationHistoryMetadata(
+			'', // no toolCallRoundId for failures
+			'', // no summary text for failures
+			{
+				model: this.endpoint.model,
+				source: 'background',
+				outcome: `noResult_${trigger}`,
+				contextLengthBefore: this._lastRenderTokenCount,
 			},
 		));
 	}

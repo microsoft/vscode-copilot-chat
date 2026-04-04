@@ -216,4 +216,55 @@ describe('BackgroundSummarizer', () => {
 		]);
 		expect(summarizer.state).toBe(BackgroundSummarizationState.Completed);
 	});
+
+	test('waitForCompletion then consumeAndReset returns undefined after failure (noResult path)', async () => {
+		// This is the exact sequence that triggers the noResult fallback paths
+		// in agentIntent.ts: wait for background compaction, then consume.
+		const summarizer = new BackgroundSummarizer(100_000);
+		summarizer.start(async _token => {
+			throw new Error('LLM request failed');
+		});
+		// agentIntent blocks on waitForCompletion when context >= 95%
+		await summarizer.waitForCompletion();
+		expect(summarizer.state).toBe(BackgroundSummarizationState.Failed);
+
+		// consumeAndReset returns undefined for Failed state — this triggers
+		// the noResult branch where we record failure metadata and fall back.
+		const result = summarizer.consumeAndReset();
+		expect(result).toBeUndefined();
+		expect(summarizer.state).toBe(BackgroundSummarizationState.Idle);
+	});
+
+	test('waitForCompletion resolves without error even when work fails', async () => {
+		// agentIntent.ts calls waitForCompletion without try/catch in the
+		// blocking paths — verify it swallows the error.
+		const summarizer = new BackgroundSummarizer(100_000);
+		summarizer.start(async _token => {
+			throw new Error('network timeout');
+		});
+		// Should not throw
+		await summarizer.waitForCompletion();
+		expect(summarizer.state).toBe(BackgroundSummarizationState.Failed);
+	});
+
+	test('cancel during waitForCompletion leaves state Idle with no result', async () => {
+		// Tests the race where a session is disposed while blocking on completion
+		const summarizer = new BackgroundSummarizer(100_000);
+		let resolveFn: () => void;
+		const gate = new Promise<void>(resolve => { resolveFn = resolve; });
+		summarizer.start(async _token => {
+			await gate;
+			return { summary: 'test', toolCallRoundId: 'r1' };
+		});
+		// Cancel before work completes
+		summarizer.cancel();
+		// Let the work resolve
+		resolveFn!();
+		await new Promise<void>(resolve => setTimeout(resolve, 0));
+
+		// consumeAndReset should return undefined (state is Idle, not InProgress)
+		const result = summarizer.consumeAndReset();
+		expect(result).toBeUndefined();
+		expect(summarizer.state).toBe(BackgroundSummarizationState.Idle);
+	});
 });
