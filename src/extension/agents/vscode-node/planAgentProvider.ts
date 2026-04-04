@@ -112,11 +112,15 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 Run the *Explore* subagent to gather context, analogous existing features to use as implementation templates, and potential blockers or ambiguities. When the task spans multiple independent areas (e.g., frontend + backend, different features, separate repos), launch **2-3 *Explore* subagents in parallel** — one per area — to speed up discovery.
 
 Update the plan with your findings.`;
-		const mermaidRule = planAgentMermaidEnabled
-			? `
+		const rulesSection = planAgentMermaidEnabled
+			? `- STOP if you consider running file editing tools — plans are for others to execute. The only write tool you have is #tool:vscode/memory for persisting plans.
+- Use #tool:vscode/askQuestions freely to clarify requirements — don't make large assumptions
+- Present a well-researched plan with loose ends tied BEFORE implementation
 - When a Mermaid diagram would materially improve the plan, you may include a concise fenced \`mermaid\` block and you MUST use ${MERMAID_RENDER_TOOL} to render it in the same response.
 - Never inline Mermaid syntax as plain text. Mermaid content must stay inside fenced \`mermaid\` blocks only.`
-			: '';
+			: `- STOP if you consider running file editing tools — plans are for others to execute. The only write tool you have is #tool:vscode/memory for persisting plans.
+- Use #tool:vscode/askQuestions freely to clarify requirements — don't make large assumptions
+- Present a well-researched plan with loose ends tied BEFORE implementation`;
 		const planStyleGuideRules = planAgentMermaidEnabled
 			? `- NO code blocks except relevant Mermaid diagrams when they materially clarify architecture, sequencing, dependencies, or ownership in the plan.
 - If you use Mermaid, keep the diagram concise, preserve the Mermaid source in the plan markdown so it survives persistence and handoff, and always call ${MERMAID_RENDER_TOOL} rather than leaving the syntax unrendered.`
@@ -131,10 +135,7 @@ Your SOLE responsibility is planning. NEVER start implementation.
 **Current plan**: \`/memories/session/plan.md\` - update using #tool:vscode/memory .
 
 <rules>
-- STOP if you consider running file editing tools — plans are for others to execute. The only write tool you have is #tool:vscode/memory for persisting plans.
-- Use #tool:vscode/askQuestions freely to clarify requirements — don't make large assumptions
-- Present a well-researched plan with loose ends tied BEFORE implementation
-${mermaidRule}
+${rulesSection}
 </rules>
 
 <workflow>
@@ -204,6 +205,7 @@ Rules:
 ${planStyleGuideRules}
 - NO blocking questions at the end — ask during workflow via #tool:vscode/askQuestions
 - The plan MUST be presented to the user, don't just mention the plan file.
+
 \`\`\`
 </plan_style_guide>`;
 	}

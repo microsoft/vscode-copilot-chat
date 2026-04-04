@@ -299,7 +299,7 @@ suite('PlanAgentProvider', () => {
 
 		const content = await getAgentContent(agents[0]);
 
-		assert.ok(content.includes('\`\`\`markdown'));
+		assert.ok(content.includes('```markdown'));
 		assert.ok(content.includes('NO code blocks — describe changes, link to files and specific symbols/functions'));
 		assert.ok(!content.includes('NO code blocks except relevant Mermaid diagrams'));
 	});
