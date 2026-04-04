@@ -26,7 +26,7 @@ export class SwitchAgentTool implements ICopilotTool<ISwitchAgentParams> {
 			throw new Error(vscode.l10n.t('Only "Plan" agent is supported'));
 		}
 
-		const planAgentBody = PlanAgentProvider.buildAgentBody();
+		const planAgentBody = PlanAgentProvider.buildAgentBody(vscode.workspace.getConfiguration('github.copilot.chat').get<boolean>('planAgent.mermaid.enabled', false));
 
 		// Execute command to switch agent
 		await vscode.commands.executeCommand('workbench.action.chat.toggleAgentMode', {

@@ -988,6 +988,8 @@ export namespace ConfigKey {
 
 	/** Additional tools to enable for the Plan agent (additive to base tools) */
 	export const PlanAgentAdditionalTools = defineSetting<string[]>('chat.planAgent.additionalTools', ConfigType.Simple, []);
+	/** Whether the Plan agent can include Mermaid diagrams in plans when relevant */
+	export const PlanAgentMermaidEnabled = defineSetting<boolean>('chat.planAgent.mermaid.enabled', ConfigType.Simple, false);
 
 	/** Model override for Implement agent (empty = use default) */
 	export const ImplementAgentModel = defineSetting<string>('chat.implementAgent.model', ConfigType.Simple, '');

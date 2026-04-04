@@ -3947,6 +3947,15 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.planAgent.mermaid.enabled": {
+						"type": "boolean",
+						"default": false,
+						"scope": "resource",
+						"markdownDescription": "%github.copilot.config.planAgent.mermaid.enabled%",
+						"tags": [
+							"experimental"
+						]
+					},
 					"github.copilot.chat.implementAgent.model": {
 						"type": "string",
 						"default": "",
@@ -6213,10 +6222,10 @@
 		"vscode-dts:check": "node script/build/vscodeDtsCheck.js",
 		"vscode-dts:dev": "node node_modules/@vscode/dts/index.js dev && node script/build/moveProposedDts.js",
 		"vscode-dts:main": "node node_modules/@vscode/dts/index.js main && node script/build/moveProposedDts.js",
-		"build": "node .esbuild.ts --sourcemaps",
-		"compile": "node .esbuild.ts --dev",
+		"build": "tsx .esbuild.ts --sourcemaps",
+		"compile": "tsx .esbuild.ts --dev",
 		"watch": "npm-run-all -p watch:*",
-		"watch:esbuild": "node .esbuild.ts --watch --dev",
+		"watch:esbuild": "tsx .esbuild.ts --watch --dev",
 		"watch:tsc-extension": "tsc --noEmit --watch --project tsconfig.json",
 		"watch:tsc-extension-web": "tsc --noEmit --watch --project tsconfig.worker.json",
 		"watch:tsc-simulation-workbench": "tsc --noEmit --watch --project test/simulation/workbench/tsconfig.json",
