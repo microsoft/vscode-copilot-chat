@@ -22,6 +22,10 @@ export class ChatPromptFileService extends Disposable implements IChatPromptFile
 	readonly onDidChangeInstructions: Event<void> = this._onDidChangeInstructions.event;
 	private readonly _onDidChangeSkills = this._register(new Emitter<void>());
 	readonly onDidChangeSkills: Event<void> = this._onDidChangeSkills.event;
+	private readonly _onDidChangeHooks = this._register(new Emitter<void>());
+	readonly onDidChangeHooks: Event<void> = this._onDidChangeHooks.event;
+	private readonly _onDidChangePlugins = this._register(new Emitter<void>());
+	readonly onDidChangePlugins: Event<void> = this._onDidChangePlugins.event;
 
 	private _customAgents: ParsedPromptFile[] = [];
 	private refreshCts: CancellationTokenSource | undefined;
@@ -43,6 +47,18 @@ export class ChatPromptFileService extends Disposable implements IChatPromptFile
 		this._register(vscode.chat.onDidChangeSkills(() => {
 			this._onDidChangeSkills.fire();
 		}));
+
+		if (vscode.chat.onDidChangeHooks) {
+			this._register(vscode.chat.onDidChangeHooks(() => {
+				this._onDidChangeHooks.fire();
+			}));
+		}
+
+		if (vscode.chat.onDidChangePlugins) {
+			this._register(vscode.chat.onDidChangePlugins(() => {
+				this._onDidChangePlugins.fire();
+			}));
+		}
 		this.triggerRefreshCustomAgents();
 	}
 
@@ -60,6 +76,14 @@ export class ChatPromptFileService extends Disposable implements IChatPromptFile
 
 	get skills(): readonly vscode.ChatResource[] {
 		return vscode.chat.skills;
+	}
+
+	get hooks(): readonly vscode.ChatResource[] {
+		return vscode.chat.hooks ?? [];
+	}
+
+	get plugins(): readonly vscode.ChatResource[] {
+		return vscode.chat.plugins ?? [];
 	}
 
 	override dispose(): void {

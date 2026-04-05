@@ -13,6 +13,7 @@ import { InMemoryConfigurationService } from '../../../../platform/configuration
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { Edits } from '../../../../platform/inlineEdits/common/dataTypes/edit';
 import { LanguageId } from '../../../../platform/inlineEdits/common/dataTypes/languageId';
+import { NextCursorLinePredictionCursorPlacement } from '../../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import { DEFAULT_OPTIONS, LanguageContextLanguages, LintOptionShowCode, LintOptionWarning, ModelConfiguration, PromptingStrategy, ResponseFormat } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IInlineEditsModelService } from '../../../../platform/inlineEdits/common/inlineEditsModelService';
@@ -2206,5 +2207,57 @@ suite('filterOutEditsWithSubstrings', () => {
 		const edit = makeEdit([]);
 		const result = filterOutEditsWithSubstrings([edit], ['<|diff_marker|>']);
 		expect(result).toEqual([edit]);
+	});
+});
+
+suite('getNextCursorColumn', () => {
+
+	const { BeforeLine, AfterLine } = NextCursorLinePredictionCursorPlacement;
+
+	/** Inserts a `|` cursor marker at the computed column position (1-based). */
+	function colWithMarker(line: string | undefined, placement: NextCursorLinePredictionCursorPlacement): string {
+		const column = XtabProvider.getNextCursorColumn(line, placement);
+		const s = line ?? '';
+		return s.slice(0, column - 1) + '|' + s.slice(column - 1);
+	}
+
+	test('BeforeLine: indented with spaces', () => {
+		expect(colWithMarker('    const x = 1;', BeforeLine)).toMatchInlineSnapshot(`"    |const x = 1;"`);
+	});
+
+	test('BeforeLine: indented with tabs', () => {
+		expect(colWithMarker('\t\treturn;', BeforeLine)).toMatchInlineSnapshot(`"		|return;"`);
+	});
+
+	test('BeforeLine: no leading whitespace', () => {
+		expect(colWithMarker('function foo() {', BeforeLine)).toMatchInlineSnapshot(`"|function foo() {"`);
+	});
+
+	test('BeforeLine: empty string', () => {
+		expect(colWithMarker('', BeforeLine)).toMatchInlineSnapshot(`"|"`);
+	});
+
+	test('BeforeLine: whitespace-only line', () => {
+		expect(colWithMarker('   ', BeforeLine)).toMatchInlineSnapshot(`"   |"`);
+	});
+
+	test('BeforeLine: undefined', () => {
+		expect(colWithMarker(undefined, BeforeLine)).toMatchInlineSnapshot(`"|"`);
+	});
+
+	test('AfterLine: normal line', () => {
+		expect(colWithMarker('const x = 1;', AfterLine)).toMatchInlineSnapshot(`"const x = 1;|"`);
+	});
+
+	test('AfterLine: empty string', () => {
+		expect(colWithMarker('', AfterLine)).toMatchInlineSnapshot(`"|"`);
+	});
+
+	test('AfterLine: undefined', () => {
+		expect(colWithMarker(undefined, AfterLine)).toMatchInlineSnapshot(`"|"`);
+	});
+
+	test('AfterLine: trailing whitespace', () => {
+		expect(colWithMarker('abc   ', AfterLine)).toMatchInlineSnapshot(`"abc   |"`);
 	});
 });

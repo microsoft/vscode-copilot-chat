@@ -6,11 +6,13 @@ import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IChatAgentService, defaultAgentName, editingSessionAgentEditorName, editingSessionAgentName, editsAgentName, getChatParticipantIdFromName, notebookEditorAgentName, terminalAgentName, vscodeAgentName } from '../../../platform/chat/common/chatAgents';
 import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaService';
+import { IChatSessionService } from '../../../platform/chat/common/chatSessionService';
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { ChatExtPerfMark, clearChatExtMarks, markChatExt } from '../../../util/common/performance';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observableInternal';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
@@ -69,7 +71,10 @@ class ChatAgents implements IDisposable {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IPromptCategorizerService private readonly promptCategorizerService: IPromptCategorizerService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
-	) { }
+		@IChatSessionService chatSessionService: IChatSessionService,
+	) {
+		this._disposables.add(chatSessionService.onDidDisposeChatSession(sessionId => clearChatExtMarks(sessionId)));
+	}
 
 	dispose() {
 		this._disposables.dispose();
@@ -198,68 +203,74 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 
 	private getChatParticipantHandler(id: string, name: string, defaultIntentIdOrGetter: IntentOrGetter): vscode.ChatExtendedRequestHandler {
 		return async (request, context, stream, token): Promise<vscode.ChatResult> => {
-			// If we need to switch to the base model, this function will handle it
-			// Otherwise it just returns the same request passed into it
-			request = await this.switchToBaseModel(request, stream);
+			markChatExt(request.sessionId, ChatExtPerfMark.WillHandleParticipant);
+			try {
+				// If we need to switch to the base model, this function will handle it
+				// Otherwise it just returns the same request passed into it
+				request = await this.switchToBaseModel(request, stream);
 
-			// Handle switch-to-auto confirmation button clicks from rate limit errors
-			const switchToAutoConfirmation = getSwitchToAutoOnRateLimitConfirmation(request);
-			if (switchToAutoConfirmation) {
-				const action = switchToAutoConfirmation.alwaysSwitchToAuto ? 'switchToAutoAlways' : 'switchToAuto';
-				/* __GDPR__
-					"chatRateLimitAction" : {
-						"owner": "lramos15",
-						"comment": "Tracks which action users take when rate limited",
-						"action": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The action taken: switchToAuto, switchToAutoAlways, tryAgain, or autoSwitch." },
-						"modelId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model ID the user was rate limited on." }
-					}
-				*/
-				this.telemetryService.sendMSFTTelemetryEvent('chatRateLimitAction', { action, modelId: request.model?.id });
-				request = await this.switchToAutoModel(request, stream, switchToAutoConfirmation.alwaysSwitchToAuto);
-			} else if (isContinueOnError(request)) {
-				this.telemetryService.sendMSFTTelemetryEvent('chatRateLimitAction', { action: 'tryAgain', modelId: request.model?.id });
-			}
-
-			// The user is starting an interaction with the chat
-			if (!request.subAgentInvocationId) {
-				this.interactionService.startInteraction();
-			}
-
-			// Generate a shared telemetry message ID on the first turn only — subsequent turns have no
-			// categorization event to join and ChatTelemetryBuilder will generate its own ID.
-			const telemetryMessageId = context.history.length === 0 ? generateUuid() : undefined;
-
-			// Categorize the first prompt (fire-and-forget)
-			if (telemetryMessageId !== undefined) {
-				this.promptCategorizerService.categorizePrompt(request, context, telemetryMessageId);
-			}
-
-			const defaultIntentId = typeof defaultIntentIdOrGetter === 'function' ?
-				defaultIntentIdOrGetter(request) :
-				defaultIntentIdOrGetter;
-
-			// empty chatAgentArgs will force InteractiveSession to not use a command or try to parse one out of the query
-			const commandsForAgent = agentsToCommands[defaultIntentId];
-			const intentId = request.command && commandsForAgent ?
-				commandsForAgent[request.command] :
-				defaultIntentId;
-
-			const handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, telemetryMessageId);
-			let result = await handler.getResult();
-
-			// Auto-retry with Auto model when the setting is enabled and the handler signals it
-			if ((result as ICopilotChatResultIn).metadata?.shouldAutoSwitchToAuto) {
-				const previousModelId = request.model?.id;
-				const switchedRequest = await this.switchToAutoModel(request, stream, false);
-				if (switchedRequest.model?.id !== previousModelId) {
-					this.telemetryService.sendMSFTTelemetryEvent('chatRateLimitAction', { action: 'autoSwitch', modelId: previousModelId });
-					request = switchedRequest;
-					const retryHandler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, telemetryMessageId);
-					result = await retryHandler.getResult();
+				// Handle switch-to-auto confirmation button clicks from rate limit errors
+				const switchToAutoConfirmation = getSwitchToAutoOnRateLimitConfirmation(request);
+				if (switchToAutoConfirmation) {
+					const action = switchToAutoConfirmation.alwaysSwitchToAuto ? 'switchToAutoAlways' : 'switchToAuto';
+					/* __GDPR__
+						"chatRateLimitAction" : {
+							"owner": "lramos15",
+							"comment": "Tracks which action users take when rate limited",
+							"action": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The action taken: switchToAuto, switchToAutoAlways, tryAgain, or autoSwitch." },
+							"modelId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model ID the user was rate limited on." }
+						}
+					*/
+					this.telemetryService.sendMSFTTelemetryEvent('chatRateLimitAction', { action, modelId: request.model?.id });
+					request = await this.switchToAutoModel(request, stream, switchToAutoConfirmation.alwaysSwitchToAuto);
+				} else if (isContinueOnError(request)) {
+					this.telemetryService.sendMSFTTelemetryEvent('chatRateLimitAction', { action: 'tryAgain', modelId: request.model?.id });
 				}
-			}
 
-			return result;
+				// The user is starting an interaction with the chat
+				if (!request.subAgentInvocationId) {
+					this.interactionService.startInteraction();
+				}
+
+				// Generate a shared telemetry message ID on the first turn only — subsequent turns have no
+				// categorization event to join and ChatTelemetryBuilder will generate its own ID.
+				const telemetryMessageId = context.history.length === 0 ? generateUuid() : undefined;
+
+				// Categorize the first prompt (fire-and-forget)
+				if (telemetryMessageId !== undefined) {
+					this.promptCategorizerService.categorizePrompt(request, context, telemetryMessageId);
+				}
+
+				const defaultIntentId = typeof defaultIntentIdOrGetter === 'function' ?
+					defaultIntentIdOrGetter(request) :
+					defaultIntentIdOrGetter;
+
+				// empty chatAgentArgs will force InteractiveSession to not use a command or try to parse one out of the query
+				const commandsForAgent = agentsToCommands[defaultIntentId];
+				const intentId = request.command && commandsForAgent ?
+					commandsForAgent[request.command] :
+					defaultIntentId;
+
+				const handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, telemetryMessageId);
+				let result = await handler.getResult();
+
+				// Auto-retry with Auto model when the setting is enabled and the handler signals it
+				if ((result as ICopilotChatResultIn).metadata?.shouldAutoSwitchToAuto) {
+					const previousModelId = request.model?.id;
+					const switchedRequest = await this.switchToAutoModel(request, stream, false);
+					if (switchedRequest.model?.id !== previousModelId) {
+						this.telemetryService.sendMSFTTelemetryEvent('chatRateLimitAction', { action: 'autoSwitch', modelId: previousModelId });
+						request = switchedRequest;
+						const retryHandler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested, telemetryMessageId);
+						result = await retryHandler.getResult();
+					}
+				}
+
+				return result;
+			} finally {
+				markChatExt(request.sessionId, ChatExtPerfMark.DidHandleParticipant);
+				clearChatExtMarks(request.sessionId);
+			}
 		};
 	}
 

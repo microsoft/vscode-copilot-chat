@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as fs from 'fs';
 import path from 'path';
 import { ApiEmbeddingsIndex, IApiEmbeddingsIndex } from '../../src/extension/context/node/resolvers/extensionApi';
 import { ConversationStore, IConversationStore } from '../../src/extension/conversationStore/node/conversationStore';
@@ -310,4 +311,21 @@ function lookupConfigKey(key: string): ExperimentBasedConfig<ExperimentBasedConf
 		throw new Error(`Configuration '${key}' provided does not exist in product. Double check if the configuration key exists by using it in vscode settings.json.`);
 	}
 	return config;
+}
+
+export function loadConfigFile(configFilePath: string): Record<string, unknown> {
+	const resolvedPath = path.isAbsolute(configFilePath) ? configFilePath : path.join(process.cwd(), configFilePath);
+	const contents = fs.readFileSync(resolvedPath, 'utf-8');
+	const configs = JSON.parse(contents) as Record<string, unknown>;
+	if (!configs || typeof configs !== 'object') {
+		throw new Error('Invalid configuration file: ' + configFilePath);
+	}
+	return configs;
+}
+
+export async function applyConfigFile(configService: IConfigurationService, configs: Record<string, unknown>): Promise<void> {
+	for (const [key, value] of Object.entries(configs)) {
+		const configKey = lookupConfigKey(key);
+		await configService.setConfig(configKey, value);
+	}
 }

@@ -7,11 +7,10 @@ import type { Attachment, SendOptions, Session, SessionOptions } from '@github/c
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import type { ChatParticipantToolToken } from 'vscode';
-import { IChatDebugFileLoggerService } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { GenAiMetrics } from '../../../../platform/otel/common/genAiMetrics';
 import { CopilotChatAttr, GenAiAttr, GenAiOperationName, IOTelService, ISpanHandle, SpanKind, SpanStatusCode, truncateForOTel } from '../../../../platform/otel/common/index';
-import type { ParsedPromptFile } from '../../../../platform/promptFiles/common/promptsService';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger, LoggedRequestKind } from '../../../../platform/requestLogger/node/requestLogger';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -24,50 +23,51 @@ import { extUriBiasedIgnorePathCase, isEqual } from '../../../../util/vs/base/co
 import { truncate } from '../../../../util/vs/base/common/strings';
 import { ThemeIcon } from '../../../../util/vs/base/common/themables';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, LanguageModelTextPart, Uri } from '../../../../vscodeTypes';
-import { ToolName } from '../../../tools/common/toolNames';
+import { ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { IToolsService } from '../../../tools/common/toolsService';
-import { IChatPromptFileService } from '../../common/chatPromptFileService';
-import { IChatSessionMetadataStore, RequestDetails, StoredModeInstructions } from '../../common/chatSessionMetadataStore';
+import { IChatSessionMetadataStore } from '../../common/chatSessionMetadataStore';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../../common/workspaceInfo';
-import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, RequestIdDetails, ToolCall, updateTodoList } from '../common/copilotCLITools';
-import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
+import { enrichToolInvocationWithSubagentMetadata, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, ToolCall, updateTodoList } from '../common/copilotCLITools';
 import { getCopilotCLISessionStateDir } from './cliHelpers';
-import { CopilotCLISessionOptions, getAgentFileNameFromFilePath, ICopilotCLISDK } from './copilotCli';
 import type { CopilotCliBridgeSpanProcessor } from './copilotCliBridgeSpanProcessor';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
 import { PermissionRequest, requestPermission, requiresFileEditconfirmation } from './permissionHelpers';
-import { IUserQuestionHandler, UserInputRequest } from './userInputHelpers';
+import { IQuestion, IUserQuestionHandler } from './userInputHelpers';
 
 /**
  * Known commands that can be sent to a CopilotCLI session instead of a free-form prompt.
  */
-export type CopilotCLICommand = 'compact';
+export type CopilotCLICommand = 'compact' | 'plan' | 'fleet';
 
 /**
  * The set of all known CopilotCLI commands.  Used by callers that need to
  * distinguish a slash-command from a regular prompt at runtime.
  */
-export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact'] as const;
+export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact', 'plan', 'fleet'] as const;
 
 export const builtinSlashSCommands = {
 	commit: '/commit',
+	sync: '/sync',
+	merge: '/merge',
 	createPr: '/create-pr',
 	createDraftPr: '/create-draft-pr',
 	updatePr: '/update-pr',
-	mergeChanges: '/merge-changes',
 };
 
 /**
  * Either a free-form prompt **or** a known command.
  */
 export type CopilotCLISessionInput =
-	| { readonly prompt: string; plan?: boolean }
-	| { readonly command: CopilotCLICommand };
+	| { readonly prompt: string }
+	| { readonly prompt?: string; readonly command: CopilotCLICommand };
 
 function getPromptLabel(input: CopilotCLISessionInput): string {
-	return 'prompt' in input ? input.prompt : `/${input.command}`;
+	if ('command' in input) {
+		const prompt = input.prompt ?? '';
+		return prompt ? `/${input.command} ${prompt}` : `/${input.command}`;
+	}
+	return input.prompt;
 }
 
 export interface ICopilotCLISession extends IDisposable {
@@ -78,6 +78,7 @@ export interface ICopilotCLISession extends IDisposable {
 	readonly status: vscode.ChatSessionStatus | undefined;
 	readonly onDidChangeStatus: vscode.Event<vscode.ChatSessionStatus | undefined>;
 	readonly workspace: IWorkspaceInfo;
+	readonly additionalWorkspaces: IWorkspaceInfo[];
 	readonly pendingPrompt: string | undefined;
 	attachStream(stream: vscode.ChatResponseStream): IDisposable;
 	setPermissionLevel(level: string | undefined): void;
@@ -92,7 +93,6 @@ export interface ICopilotCLISession extends IDisposable {
 	addUserMessage(content: string): void;
 	addUserAssistantMessage(content: string): void;
 	getSelectedModelId(): Promise<string | undefined>;
-	getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]>;
 }
 
 export class CopilotCLISession extends DisposableStore implements ICopilotCLISession {
@@ -125,7 +125,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		return this._sdkSession;
 	}
 	public get workspace() {
-		return this._options.workspaceInfo;
+		return this._workspaceInfo;
+	}
+	public get additionalWorkspaces() {
+		return this._additionalWorkspaces;
 	}
 	private _lastUsedModel: string | undefined;
 	private _permissionLevel: string | undefined;
@@ -145,33 +148,23 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		this._updateSdkTraceContext = updater;
 	}
 	constructor(
-		private readonly _options: CopilotCLISessionOptions,
+		private readonly _workspaceInfo: IWorkspaceInfo,
+		private readonly _agentName: string | undefined,
 		private readonly _sdkSession: Session,
+		private readonly _additionalWorkspaces: IWorkspaceInfo[],
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IChatSessionMetadataStore private readonly _chatSessionMetadataStore: IChatSessionMetadataStore,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@IChatDelegationSummaryService private readonly _delegationSummaryService: IChatDelegationSummaryService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@ICopilotCLIImageSupport private readonly _imageSupport: ICopilotCLIImageSupport,
 		@IToolsService private readonly _toolsService: IToolsService,
 		@IUserQuestionHandler private readonly _userQuestionHandler: IUserQuestionHandler,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IOTelService private readonly _otelService: IOTelService,
-		@IChatDebugFileLoggerService private readonly _debugFileLogger: IChatDebugFileLoggerService,
-		@IChatPromptFileService private readonly _chatPromptFileService: IChatPromptFileService,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
-		this._debugFileLogger.startSession(this.sessionId).catch(err => {
-			this.logService.error('[CopilotCLISession] Failed to start debug log session', err);
-		});
-		this.add(toDisposable(() => {
-			this._debugFileLogger.endSession(this.sessionId).catch(err => {
-				this.logService.error('[CopilotCLISession] Failed to end debug log session', err);
-			});
-		}));
 	}
 
 	attachStream(stream: vscode.ChatResponseStream): IDisposable {
@@ -278,17 +271,16 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		this.logService.info(`[CopilotCLISession] Steering session ${this.sessionId}`);
 		const disposables = new DisposableStore();
 		const logStartTime = Date.now();
-		const abortController = new AbortController();
 		disposables.add(token.onCancellationRequested(() => {
-			abortController.abort();
+			this._sdkSession.abort();
 		}));
-		disposables.add(toDisposable(() => abortController.abort()));
+		disposables.add(toDisposable(() => this._sdkSession.abort()));
 
 		try {
 			// Send the steering prompt (completes quickly) and also wait for the
 			// previous request to finish, so this promise settles only once all
 			// in-flight work is done.
-			await Promise.all([previousRequestPromise, this.sendRequestInternal(input, attachments, true, logStartTime, abortController)]);
+			await Promise.all([previousRequestPromise, this.sendRequestInternal(input, attachments, true, logStartTime)]);
 			this._logConversation(prompt, '', modelId || '', attachments, logStartTime, 'Completed');
 		} catch (error) {
 			this._logConversation(prompt, '', modelId || '', attachments, logStartTime, 'Failed', error instanceof Error ? error.message : String(error));
@@ -359,11 +351,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		this.logService.info(`[CopilotCLISession] Invoking session ${this.sessionId}`);
 		const disposables = new DisposableStore();
 		const logStartTime = Date.now();
-		const abortController = new AbortController();
 		disposables.add(token.onCancellationRequested(() => {
-			abortController.abort();
+			this._sdkSession.abort();
 		}));
-		disposables.add(toDisposable(() => abortController.abort()));
+		disposables.add(toDisposable(() => this._sdkSession.abort()));
 
 		this._status = ChatSessionStatus.InProgress;
 		this._statusChange.fire(this._status);
@@ -394,6 +385,20 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 			toolCallWaitingForPermissions.length = 0;
 		};
+		// Flush only the tool invocation matching the given toolCallId, leaving other
+		// pending tools in the array. This prevents parallel tool calls from being
+		// prematurely pushed to the stream when only one of them has been approved.
+		const flushPendingInvocationMessageForToolCallId = (toolCallId: string | undefined) => {
+			if (!toolCallId) {
+				flushPendingInvocationMessages();
+				return;
+			}
+			const index = toolCallWaitingForPermissions.findIndex(([, tc]) => tc.toolCallId === toolCallId);
+			if (index !== -1) {
+				const [[invocationMessage]] = toolCallWaitingForPermissions.splice(index, 1);
+				this._stream?.push(invocationMessage);
+			}
+		};
 
 		const chunkMessageIds = new Set<string>();
 		const assistantMessageChunks: string[] = [];
@@ -419,7 +424,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					},
 					token
 				);
-				flushPendingInvocationMessages();
+				flushPendingInvocationMessageForToolCallId(permissionRequest.toolCallId);
 
 				this._requestLogger.addEntry({
 					type: LoggedRequestKind.MarkdownContentRequest,
@@ -434,12 +439,21 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			})));
 			if (shouldHandleExitPlanModeRequests) {
 				disposables.add(toDisposable(this._sdkSession.on('exit_plan_mode.requested', async (event) => {
+					this.updateArtifacts();
+					type ActionType = Parameters<NonNullable<SessionOptions['onExitPlanMode']>>[0]['actions'][number];
 					if (this._permissionLevel === 'autopilot') {
 						this.logService.trace('[CopilotCLISession] Auto-approving exit plan mode in autopilot');
-						type ActionType = Parameters<NonNullable<SessionOptions['onExitPlanMode']>>[0]['actions'][number];
 						const choices: ActionType[] = (event.data.actions as ActionType[]) ?? [];
+						if (event.data.recommendedAction && choices.includes(event.data.recommendedAction as ActionType)) {
+							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, selectedAction: event.data.recommendedAction as ActionType, autoApproveEdits: true });
+							return;
+						}
 						if (choices.includes('autopilot')) {
 							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, selectedAction: 'autopilot', autoApproveEdits: true });
+							return;
+						}
+						if (choices.includes('autopilot_fleet')) {
+							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, selectedAction: 'autopilot_fleet', autoApproveEdits: true });
 							return;
 						}
 						if (choices.includes('interactive')) {
@@ -458,25 +472,39 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 						this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: false });
 						return;
 					}
-					const params = {
-						title: l10n.t('Approve this plan?'),
-						message: event.data.summary,
-						confirmationType: 'basic' as const,
+					const actionDescriptions: Record<ActionType, string> = {
+						'autopilot': l10n.t('Auto-approve all tool calls and continue until the task is done'),
+						'interactive': l10n.t('Let the agent continue in interactive mode, asking for user input and approval for each action.'),
+						'exit_only': l10n.t('Exit plan mode, but do not execute the plan. I will execute the plan myself after reviewing it.'),
+						'autopilot_fleet': l10n.t('Auto-approve all tool calls, including fleet management actions, and continue until the task is done.'),
 					};
 
-					let approved = true;
+					const approved = true;
+					event.data.actions;
 					try {
-						const result = await this._toolsService.invokeTool(ToolName.CoreConfirmationTool, {
-							input: params,
-							toolInvocationToken: this._toolInvocationToken,
-						}, CancellationToken.None);
-
-						const firstResultPart = result.content.at(0);
-						approved = firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes';
-						const autoApproveEdits = approved && this._permissionLevel === 'autoApprove' ? true : undefined;
-						if (approved) {
-							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved, selectedAction: 'exit_only', autoApproveEdits });
+						const userInputRequest: IQuestion = {
+							question: l10n.t('Approve this plan?'),
+							header: l10n.t('Approve this plan?'),
+							options: event.data.actions.map(a => ({ label: (actionDescriptions as Record<string, string>)[a] ?? a, recommended: a === event.data.recommendedAction })),
+							allowFreeformInput: true,
+						};
+						const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, this._toolInvocationToken as unknown as never, token);
+						flushPendingInvocationMessages();
+						if (!answer) {
+							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: false });
 							return;
+						}
+						if (answer.freeText) {
+							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: false, feedback: answer.freeText });
+						} else {
+							let selectedAction: ActionType = answer.selected[0] as ActionType;
+							Object.entries(actionDescriptions).forEach(([action, description]) => {
+								if (description === selectedAction) {
+									selectedAction = action as ActionType;
+								}
+							});
+							const autoApproveEdits = approved && this._permissionLevel === 'autoApprove' ? true : undefined;
+							this._sdkSession.respondToExitPlanMode(event.data.requestId, { approved: true, selectedAction, autoApproveEdits });
 						}
 					} catch (error) {
 						this.logService.error(error, '[ConfirmationTool] Error showing confirmation tool for exit plan mode');
@@ -497,10 +525,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
 					return;
 				}
-				const userInputRequest: UserInputRequest = {
+				const userInputRequest: IQuestion = {
 					question: event.data.question,
-					choices: event.data.choices,
-					allowFreeform: event.data.allowFreeform,
+					options: (event.data.choices ?? []).map(c => ({ label: c })),
+					allowFreeformInput: event.data.allowFreeform,
+					header: event.data.question,
 				};
 				const answer = await this._userQuestionHandler.askUserQuestion(userInputRequest, this._toolInvocationToken as unknown as never, token);
 				flushPendingInvocationMessages();
@@ -508,7 +537,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
 					return;
 				}
-				this._sdkSession.respondToUserInput(event.data.requestId, answer);
+				if (answer.freeText) {
+					this._sdkSession.respondToUserInput(event.data.requestId, { answer: answer.freeText, wasFreeform: true });
+				} else {
+					this._sdkSession.respondToUserInput(event.data.requestId, { answer: answer.selected.join(', '), wasFreeform: false });
+				}
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('session.title_changed', (event) => {
 				this._title = event.data.title;
@@ -590,6 +623,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					if (pullRequestUrl) {
 						this._createdPullRequestUrl = pullRequestUrl;
 						this.logService.trace(`[CopilotCLISession] Captured pull request URL: ${pullRequestUrl}`);
+						GenAiMetrics.incrementPullRequestCount(this._otelService);
 					}
 				}
 				// Log tool call to request logger
@@ -607,7 +641,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				// Just complete the tool invocation - the part was already pushed with partial updates enabled
 				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService, getWorkingDirectory(this.workspace)) ?? [];
 				if (responsePart) {
-					flushPendingInvocationMessages();
+					flushPendingInvocationMessageForToolCallId(event.data.toolCallId);
 					if (responsePart instanceof ChatToolInvocationPart) {
 						responsePart.enablePartialUpdate = true;
 					}
@@ -635,6 +669,21 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					markdownContent: errorMarkdown,
 					isConversationRequest: true
 				});
+			})));
+			disposables.add(toDisposable(this._sdkSession.on('subagent.started', (event) => {
+				this.logService.trace(`[CopilotCLISession] Subagent started: ${event.data.agentDisplayName} (toolCallId: ${event.data.toolCallId})`);
+				enrichToolInvocationWithSubagentMetadata(
+					event.data.toolCallId,
+					event.data.agentDisplayName,
+					event.data.agentDescription,
+					pendingToolInvocations
+				);
+			})));
+			disposables.add(toDisposable(this._sdkSession.on('subagent.completed', (event) => {
+				this.logService.trace(`[CopilotCLISession] Subagent completed: ${event.data.agentDisplayName} (toolCallId: ${event.data.toolCallId})`);
+			})));
+			disposables.add(toDisposable(this._sdkSession.on('subagent.failed', (event) => {
+				this.logService.trace(`[CopilotCLISession] Subagent failed: ${event.data.agentDisplayName} (toolCallId: ${event.data.toolCallId})`);
 			})));
 			// Stash hook event data on the bridge processor so SDK hook spans
 			// are enriched with input/output details for the debug panel.
@@ -665,7 +714,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			})));
 
 			if (!token.isCancellationRequested) {
-				await this.sendRequestInternal(input, attachments, false, logStartTime, abortController);
+				await this.sendRequestInternal(input, attachments, false, logStartTime);
 			}
 			this.logService.trace(`[CopilotCLISession] Invoking session (completed) ${this.sessionId}`);
 
@@ -681,7 +730,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					vscodeRequestId: request.id,
 					copilotRequestId: sdkRequestId,
 					toolIdEditMap: resolvedToolIdEditMap,
-					agentId: this._options.agentName,
+					agentId: this._agentName,
 				}]).catch(error => {
 					this.logService.error(`[CopilotCLISession] Failed to update chat session metadata store for request ${request.id}`, error);
 				});
@@ -712,6 +761,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 			this._pendingPrompt = undefined;
 			disposables.dispose();
+
+			this.updateArtifacts();
 		}
 	}
 
@@ -737,6 +788,24 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}
 	}
 
+	private updateArtifacts() {
+		const shouldHandleExitPlanModeRequests = this.configurationService.getConfig(ConfigKey.Advanced.CLIPlanExitModeEnabled);
+
+		if (!shouldHandleExitPlanModeRequests || !this._toolsService.getTool('setArtifacts') || !this._toolInvocationToken) {
+			return;
+		}
+
+		const artifacts: { label: string; uri: string; type: 'devServer' | 'screenshot' | 'plan' }[] = [];
+		const planPath = this._sdkSession.getPlanPath();
+		if (planPath) {
+			artifacts.push({ label: l10n.t('Plan'), uri: Uri.file(planPath).toString(), type: 'plan' });
+		}
+		Promise.resolve(this._toolsService
+			.invokeTool('setArtifacts', { input: { artifacts }, toolInvocationToken: this._toolInvocationToken }, CancellationToken.None))
+			.catch(error => {
+				this.logService.error(error, '[CopilotCLISession] Failed to update artifacts');
+			});
+	}
 	/**
 	 * Sends a request to the underlying SDK session.
 	 *
@@ -744,11 +813,11 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	 *   prompt is injected into the already-running conversation rather than
 	 *   starting a new turn. This is the mechanism behind session steering.
 	 */
-	private async sendRequestInternal(input: CopilotCLISessionInput, attachments: Attachment[], steering = false, logStartTime: number, abortController: AbortController): Promise<void> {
+	private async sendRequestInternal(input: CopilotCLISessionInput, attachments: Attachment[], steering = false, logStartTime: number): Promise<void> {
 		const prompt = getPromptLabel(input);
 		this._logRequest(prompt, this._lastUsedModel || '', attachments, logStartTime);
 
-		if ('command' in input) {
+		if ('command' in input && input.command !== 'plan') {
 			switch (input.command) {
 				case 'compact': {
 					this._stream?.progress(l10n.t('Compacting conversation...'));
@@ -762,20 +831,49 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					}
 					break;
 				}
+				case 'fleet': {
+					await this._startFleetAndWaitForIdle(input);
+					break;
+				}
 			}
 		} else {
-			if (input.plan) {
+			if ('command' in input && input.command === 'plan') {
 				this._sdkSession.currentMode = 'plan';
 			} else if (this._permissionLevel === 'autopilot') {
 				this._sdkSession.currentMode = 'autopilot';
 			} else {
 				this._sdkSession.currentMode = 'interactive';
 			}
-			const sendOptions: SendOptions = { prompt: input.prompt, attachments, abortController, agentMode: this._sdkSession.currentMode };
+			const sendOptions: SendOptions = { prompt: input.prompt ?? '', attachments, agentMode: this._sdkSession.currentMode };
 			if (steering) {
 				sendOptions.mode = 'immediate';
 			}
 			await this._sdkSession.send(sendOptions);
+		}
+	}
+
+	private async _startFleetAndWaitForIdle(input: CopilotCLISessionInput): Promise<void> {
+		const prompt = 'prompt' in input ? input.prompt : undefined;
+		try {
+			const promise = new Promise<void>((resolve) => {
+				const off = this._sdkSession.on('session.idle', () => {
+					resolve();
+					off();
+				});
+			});
+			if (this._permissionLevel === 'autopilot') {
+				this._sdkSession.currentMode = 'autopilot';
+			} else {
+				this._sdkSession.currentMode = 'interactive';
+			}
+			const result = await this._sdkSession.fleet.start({ prompt });
+			if (!result.started) {
+				this.logService.info('[CopilotCLISession] Fleet mode not started');
+				return;
+			}
+			await promise;
+		} catch (error) {
+			this.logService.error(`[CopilotCLISession] Fleet error: ${error}`);
 		}
 	}
 
@@ -792,84 +890,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 	public getSelectedModelId() {
 		return this._sdkSession.getSelectedModel();
-	}
-
-	public async getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]> {
-		const events = this._sdkSession.getEvents();
-		const [storedDetails, agentId] = await Promise.all([
-			this._chatSessionMetadataStore.getRequestDetails(this.sessionId),
-			this._chatSessionMetadataStore.getSessionAgent(this.sessionId)
-		]);
-		const customAgentLookup = this.createCustomAgentLookup();
-		const defaultModeInstructions = agentId ? this.resolveAgentModeInstructions(agentId, customAgentLookup) : undefined;
-		// Build lookup from copilotRequestId → RequestDetails for the callback
-		const detailsByCopilotId = new Map<string, RequestIdDetails>();
-		for (const d of storedDetails) {
-			if (d.copilotRequestId) {
-				const modeInstructions = d.modeInstructions ?? this.resolveAgentModeInstructions(d.agentId, customAgentLookup) ?? defaultModeInstructions;
-				detailsByCopilotId.set(d.copilotRequestId, { requestId: d.vscodeRequestId, toolIdEditMap: d.toolIdEditMap, modeInstructions });
-			}
-		}
-		const legacyMappings: RequestDetails[] = [];
-		const getVSCodeRequestId = (sdkRequestId: string) => {
-			const stored = detailsByCopilotId.get(sdkRequestId);
-			if (stored) {
-				return stored;
-			}
-			const mapping = this.copilotCLISDK.getRequestId(sdkRequestId);
-			if (mapping) {
-				detailsByCopilotId.set(sdkRequestId, mapping);
-				legacyMappings.push({
-					copilotRequestId: sdkRequestId,
-					vscodeRequestId: mapping.requestId,
-					toolIdEditMap: mapping.toolIdEditMap,
-				});
-			}
-			return mapping;
-		};
-		const modelId = await this.getSelectedModelId();
-		const chatHistory = buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, getWorkingDirectory(this.workspace), defaultModeInstructions);
-
-		if (legacyMappings.length > 0) {
-			await this._chatSessionMetadataStore.updateRequestDetails(this.sessionId, legacyMappings).catch(error => {
-				this.logService.error(`[CopilotCLISession] Failed to update chat session metadata store with legacy mappings for session ${this.sessionId}`, error);
-			});
-		}
-
-		return chatHistory;
-	}
-
-	private createCustomAgentLookup(): Map<string, ParsedPromptFile> {
-		const agents = this._chatPromptFileService.customAgentPromptFiles;
-		const lookup = new Map<string, ParsedPromptFile>();
-		for (const agent of agents) {
-			const keys = [
-				agent.header?.name?.trim(),
-				agent.uri.toString(),
-				getAgentFileNameFromFilePath(agent.uri),
-			];
-			for (const key of keys) {
-				if (key && !lookup.has(key)) {
-					lookup.set(key, agent);
-				}
-			}
-		}
-		return lookup;
-	}
-
-	private resolveAgentModeInstructions(agentId: string | undefined, customAgentLookup: Map<string, ParsedPromptFile>): StoredModeInstructions | undefined {
-		if (!agentId) {
-			return undefined;
-		}
-		const agent = customAgentLookup.get(agentId);
-		if (!agent) {
-			return undefined;
-		}
-		return {
-			uri: agent.uri.toString(),
-			name: agent.header?.name?.trim() || agentId,
-			content: agent.body?.getContent() ?? '',
-		};
 	}
 
 	private isFileFromSessionWorkspace(file: Uri): boolean {

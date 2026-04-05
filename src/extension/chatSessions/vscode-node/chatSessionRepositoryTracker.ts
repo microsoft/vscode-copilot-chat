@@ -4,25 +4,23 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { IGitService } from '../../../platform/git/common/gitService';
-import { RepositoryState } from '../../../platform/git/vscode/git';
 import { ILogService } from '../../../platform/log/common/logService';
-import { Disposable, DisposableMap, DisposableStore } from '../../../util/vs/base/common/lifecycle';
+import { Event } from '../../../util/vs/base/common/event';
+import { Disposable, DisposableResourceMap, DisposableStore } from '../../../util/vs/base/common/lifecycle';
+import { relative } from '../../../util/vs/base/common/path';
 import { IChatSessionMetadataStore } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import { ICopilotCLIChatSessionItemProvider } from './copilotCLIChatSessions';
 
 export class ChatSessionRepositoryTracker extends Disposable {
-	private readonly trackers = new DisposableMap<string>();
-	private readonly repositories = new Map<string, RepositoryState>();
+	private readonly watchers = new DisposableResourceMap();
 
 	constructor(
 		private readonly sessionItemProvider: ICopilotCLIChatSessionItemProvider,
 		@IChatSessionMetadataStore private readonly metadataStore: IChatSessionMetadataStore,
 		@IChatSessionWorktreeService private readonly worktreeService: IChatSessionWorktreeService,
 		@IChatSessionWorkspaceFolderService private readonly workspaceFolderService: IChatSessionWorkspaceFolderService,
-		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService
 	) {
 		super();
@@ -31,6 +29,7 @@ export class ChatSessionRepositoryTracker extends Disposable {
 		if (vscode.workspace.isAgentSessionsWorkspace) {
 			this.logService.trace('[ChatSessionRepositoryTracker][constructor] Initializing workspace folder event handler');
 			this._register(vscode.workspace.onDidChangeWorkspaceFolders(e => this.onDidChangeWorkspaceFolders(e)));
+			this.onDidChangeWorkspaceFolders({ added: vscode.workspace.workspaceFolders ?? [], removed: [] });
 		}
 	}
 
@@ -39,56 +38,48 @@ export class ChatSessionRepositoryTracker extends Disposable {
 
 		// Add trackers
 		for (const added of e.added) {
-			await this.trackFolderChanges(added.uri);
+			this.createWorkspaceFolderWatcher(added.uri);
 		}
 
 		// Dispose trackers
 		for (const removed of e.removed) {
-			this.disposeFolderTracker(removed.uri);
+			this.disposeWorkspaceFolderWatcher(removed.uri);
 		}
 	}
 
-	private async trackFolderChanges(uri: vscode.Uri): Promise<void> {
-		this.logService.trace(`[ChatSessionRepositoryTracker][trackFolderChanges] Tracking file changes for ${uri.toString()}.`);
-
-		// Open the repository so that we can track state changes
-		const repositoryState = await this.gitService.getRepositoryState(uri);
-		if (!repositoryState) {
-			this.logService.trace(`[ChatSessionRepositoryTracker][trackFolderChanges] No repository state found for ${uri.toString()}.`);
+	private createWorkspaceFolderWatcher(uri: vscode.Uri): void {
+		if (this.watchers.has(uri)) {
+			this.logService.trace(`[ChatSessionRepositoryTracker][createWorkspaceFolderWatcher] Already tracking file changes for workspace ${uri.toString()}.`);
 			return;
 		}
 
-		if (this.repositories.has(uri.fsPath)) {
-			const trackedRepositoryState = this.repositories.get(uri.fsPath);
-
-			// If the repository state is the same as the one we are already tracking,
-			// do nothing. But if a new repository state is detected, which can happen
-			// when the repository is reopened, we need to replace the tracker.
-			if (trackedRepositoryState === repositoryState) {
-				this.logService.trace(`[ChatSessionRepositoryTracker][trackFolderChanges] Already tracking changes for ${uri.toString()}.`);
-				return;
-			}
-
-			this.logService.trace(`[ChatSessionRepositoryTracker][trackFolderChanges] Replacing stale tracker for ${uri.toString()}.`);
-			this.trackers.deleteAndDispose(uri.fsPath);
-			this.repositories.delete(uri.fsPath);
-		}
-
-		// Setup event listeners to track changes in the worktree repository in order to
-		// update the worktree properties (ex: changes) while the session is in progress
 		const disposables = new DisposableStore();
 
-		// Repository state changes. The event will fire every single
-		// time `git status` is being run in the worktree repository.
-		disposables.add(repositoryState.onDidChange(async () =>
-			await this.onDidChangeRepositoryState(uri)));
+		// Setup file system watcher to track changes in the workspace folder
+		const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(uri, '**'));
+		disposables.add(watcher);
 
-		this.trackers.set(uri.fsPath, disposables);
-		this.repositories.set(uri.fsPath, repositoryState);
+		// Consolidation file watcher events
+		const onDidChangeWorkspaceFile = Event.any<vscode.Uri>(
+			watcher.onDidChange as Event<vscode.Uri>,
+			watcher.onDidCreate as Event<vscode.Uri>,
+			watcher.onDidDelete as Event<vscode.Uri>);
+
+		// Filter out events from the .git and node_modules folders
+		const onDidChangeRepositoryFile = Event.filter(onDidChangeWorkspaceFile, changedUri => {
+			const relativePath = relative(uri.fsPath, changedUri.fsPath);
+			return !/\.git($|\\|\/)/.test(relativePath) && !/(^|\\|\/)node_modules($|\\|\/)/.test(relativePath);
+		});
+
+		// Debounce file change events to avoid rapid consecutive updates (3 seconds)
+		const debouncedOnDidChangeRepositoryFile = Event.debounce(onDidChangeRepositoryFile, () => { }, 3_000, true);
+		debouncedOnDidChangeRepositoryFile(() => this.onDidChangesWorkspaceFile(uri), this, disposables);
+
+		this.watchers.set(uri, disposables);
 	}
 
-	private async onDidChangeRepositoryState(uri: vscode.Uri): Promise<void> {
-		this.logService.trace(`[ChatSessionRepositoryTracker][onDidChangeRepositoryState] Repository state changed for ${uri.toString()}. Updating worktree properties.`);
+	private async onDidChangesWorkspaceFile(uri: vscode.Uri): Promise<void> {
+		this.logService.trace(`[ChatSessionRepositoryTracker][onDidChangesWorkspaceFile] File changed in workspace ${uri.toString()}. Updating session properties.`);
 
 		const worktreeSessionId = await this.worktreeService.getSessionIdForWorktree(uri);
 		const workspaceSessionIds = await this.metadataStore.getSessionIdForWorkspaceFolder(uri);
@@ -97,7 +88,6 @@ export class ChatSessionRepositoryTracker extends Disposable {
 			// Worktree
 			const worktreeProperties = await this.worktreeService.getWorktreeProperties(worktreeSessionId);
 			if (!worktreeProperties) {
-				this.logService.trace(`[ChatSessionRepositoryTracker][onDidChangeRepositoryState] No worktree properties found for session ${worktreeSessionId}.`);
 				return;
 			}
 
@@ -107,34 +97,34 @@ export class ChatSessionRepositoryTracker extends Disposable {
 			});
 
 			await this.sessionItemProvider.refreshSession({ reason: 'update', sessionId: worktreeSessionId });
+			this.logService.trace(`[ChatSessionRepositoryTracker][onDidChangesWorkspaceFile] Updated session properties for worktree ${uri.toString()}.`);
 		} else if (workspaceSessionIds.length > 0) {
 			// Workspace
-			this.workspaceFolderService.clearWorkspaceChanges(uri);
+			for (const sessionId of workspaceSessionIds) {
+				this.workspaceFolderService.clearWorkspaceChanges(sessionId);
+			}
 
 			// This is still using the old ChatSessionItem API so there is no need to refresh each session
 			// associated with the workspace folder. When the new controller API is fully adopted we will
 			// have to refresh each session.
 			await this.sessionItemProvider.refreshSession({ reason: 'update', sessionId: '' });
+			this.logService.trace(`[ChatSessionRepositoryTracker][onDidChangesWorkspaceFile] Updated session properties for workspace ${uri.toString()}.`);
 		} else {
-			this.logService.trace(`[ChatSessionRepositoryTracker][onDidChangeRepositoryState] No session associated with ${uri.toString()}.`);
+			this.logService.trace(`[ChatSessionRepositoryTracker][onDidChangesWorkspaceFile] No session associated with workspace ${uri.toString()}.`);
 		}
 	}
 
-	private disposeFolderTracker(uri: vscode.Uri): void {
-		if (!this.trackers.has(uri.fsPath)) {
+	private disposeWorkspaceFolderWatcher(uri: vscode.Uri): void {
+		if (!this.watchers.has(uri)) {
 			return;
 		}
 
-		this.logService.trace(`[ChatSessionRepositoryTracker][disposeFolderTracker] Disposing tracker for ${uri.toString()}.`);
-
-		this.trackers.deleteAndDispose(uri.fsPath);
-		this.repositories.delete(uri.fsPath);
+		this.logService.trace(`[ChatSessionRepositoryTracker][disposeWorkspaceFolderWatcher] Disposing file watcher for ${uri.toString()}.`);
+		this.watchers.deleteAndDispose(uri);
 	}
 
 	override dispose(): void {
-		this.trackers.dispose();
-		this.repositories.clear();
-
+		this.watchers.dispose();
 		super.dispose();
 	}
 }

@@ -14,7 +14,7 @@ import { SpeculativeRequestsAutoExpandEditWindowLines, SpeculativeRequestsEnable
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../../../platform/inlineEdits/common/observableGit';
 import { MutableObservableWorkspace } from '../../../../platform/inlineEdits/common/observableWorkspace';
-import { EditStreamingWithTelemetry, IStatelessNextEditProvider, NoNextEditReason, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { EditStreamingWithTelemetry, IStatelessNextEditProvider, NoNextEditReason, RequestEditWindow, RequestEditWindowWithCursorJump, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { NesHistoryContextProvider } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ILogger, ILogService, LogServiceImpl } from '../../../../platform/log/common/logService';
@@ -72,6 +72,12 @@ class TestStatelessNextEditProvider implements IStatelessNextEditProvider {
 	public readonly calls: ICallRecord[] = [];
 	private readonly _callDeferreds: DeferredPromise<void>[] = [];
 
+	/**
+	 * When set, each `provideNextEdit` call will assign this to `request.requestEditWindow`
+	 * (mirroring how the real XtabProvider sets the edit window early in its execution).
+	 */
+	public editWindow: RequestEditWindow | RequestEditWindowWithCursorJump | undefined;
+
 	public enqueueBehavior(behavior: ProviderBehavior): void {
 		this._behaviors.push(behavior);
 	}
@@ -100,6 +106,12 @@ class TestStatelessNextEditProvider implements IStatelessNextEditProvider {
 			throw new Error('Missing provider behavior');
 		}
 
+		if (this.editWindow) {
+			request.requestEditWindow = this.editWindow;
+		}
+
+		const streamedEditWindow = this.editWindow?.window;
+		const streamedOriginalWindow = this.editWindow instanceof RequestEditWindowWithCursorJump ? this.editWindow.originalWindow : undefined;
 		const telemetryBuilder = new StatelessNextEditTelemetryBuilder(request.headerRequestId);
 		const activeDocId = request.getActiveDocument().id;
 		const cancellationRequested = new DeferredPromise<void>();
@@ -128,24 +140,24 @@ class TestStatelessNextEditProvider implements IStatelessNextEditProvider {
 			}
 
 			if (behavior.kind === 'yieldEditThenWaitThenYieldEditsThenNoSuggestions') {
-				yield new WithStatelessProviderTelemetry({ edit: behavior.firstEdit, isFromCursorJump: false, targetDocument: activeDocId }, telemetryBuilder.build(Result.ok(undefined)));
+				yield new WithStatelessProviderTelemetry({ edit: behavior.firstEdit, isFromCursorJump: false, targetDocument: activeDocId, window: streamedEditWindow, originalWindow: streamedOriginalWindow }, telemetryBuilder.build(Result.ok(undefined)));
 				await Promise.race([behavior.continueSignal.p, cancellationRequested.p]);
 				if (!call.wasCancelled) {
 					for (const edit of behavior.remainingEdits) {
-						yield new WithStatelessProviderTelemetry({ edit, isFromCursorJump: false, targetDocument: activeDocId }, telemetryBuilder.build(Result.ok(undefined)));
+						yield new WithStatelessProviderTelemetry({ edit, isFromCursorJump: false, targetDocument: activeDocId, window: streamedEditWindow, originalWindow: streamedOriginalWindow }, telemetryBuilder.build(Result.ok(undefined)));
 					}
 				}
-				const noSuggestions = new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, undefined);
+				const noSuggestions = new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, streamedEditWindow);
 				return new WithStatelessProviderTelemetry(noSuggestions, telemetryBuilder.build(Result.error(noSuggestions)));
 			}
 
-			yield new WithStatelessProviderTelemetry({ edit: behavior.edit, isFromCursorJump: false, targetDocument: activeDocId }, telemetryBuilder.build(Result.ok(undefined)));
+			yield new WithStatelessProviderTelemetry({ edit: behavior.edit, isFromCursorJump: false, targetDocument: activeDocId, window: streamedEditWindow, originalWindow: streamedOriginalWindow }, telemetryBuilder.build(Result.ok(undefined)));
 
 			if (behavior.kind === 'yieldEditThenWait') {
 				await Promise.race([behavior.continueSignal.p, cancellationRequested.p]);
 			}
 
-			const noSuggestions = new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, undefined);
+			const noSuggestions = new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, streamedEditWindow);
 			return new WithStatelessProviderTelemetry(noSuggestions, telemetryBuilder.build(Result.error(noSuggestions)));
 		} finally {
 			cancellationDisposable.dispose();
@@ -1115,6 +1127,188 @@ describe('NextEditProvider speculative requests', () => {
 
 			nextEditProvider.handleRejection(doc.id, suggestion);
 			await statelessProvider.calls[1].completed.p;
+		});
+	});
+
+	describe('edit window cursor check for request reuse', () => {
+		beforeEach(async () => {
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsCheckEditWindowOnReuse, true);
+		});
+
+		it('does not reuse in-flight request when cursor moves outside edit window', async () => {
+			const statelessProvider = new TestStatelessNextEditProvider();
+			// Edit window covers offsets 0–20 of the document
+			statelessProvider.editWindow = new RequestEditWindow(new OffsetRange(0, 20));
+			const continueSignal1 = new DeferredPromise<void>();
+			const continueSignal2 = new DeferredPromise<void>();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenWait', edit: lineReplacement(1, 'const value = 2;'), continueSignal: continueSignal1 });
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenWait', edit: lineReplacement(1, 'const value = 3;'), continueSignal: continueSignal2 });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/ew-outside.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);\nconst other = 3;\n',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			// First request — yields first edit, stream still running in background
+			const firstSuggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(firstSuggestion.result?.edit);
+			expect(statelessProvider.calls.length).toBe(1);
+
+			// Move cursor far outside the edit window (offset 40)
+			doc.setSelection([new OffsetRange(40, 40)], undefined);
+
+			// Second request — should NOT reuse the in-flight request because cursor is outside edit window
+			// The first request's stream is still running, but cursor is outside its edit window, so a new request is made
+			const secondSuggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(secondSuggestion.result?.edit);
+
+			// Two separate provider calls were made
+			expect(statelessProvider.calls.length).toBe(2);
+
+			// Clean up
+			continueSignal1.complete();
+			continueSignal2.complete();
+			await statelessProvider.calls[0].completed.p;
+			await statelessProvider.calls[1].completed.p;
+		});
+
+		it('reuses in-flight request when cursor stays within edit window', async () => {
+			const statelessProvider = new TestStatelessNextEditProvider();
+			// Edit window covers offsets 0–50 (whole document)
+			statelessProvider.editWindow = new RequestEditWindow(new OffsetRange(0, 50));
+			const continueSignal = new DeferredPromise<void>();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenWait', edit: lineReplacement(1, 'const value = 2;'), continueSignal });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/ew-inside.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);\n',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			// First request — yields first edit, stream still running
+			const firstSuggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(firstSuggestion.result?.edit);
+			expect(statelessProvider.calls.length).toBe(1);
+
+			// Move cursor but still within the edit window (offset 10)
+			doc.setSelection([new OffsetRange(10, 10)], undefined);
+
+			// Second request — should reuse the in-flight request
+			const secondSuggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(secondSuggestion.result?.edit);
+
+			// Only one provider call was made (reused)
+			expect(statelessProvider.calls.length).toBe(1);
+
+			// Clean up
+			continueSignal.complete();
+			await statelessProvider.calls[0].completed.p;
+		});
+
+		it('reuses in-flight request when editWindow is undefined (graceful fallback)', async () => {
+			const statelessProvider = new TestStatelessNextEditProvider();
+			// No editWindow set — should allow reuse
+			const continueSignal = new DeferredPromise<void>();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenWait', edit: lineReplacement(1, 'const value = 2;'), continueSignal });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/ew-undefined.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);\nconst other = 3;\n',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			// First request — yields first edit, stream still running
+			const firstSuggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(firstSuggestion.result?.edit);
+			expect(statelessProvider.calls.length).toBe(1);
+
+			// Move cursor far away — but editWindow is undefined so reuse is allowed
+			doc.setSelection([new OffsetRange(40, 40)], undefined);
+
+			// Second request — should reuse (no edit window to check)
+			const secondSuggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(secondSuggestion.result?.edit);
+
+			expect(statelessProvider.calls.length).toBe(1);
+
+			// Clean up
+			continueSignal.complete();
+			await statelessProvider.calls[0].completed.p;
+		});
+
+		it('does not reuse speculative request when cursor moves outside edit window', async () => {
+			await configService.setConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, SpeculativeRequestsEnablement.On);
+
+			const statelessProvider = new TestStatelessNextEditProvider();
+			// Edit window covers offsets 0–20
+			statelessProvider.editWindow = new RequestEditWindow(new OffsetRange(0, 20));
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(1, 'const value = 2;') });
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(2, 'console.log(value + 1);') });
+			// Third behavior for the new request that will be needed since speculative won't be reused
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenNoSuggestions', edit: lineReplacement(2, 'console.log(value + 1);') });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/ew-spec-outside.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);\nconst other = 3;\n',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			const firstSuggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(firstSuggestion.result?.edit);
+			nextEditProvider.handleShown(firstSuggestion);
+			await statelessProvider.waitForCall(2);
+			await statelessProvider.calls[1].completed.p;
+
+			// Accept and apply the edit
+			nextEditProvider.handleAcceptance(doc.id, firstSuggestion);
+			doc.applyEdit(firstSuggestion.result.edit.toEdit());
+
+			// Move cursor outside the speculative request's edit window
+			doc.setSelection([new OffsetRange(40, 40)], undefined);
+
+			// This should NOT reuse the speculative request (cursor is outside)
+			await getNextEdit(nextEditProvider, doc.id);
+
+			// Three calls: original, speculative, and a new one (speculative was not reused)
+			expect(statelessProvider.calls.length).toBe(3);
+		});
+
+		it('reuses in-flight request when cursor is within originalWindow of cursor jump edit window', async () => {
+			const statelessProvider = new TestStatelessNextEditProvider();
+			// Cursor jump: new window is at 30–50, original window is at 0–20
+			statelessProvider.editWindow = new RequestEditWindowWithCursorJump(new OffsetRange(30, 50), new OffsetRange(0, 20));
+			const continueSignal = new DeferredPromise<void>();
+			statelessProvider.enqueueBehavior({ kind: 'yieldEditThenWait', edit: lineReplacement(1, 'const value = 2;'), continueSignal });
+			const { nextEditProvider, workspace } = createProviderAndWorkspace(statelessProvider);
+
+			const doc = workspace.addDocument({
+				id: DocumentId.create(URI.file('/test/ew-cursorjump.ts').toString()),
+				initialValue: 'const value = 1;\nconsole.log(value);\nconst other = 3;\nconst extra = 4;\n',
+			});
+			doc.setSelection([new OffsetRange(0, 0)], undefined);
+
+			// First request — yields first edit, stream still running
+			const firstSuggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(firstSuggestion.result?.edit);
+			expect(statelessProvider.calls.length).toBe(1);
+
+			// Move cursor to offset 10 — inside originalWindow (0–20) but outside jump target (30–50)
+			doc.setSelection([new OffsetRange(10, 10)], undefined);
+
+			// Second request — should reuse because cursor is in originalWindow
+			const secondSuggestion = await getNextEdit(nextEditProvider, doc.id);
+			assert(secondSuggestion.result?.edit);
+
+			expect(statelessProvider.calls.length).toBe(1);
+
+			// Clean up
+			continueSignal.complete();
+			await statelessProvider.calls[0].completed.p;
 		});
 	});
 });

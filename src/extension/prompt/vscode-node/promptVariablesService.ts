@@ -4,12 +4,57 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { ChatLanguageModelToolReference, ChatPromptReference } from 'vscode';
+import * as vscode from 'vscode';
+import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { getToolName } from '../../tools/common/toolNames';
 import { IPromptVariablesService } from '../node/promptVariablesService';
+
+/**
+ * Known template variables that can be resolved at runtime.
+ * Each entry maps a placeholder name (without the `{{ }}` delimiters) to a
+ * resolver that produces the replacement string, or `undefined` if the
+ * variable cannot be resolved in the current context.
+ */
+type VariableResolver = (sessionId: string | undefined, debugTargetSessionIds: readonly string[] | undefined) => string | undefined;
 
 export class PromptVariablesServiceImpl implements IPromptVariablesService {
 
 	declare readonly _serviceBrand: undefined;
+
+	private readonly _resolvers: ReadonlyMap<string, VariableResolver>;
+
+	constructor(
+		@IChatDebugFileLoggerService private readonly chatDebugFileLoggerService: IChatDebugFileLoggerService,
+		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
+		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+	) {
+		this._resolvers = new Map<string, VariableResolver>([
+			['VSCODE_USER_PROMPTS_FOLDER', () => {
+				const globalStorageUri = this.extensionContext.globalStorageUri;
+				const userFolderUri = vscode.Uri.joinPath(globalStorageUri, '..', '..');
+				const userPromptsFolderUri = vscode.Uri.joinPath(userFolderUri, 'prompts');
+				return userPromptsFolderUri.fsPath;
+			}],
+			['VSCODE_TARGET_SESSION_LOG', (sessionId, debugTargetSessionIds) => {
+				if (debugTargetSessionIds && debugTargetSessionIds.length > 0) {
+					return debugTargetSessionIds.map(id => {
+						const sessionDir = this.chatDebugFileLoggerService.getSessionDir(id);
+						return sessionDir ? this.promptPathRepresentationService.getFilePath(sessionDir) : undefined;
+					}).filter((path): path is string => path !== undefined).join(', ');
+				}
+				if (!sessionId) {
+					return undefined;
+				}
+				const sessionDir = this.chatDebugFileLoggerService.getSessionDir(sessionId);
+				if (!sessionDir) {
+					return undefined;
+				}
+				return this.promptPathRepresentationService.getFilePath(sessionDir);
+			}],
+		]);
+	}
 
 	async resolveVariablesInPrompt(message: string, variables: ChatPromptReference[]): Promise<{ message: string }> {
 		for (const variable of this._reverseSortRefsWithRange(variables)) {
@@ -35,6 +80,25 @@ export class PromptVariablesServiceImpl implements IPromptVariablesService {
 			previousRange = range;
 		}
 		return message;
+	}
+
+	buildTemplateVariablesContext(sessionId: string | undefined, debugTargetSessionIds?: readonly string[]): string {
+		const entries: [string, string][] = [];
+		for (const [name, resolve] of this._resolvers) {
+			const value = resolve(sessionId, debugTargetSessionIds);
+			if (value !== undefined) {
+				entries.push([name, value]);
+			}
+		}
+		if (entries.length === 0) {
+			return '';
+		}
+		const lines = entries.map(([name, value]) => `- ${name}: ${value}`);
+		return [
+			'The following template variables are available for this session:',
+			...lines,
+			'When a skill or instruction references {{VSCODE_VARIABLE_NAME}}, substitute the corresponding value above.',
+		].join('\n');
 	}
 
 	private _reverseSortRefsWithRange<T extends { range?: [number, number] }>(refs: T[]): (T & { range: [number, number] })[] {

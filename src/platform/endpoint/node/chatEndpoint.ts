@@ -192,7 +192,7 @@ export class ChatEndpoint implements IChatEndpoint {
 
 			const betaFeatures: string[] = [];
 
-			if (!this.supportsAdaptiveThinking || this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicForceExtendedThinking, this._expService)) {
+			if (!this.supportsAdaptiveThinking) {
 				betaFeatures.push('interleaved-thinking-2025-05-14');
 			}
 
@@ -393,7 +393,7 @@ export class ChatEndpoint implements IChatEndpoint {
 			useWebSocket
 			&& options.conversationId
 			&& options.turnId
-			&& this._chatWebSocketService.hasActiveConnection(options.conversationId, options.turnId)
+			&& this._chatWebSocketService.hasActiveConnection(options.conversationId)
 		);
 		const response = await this._makeChatRequest2({
 			...options,

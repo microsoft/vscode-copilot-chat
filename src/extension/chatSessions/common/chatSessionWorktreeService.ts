@@ -54,7 +54,7 @@ export const IChatSessionWorktreeService = createServiceIdentifier<IChatSessionW
 export interface IChatSessionWorktreeService {
 	readonly _serviceBrand: undefined;
 
-	createWorktree(repositoryPath: vscode.Uri, stream?: vscode.ChatResponseStream, baseBranch?: string): Promise<ChatSessionWorktreeProperties | undefined>;
+	createWorktree(repositoryPath: vscode.Uri, stream?: vscode.ChatResponseStream, baseBranch?: string, branchName?: string): Promise<ChatSessionWorktreeProperties | undefined>;
 
 	getWorktreeProperties(sessionId: string): Promise<ChatSessionWorktreeProperties | undefined>;
 	getWorktreeProperties(folder: vscode.Uri): Promise<ChatSessionWorktreeProperties | undefined>;
@@ -71,4 +71,27 @@ export interface IChatSessionWorktreeService {
 	getWorktreeChanges(sessionId: string): Promise<readonly vscode.ChatSessionChangedFile2[] | undefined>;
 
 	handleRequestCompleted(sessionId: string): Promise<void>;
+
+	/** Get worktree properties for all additional workspaces in a session. */
+	getAdditionalWorktreeProperties(sessionId: string): Promise<ChatSessionWorktreeProperties[]>;
+
+	/** Store worktree properties for additional workspaces in a session. */
+	setAdditionalWorktreeProperties(sessionId: string, properties: ChatSessionWorktreeProperties[]): Promise<void>;
+
+	/** Commit changes in a specific worktree, identified by its properties directly. */
+	handleRequestCompletedForWorktree(worktreeProperties: ChatSessionWorktreeProperties): Promise<void>;
+
+	/**
+	 * Attempts to clean up a worktree when a session is archived.
+	 * If auto-commit is enabled and there are uncommitted changes, commits them first.
+	 * Returns whether the worktree was successfully deleted.
+	 */
+	cleanupWorktreeOnArchive(sessionId: string): Promise<{ cleaned: boolean; reason?: string }>;
+
+	/**
+	 * Recreates a worktree from the session branch when a session is unarchived.
+	 * The branch must still exist (it is preserved during archive cleanup).
+	 * Returns whether the worktree was successfully recreated.
+	 */
+	recreateWorktreeOnUnarchive(sessionId: string): Promise<{ recreated: boolean; reason?: string }>;
 }

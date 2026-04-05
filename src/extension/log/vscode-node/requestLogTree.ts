@@ -21,7 +21,7 @@ import { LRUCache } from '../../../util/vs/base/common/map';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
-import { assembleChatReplayExport, createExportedPrompt, ExportedPrompt, serializeChatReplayExport } from '../../replay/node/chatReplayExport';
+import { assembleChatLogExport, createExportedPrompt, ExportedPrompt, serializeChatLogExport } from '../node/chatLogExport';
 
 const showHtmlCommand = 'vscode.copilot.chat.showRequestHtmlItem';
 const exportLogItemCommand = 'github.copilot.chat.debug.exportLogItem';
@@ -370,7 +370,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 
 			// Generate a default filename based on the prompt
 			const promptText = treeItem.token.label.replace(/\W/g, '_').substring(0, 50);
-			const defaultFilename = `${promptText}_logs.chatreplay.json`;
+			const defaultFilename = `${promptText}_logs.json`;
 
 			// Show save dialog
 			const saveUri = await vscode.window.showSaveDialog({
@@ -439,7 +439,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			} else {
 				// Generate a default filename based on current timestamp
 				const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
-				const defaultFilename = `copilot_all_prompts_${timestamp}.chatreplay.json`;
+				const defaultFilename = `copilot_all_prompts_${timestamp}.json`;
 
 				// Show save dialog
 				const dialogResult = await vscode.window.showSaveDialog({
@@ -470,11 +470,11 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				}
 
 				// Use shared export assembly function
-				const exportData = assembleChatReplayExport(
+				const exportData = assembleChatLogExport(
 					allPromptsContent,
 					serializeMcpServers(vscode.lm.mcpServerDefinitions ?? [])
 				);
-				const finalContent = serializeChatReplayExport(exportData);
+				const finalContent = serializeChatLogExport(exportData);
 
 				// Write to the selected file
 				await vscode.workspace.fs.writeFile(saveUri, Buffer.from(finalContent, 'utf8'));

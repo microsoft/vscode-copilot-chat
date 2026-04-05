@@ -1,3 +1,28 @@
+# GitHub Copilot Chat in VS Code - Changelog
+
+You can find the latest AI-related updates for GitHub Copilot in VS Code in the weekly [VS Code release notes](https://code.visualstudio.com/updates).
+
+For more frequent updates, check the [Commit log](https://github.com/Microsoft/vscode/commits/main) and [vscode-copilot-chat commit log](https://github.com/microsoft/vscode-copilot-chat/commits/main) on GitHub.
+
+---
+
+# Past updates
+
+## 0.41 (2026-03-25)
+
+GitHub Copilot updates for [VS Code 1.113](https://code.visualstudio.com/updates/v1_113):
+
+- MCP support in Copilot CLI & Claude agents
+- Forking sessions in Copilot CLI & Claude agents
+- Agent debug logs for Copilot CLI and Claude CLI sessions (Preview)
+- Claude session listing powered by SDK APIs
+- Nested subagents
+- Manage plugin marketplaces
+- URL handlers for plugin installation
+- Chat Customizations editor (Preview)
+- Configurable thinking effort in model picker
+- Images preview for chat attachments
+
 ## 0.40 (2026-03-18)
 
 GitHub Copilot updates for [VS Code 1.112](https://code.visualstudio.com/updates/v1_112):

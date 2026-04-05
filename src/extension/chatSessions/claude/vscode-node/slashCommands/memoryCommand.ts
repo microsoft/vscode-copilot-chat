@@ -96,7 +96,6 @@ export class MemorySlashCommand implements IClaudeSlashCommandHandler {
 
 		// Show QuickPick
 		const selected = await vscode.window.showQuickPick(items, {
-			title: vscode.l10n.t('Claude Memory'),
 			placeHolder: vscode.l10n.t('Select memory file to edit'),
 			ignoreFocusOut: true,
 		});

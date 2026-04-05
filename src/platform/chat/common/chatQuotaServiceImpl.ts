@@ -6,7 +6,7 @@
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IHeaders } from '../../networking/common/fetcherService';
-import { CopilotUserQuotaInfo, IChatQuota, IChatQuotaService } from './chatQuotaService';
+import { CopilotUserQuotaInfo, IChatQuota, IChatQuotaService, QuotaSnapshots } from './chatQuotaService';
 
 export class ChatQuotaService extends Disposable implements IChatQuotaService {
 	declare readonly _serviceBrand: undefined;
@@ -77,6 +77,32 @@ export class ChatQuotaService extends Disposable implements IChatQuotaService {
 			};
 		} catch (error) {
 			console.error('Failed to parse quota header', error);
+		}
+	}
+
+	processQuotaSnapshots(snapshots: QuotaSnapshots): void {
+		const snapshot = this._authService.copilotToken?.isFreeUser
+			? snapshots['chat']
+			: snapshots['premium_models'] ?? snapshots['premium_interactions'];
+		if (!snapshot) {
+			return;
+		}
+
+		try {
+			const entitlement = parseInt(snapshot.entitlement, 10);
+			const resetDate = snapshot.reset_date ? new Date(snapshot.reset_date) : (() => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d; })();
+			const used = Math.max(0, entitlement * (1 - snapshot.percent_remaining / 100));
+
+			this._quotaInfo = {
+				quota: entitlement,
+				unlimited: entitlement === -1,
+				used,
+				overageUsed: snapshot.overage_count,
+				overageEnabled: snapshot.overage_permitted,
+				resetDate
+			};
+		} catch (error) {
+			console.error('Failed to process quota snapshots', error);
 		}
 	}
 
