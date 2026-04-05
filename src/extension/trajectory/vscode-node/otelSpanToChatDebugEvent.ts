@@ -588,8 +588,12 @@ function capitalize(s: string): string {
  * Convert a JSONL debug log entry into a VS Code debug panel event.
  * Returns undefined for entry types that are not displayed in the panel
  * (session_start, turn boundaries, child session references).
+ *
+ * @param skipCoreEvents When true, skip `discovery` and core-sourced `generic`
+ *   entries because VS Code core is already displaying them for live sessions.
+ *   Set to false for historical sessions where core won't fire those events.
  */
-export function debugLogEntryToDebugEvent(entry: IDebugLogEntry): vscode.ChatDebugEvent | undefined {
+export function debugLogEntryToDebugEvent(entry: IDebugLogEntry, skipCoreEvents = true): vscode.ChatDebugEvent | undefined {
 	switch (entry.type) {
 		case 'tool_call':
 			return entryToToolCallEvent(entry);
@@ -603,13 +607,22 @@ export function debugLogEntryToDebugEvent(entry: IDebugLogEntry): vscode.ChatDeb
 			return entryToSubagentEvent(entry);
 		case 'hook':
 			return entryToHookEvent(entry);
+		case 'child_session_ref':
+			return entryToChildSessionRefEvent(entry);
 		case 'discovery':
+			// Discovery events (Load Agents, Load Skills, etc.) are already displayed
+			// by VS Code core via onDidReceiveChatDebugEvent for live sessions.
+			return skipCoreEvents ? undefined : entryToGenericEvent(entry);
 		case 'generic':
+			// Generic events from core (e.g. Resolve Customizations) are also displayed
+			// by VS Code core directly for live sessions.
+			if (skipCoreEvents && entry.attrs.source === 'core') {
+				return undefined;
+			}
 			return entryToGenericEvent(entry);
 		case 'session_start':
 		case 'turn_start':
 		case 'turn_end':
-		case 'child_session_ref':
 		case 'error':
 			return undefined;
 		default:
@@ -626,7 +639,15 @@ export function entryDedupKey(entry: IDebugLogEntry): string {
 }
 
 function entryToToolCallEvent(entry: IDebugLogEntry): vscode.ChatDebugToolCallEvent {
-	const evt = new vscode.ChatDebugToolCallEvent(entry.name, new Date(entry.ts));
+	let displayName = entry.name;
+	// For runSubagent, extract the description from args for a more informative display
+	if (entry.name === 'runSubagent') {
+		const desc = extractJsonField(entry.attrs.args as string | undefined, 'description');
+		if (desc) {
+			displayName = `runSubagent: ${desc}`;
+		}
+	}
+	const evt = new vscode.ChatDebugToolCallEvent(displayName, new Date(entry.ts));
 	evt.id = entry.spanId;
 	evt.parentEventId = entry.parentSpanId;
 	evt.input = entry.attrs.args as string | undefined;
@@ -707,6 +728,19 @@ function entryToHookEvent(entry: IDebugLogEntry): vscode.ChatDebugGenericEvent {
 	const prefix = command ? `${command} ` : '';
 	evt.details = `${prefix}(${entry.dur}ms, ${resultKind ?? 'unknown'})`;
 	evt.category = 'discovery';
+	return evt;
+}
+
+function entryToChildSessionRefEvent(entry: IDebugLogEntry): vscode.ChatDebugGenericEvent | undefined {
+	const label = entry.attrs.label as string | undefined ?? entry.name;
+	// Filter out internal infrastructure entries
+	if (label === 'categorization' || label === 'title') {
+		return undefined;
+	}
+	const evt = new vscode.ChatDebugGenericEvent(label, vscode.ChatDebugLogLevel.Info, new Date(entry.ts));
+	evt.id = entry.spanId;
+	evt.parentEventId = entry.parentSpanId;
+	evt.category = 'subagent';
 	return evt;
 }
 

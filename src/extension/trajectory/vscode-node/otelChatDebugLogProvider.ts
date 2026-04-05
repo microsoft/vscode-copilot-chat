@@ -50,14 +50,16 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	/** Per-session LRU cache of entries for detail resolution (only while panel is open) */
 	private _activeEntryCache = new Map<string, IDebugLogEntry>();
 
-	/** Current run index — incremented on each detected restart to scope event IDs */
-	private _currentRunIndex = 0;
-
-	/** Seen spanIds in current run — a collision means a restart occurred */
-	private _seenSpanIds = new Set<string>();
-
 	/** Imported sessions stored in memory (import is rare, sessions are small) */
 	private readonly _importedSessions = new Map<string, IDebugLogEntry[]>();
+
+	/** Map of child session IDs → scoped parent event ID for the active session.
+	 *  Used by the live handler to route child entries under the correct parent node. */
+	private readonly _activeChildSessions = new Map<string, string>();
+
+	/** Whether to skip core-sourced events (discovery, generic with source=core).
+	 *  True for live sessions (core already displays them), false for historical. */
+	private _skipCoreEvents = true;
 
 	/** Subscription to live entry events (disposed on panel close) */
 	private _liveSubscription: IDisposable | undefined;
@@ -148,8 +150,10 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		this._activeSessionId = sessionId;
 		this._sentDedupKeys.clear();
 		this._activeEntryCache.clear();
-		this._currentRunIndex = 0;
-		this._seenSpanIds.clear();
+		this._activeChildSessions.clear();
+		// For live sessions, core already displays discovery/customization events.
+		// For historical sessions, we need to render them from JSONL.
+		this._skipCoreEvents = this._fileLogger.getActiveSessionIds().includes(sessionId);
 
 		// Clean up on cancellation
 		token.onCancellationRequested(() => {
@@ -158,8 +162,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 				this._activeSessionId = undefined;
 				this._activeEntryCache.clear();
 				this._sentDedupKeys.clear();
-				this._currentRunIndex = 0;
-				this._seenSpanIds.clear();
+				this._activeChildSessions.clear();
 				this._liveSubscription?.dispose();
 				this._liveSubscription = undefined;
 			}
@@ -168,23 +171,51 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		// Subscribe to live events from the file logger bridge
 		this._liveSubscription?.dispose();
 		this._liveSubscription = this._fileLogger.onDidEmitEntry(({ sessionId: sid, entry }) => {
-			if (sid !== this._activeSessionId) { return; }
+			// Accept entries from the active parent session OR a known child session
+			const childParentId = this._activeChildSessions.get(sid);
+			if (sid !== this._activeSessionId && !childParentId) { return; }
 
-			// Detect restart: if we've seen this spanId before, OTel counter has reset
-			if (this._seenSpanIds.has(entry.spanId)) {
-				this._currentRunIndex++;
-				this._seenSpanIds.clear();
+			// Entries from a child session: reparent under the child_session_ref node
+			if (childParentId) {
+				const evt = debugLogEntryToDebugEvent(entry, this._skipCoreEvents);
+				if (evt) {
+					this._scopeEventIds(evt, entry.rIdx ?? 0);
+					if ('parentEventId' in evt) {
+						(evt as { parentEventId?: string }).parentEventId = childParentId;
+					}
+					const evtId = 'id' in evt ? (evt as { id?: string }).id : undefined;
+					if (evtId) {
+						this._cacheEntry(evtId, entry);
+					}
+					this._streamEvent(evt, entryDedupKey(entry));
+				}
+				return;
 			}
-			this._seenSpanIds.add(entry.spanId);
 
-			const evt = debugLogEntryToDebugEvent(entry);
+			// Parent session entry
+			const evt = debugLogEntryToDebugEvent(entry, this._skipCoreEvents);
 			if (evt) {
-				this._scopeEventIds(evt, this._currentRunIndex);
+				this._scopeEventIds(evt, entry.rIdx ?? 0);
 				const evtId = 'id' in evt ? (evt as { id?: string }).id : undefined;
 				if (evtId) {
 					this._cacheEntry(evtId, entry);
 				}
 				this._streamEvent(evt, entryDedupKey(entry));
+			}
+
+			// When a child_session_ref arrives, register the child session
+			// so subsequent live entries from it are routed here
+			if (entry.type === 'child_session_ref' && evt) {
+				const childSessionId = entry.attrs.childSessionId as string | undefined;
+				if (childSessionId) {
+					const parentRunIndex = entry.rIdx ?? 0;
+					const scopedParentId = parentRunIndex > 0 ? `${entry.spanId}:r${parentRunIndex}` : entry.spanId;
+					this._activeChildSessions.set(childSessionId, scopedParentId);
+					// Also load any entries already written before we registered
+					this._streamChildSessionEntries(childSessionId, scopedParentId, entry).catch(() => {
+						// Expected for live scenarios — child file may not exist yet
+					});
+				}
 			}
 		});
 
@@ -194,7 +225,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 
 		// For imported sessions, return all entries directly
 		if (importedEntries) {
-			return this._processEntries(importedEntries, startTime);
+			return await this._processEntries(importedEntries, startTime);
 		}
 
 		// Read the latest entries from the tail of the JSONL file for fast initial load.
@@ -202,7 +233,7 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		const INITIAL_TAIL_COUNT = 500;
 		try {
 			const tailEntries = await this._fileLogger.readTailEntries(sessionId, INITIAL_TAIL_COUNT);
-			const events = this._processEntries(tailEntries, startTime);
+			const events = await this._processEntries(tailEntries, startTime);
 
 			// Background-stream the full file to backfill older events.
 			// Core's addEvent uses binary-insert by timestamp, so older events
@@ -218,35 +249,61 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	}
 
 	/**
-	 * Process a batch of entries: detect restart boundaries, convert to events,
-	 * cache for detail resolution, and mark as sent.
+	 * Process a batch of entries: scope event IDs by run index, convert to events,
+	 * cache for detail resolution, load child session entries, and mark as sent.
 	 */
-	private _processEntries(entries: readonly IDebugLogEntry[], startTime: number): vscode.ChatDebugEvent[] {
+	private async _processEntries(entries: readonly IDebugLogEntry[], startTime: number): Promise<vscode.ChatDebugEvent[]> {
 		const events: vscode.ChatDebugEvent[] = [];
 
-		let runIndex = this._currentRunIndex;
-
 		for (const entry of entries) {
-			// Detect restart: spanId collision means OTel counter was reset
-			if (this._seenSpanIds.has(entry.spanId)) {
-				runIndex++;
-				this._seenSpanIds.clear();
-			}
-			this._seenSpanIds.add(entry.spanId);
+			const dedupKey = entryDedupKey(entry);
+			// Skip entries already sent by the live handler during the async tail read
+			if (this._sentDedupKeys.has(dedupKey)) { continue; }
 
-			const evt = debugLogEntryToDebugEvent(entry);
+			const evt = debugLogEntryToDebugEvent(entry, this._skipCoreEvents);
 			if (evt) {
-				this._scopeEventIds(evt, runIndex);
+				this._scopeEventIds(evt, entry.rIdx ?? 0);
 				const evtId = 'id' in evt ? (evt as { id?: string }).id : undefined;
 				if (evtId) {
 					this._cacheEntry(evtId, entry);
 				}
 				events.push(evt);
 			}
-			this._sentDedupKeys.add(entryDedupKey(entry));
-		}
+			this._sentDedupKeys.add(dedupKey);
 
-		this._currentRunIndex = runIndex;
+			// When we see a non-filtered child_session_ref, load its child session's entries
+			if (entry.type === 'child_session_ref' && evt) {
+				const childSessionId = entry.attrs.childSessionId as string | undefined;
+				if (childSessionId) {
+					// Compute the scoped parent ID (with :rN suffix if applicable)
+					const parentRunIndex = entry.rIdx ?? 0;
+					const scopedParentId = parentRunIndex > 0 ? `${entry.spanId}:r${parentRunIndex}` : entry.spanId;
+					// Register so the live handler routes future child entries here
+					this._activeChildSessions.set(childSessionId, scopedParentId);
+					try {
+						const childEntries = await this._readChildEntries(entry);
+						for (const childEntry of childEntries) {
+							const childEvt = debugLogEntryToDebugEvent(childEntry, this._skipCoreEvents);
+							if (childEvt) {
+								this._scopeEventIds(childEvt, childEntry.rIdx ?? 0);
+								// Set parent to the child_session_ref entry (with run-index scope)
+								if ('parentEventId' in childEvt) {
+									(childEvt as { parentEventId?: string }).parentEventId = scopedParentId;
+								}
+								const childEvtId = 'id' in childEvt ? (childEvt as { id?: string }).id : undefined;
+								if (childEvtId) {
+									this._cacheEntry(childEvtId, childEntry);
+								}
+								events.push(childEvt);
+							}
+							this._sentDedupKeys.add(entryDedupKey(childEntry));
+						}
+					} catch (err) {
+						// Silent fail on child session read errors
+					}
+				}
+			}
+		}
 
 		// Sort by timestamp
 		events.sort((a, b) => {
@@ -280,34 +337,116 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	 * that were already returned in the initial batch.
 	 */
 	private _streamOlderEntries(sessionId: string, token: vscode.CancellationToken): void {
-		// Use local state for restart detection during streaming to avoid
-		// race conditions with live events modifying shared state.
-		let streamRunIndex = 0;
-		const streamSeenSpanIds = new Set<string>();
+		const childRefs: { childSessionId: string; scopedParentId: string }[] = [];
 
 		this._fileLogger.streamEntries(sessionId, entry => {
 			if (token.isCancellationRequested) { return; }
 
-			// Detect restart boundaries during streaming (local state only)
-			if (streamSeenSpanIds.has(entry.spanId)) {
-				streamRunIndex++;
-				streamSeenSpanIds.clear();
-			}
-			streamSeenSpanIds.add(entry.spanId);
-
 			const dedupKey = entryDedupKey(entry);
 			if (this._sentDedupKeys.has(dedupKey)) { return; } // Already sent in tail batch
 
-			const evt = debugLogEntryToDebugEvent(entry);
+			const evt = debugLogEntryToDebugEvent(entry, this._skipCoreEvents);
 			if (evt) {
-				this._scopeEventIds(evt, streamRunIndex);
+				this._scopeEventIds(evt, entry.rIdx ?? 0);
 				const evtId = 'id' in evt ? (evt as { id?: string }).id : undefined;
 				if (evtId) {
 					this._cacheEntry(evtId, entry);
 				}
 				this._streamEvent(evt, dedupKey);
 			}
+
+			// Collect non-filtered child_session_ref entries for post-stream loading
+			if (entry.type === 'child_session_ref' && evt) {
+				const childSessionId = entry.attrs.childSessionId as string | undefined;
+				if (childSessionId) {
+					const parentRunIndex = entry.rIdx ?? 0;
+					const scopedParentId = parentRunIndex > 0 ? `${entry.spanId}:r${parentRunIndex}` : entry.spanId;
+					childRefs.push({ childSessionId, scopedParentId });
+					// Register so the live handler routes future child entries here
+					this._activeChildSessions.set(childSessionId, scopedParentId);
+				}
+			}
+		}).then(async () => {
+			// Load child session entries that weren't already loaded by _processEntries
+			for (const { childSessionId, scopedParentId } of childRefs) {
+				if (token.isCancellationRequested) { break; }
+				await this._streamChildSessionEntries(childSessionId, scopedParentId);
+			}
 		}).catch(() => { /* streaming failed — tail events are still shown */ });
+	}
+
+	/**
+	 * Load entries from a child session and stream them to the debug panel,
+	 * setting their parentEventId to the child_session_ref event.
+	 * Dedup keys prevent double-reporting if entries were already sent.
+	 */
+	private async _streamChildSessionEntries(childSessionId: string, scopedParentId: string, childSessionRefEntry?: IDebugLogEntry): Promise<void> {
+		try {
+			const childEntries = childSessionRefEntry
+				? await this._readChildEntries(childSessionRefEntry)
+				: await this._fileLogger.readEntries(childSessionId);
+			for (const childEntry of childEntries) {
+				const childEvt = debugLogEntryToDebugEvent(childEntry, this._skipCoreEvents);
+				if (childEvt) {
+					this._scopeEventIds(childEvt, childEntry.rIdx ?? 0);
+					if ('parentEventId' in childEvt) {
+						(childEvt as { parentEventId?: string }).parentEventId = scopedParentId;
+					}
+					const childEvtId = 'id' in childEvt ? (childEvt as { id?: string }).id : undefined;
+					if (childEvtId) {
+						this._cacheEntry(childEvtId, childEntry);
+					}
+					this._streamEvent(childEvt, entryDedupKey(childEntry));
+				}
+			}
+		} catch {
+			// Silent fail on child session read errors
+		}
+	}
+
+	/**
+	 * Read entries from a child session file. Tries readEntries() first
+	 * (which includes unflushed buffer entries for active sessions), then
+	 * falls back to direct file read using the childLogFile attribute
+	 * (for historical sessions where the child session mapping is lost).
+	 */
+	private async _readChildEntries(childSessionRefEntry: IDebugLogEntry): Promise<IDebugLogEntry[]> {
+		const childSessionId = childSessionRefEntry.attrs.childSessionId as string | undefined;
+
+		// Try readEntries first — handles active sessions with file + unflushed buffer
+		if (childSessionId) {
+			const entries = await this._fileLogger.readEntries(childSessionId);
+			if (entries.length > 0) {
+				return entries;
+			}
+		}
+
+		// Fallback: direct file read using the known filename from the entry
+		// (for historical sessions where _childSessionMap may be empty after restart)
+		const childLogFile = childSessionRefEntry.attrs.childLogFile as string | undefined;
+		const parentSessionId = childSessionRefEntry.sid;
+		if (childLogFile) {
+			const parentDir = this._fileLogger.getSessionDir(parentSessionId);
+			if (parentDir) {
+				const childFilePath = URI.joinPath(parentDir, childLogFile).fsPath;
+				try {
+					const content = await fs.promises.readFile(childFilePath, 'utf-8');
+					const entries: IDebugLogEntry[] = [];
+					for (const line of content.split('\n')) {
+						if (!line.trim()) { continue; }
+						try {
+							entries.push(JSON.parse(line) as IDebugLogEntry);
+						} catch { /* skip malformed */ }
+					}
+					return entries;
+				} catch {
+					// Expected for live scenarios — file hasn't been flushed yet.
+					// The live handler will pick up child entries via _activeChildSessions.
+				}
+			}
+		}
+
+		return [];
 	}
 
 	private _resolveChatDebugLogEvent(
@@ -365,7 +504,6 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	/**
 	 * Scan the JSONL file on disk to find an entry by event ID.
 	 * Used as a fallback when the entry was evicted from the LRU cache.
-	 * Tracks restart boundaries to match the correct run when spanIds are reused.
 	 */
 	private async _findEntryOnDisk(sessionId: string, eventId: string): Promise<IDebugLogEntry | undefined> {
 		// The eventId may have a run suffix (e.g., "0000000000000001:r1").
@@ -374,24 +512,43 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 		const targetRunIndex = runMatch ? parseInt(runMatch[1], 10) : 0;
 
 		let found: IDebugLogEntry | undefined;
-		let runIndex = 0;
-		const seenSpanIds = new Set<string>();
+		const childSessionIds: string[] = [];
 
 		await this._fileLogger.streamEntries(sessionId, entry => {
 			if (found) { return; }
 
-			// Track restart boundaries to find the correct run
-			if (seenSpanIds.has(entry.spanId)) {
-				runIndex++;
-				seenSpanIds.clear();
-			}
-			seenSpanIds.add(entry.spanId);
-
-			if (entry.spanId === rawSpanId && runIndex === targetRunIndex) {
+			if (entry.spanId === rawSpanId && (entry.rIdx ?? 0) === targetRunIndex) {
 				found = entry;
 			}
+
+			// Collect child session IDs for fallback search
+			if (entry.type === 'child_session_ref') {
+				const childSessionId = entry.attrs.childSessionId as string | undefined;
+				if (childSessionId) {
+					childSessionIds.push(childSessionId);
+				}
+			}
 		});
-		return found;
+
+		if (found) {
+			return found;
+		}
+
+		// Search child session JSONL files
+		for (const childSessionId of childSessionIds) {
+			try {
+				const childEntries = await this._fileLogger.readEntries(childSessionId);
+				for (const childEntry of childEntries) {
+					if (childEntry.spanId === rawSpanId && (childEntry.rIdx ?? 0) === targetRunIndex) {
+						return childEntry;
+					}
+				}
+			} catch {
+				// Skip unreadable child sessions
+			}
+		}
+
+		return undefined;
 	}
 
 	// ── Export / Import ──

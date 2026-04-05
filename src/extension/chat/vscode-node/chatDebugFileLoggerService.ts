@@ -64,6 +64,8 @@ interface IActiveLogSession {
 	pendingToolDefs: string | undefined;
 	/** Whether we've already checked disk for a previous session directory (prevents repeated sync FS calls) */
 	resumeChecked: boolean;
+	/** Run index: 0 for the first run, incremented on each VS Code restart that resumes this session */
+	runIndex: number;
 }
 
 // IDebugLogEntry is imported from and defined in the platform layer.
@@ -80,7 +82,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 
 	private readonly _activeSessions = new Map<string, IActiveLogSession>();
 	/** Maps child session ID → { parentSessionId, label } for child session routing */
-	private readonly _childSessionMap = new Map<string, { parentSessionId: string; label: string }>();
+	private readonly _childSessionMap = new Map<string, { parentSessionId: string; label: string; parentToolSpanId?: string }>();
 	/** Maps spanId → resolved session ID for parent-span inheritance */
 	private readonly _spanSessionIndex = new Map<string, string>();
 	private readonly _pendingCoreEvents: IDebugLogEntry[] = [];
@@ -198,6 +200,12 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		this._ensureSession(sessionId, /* hasOwnSpans */ true);
 	}
 
+	startChildSession(childSessionId: string, parentSessionId: string, label: string, parentToolSpanId?: string): void {
+		if (!this._childSessionMap.has(childSessionId)) {
+			this._childSessionMap.set(childSessionId, { parentSessionId, label, parentToolSpanId });
+		}
+	}
+
 	/**
 	 * Synchronously ensure a session exists for buffering. Directory creation
 	 * and old-log cleanup are deferred to the first flush.
@@ -250,6 +258,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 				type: 'child_session_ref',
 				name: childInfo.label,
 				spanId: `child-ref-${sessionId}`,
+				...(childInfo.parentToolSpanId ? { parentSpanId: childInfo.parentToolSpanId } : {}),
 				status: 'ok',
 				attrs: {
 					childSessionId: sessionId,
@@ -282,6 +291,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 			currentToolsFile: undefined,
 			pendingToolDefs: undefined,
 			resumeChecked: false,
+			runIndex: 0,
 		};
 		this._activeSessions.set(sessionId, session);
 
@@ -355,6 +365,14 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		const active = this._activeSessions.get(sessionId);
 		if (active) {
 			return active.uri;
+		}
+		// For child sessions, construct the correct <label>-<sessionId>.jsonl path
+		const childInfo = this._childSessionMap.get(sessionId);
+		if (childInfo) {
+			const dir = this._getDebugLogsDir();
+			if (!dir) { return undefined; }
+			const parentDir = URI.joinPath(dir, childInfo.parentSessionId);
+			return URI.joinPath(parentDir, `${childInfo.label}-${sessionId}.jsonl`);
 		}
 		// For historical sessions (after restart), construct the default path
 		const sessionDir = this.getSessionDir(sessionId);
@@ -539,6 +557,22 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 				// Directory exists from a previous run — this is a resumed session
 				session.hasOwnSpans = true;
 				session.dirEnsured = true;
+
+				// Determine the run index: read the max rIdx from the existing file + 1
+				try {
+					const tail = this._readTailBytes(mainJsonl.fsPath, 8192);
+					let maxRIdx = 0;
+					for (const line of tail.split('\n')) {
+						if (!line.trim()) { continue; }
+						try {
+							const parsed = JSON.parse(line);
+							if (typeof parsed.rIdx === 'number' && parsed.rIdx > maxRIdx) {
+								maxRIdx = parsed.rIdx;
+							}
+						} catch { /* skip malformed lines */ }
+					}
+					session.runIndex = maxRIdx + 1;
+				} catch { /* file read failed — runIndex stays at 0, but that's safe since this is a back-compat path */ }
 
 				// Find the next available indices for companion files to avoid
 				// overwriting ones from the previous run. Single readdir + scan.
@@ -973,6 +1007,23 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 
 	// ── Helpers ──
 
+	/**
+	 * Read the last `byteCount` bytes of a file synchronously.
+	 * Used during session resume to determine the max rIdx without reading the entire file.
+	 */
+	private _readTailBytes(filePath: string, byteCount: number): string {
+		const fd = fs.openSync(filePath, 'r');
+		try {
+			const stat = fs.fstatSync(fd);
+			const start = Math.max(0, stat.size - byteCount);
+			const buf = Buffer.alloc(Math.min(byteCount, stat.size));
+			fs.readSync(fd, buf, 0, buf.length, start);
+			return buf.toString('utf-8');
+		} finally {
+			fs.closeSync(fd);
+		}
+	}
+
 	private _extractSessionId(span: ICompletedSpanData): string | undefined {
 		return asString(span.attributes[CopilotChatAttr.CHAT_SESSION_ID])
 			?? asString(span.attributes[GenAiAttr.CONVERSATION_ID])
@@ -984,9 +1035,13 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		if (!session) {
 			return;
 		}
-		const versionedEntry = entry.v ? entry : { v: 1, ...entry };
-		session.buffer.push(JSON.stringify(versionedEntry) + '\n');
-		this._onDidEmitEntry.fire({ sessionId, entry: versionedEntry });
+		let stamped = entry.v ? entry : { v: 1, ...entry };
+		// Stamp run index for restart scoping (omit when 0 to save bytes)
+		if (session.runIndex > 0 && !stamped.rIdx) {
+			stamped = { ...stamped, rIdx: session.runIndex };
+		}
+		session.buffer.push(JSON.stringify(stamped) + '\n');
+		this._onDidEmitEntry.fire({ sessionId, entry: stamped });
 	}
 
 	async readEntries(sessionId: string): Promise<IDebugLogEntry[]> {
@@ -1043,6 +1098,11 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 					entries.push(JSON.parse(line) as IDebugLogEntry);
 				} catch { /* skip malformed */ }
 			}
+		}
+
+		// Trim to the last `count` entries (file + buffer combined)
+		if (entries.length > count) {
+			entries = entries.slice(-count);
 		}
 
 		return entries;

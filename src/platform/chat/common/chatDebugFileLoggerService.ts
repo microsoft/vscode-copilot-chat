@@ -47,6 +47,14 @@ export interface IChatDebugFileLoggerService {
 	startSession(sessionId: string): Promise<void>;
 
 	/**
+	 * Register a child session that should be written under a parent session's directory.
+	 * Call this before any spans arrive for the child session to ensure
+	 * correct routing of all events (including tool calls that may arrive
+	 * before the child's invoke_agent span completes).
+	 */
+	startChildSession(childSessionId: string, parentSessionId: string, label: string, parentToolSpanId?: string): void;
+
+	/**
 	 * End logging for a session. Performs a final flush and removes the
 	 * session from the active set.
 	 */
@@ -132,6 +140,8 @@ export interface IChatDebugFileLoggerService {
 export interface IDebugLogEntry {
 	/** Schema version. Absent or 1 = current schema. Bump on breaking changes. */
 	readonly v?: number;
+	/** Run index within a session. 0 (or absent) = first run; incremented on each VS Code restart that resumes the same session. */
+	readonly rIdx?: number;
 	/** Epoch ms timestamp */
 	readonly ts: number;
 	/** Duration in ms (0 for instant events) */
@@ -159,6 +169,7 @@ export class NullChatDebugFileLoggerService implements IChatDebugFileLoggerServi
 	declare readonly _serviceBrand: undefined;
 
 	async startSession(): Promise<void> { }
+	startChildSession(): void { }
 	async endSession(): Promise<void> { }
 	async flush(): Promise<void> { }
 	getLogPath(_sessionId?: string): URI | undefined { return undefined; }

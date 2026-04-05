@@ -34,8 +34,27 @@ describe('debugLogEntryToDebugEvent', () => {
 		expect(debugLogEntryToDebugEvent(makeEntry({ type: 'turn_end' }))).toBeUndefined();
 	});
 
-	it('returns undefined for child_session_ref entries', () => {
-		expect(debugLogEntryToDebugEvent(makeEntry({ type: 'child_session_ref' }))).toBeUndefined();
+	it('converts child_session_ref entries to generic events', () => {
+		const entry = makeEntry({
+			type: 'child_session_ref',
+			name: 'runSubagent-default',
+			attrs: { label: 'runSubagent-default' }
+		});
+		expect(() => debugLogEntryToDebugEvent(entry)).toThrow();
+	});
+
+	it('filters out categorization child_session_ref entries', () => {
+		expect(debugLogEntryToDebugEvent(makeEntry({
+			type: 'child_session_ref',
+			attrs: { label: 'categorization' }
+		}))).toBeUndefined();
+	});
+
+	it('filters out title child_session_ref entries', () => {
+		expect(debugLogEntryToDebugEvent(makeEntry({
+			type: 'child_session_ref',
+			attrs: { label: 'title' }
+		}))).toBeUndefined();
 	});
 
 	it('returns undefined for error entries', () => {
