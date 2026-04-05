@@ -3231,15 +3231,6 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.anthropic.thinking.forceExtendedThinking": {
-						"type": "boolean",
-						"markdownDescription": "%github.copilot.config.anthropic.thinking.forceExtendedThinking%",
-						"default": false,
-						"tags": [
-							"preview",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.backgroundCompaction": {
 						"type": "boolean",
 						"default": false,
@@ -3326,6 +3317,22 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.githubMcpServer.lockdown%",
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.chat.githubMcpServer.channel": {
+						"type": "string",
+						"default": "stable",
+						"enum": [
+							"stable",
+							"insiders"
+						],
+						"enumDescriptions": [
+							"%github.copilot.config.githubMcpServer.channel.stable%",
+							"%github.copilot.config.githubMcpServer.channel.insiders%"
+						],
+						"markdownDescription": "%github.copilot.config.githubMcpServer.channel%",
 						"tags": [
 							"experimental"
 						]
@@ -3770,20 +3777,6 @@
 							"clear-both"
 						]
 					},
-					"github.copilot.chat.anthropic.promptOptimization": {
-						"type": "string",
-						"default": "control",
-						"markdownDescription": "%github.copilot.config.anthropic.promptOptimization%",
-						"tags": [
-							"experimental",
-							"onExp"
-						],
-						"enum": [
-							"control",
-							"combined",
-							"split"
-						]
-					},
 					"github.copilot.chat.responsesApiReasoningSummary": {
 						"type": "string",
 						"default": "detailed",
@@ -4034,6 +4027,16 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "Enable the modern `multi_replace_string_in_file` edit tool when generating edits with Gemini 3 models.",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.edits.batchReplaceStringDescriptions": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "Update tool descriptions to promote `multi_replace_string_in_file` as the primary multi-edit tool.",
 						"tags": [
 							"advanced",
 							"experimental",
@@ -4375,10 +4378,10 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.agentHistorySummarizationCacheFriendly": {
+					"github.copilot.chat.agentHistorySummarizationInline": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "%github.copilot.config.agentHistorySummarizationCacheFriendly%",
+						"markdownDescription": "%github.copilot.config.agentHistorySummarizationInline%",
 						"tags": [
 							"advanced",
 							"experimental",
@@ -4871,27 +4874,27 @@
 				},
 				{
 					"command": "github.copilot.sessions.sync",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && sessions.hasGitRepository && !sessions.hasUncommittedChanges && false",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == workspace && sessions.hasGitRepository && !sessions.hasUncommittedChanges",
 					"group": "sync@1"
 				},
 				{
 					"command": "github.copilot.chat.mergeCopilotCLIAgentSessionChanges.merge",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasGitRepository && !sessions.isMergeBaseBranchProtected && !sessions.hasPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasGitRepository && !sessions.isMergeBaseBranchProtected && !sessions.hasPullRequest && (sessions.hasUncommittedChanges || sessions.hasOutgoingChanges)",
 					"group": "merge@1"
 				},
 				{
 					"command": "github.copilot.chat.mergeCopilotCLIAgentSessionChanges.mergeAndSync",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasGitRepository && !sessions.isMergeBaseBranchProtected && !sessions.hasPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasGitRepository && !sessions.isMergeBaseBranchProtected && !sessions.hasPullRequest && (sessions.hasUncommittedChanges || sessions.hasOutgoingChanges)",
 					"group": "merge@2"
 				},
 				{
 					"command": "github.copilot.chat.createPullRequestCopilotCLIAgentSession.createPR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasGitRepository && !sessions.hasPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasGitRepository && !sessions.hasPullRequest && (sessions.hasUncommittedChanges || sessions.hasOutgoingChanges)",
 					"group": "pull_request@1"
 				},
 				{
 					"command": "github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasGitRepository && !sessions.hasPullRequest",
+					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.isolationMode == worktree && sessions.hasGitRepository && !sessions.hasPullRequest && (sessions.hasUncommittedChanges || sessions.hasOutgoingChanges)",
 					"group": "pull_request@2"
 				},
 				{
@@ -6133,49 +6136,58 @@
 		"chatAgents": [],
 		"chatPromptFiles": [
 			{
-				"path": "./assets/prompts/plan.prompt.md"
+				"path": "./assets/prompts/plan.prompt.md",
+				"when": "chatSessionType == local"
 			},
 			{
-				"path": "./assets/prompts/init.prompt.md"
+				"path": "./assets/prompts/init.prompt.md",
+				"when": "chatSessionType == local"
 			},
 			{
-				"path": "./assets/prompts/create-prompt.prompt.md"
+				"path": "./assets/prompts/create-prompt.prompt.md",
+				"when": "chatSessionType == local"
 			},
 			{
-				"path": "./assets/prompts/create-instructions.prompt.md"
+				"path": "./assets/prompts/create-instructions.prompt.md",
+				"when": "chatSessionType == local"
 			},
 			{
-				"path": "./assets/prompts/create-skill.prompt.md"
+				"path": "./assets/prompts/create-skill.prompt.md",
+				"when": "chatSessionType == local"
 			},
 			{
-				"path": "./assets/prompts/create-agent.prompt.md"
+				"path": "./assets/prompts/create-agent.prompt.md",
+				"when": "chatSessionType == local"
 			},
 			{
-				"path": "./assets/prompts/create-hook.prompt.md"
+				"path": "./assets/prompts/create-hook.prompt.md",
+				"when": "chatSessionType == local"
 			}
 		],
 		"chatSkills": [
 			{
 				"path": "./assets/prompts/skills/project-setup-info-local/SKILL.md",
-				"when": "config.github.copilot.chat.projectSetupInfoSkill.enabled && !config.github.copilot.chat.newWorkspace.useContext7"
+				"when": "chatSessionType == local && config.github.copilot.chat.projectSetupInfoSkill.enabled && !config.github.copilot.chat.newWorkspace.useContext7"
 			},
 			{
 				"path": "./assets/prompts/skills/project-setup-info-context7/SKILL.md",
-				"when": "config.github.copilot.chat.projectSetupInfoSkill.enabled && config.github.copilot.chat.newWorkspace.useContext7"
+				"when": "chatSessionType == local && config.github.copilot.chat.projectSetupInfoSkill.enabled && config.github.copilot.chat.newWorkspace.useContext7"
 			},
 			{
 				"path": "./assets/prompts/skills/install-vscode-extension/SKILL.md",
-				"when": "config.github.copilot.chat.installExtensionSkill.enabled && config.github.copilot.chat.newWorkspaceCreation.enabled"
+				"when": "chatSessionType == local && config.github.copilot.chat.installExtensionSkill.enabled && config.github.copilot.chat.newWorkspaceCreation.enabled"
 			},
 			{
 				"path": "./assets/prompts/skills/get-search-view-results/SKILL.md",
-				"when": "config.github.copilot.chat.getSearchViewResultsSkill.enabled"
+				"when": "chatSessionType == local && config.github.copilot.chat.getSearchViewResultsSkill.enabled"
 			},
 			{
-				"path": "./assets/prompts/skills/troubleshoot/SKILL.md"
+				"path": "./assets/prompts/skills/troubleshoot/SKILL.md",
+				"when": "chatSessionType == local || chatSessionType == copilotcli"
 			},
 			{
-				"path": "./assets/prompts/skills/agent-customization/SKILL.md"
+				"path": "./assets/prompts/skills/agent-customization/SKILL.md",
+				"when": "chatSessionType == local || chatSessionType == copilotcli"
 			}
 		],
 		"terminal": {
@@ -6285,7 +6297,7 @@
 		"copyfiles": "^2.4.1",
 		"csv-parse": "^6.0.0",
 		"dotenv": "^17.2.0",
-		"electron": "^37.2.1",
+		"electron": "^39.8.5",
 		"eslint": "^9.30.0",
 		"eslint-import-resolver-typescript": "^4.4.4",
 		"eslint-plugin-header": "^3.1.1",
@@ -6336,10 +6348,10 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "^0.2.81",
-		"@anthropic-ai/sdk": "^0.80.0",
+		"@anthropic-ai/claude-agent-sdk": "^0.2.91",
+		"@anthropic-ai/sdk": "^0.82.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
-		"@github/copilot": "^1.0.12",
+		"@github/copilot": "^1.0.17",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -6358,7 +6370,7 @@
 		"@opentelemetry/sdk-trace-node": "^2.5.1",
 		"@opentelemetry/semantic-conventions": "^1.39.0",
 		"@sinclair/typebox": "^0.34.41",
-		"@vscode/copilot-api": "^0.2.18",
+		"@vscode/copilot-api": "^0.2.19",
 		"@vscode/extension-telemetry": "^1.5.1",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.8",
@@ -6387,6 +6399,7 @@
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
 	},
+	"vscodeCommit": "20b24833bc088c84b778ee89be4c17f15660441a",
 	"__metadata": {
 		"id": "7ec7d6e6-b89e-4cc5-a59b-d6c4d238246f",
 		"publisherId": {

@@ -385,6 +385,20 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 			toolCallWaitingForPermissions.length = 0;
 		};
+		// Flush only the tool invocation matching the given toolCallId, leaving other
+		// pending tools in the array. This prevents parallel tool calls from being
+		// prematurely pushed to the stream when only one of them has been approved.
+		const flushPendingInvocationMessageForToolCallId = (toolCallId: string | undefined) => {
+			if (!toolCallId) {
+				flushPendingInvocationMessages();
+				return;
+			}
+			const index = toolCallWaitingForPermissions.findIndex(([, tc]) => tc.toolCallId === toolCallId);
+			if (index !== -1) {
+				const [[invocationMessage]] = toolCallWaitingForPermissions.splice(index, 1);
+				this._stream?.push(invocationMessage);
+			}
+		};
 
 		const chunkMessageIds = new Set<string>();
 		const assistantMessageChunks: string[] = [];
@@ -410,7 +424,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					},
 					token
 				);
-				flushPendingInvocationMessages();
+				flushPendingInvocationMessageForToolCallId(permissionRequest.toolCallId);
 
 				this._requestLogger.addEntry({
 					type: LoggedRequestKind.MarkdownContentRequest,
@@ -627,7 +641,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				// Just complete the tool invocation - the part was already pushed with partial updates enabled
 				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService, getWorkingDirectory(this.workspace)) ?? [];
 				if (responsePart) {
-					flushPendingInvocationMessages();
+					flushPendingInvocationMessageForToolCallId(event.data.toolCallId);
 					if (responsePart instanceof ChatToolInvocationPart) {
 						responsePart.enablePartialUpdate = true;
 					}
