@@ -46,7 +46,7 @@ import { createServiceIdentifier } from '../../src/util/common/services';
 import { ChatReferenceDiagnostic } from '../../src/util/common/test/shims/chatTypes';
 import { disposableTimeout, IntervalTimer } from '../../src/util/vs/base/common/async';
 import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
-import { Emitter } from '../../src/util/vs/base/common/event';
+import { Event, Emitter } from '../../src/util/vs/base/common/event';
 import { Lazy } from '../../src/util/vs/base/common/lazy';
 import { Disposable, DisposableStore, IReference } from '../../src/util/vs/base/common/lifecycle';
 import { URI } from '../../src/util/vs/base/common/uri';
@@ -76,9 +76,13 @@ export class MockChatPromptFileService extends Disposable implements IChatPrompt
 	customAgents: ChatResource[] = [];
 	instructions: ChatResource[] = [];
 	skills: ChatResource[] = [];
+	readonly hooks: readonly ChatResource[] = [];
+	readonly plugins: readonly ChatResource[] = [];
 	private readonly _onDidChangeCustomAgents = this._register(new Emitter<void>());
 	private readonly _onDidChangeInstructions = this._register(new Emitter<void>());
 	private readonly _onDidChangeSkills = this._register(new Emitter<void>());
+	readonly onDidChangeHooks = Event.None;
+	readonly onDidChangePlugins = Event.None;
 
 	get onDidChangeCustomAgents() {
 		return this._onDidChangeCustomAgents.event;
