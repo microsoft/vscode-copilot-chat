@@ -51,7 +51,7 @@ describe('createInitialFetchErrorDetector', () => {
 	});
 
 	it('returns the error when fetch fails before any tokens', async () => {
-		const { wrapFinishedCb: _wrapFinishedCb, getInitialFetchError } = createInitialFetchErrorDetector();
+		const { getInitialFetchError } = createInitialFetchErrorDetector();
 
 		const errorResponse = makeErrorResponse(ChatFetchResponseType.NotFound);
 		const fetchResultPromise = Promise.resolve(errorResponse);
@@ -61,7 +61,7 @@ describe('createInitialFetchErrorDetector', () => {
 	});
 
 	it('returns undefined when fetch succeeds before any tokens (unusual but not an error)', async () => {
-		const { wrapFinishedCb: _wrapFinishedCb, getInitialFetchError } = createInitialFetchErrorDetector();
+		const { getInitialFetchError } = createInitialFetchErrorDetector();
 
 		const successResponse = makeSuccessResponse();
 		const fetchResultPromise = Promise.resolve(successResponse);
@@ -120,7 +120,7 @@ describe('createInitialFetchErrorDetector', () => {
 		];
 
 		for (const errorType of errorTypes) {
-			const { wrapFinishedCb: _wrapFinishedCb, getInitialFetchError } = createInitialFetchErrorDetector();
+			const { getInitialFetchError } = createInitialFetchErrorDetector();
 
 			const errorResponse = makeErrorResponse(errorType);
 			const fetchResultPromise = Promise.resolve(errorResponse);

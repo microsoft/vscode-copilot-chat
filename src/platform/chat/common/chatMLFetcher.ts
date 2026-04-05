@@ -181,6 +181,10 @@ export function createInitialFetchErrorDetector(): {
 
 			// `firstTokenReceived.p` resolves to `undefined` (void) — no early error.
 			// `fetchResultPromise` resolves to a `ChatResponse`; only an error response is returned.
+			//
+			// Note: when `fetchResultPromise` wins the race due to an early error, `firstTokenReceived`
+			// remains unsettled. This is intentional — after this function returns, the deferred is no
+			// longer needed and will be garbage-collected along with the rest of the closure.
 			if (result !== undefined && result.type !== ChatFetchResponseType.Success) {
 				return result;
 			}
