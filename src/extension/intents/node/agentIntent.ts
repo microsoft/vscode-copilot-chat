@@ -783,7 +783,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				}
 			} else if (postRenderRatio >= 0.80 && (backgroundSummarizer.state === BackgroundSummarizationState.Idle || backgroundSummarizer.state === BackgroundSummarizationState.Failed)) {
 				// At ≥ 80% with no running compaction (or a previous failure) — kick off background work.
-				this._startBackgroundSummarization(backgroundSummarizer, props, endpoint, token, postRenderRatio);
+				this._startBackgroundSummarization(backgroundSummarizer, props, token, postRenderRatio);
 			}
 		}
 
@@ -851,7 +851,6 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 	private _startBackgroundSummarization(
 		backgroundSummarizer: BackgroundSummarizer,
 		props: AgentPromptProps,
-		endpoint: IChatEndpoint,
 		token: vscode.CancellationToken,
 		contextRatio: number,
 	): void {

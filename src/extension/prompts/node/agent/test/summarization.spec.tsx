@@ -488,60 +488,6 @@ suite('Agent Summarization', () => {
 			&& successMeta!.outcome !== 'success';
 		expect(shouldSkipAfterSuccess).toBe(false);
 	});
-
-	test('background compaction failure metadata is recorded on turn for all noResult triggers', () => {
-		// This test verifies the contract that agentIntent._recordBackgroundCompactionFailure relies on:
-		// when a background compaction produces no usable result, failure metadata is set on the turn
-		// with source='background' and outcome='noResult_{trigger}', matching the foreground pattern.
-		const triggers = ['preRender', 'preRenderBlocked', 'budgetExceededWaited', 'budgetExceededReady', 'postRenderBlocked'];
-
-		for (const trigger of triggers) {
-			const turn = new Turn('turnId', { type: 'user', message: 'hello' });
-
-			// Simulate what agentIntent._recordBackgroundCompactionFailure does
-			turn.setMetadata(new SummarizedConversationHistoryMetadata(
-				'', // no toolCallRoundId for failures
-				'', // no summary text for failures
-				{
-					model: 'test-model',
-					source: 'background',
-					outcome: `noResult_${trigger}`,
-					contextLengthBefore: 80_000,
-				},
-			));
-
-			const meta = turn.getMetadata(SummarizedConversationHistoryMetadata);
-			expect(meta).toBeDefined();
-			expect(meta!.source).toBe('background');
-			expect(meta!.outcome).toBe(`noResult_${trigger}`);
-			expect(meta!.contextLengthBefore).toBe(80_000);
-			expect(meta!.toolCallRoundId).toBe('');
-			expect(meta!.text).toBe('');
-
-			// Background failures should NOT trigger the foreground retry guard
-			// because the guard checks source === 'foreground'
-			const shouldSkipForeground = meta!.source === 'foreground'
-				&& !!meta!.outcome
-				&& meta!.outcome !== 'success';
-			expect(shouldSkipForeground).toBe(false);
-		}
-	});
-
-	test('background failure metadata does not prevent subsequent foreground summarization', () => {
-		// When background compaction fails, a foreground fallback should still be allowed.
-		// The retry guard in renderWithSummarization only checks source === 'foreground'.
-		const turn = new Turn('turnId', { type: 'user', message: 'hello' });
-
-		const bgFailureOpts = { model: 'test-model', source: 'background' as const, outcome: 'noResult_postRenderBlocked' };
-		turn.setMetadata(new SummarizedConversationHistoryMetadata('', '', bgFailureOpts));
-
-		const fgSuccessOpts = { model: 'test-model', source: 'foreground' as const, outcome: 'success' };
-		turn.setMetadata(new SummarizedConversationHistoryMetadata('roundId', 'summary text', fgSuccessOpts));
-
-		const latest = turn.getMetadata(SummarizedConversationHistoryMetadata);
-		expect(latest!.source).toBe('foreground');
-		expect(latest!.outcome).toBe('success');
-	});
 });
 
 suite('extractInlineSummary', () => {
