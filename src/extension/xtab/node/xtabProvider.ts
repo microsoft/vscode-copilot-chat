@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
-import { FetchStreamSource } from '../../../platform/chat/common/chatMLFetcher';
+import { createInitialFetchErrorDetector, FetchStreamSource } from '../../../platform/chat/common/chatMLFetcher';
 import { ChatFetchError, ChatFetchResponseType, ChatLocation, RESPONSE_CONTAINED_NO_CHOICES } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
@@ -704,7 +704,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		let ttft: number | undefined;
 
-		const firstTokenReceived = new DeferredPromise<void>();
+		const { wrapFinishedCb, getInitialFetchError } = createInitialFetchErrorDetector();
 
 		logContext.setHeaderRequestId(request.headerRequestId);
 
@@ -716,10 +716,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			{
 				debugName: XtabProvider.ID,
 				messages,
-				finishedCb: async (text, _, delta) => {
-					if (!firstTokenReceived.isSettled) {
-						firstTokenReceived.complete();
-					}
+				finishedCb: wrapFinishedCb(async (text, _, delta) => {
 					if (ttft === undefined && text !== '') {
 						ttft = fetchRequestStopWatch.elapsed();
 						logContext.addLog(`TTFT ${ttft} ms`);
@@ -729,7 +726,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					responseSoFar = text;
 					logContext.setResponse(responseSoFar);
 					return undefined;
-				},
+				}),
 				location: ChatLocation.Other,
 				source: undefined,
 				requestOptions: {
@@ -753,19 +750,19 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		telemetryBuilder.setResponse(fetchResultPromise.then((response) => ({ response, ttft })));
 		logContext.setFullResponse(fetchResultPromise.then((response) => response.type === ChatFetchResponseType.Success ? response.value : undefined));
 
-		const fetchRes = await Promise.race([firstTokenReceived.p, fetchResultPromise]);
-		if (fetchRes && fetchRes.type !== ChatFetchResponseType.Success) {
-			if (fetchRes.type === ChatFetchResponseType.NotFound &&
+		const initialFetchError = await getInitialFetchError(fetchResultPromise);
+		if (initialFetchError) {
+			if (initialFetchError.type === ChatFetchResponseType.NotFound &&
 				!this.forceUseDefaultModel // if we haven't already forced using the default model; otherwise, this could cause an infinite loop
 			) {
 				this.forceUseDefaultModel = true;
 				return yield* this.doGetNextEdit(request, delaySession, tracer, logContext, cancellationToken, telemetryBuilder, opts.retryState); // use the same retry state
 			}
 			// diff-patch based model returns no choices if it has no edits to suggest
-			if (fetchRes.type === ChatFetchResponseType.Unknown && fetchRes.reason === RESPONSE_CONTAINED_NO_CHOICES) {
+			if (initialFetchError.type === ChatFetchResponseType.Unknown && initialFetchError.reason === RESPONSE_CONTAINED_NO_CHOICES) {
 				return new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
 			}
-			return mapChatFetcherErrorToNoNextEditReason(fetchRes);
+			return mapChatFetcherErrorToNoNextEditReason(initialFetchError);
 		}
 
 		fetchResultPromise
@@ -780,10 +777,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				logContext.addLog(`ChatMLFetcher fetch call threw -- this's UNEXPECTED!`);
 			}).finally(() => {
 				logContext.setFetchEndTime();
-
-				if (!firstTokenReceived.isSettled) {
-					firstTokenReceived.complete();
-				}
 
 				fetchStreamSource.resolve();
 

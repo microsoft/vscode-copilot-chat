@@ -5,11 +5,11 @@
 
 import type { CancellationToken } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { AsyncIterableObject, AsyncIterableSource } from '../../../util/vs/base/common/async';
+import { AsyncIterableObject, AsyncIterableSource, DeferredPromise } from '../../../util/vs/base/common/async';
 import { Event } from '../../../util/vs/base/common/event';
 import { FinishedCallback, IResponseDelta, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { IChatEndpoint, IMakeChatRequestOptions } from '../../networking/common/networking';
-import { ChatResponse, ChatResponses } from './commonTypes';
+import { ChatFetchError, ChatFetchResponseType, ChatResponse, ChatResponses } from './commonTypes';
 
 export interface Source {
 	readonly extensionId?: string;
@@ -134,4 +134,57 @@ export class FetchStreamRecorder {
 			return result;
 		};
 	}
+}
+
+/**
+ * Creates a utility to detect if a streaming chat request fails before the first token is received.
+ *
+ * This is useful for handling HTTP errors (such as 404) that occur before any streaming data is
+ * returned. The utility works by racing the fetch result promise against a signal that resolves
+ * when the first streaming token arrives.
+ *
+ * Usage:
+ * ```typescript
+ * const { wrapFinishedCb, getInitialFetchError } = createInitialFetchErrorDetector();
+ *
+ * const fetchResultPromise = endpoint.makeChatRequest2({
+ *   ...,
+ *   finishedCb: wrapFinishedCb(myFinishedCb),
+ * }, token);
+ *
+ * const initialError = await getInitialFetchError(fetchResultPromise);
+ * if (initialError) {
+ *   // handle early fetch failure (e.g., 404, rate limit)
+ * }
+ * ```
+ */
+export function createInitialFetchErrorDetector(): {
+	readonly wrapFinishedCb: (cb: FinishedCallback | undefined) => FinishedCallback;
+	readonly getInitialFetchError: (fetchResultPromise: Promise<ChatResponse>) => Promise<ChatFetchError | undefined>;
+} {
+	const firstTokenReceived = new DeferredPromise<void>();
+
+	return {
+		wrapFinishedCb(cb: FinishedCallback | undefined): FinishedCallback {
+			return async (text: string, index: number, delta: IResponseDelta): Promise<number | undefined> => {
+				if (!firstTokenReceived.isSettled) {
+					firstTokenReceived.complete();
+				}
+				return cb ? cb(text, index, delta) : undefined;
+			};
+		},
+
+		async getInitialFetchError(fetchResultPromise: Promise<ChatResponse>): Promise<ChatFetchError | undefined> {
+			// Race: if the first token arrives before the fetch settles, streaming started OK.
+			// If the fetch settles first with an error, we catch it early before any tokens arrive.
+			const result = await Promise.race([firstTokenReceived.p, fetchResultPromise]);
+
+			// `firstTokenReceived.p` resolves to `undefined` (void) — no early error.
+			// `fetchResultPromise` resolves to a `ChatResponse`; only an error response is returned.
+			if (result !== undefined && result.type !== ChatFetchResponseType.Success) {
+				return result;
+			}
+			return undefined;
+		},
+	};
 }
