@@ -29,7 +29,6 @@ import { StopWatch } from '../../../../util/vs/base/common/stopwatch';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart2 } from '../../../../vscodeTypes';
-import { addCacheBreakpoints } from '../../../intents/node/cacheBreakpoints';
 import { ToolCallingLoop } from '../../../intents/node/toolCallingLoop';
 import { IResultMetadata } from '../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../../../prompt/common/intents';
@@ -39,9 +38,8 @@ import { NotebookSummary } from '../../../tools/node/notebookSummaryTool';
 import { renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { ChatToolCalls } from '../panel/toolCalling';
-import { AgentPrompt, AgentPromptProps, AgentUserMessage, AgentUserMessageCustomizations, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
+import { AgentUserMessage, AgentUserMessageCustomizations, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
 import { DefaultOpenAIKeepGoingReminder } from './openai/defaultOpenAIPrompt';
-import { PromptRegistry } from './promptRegistry';
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
@@ -399,6 +397,8 @@ export interface SummarizedAgentHistoryProps extends BasePromptElementProps, Age
 	readonly location: ChatLocation;
 	readonly promptContext: IBuildPromptContext;
 	readonly triggerSummarize?: boolean;
+	/** When true, appends a summarization instruction in the agent loop instead of a separate LLM call. */
+	readonly inlineSummarization?: boolean;
 	readonly tools?: ReadonlyArray<LanguageModelToolInformation> | undefined;
 	readonly enableCacheBreakpoints?: boolean;
 	readonly workingNotebook?: NotebookDocument;
@@ -478,12 +478,18 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 			}
 		}
 
+		// Inline summarization: append instruction as a user message in the agent loop
+		// instead of making a separate LLM call. The model outputs only a summary.
+		const inlineSummarizationRequested = this.props.inlineSummarization && !this.props.triggerSummarize;
+
 		return <>
 			{historyMetadata && <meta value={historyMetadata} />}
+			{inlineSummarizationRequested && <meta value={new InlineSummarizationRequestedMetadata()} />}
 			<ConversationHistory
 				{...this.props}
 				promptContext={promptContext}
 				enableCacheBreakpoints={this.props.enableCacheBreakpoints} />
+			{inlineSummarizationRequested && <InlineSummarizationUserMessage priority={1000} endpoint={this.props.endpoint} />}
 		</>;
 	}
 
@@ -574,7 +580,6 @@ class ConversationHistorySummarizer {
 		@ILogService private readonly logService: ILogService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IChatHookService private readonly chatHookService: IChatHookService,
 	) { }
 
@@ -663,23 +668,8 @@ class ConversationHistorySummarizer {
 
 		let summarizationPrompt: ChatMessage[];
 		const associatedRequestId = this.props.promptContext.conversation?.getLatestTurn().id;
-		const cacheFriendlyMode = this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentHistorySummarizationCacheFriendly, this.experimentationService);
-		let usedCacheFriendlyPrompt = false;
 		try {
-			if (mode === SummaryMode.Full && cacheFriendlyMode) {
-				const customizations = await PromptRegistry.resolveAllCustomizations(this.instantiationService, endpoint);
-				const props: CacheFriendlySummarizationPromptProps = {
-					...propsInfo.props,
-					triggerSummarize: false,
-					enableCacheBreakpoints: true,
-					customizations,
-				};
-				const expandedEndpoint = endpoint.cloneWithTokenOverride(endpoint.modelMaxPromptTokens * 1.15);
-				summarizationPrompt = (await renderPromptElement(this.instantiationService, expandedEndpoint, CacheFriendlySummarizationPrompt, props, undefined, this.token)).messages;
-				usedCacheFriendlyPrompt = true;
-			} else {
-				summarizationPrompt = (await renderPromptElement(this.instantiationService, endpoint, ConversationHistorySummarizationPrompt, { ...propsInfo.props, simpleMode: mode === SummaryMode.Simple }, undefined, this.token)).messages;
-			}
+			summarizationPrompt = (await renderPromptElement(this.instantiationService, endpoint, ConversationHistorySummarizationPrompt, { ...propsInfo.props, simpleMode: mode === SummaryMode.Simple }, undefined, this.token)).messages;
 			this.logInfo(`summarization prompt rendered in ${stopwatch.elapsed()}ms.`, mode);
 		} catch (e) {
 			const budgetExceeded = e instanceof BudgetExceededError;
@@ -709,22 +699,7 @@ class ConversationHistorySummarizer {
 				),
 			} : undefined;
 
-			if (usedCacheFriendlyPrompt) {
-				// Place cache breakpoints on the agent-loop prefix only (everything
-				// except the appended summarize instruction).  addCacheBreakpoints
-				// uses the last User message as the boundary between "current turn"
-				// and "history above", so running it on the full prompt (which ends
-				// with the summarize UserMessage) would shift that boundary and
-				// place breakpoints at different positions than the agent loop did —
-				// causing the Anthropic cache lookback to miss the agent loop's
-				// cached prefix.
-				const prefixMessages = summarizationPrompt.slice(0, -1);
-				addCacheBreakpoints(prefixMessages);
-			} else if (cacheFriendlyMode) {
-				addCacheBreakpoints(summarizationPrompt);
-			} else {
-				stripCacheBreakpoints(summarizationPrompt);
-			}
+			stripCacheBreakpoints(summarizationPrompt);
 
 			let messages = ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt);
 			// Gemini strictly requires every function_call to have a matching function_response.
@@ -919,42 +894,6 @@ class ConversationHistorySummarizer {
 	}
 }
 
-/**
- * Cache-friendly summarization prompt that shares the agent loop's prefix for prompt cache hits.
- *
- * Structure:
- * - AgentPrompt preamble + conversation history (byte-identical to the agent loop → cache hit)
- * - SummaryPrompt instructions (appended AFTER history to maximize prefix overlap)
- * - Final "Summarize..." user message
- *
- * The key insight: by placing SummaryPrompt after the history rather than before, the prefix
- * match with the preceding agent loop request extends through the entire conversation
- * (potentially 80k+ cached tokens instead of just ~17k for the preamble alone).
- */
-interface CacheFriendlySummarizationPromptProps extends AgentPromptProps {
-	readonly workingNotebook?: NotebookDocument;
-	readonly summarizationInstructions?: string;
-}
-
-class CacheFriendlySummarizationPrompt extends PromptElement<CacheFriendlySummarizationPromptProps> {
-	override async render(state: void, sizing: PromptSizing) {
-		return <>
-			<AgentPrompt {...this.props} />
-			{this.props.workingNotebook && <WorkingNotebookSummary priority={998} notebook={this.props.workingNotebook} />}
-			<UserMessage priority={1000}>
-				{SummaryPrompt}
-				{this.props.summarizationInstructions && <>
-					<br /><br />
-					## Additional instructions from the user:<br />
-					{this.props.summarizationInstructions}
-				</>}
-				<br /><br />
-				Now summarize the conversation above. Do NOT call any tools.
-			</UserMessage>
-		</>;
-	}
-}
-
 function stripCacheBreakpoints(messages: ChatMessage[]): void {
 	messages.forEach(message => {
 		message.content = message.content.filter(part => {
@@ -1070,4 +1009,69 @@ class SummaryMessageElement extends PromptElement<SummaryMessageProps> {
 			</Tag>}
 		</UserMessage>;
 	}
+}
+
+/**
+ * Metadata flag indicating that inline summarization was requested in this render.
+ * The caller (agentIntent) checks for this to know the model response should
+ * contain only a summary.
+ */
+export class InlineSummarizationRequestedMetadata extends PromptMetadata { }
+
+interface InlineSummarizationUserMessageProps extends BasePromptElementProps {
+	readonly endpoint: IChatEndpoint;
+}
+
+/**
+ * User message appended to the agent prompt when inline summarization is triggered.
+ * Instructs the model to output ONLY a summary wrapped in `<summary>` tags, with
+ * no tool calls. The summary is extracted from the response and stored on the round
+ * for the next iteration.
+ */
+class InlineSummarizationUserMessage extends PromptElement<InlineSummarizationUserMessageProps> {
+	override async render(state: void, sizing: PromptSizing) {
+		const isOpus = this.props.endpoint.model.startsWith('claude-opus');
+		return <UserMessage priority={1000}>
+			The conversation has grown too large for the context window and must be compacted now.<br />
+			<br />
+			{SummaryPrompt}
+			<br />
+			<br />
+			IMPORTANT: Output your summary wrapped in {'<summary>'} and {'</summary>'} tags. Do NOT call any tools. Your ONLY task right now is to produce a comprehensive summary of the conversation so far.<br />
+			{isOpus && <>
+				<br />
+				IMPORTANT: Do NOT call any tools. Your only task is to generate a text summary of the conversation. Do not attempt to execute any actions or make any tool calls.<br />
+			</>}
+		</UserMessage>;
+	}
+}
+
+/**
+ * Extracts an inline summary from the model's response text.
+ *
+ * Parsing strategy (multi-level fallback):
+ * 1. Clean `<summary>...</summary>` tags → extracts content between them
+ * 2. `<summary>` found but no closing tag → takes everything after `<summary>`
+ * 3. No tags found → returns undefined (caller falls back to separate-call summarization)
+ *
+ * @returns The extracted summary text, or `undefined` if no summary could be found.
+ */
+export function extractInlineSummary(responseText: string): string | undefined {
+	// 1. Try clean <summary>...</summary> extraction
+	const openTag = '<summary>';
+	const closeTag = '</summary>';
+	const openIdx = responseText.indexOf(openTag);
+	if (openIdx !== -1) {
+		const contentStart = openIdx + openTag.length;
+		const closeIdx = responseText.indexOf(closeTag, contentStart);
+		if (closeIdx !== -1) {
+			// Clean extraction
+			return responseText.substring(contentStart, closeIdx).trim();
+		}
+		// 2. Open tag but no closing tag — take everything after <summary>
+		return responseText.substring(contentStart).trim();
+	}
+
+	// 3. No tags found — cannot extract
+	return undefined;
 }

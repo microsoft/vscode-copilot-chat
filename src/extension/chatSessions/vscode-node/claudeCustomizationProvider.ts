@@ -69,9 +69,11 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 		return {
 			label: 'Claude',
 			iconId: 'claude',
-			unsupportedTypes: [
-				vscode.ChatSessionCustomizationType.Prompt,
-				new vscode.ChatSessionCustomizationType('plugins'),
+			supportedTypes: [
+				vscode.ChatSessionCustomizationType.Agent,
+				vscode.ChatSessionCustomizationType.Skill,
+				vscode.ChatSessionCustomizationType.Instructions,
+				vscode.ChatSessionCustomizationType.Hook,
 			],
 		};
 	}
@@ -107,7 +109,7 @@ export class ClaudeCustomizationProvider extends Disposable implements vscode.Ch
 				type: vscode.ChatSessionCustomizationType.Agent,
 				name: agent.name,
 				description: agent.description,
-				groupKey: 'Built-in',
+				// No groupKey — vscode infers Built-in from non-file: scheme
 			});
 		}
 

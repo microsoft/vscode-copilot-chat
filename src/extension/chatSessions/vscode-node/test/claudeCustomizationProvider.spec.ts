@@ -141,12 +141,36 @@ describe('ClaudeCustomizationProvider', () => {
 			expect(ClaudeCustomizationProvider.metadata.iconId).toBe('claude');
 		});
 
-		it('marks Prompt and plugins as unsupported', () => {
-			const unsupported = ClaudeCustomizationProvider.metadata.unsupportedTypes;
-			expect(unsupported).toBeDefined();
-			expect(unsupported).toHaveLength(2);
-			expect(unsupported![0]).toBe(FakeChatSessionCustomizationType.Prompt);
-			expect(unsupported![1].id).toBe('plugins');
+		it('supports Agent, Skill, Instructions, and Hook types', () => {
+			const supported = ClaudeCustomizationProvider.metadata.supportedTypes;
+			expect(supported).toBeDefined();
+			expect(supported).toHaveLength(4);
+			expect(supported).toContain(FakeChatSessionCustomizationType.Agent);
+			expect(supported).toContain(FakeChatSessionCustomizationType.Skill);
+			expect(supported).toContain(FakeChatSessionCustomizationType.Instructions);
+			expect(supported).toContain(FakeChatSessionCustomizationType.Hook);
+		});
+
+		it('only returns items whose type is in supportedTypes', async () => {
+			mockRuntimeDataService.setAgents([
+				{ name: 'Explore', description: 'Fast exploration agent' },
+			]);
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const supported = new Set(ClaudeCustomizationProvider.metadata.supportedTypes!.map(t => t.id));
+			for (const item of items) {
+				expect(supported.has(item.type.id), `item "${item.name}" has type "${item.type.id}" which is not in supportedTypes`).toBe(true);
+			}
+		});
+
+		it('does not set groupKey for items with synthetic URIs (vscode infers grouping)', async () => {
+			mockRuntimeDataService.setAgents([
+				{ name: 'Explore', description: 'Explore agent' },
+			]);
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const builtinItems = items.filter(i => i.uri.scheme !== 'file');
+			for (const item of builtinItems) {
+				expect(item.groupKey, `item "${item.name}" with scheme "${item.uri.scheme}" should not have groupKey (vscode infers)`).toBeUndefined();
+			}
 		});
 	});
 
@@ -167,7 +191,7 @@ describe('ClaudeCustomizationProvider', () => {
 			expect(agentItems).toHaveLength(2);
 			expect(agentItems[0].name).toBe('Explore');
 			expect(agentItems[0].description).toBe('Fast exploration agent');
-			expect(agentItems[0].groupKey).toBe('Built-in');
+			expect(agentItems[0].groupKey).toBeUndefined();
 			expect(agentItems[0].uri.scheme).toBe('claude-code');
 			expect(agentItems[0].uri.path).toBe('/agents/Explore');
 			expect(agentItems[1].name).toBe('Review');
@@ -199,7 +223,7 @@ describe('ClaudeCustomizationProvider', () => {
 			const agentItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Agent);
 			expect(agentItems).toHaveLength(1);
 			expect(agentItems[0].description).toBe('SDK version');
-			expect(agentItems[0].groupKey).toBe('Built-in');
+			expect(agentItems[0].groupKey).toBeUndefined();
 		});
 
 		it('filters out file agents not under .claude/', async () => {

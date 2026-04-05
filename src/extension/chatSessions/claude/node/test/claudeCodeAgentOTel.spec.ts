@@ -58,7 +58,7 @@ function createToolCallSdkService(messageFactory: (sessionId: string) => AsyncGe
 			const prompt = options.prompt;
 			const generator = (async function* () {
 				for await (const msg of prompt) {
-					const sessionId = msg.session_id;
+					const sessionId = msg.session_id ?? '';
 					yield* messageFactory(sessionId);
 				}
 			})();
@@ -91,7 +91,7 @@ function createSdkServiceWithHooks(
 			const hooks = queryOptions.options.hooks;
 			const generator = (async function* () {
 				for await (const msg of prompt) {
-					const sessionId = msg.session_id;
+					const sessionId = msg.session_id ?? '';
 					yield* messageFactory(sessionId, hooks);
 				}
 			})();

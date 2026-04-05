@@ -48,10 +48,11 @@ export const copilotCLICommands: readonly CopilotCLICommand[] = ['compact', 'pla
 
 export const builtinSlashSCommands = {
 	commit: '/commit',
+	sync: '/sync',
+	merge: '/merge',
 	createPr: '/create-pr',
 	createDraftPr: '/create-draft-pr',
 	updatePr: '/update-pr',
-	mergeChanges: '/merge-changes',
 };
 
 /**
@@ -384,6 +385,20 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 			toolCallWaitingForPermissions.length = 0;
 		};
+		// Flush only the tool invocation matching the given toolCallId, leaving other
+		// pending tools in the array. This prevents parallel tool calls from being
+		// prematurely pushed to the stream when only one of them has been approved.
+		const flushPendingInvocationMessageForToolCallId = (toolCallId: string | undefined) => {
+			if (!toolCallId) {
+				flushPendingInvocationMessages();
+				return;
+			}
+			const index = toolCallWaitingForPermissions.findIndex(([, tc]) => tc.toolCallId === toolCallId);
+			if (index !== -1) {
+				const [[invocationMessage]] = toolCallWaitingForPermissions.splice(index, 1);
+				this._stream?.push(invocationMessage);
+			}
+		};
 
 		const chunkMessageIds = new Set<string>();
 		const assistantMessageChunks: string[] = [];
@@ -409,7 +424,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					},
 					token
 				);
-				flushPendingInvocationMessages();
+				flushPendingInvocationMessageForToolCallId(permissionRequest.toolCallId);
 
 				this._requestLogger.addEntry({
 					type: LoggedRequestKind.MarkdownContentRequest,
@@ -424,6 +439,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			})));
 			if (shouldHandleExitPlanModeRequests) {
 				disposables.add(toDisposable(this._sdkSession.on('exit_plan_mode.requested', async (event) => {
+					this.updateArtifacts();
 					type ActionType = Parameters<NonNullable<SessionOptions['onExitPlanMode']>>[0]['actions'][number];
 					if (this._permissionLevel === 'autopilot') {
 						this.logService.trace('[CopilotCLISession] Auto-approving exit plan mode in autopilot');
@@ -625,7 +641,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				// Just complete the tool invocation - the part was already pushed with partial updates enabled
 				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService, getWorkingDirectory(this.workspace)) ?? [];
 				if (responsePart) {
-					flushPendingInvocationMessages();
+					flushPendingInvocationMessageForToolCallId(event.data.toolCallId);
 					if (responsePart instanceof ChatToolInvocationPart) {
 						responsePart.enablePartialUpdate = true;
 					}
@@ -745,6 +761,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 			this._pendingPrompt = undefined;
 			disposables.dispose();
+
+			this.updateArtifacts();
 		}
 	}
 
@@ -770,6 +788,24 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		}
 	}
 
+	private updateArtifacts() {
+		const shouldHandleExitPlanModeRequests = this.configurationService.getConfig(ConfigKey.Advanced.CLIPlanExitModeEnabled);
+
+		if (!shouldHandleExitPlanModeRequests || !this._toolsService.getTool('setArtifacts') || !this._toolInvocationToken) {
+			return;
+		}
+
+		const artifacts: { label: string; uri: string; type: 'devServer' | 'screenshot' | 'plan' }[] = [];
+		const planPath = this._sdkSession.getPlanPath();
+		if (planPath) {
+			artifacts.push({ label: l10n.t('Plan'), uri: Uri.file(planPath).toString(), type: 'plan' });
+		}
+		Promise.resolve(this._toolsService
+			.invokeTool('setArtifacts', { input: { artifacts }, toolInvocationToken: this._toolInvocationToken }, CancellationToken.None))
+			.catch(error => {
+				this.logService.error(error, '[CopilotCLISession] Failed to update artifacts');
+			});
+	}
 	/**
 	 * Sends a request to the underlying SDK session.
 	 *
