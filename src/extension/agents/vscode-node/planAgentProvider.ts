@@ -201,13 +201,12 @@ Keep iterating until explicit approval or handoff.
 **Further Considerations** (if applicable, 1-3 items)
 1. {Clarifying question with recommendation. Option A / Option B / Option C}
 2. {…}
+\`\`\`
 
 Rules:
 ${planStyleGuideRules}
 - NO blocking questions at the end — ask during workflow via #tool:vscode/askQuestions
 - The plan MUST be presented to the user, don't just mention the plan file.
-
-\`\`\`
 </plan_style_guide>`;
 	}
 
