@@ -441,6 +441,7 @@ export class ClaudeCodeSession extends Disposable {
 			// Pass the permission mode to the SDK
 			permissionMode: this._currentPermissionMode,
 			hooks: this._buildHooks(token),
+			includeHookEvents: true,
 			mcpServers,
 			settings: {
 				env: {
