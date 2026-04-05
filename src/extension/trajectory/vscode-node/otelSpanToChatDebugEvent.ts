@@ -587,7 +587,9 @@ function capitalize(s: string): string {
 /**
  * Convert a JSONL debug log entry into a VS Code debug panel event.
  * Returns undefined for entry types that are not displayed in the panel
- * (session_start, turn boundaries, child session references).
+ * (session_start, turn boundaries, errors) and for filtered child session
+ * references (categorization, title). Non-filtered child_session_ref entries
+ * are converted into generic events with category 'subagent'.
  *
  * @param skipCoreEvents When true, skip `discovery` and core-sourced `generic`
  *   entries because VS Code core is already displaying them for live sessions.

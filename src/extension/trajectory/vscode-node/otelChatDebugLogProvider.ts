@@ -430,14 +430,27 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 			if (parentDir) {
 				const childFilePath = URI.joinPath(parentDir, childLogFile).fsPath;
 				try {
-					const content = await fs.promises.readFile(childFilePath, 'utf-8');
 					const entries: IDebugLogEntry[] = [];
-					for (const line of content.split('\n')) {
-						if (!line.trim()) { continue; }
-						try {
-							entries.push(JSON.parse(line) as IDebugLogEntry);
-						} catch { /* skip malformed */ }
-					}
+					const stream = fs.createReadStream(childFilePath, { encoding: 'utf-8' });
+					let remainder = '';
+					await new Promise<void>((resolve, reject) => {
+						stream.on('data', (chunk) => {
+							remainder += String(chunk);
+							const lines = remainder.split('\n');
+							remainder = lines.pop()!;
+							for (const line of lines) {
+								if (!line.trim()) { continue; }
+								try { entries.push(JSON.parse(line) as IDebugLogEntry); } catch { /* skip */ }
+							}
+						});
+						stream.on('end', () => {
+							if (remainder.trim()) {
+								try { entries.push(JSON.parse(remainder) as IDebugLogEntry); } catch { /* skip */ }
+							}
+							resolve();
+						});
+						stream.on('error', reject);
+					});
 					return entries;
 				} catch {
 					// Expected for live scenarios — file hasn't been flushed yet.

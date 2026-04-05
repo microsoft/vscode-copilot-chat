@@ -242,7 +242,8 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		if (childInfo) {
 			// Child session — write under parent's directory
 			sessionDir = URI.joinPath(dir, childInfo.parentSessionId);
-			const fileName = `${childInfo.label}-${sessionId}.jsonl`;
+			const safeLabel = childInfo.label.replace(/[/\\:*?"<>|\x00-\x1f]/g, '_').replace(/\.\./g, '_');
+			const fileName = `${safeLabel}-${sessionId}.jsonl`;
 			fileUri = URI.joinPath(sessionDir, fileName);
 
 			// Ensure parent session exists so we can write a cross-reference.
@@ -262,7 +263,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 				status: 'ok',
 				attrs: {
 					childSessionId: sessionId,
-					childLogFile: `${childInfo.label}-${sessionId}.jsonl`,
+					childLogFile: `${safeLabel}-${sessionId}.jsonl`,
 					label: childInfo.label,
 				},
 			});

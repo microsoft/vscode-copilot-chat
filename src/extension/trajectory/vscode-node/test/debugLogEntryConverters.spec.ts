@@ -91,9 +91,9 @@ describe('debugLogEntryToDebugEvent', () => {
 		expect(() => debugLogEntryToDebugEvent(entry)).toThrow();
 	});
 
-	it('attempts to convert discovery entry (enters conversion path)', () => {
+	it('skips discovery entries by default (core handles them)', () => {
 		const entry = makeEntry({ type: 'discovery', attrs: { category: 'discovery' } });
-		expect(() => debugLogEntryToDebugEvent(entry)).toThrow();
+		expect(debugLogEntryToDebugEvent(entry)).toBeUndefined();
 	});
 
 	it('attempts to convert generic entry (enters conversion path)', () => {
@@ -138,5 +138,96 @@ describe('entryDedupKey', () => {
 		const before = makeEntry({ type: 'hook', spanId: '0000000000000009', ts: 1000 });
 		const after = makeEntry({ type: 'hook', spanId: '0000000000000009', ts: 9000 });
 		expect(entryDedupKey(before)).not.toBe(entryDedupKey(after));
+	});
+});
+
+describe('debugLogEntryToDebugEvent skipCoreEvents', () => {
+	it('skips discovery entries when skipCoreEvents is true (default)', () => {
+		const entry = makeEntry({
+			type: 'discovery',
+			name: 'Load Agents',
+			attrs: { category: 'discovery', source: 'core', details: 'Resolved 5 agents' },
+		});
+		expect(debugLogEntryToDebugEvent(entry)).toBeUndefined();
+		expect(debugLogEntryToDebugEvent(entry, true)).toBeUndefined();
+	});
+
+	it('converts discovery entries when skipCoreEvents is false', () => {
+		const entry = makeEntry({
+			type: 'discovery',
+			name: 'Load Agents',
+			attrs: { category: 'discovery', source: 'core', details: 'Resolved 5 agents' },
+		});
+		expect(() => debugLogEntryToDebugEvent(entry, false)).toThrow();
+	});
+
+	it('skips core-sourced generic entries when skipCoreEvents is true', () => {
+		const entry = makeEntry({
+			type: 'generic',
+			name: 'Resolve Customizations',
+			attrs: { category: 'customization', source: 'core' },
+		});
+		expect(debugLogEntryToDebugEvent(entry)).toBeUndefined();
+	});
+
+	it('converts core-sourced generic entries when skipCoreEvents is false', () => {
+		const entry = makeEntry({
+			type: 'generic',
+			name: 'Resolve Customizations',
+			attrs: { category: 'customization', source: 'core' },
+		});
+		expect(() => debugLogEntryToDebugEvent(entry, false)).toThrow();
+	});
+
+	it('converts non-core generic entries regardless of skipCoreEvents', () => {
+		const entry = makeEntry({
+			type: 'generic',
+			name: 'Custom Event',
+			attrs: { details: 'something' },
+		});
+		// Both should attempt conversion (not return undefined)
+		expect(() => debugLogEntryToDebugEvent(entry, true)).toThrow();
+		expect(() => debugLogEntryToDebugEvent(entry, false)).toThrow();
+	});
+});
+
+describe('child_session_ref conversion', () => {
+	it('sets parentEventId from parentSpanId on child_session_ref', () => {
+		const entry = makeEntry({
+			type: 'child_session_ref',
+			name: 'runSubagent-Explore',
+			spanId: 'child-ref-abc',
+			parentSpanId: 'tool-span-42',
+			attrs: { label: 'runSubagent-Explore', childSessionId: 'abc', childLogFile: 'runSubagent-Explore-abc.jsonl' },
+		});
+		expect(() => debugLogEntryToDebugEvent(entry)).toThrow();
+	});
+
+	it('child_session_ref without parentSpanId has undefined parentEventId', () => {
+		const entry = makeEntry({
+			type: 'child_session_ref',
+			name: 'runSubagent-default',
+			spanId: 'child-ref-def',
+			attrs: { label: 'runSubagent-default', childSessionId: 'def' },
+		});
+		expect(() => debugLogEntryToDebugEvent(entry)).toThrow();
+	});
+
+	it('filters categorization child_session_ref regardless of skipCoreEvents', () => {
+		const entry = makeEntry({
+			type: 'child_session_ref',
+			attrs: { label: 'categorization' },
+		});
+		expect(debugLogEntryToDebugEvent(entry, true)).toBeUndefined();
+		expect(debugLogEntryToDebugEvent(entry, false)).toBeUndefined();
+	});
+
+	it('filters title child_session_ref regardless of skipCoreEvents', () => {
+		const entry = makeEntry({
+			type: 'child_session_ref',
+			attrs: { label: 'title' },
+		});
+		expect(debugLogEntryToDebugEvent(entry, true)).toBeUndefined();
+		expect(debugLogEntryToDebugEvent(entry, false)).toBeUndefined();
 	});
 });
