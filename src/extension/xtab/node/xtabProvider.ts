@@ -851,6 +851,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				pseudoEditWindow,
 				tracer,
 				() => chatResponseFailure ? mapChatFetcherErrorToNoNextEditReason(chatResponseFailure) : undefined,
+				cancellationToken,
 			);
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.UnifiedWithXml) {
 			const linesIter = linesStream[Symbol.asyncIterator]();
@@ -939,7 +940,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		let i = 0;
 		let hasBeenDelayed = false;
 		try {
-			for await (const edit of ResponseProcessor.diff(editWindowLines, cleanedLinesStream, cursorOriginalLinesOffset, diffOptions)) {
+			for await (const edit of ResponseProcessor.diff(editWindowLines, cleanedLinesStream, cursorOriginalLinesOffset, diffOptions, cancellationToken)) {
 
 				tracer.trace(`ResponseProcessor streamed edit #${i} with latency ${fetchRequestStopWatch.elapsed()} ms`);
 
@@ -1001,6 +1002,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 			if (chatResponseFailure) {
 				return mapChatFetcherErrorToNoNextEditReason(chatResponseFailure);
+			}
+
+			if (cancellationToken.isCancellationRequested) {
+				return new NoNextEditReason.GotCancelled('duringStreaming');
 			}
 
 			return new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);

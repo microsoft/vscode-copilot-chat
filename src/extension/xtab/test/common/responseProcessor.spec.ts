@@ -6,6 +6,7 @@
 import { describe, expect, it, suite, test } from 'vitest';
 import { ResponseProcessor } from '../../../../platform/inlineEdits/common/responseProcessor';
 import { AsyncIterUtils } from '../../../../util/common/asyncIterableUtils';
+import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { LineEdit, LineReplacement } from '../../../../util/vs/editor/common/core/edits/lineEdit';
 import { LineRange } from '../../../../util/vs/editor/common/core/ranges/lineRange';
 
@@ -575,5 +576,51 @@ describe('isAdditiveEdit', () => {
 		expect(ResponseProcessor.isAdditiveEdit('aaa', 'aaaa')).toMatchInlineSnapshot(`true`);
 		expect(ResponseProcessor.isAdditiveEdit('aaa', 'aXaYaZ')).toMatchInlineSnapshot(`true`);
 		expect(ResponseProcessor.isAdditiveEdit('aaaa', 'aaa')).toMatchInlineSnapshot(`false`);
+	});
+});
+
+describe('ResponseProcessor.diff cancellation', () => {
+
+	it('stops yielding edits when the cancellation token is cancelled', async () => {
+		const original = ['line1', 'line2', 'line3', 'line4', 'line5'];
+		const modified = ['line1', 'CHANGED2', 'CHANGED3', 'CHANGED4', 'line5'];
+
+		const cts = new CancellationTokenSource();
+
+		const edits: LineReplacement[] = [];
+		// Cancel before any iteration starts
+		cts.cancel();
+
+		for await (const edit of ResponseProcessor.diff(original, AsyncIterUtils.fromArray(modified), 0, ResponseProcessor.DEFAULT_DIFF_PARAMS, cts.token)) {
+			edits.push(edit);
+		}
+
+		// No edits should have been yielded because the token was already cancelled
+		expect(edits).toHaveLength(0);
+	});
+
+	it('stops mid-stream when the cancellation token is cancelled during iteration', async () => {
+		const original = ['a', 'b', 'c', 'd', 'e'];
+		const modified = ['X', 'Y', 'Z', 'W', 'V'];
+
+		const cts = new CancellationTokenSource();
+
+		// Cancel mid-stream using an async iterable that cancels after the first item
+		async function* cancelMidStream() {
+			yield modified[0];
+			cts.cancel();
+			yield modified[1];
+			yield modified[2];
+			yield modified[3];
+			yield modified[4];
+		}
+
+		const edits: LineReplacement[] = [];
+		for await (const edit of ResponseProcessor.diff(original, cancelMidStream(), 0, ResponseProcessor.DEFAULT_DIFF_PARAMS, cts.token)) {
+			edits.push(edit);
+		}
+
+		// Cancellation stops the generator — no final edit should be emitted
+		expect(edits).toHaveLength(0);
 	});
 });

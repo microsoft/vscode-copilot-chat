@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { illegalArgument } from '../../../util/vs/base/common/errors';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange';
 
@@ -63,7 +64,7 @@ export namespace ResponseProcessor {
 	 * @param modifiedLines
 	 * @param cursorOriginalLinesOffset offset of cursor within original lines
 	 */
-	export async function* diff(originalLines: string[], modifiedLines: AsyncIterable<string>, cursorOriginalLinesOffset: number, params: DiffParams): AsyncIterable<LineReplacement> {
+	export async function* diff(originalLines: string[], modifiedLines: AsyncIterable<string>, cursorOriginalLinesOffset: number, params: DiffParams, cancellationToken: CancellationToken = CancellationToken.None): AsyncIterable<LineReplacement> {
 
 		const lineToIdxs = new ArrayMap<string, number>();
 		for (const [i, line] of originalLines.entries()) {
@@ -76,6 +77,9 @@ export namespace ResponseProcessor {
 		let state: DivergenceState = { k: 'aligned' };
 
 		for await (const line of modifiedLines) {
+			if (cancellationToken.isCancellationRequested) {
+				return;
+			}
 			++updatedEditWindowIdx;
 
 			// handle modifiedLines.length > originalLines.length
