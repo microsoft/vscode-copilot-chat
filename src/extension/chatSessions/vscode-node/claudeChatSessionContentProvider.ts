@@ -30,7 +30,7 @@ import { IClaudeSlashCommandService } from '../claude/vscode-node/claudeSlashCom
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../common/folderRepositoryManager';
 import { buildChatHistory, collectSdkModelIds } from './chatHistoryBuilder';
 
-const permissionModes: ReadonlySet<string> = new Set<PermissionMode>(['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk']);
+const permissionModes: ReadonlySet<string> = new Set<PermissionMode>(['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk', 'auto']);
 
 function isPermissionMode(value: string): value is PermissionMode {
 	return permissionModes.has(value);
@@ -79,7 +79,8 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 
 		// Listen for configuration changes to update available options
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(ConfigKey.ClaudeAgentAllowDangerouslySkipPermissions.fullyQualifiedId)) {
+			if (e.affectsConfiguration(ConfigKey.ClaudeAgentAllowDangerouslySkipPermissions.fullyQualifiedId) ||
+				e.affectsConfiguration(ConfigKey.ClaudeAgentAllowAutoPermissions.fullyQualifiedId)) {
 				this._onDidChangeChatSessionProviderOptions.fire();
 			}
 		}));
@@ -277,6 +278,11 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			{ id: 'acceptEdits', name: l10n.t('Edit automatically') },
 			{ id: 'plan', name: l10n.t('Plan mode') },
 		];
+
+		// Add auto permissions option if enabled via setting
+		if (this.configurationService.getConfig(ConfigKey.ClaudeAgentAllowAutoPermissions)) {
+			permissionModeItems.push({ id: 'auto', name: l10n.t('Auto (model classifier)') });
+		}
 
 		// Add bypass permissions option if enabled via setting
 		if (this.configurationService.getConfig(ConfigKey.ClaudeAgentAllowDangerouslySkipPermissions)) {

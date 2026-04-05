@@ -604,7 +604,7 @@ describe('ChatSessionContentProvider', () => {
 		});
 
 		it('accepts all valid permission modes in provideHandleOptionsChange', async () => {
-			const validModes = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk'] as const;
+			const validModes = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk', 'auto'] as const;
 
 			for (const mode of validModes) {
 				seedSessionItem(`test-session-${mode}`);
