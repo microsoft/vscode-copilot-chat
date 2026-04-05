@@ -1730,9 +1730,15 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				}
 			);
 
-			if (!this.isRepetitive(chatCompletion, baseTelemetry?.properties)) {
-				completions.push(chatCompletion);
+			if (this.isRepetitive(chatCompletion, baseTelemetry?.properties)) {
+				// Log repetition but still include the completion in the results.
+				// Previously, repetitive completions were silently dropped, which caused
+				// the response to have zero successful completions and fall through to
+				// {type: "Unknown"}, triggering auto-retry in agent mode — creating a
+				// self-reinforcing repetition loop.
+				this._logService.warn('[ChatMLFetcher] Repetitive response detected, including in results to prevent unknown/retry loop');
 			}
+			completions.push(chatCompletion);
 		}
 		const successFinishReasons = new Set([FinishedCompletionReason.Stop, FinishedCompletionReason.ClientTrimmed, FinishedCompletionReason.FunctionCall, FinishedCompletionReason.ToolCalls]);
 		const successfulCompletions = completions.filter(c => successFinishReasons.has(c.finishReason));

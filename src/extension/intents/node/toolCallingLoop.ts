@@ -348,6 +348,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 	private static readonly MAX_AUTOPILOT_RETRIES = 3;
 	private static readonly MAX_AUTOPILOT_ITERATIONS = 5;
+	/**
+	 * Maximum number of consecutive text-only rounds (no tool calls) before we
+	 * break the loop to prevent infinite repetition. This catches the case where
+	 * the model keeps generating planning text without making progress.
+	 */
+	private static readonly MAX_CONSECUTIVE_TEXT_ONLY_ROUNDS = 3;
 	private autopilotRetryCount = 0;
 	private autopilotIterationCount = 0;
 
@@ -364,6 +370,28 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 * message or `undefined` to let the loop stop.
 	 */
 	protected shouldAutopilotContinue(result: IToolCallSingleResult): string | undefined {
+		// Guard against the model generating semantically similar text-only
+		// responses across consecutive rounds.  When both the current and
+		// previous rounds had zero tool calls AND their word-level Jaccard
+		// similarity exceeds 60%, the model is almost certainly in a
+		// degenerate repetition loop.  Returning `undefined` lets the loop
+		// stop naturally instead of sending another "keep going" nudge that
+		// the model will also ignore.
+		if (this.toolCallRounds.length >= 2) {
+			const lastRound = this.toolCallRounds[this.toolCallRounds.length - 1];
+			const prevRound = this.toolCallRounds[this.toolCallRounds.length - 2];
+			if (!lastRound.toolCalls.length && !prevRound.toolCalls.length) {
+				const similarity = ToolCallingLoop.jaccardSimilarity(lastRound.response, prevRound.response);
+				if (similarity > 0.6) {
+					this._logService.warn(
+						`[ToolCallingLoop] Detected semantically similar consecutive ` +
+						`text-only rounds (Jaccard=${similarity.toFixed(2)}), stopping autopilot nudge`
+					);
+					return undefined;
+				}
+			}
+		}
+
 		if (this.taskCompleted) {
 			this._logService.info('[ToolCallingLoop] Autopilot: task_complete was called, stopping');
 			return undefined;
@@ -398,6 +426,26 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			'When you ARE done, first provide a brief text summary of what was accomplished, then call task_complete. ' +
 			'Both the summary message and the tool call are required.\n\n' +
 			'Keep working autonomously until the task is truly finished, then call task_complete.';
+	}
+
+	/**
+	 * Compute the Jaccard similarity between two strings based on word-level sets.
+	 * Returns a value in [0, 1] where 1 means identical word sets.
+	 */
+	protected static jaccardSimilarity(a: string, b: string): number {
+		const wordsA = new Set(a.split(/\s+/).filter(Boolean));
+		const wordsB = new Set(b.split(/\s+/).filter(Boolean));
+		if (wordsA.size === 0 && wordsB.size === 0) {
+			return 1;
+		}
+		let intersection = 0;
+		for (const word of wordsA) {
+			if (wordsB.has(word)) {
+				intersection++;
+			}
+		}
+		const union = new Set([...wordsA, ...wordsB]).size;
+		return union > 0 ? intersection / union : 0;
 	}
 
 	/**
@@ -889,6 +937,23 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				this.toolCallRounds.push(result.round);
 				this._sessionTranscriptService.logAssistantTurnEnd(sessionId, turnId);
 				agentSpan?.addEvent('turn_end', { turnId, ...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}) });
+
+				// Guard against infinite repetition: if the model has produced N
+				// consecutive text-only rounds (no tool calls), it is very likely
+				// stuck in a planning loop. Break early instead of nudging further.
+				if (result.response.type === ChatFetchResponseType.Success && !result.round.toolCalls.length) {
+					let consecutiveTextOnlyRounds = 0;
+					for (let ri = this.toolCallRounds.length - 1; ri >= 0 && !this.toolCallRounds[ri].toolCalls.length; ri--) {
+						consecutiveTextOnlyRounds++;
+					}
+					if (consecutiveTextOnlyRounds >= ToolCallingLoop.MAX_CONSECUTIVE_TEXT_ONLY_ROUNDS) {
+						this._logService.warn(
+							`[ToolCallingLoop] ${consecutiveTextOnlyRounds} consecutive text-only rounds detected — ` +
+							`breaking loop to prevent infinite repetition`
+						);
+						break;
+					}
+				}
 
 				// Inline summarization: the model responded with summary text only (no tool calls).
 				// Extract the summary, store it on the appropriate round, and continue the loop.

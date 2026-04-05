@@ -69,6 +69,13 @@ class AutopilotTestToolCallingLoop extends ToolCallingLoop<IToolCallingLoopOptio
 	public testEnsureAutopilotTools(tools: LanguageModelToolInformation[]): LanguageModelToolInformation[] {
 		return this.ensureAutopilotTools(tools);
 	}
+
+	/**
+	 * Expose jaccardSimilarity for testing.
+	 */
+	public static testJaccardSimilarity(a: string, b: string): number {
+		return ToolCallingLoop.jaccardSimilarity(a, b);
+	}
 }
 
 function createMockChatRequest(overrides: Partial<ChatRequest> = {}): ChatRequest {
@@ -222,6 +229,88 @@ describe('ToolCallingLoop autopilot', () => {
 			// Second nudge should work
 			const msg2 = loop.testShouldAutopilotContinue(createMockSingleResult());
 			expect(msg2).toContain('task_complete');
+		});
+		it('should stop when consecutive text-only rounds have similar content', () => {
+			const loop = createLoop('autopilot');
+
+			// Simulate two consecutive text-only rounds with nearly identical text
+			loop.addToolCallRound({
+				...createMockRound(),
+				response: 'Let me review the code and analyze the structure of this file.',
+			});
+			loop.addToolCallRound({
+				...createMockRound(),
+				response: 'Let me review the code and analyze the structure of the file.',
+			});
+
+			// shouldAutopilotContinue should detect the similarity and return undefined
+			const result = loop.testShouldAutopilotContinue(createMockSingleResult());
+			expect(result).toBeUndefined();
+		});
+
+		it('should continue when text-only rounds have different content', () => {
+			const loop = createLoop('autopilot');
+
+			// Two text-only rounds with very different content
+			loop.addToolCallRound({
+				...createMockRound(),
+				response: 'I need to read the configuration file first.',
+			});
+			loop.addToolCallRound({
+				...createMockRound(),
+				response: 'The database connection string needs to be updated with new credentials.',
+			});
+
+			// Content is different enough — should still nudge
+			const result = loop.testShouldAutopilotContinue(createMockSingleResult());
+			expect(result).toContain('task_complete');
+		});
+
+		it('should not trigger similarity check when previous round had tool calls', () => {
+			const loop = createLoop('autopilot');
+
+			// Previous round had tool calls, current round is text-only
+			loop.addToolCallRound(createMockRound(['read_file']));
+			loop.addToolCallRound({
+				...createMockRound(),
+				response: 'Let me analyze this further.',
+			});
+
+			// Should still nudge since the previous round had tool calls
+			const result = loop.testShouldAutopilotContinue(createMockSingleResult());
+			expect(result).toContain('task_complete');
+		});
+	});
+
+	describe('jaccardSimilarity', () => {
+		it('should return 1 for identical strings', () => {
+			expect(AutopilotTestToolCallingLoop.testJaccardSimilarity(
+				'hello world', 'hello world'
+			)).toBe(1);
+		});
+
+		it('should return 0 for completely different strings', () => {
+			expect(AutopilotTestToolCallingLoop.testJaccardSimilarity(
+				'apple banana cherry', 'dog elephant frog'
+			)).toBe(0);
+		});
+
+		it('should return 1 for two empty strings', () => {
+			expect(AutopilotTestToolCallingLoop.testJaccardSimilarity('', '')).toBe(1);
+		});
+
+		it('should detect high similarity for slightly different planning text', () => {
+			const a = 'Let me review the code and analyze the structure of this file';
+			const b = 'Let me review the code and analyze the structure of the file';
+			const similarity = AutopilotTestToolCallingLoop.testJaccardSimilarity(a, b);
+			expect(similarity).toBeGreaterThan(0.6);
+		});
+
+		it('should detect low similarity for genuinely different content', () => {
+			const a = 'I need to read the database configuration settings';
+			const b = 'The build process failed due to a missing dependency';
+			const similarity = AutopilotTestToolCallingLoop.testJaccardSimilarity(a, b);
+			expect(similarity).toBeLessThan(0.3);
 		});
 	});
 
