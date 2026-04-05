@@ -7,6 +7,7 @@ import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/docum
 import { NoNextEditReason, StreamedEdit } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ILogger } from '../../../platform/log/common/logService';
 import { ErrorUtils } from '../../../util/common/errors';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { isAbsolute } from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
 import { LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
@@ -71,11 +72,15 @@ export class XtabCustomDiffPatchResponseHandler {
 		window: OffsetRange | undefined,
 		parentTracer: ILogger,
 		getFetchFailure?: () => NoNextEditReason | undefined,
+		cancellationToken: CancellationToken = CancellationToken.None,
 	): AsyncGenerator<StreamedEdit, NoNextEditReason, void> {
 		const tracer = parentTracer.createSubLogger(['XtabCustomDiffPatchResponseHandler', 'handleResponse']);
 		const activeDocRelativePath = toUniquePath(activeDocumentId, workspaceRoot?.path);
 		try {
 			for await (const edit of XtabCustomDiffPatchResponseHandler.extractEdits(linesStream)) {
+				if (cancellationToken.isCancellationRequested) {
+					return new NoNextEditReason.GotCancelled('duringStreaming');
+				}
 				const fetchFailure = getFetchFailure?.();
 				if (fetchFailure) {
 					return fetchFailure;
