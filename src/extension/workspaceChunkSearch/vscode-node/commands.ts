@@ -23,7 +23,7 @@ export function register(accessor: ServicesAccessor): IDisposable {
 	disposableStore.add(vscode.commands.registerCommand(buildRemoteIndexCommandId, onlyRunOneAtATime(async () => {
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Window,
-			title: t`Building codebases semantic index`,
+			title: t`Building codebase semantic index`,
 		}, async (progress, token) => {
 			const triggerResult = await workspaceChunkSearch.triggerIndexing(
 				'manual',
