@@ -7,13 +7,16 @@ import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { INSTRUCTION_FILE_EXTENSION, SKILL_FILENAME } from '../../../platform/customInstructions/common/promptTypes';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService } from '../../../platform/promptFiles/common/promptsService';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { basename } from '../../../util/vs/base/common/resources';
+import { URI } from '../../../util/vs/base/common/uri';
 import { IChatPromptFileService } from '../common/chatPromptFileService';
 import { ICopilotCLIAgents } from '../copilotcli/node/copilotCli';
 
@@ -42,6 +45,8 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
 		@IPromptsService private readonly promptsService: IPromptsService,
 		@ILogService private readonly logService: ILogService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 	) {
 		super();
 
@@ -90,12 +95,26 @@ export class CopilotCLICustomizationProvider extends Disposable implements vscod
 	 * Collects all instruction items from the prompt file service,
 	 * categorizing them with groupKeys and badges matching the core
 	 * implementation:
-	 * - agent-instructions: copilot-instructions.md files
+	 * - agent-instructions: AGENTS.md, CLAUDE.md, copilot-instructions.md
 	 * - context-instructions: files with an applyTo pattern (badge = pattern)
 	 * - on-demand-instructions: files without an applyTo pattern
 	 */
 	private async getInstructionItems(token: CancellationToken): Promise<vscode.ChatSessionCustomizationItem[]> {
+		// Collect agent instruction URIs from customInstructionsService
+		// (copilot-instructions.md) plus workspace-root AGENTS.md and CLAUDE.md
 		const agentInstructionUriList = await this.customInstructionsService.getAgentInstructions();
+		const rootFileNames = ['AGENTS.md', 'CLAUDE.md'];
+		for (const folder of this.workspaceService.getWorkspaceFolders()) {
+			for (const fileName of rootFileNames) {
+				const uri = URI.joinPath(folder, fileName);
+				try {
+					await this.fileSystemService.stat(uri);
+					agentInstructionUriList.push(uri);
+				} catch {
+					// file doesn't exist
+				}
+			}
+		}
 
 		const items: vscode.ChatSessionCustomizationItem[] = [];
 		const seenUris = new Set<string>();

@@ -160,6 +160,8 @@ describe('CopilotCLICustomizationProvider', () => {
 			mockCustomInstructionsService,
 			mockPromptsService,
 			new TestLogService(),
+			{ getWorkspaceFolders: () => [] } as any,
+			{ stat: () => Promise.reject(new Error('not found')) } as any,
 		));
 	});
 
@@ -362,6 +364,36 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(instrItems).toHaveLength(3);
 			expect(instrItems.every(i => i.groupKey === 'agent-instructions')).toBe(true);
 			expect(instrItems.map(i => i.name)).toEqual(['AGENTS.md', 'CLAUDE.md', 'copilot-instructions.md']);
+		});
+
+		it('discovers AGENTS.md and CLAUDE.md from workspace roots via filesystem', async () => {
+			const workspaceRoot = URI.file('/workspace');
+			const agentsUri = URI.file('/workspace/AGENTS.md');
+			const claudeUri = URI.file('/workspace/CLAUDE.md');
+			const existingUris = new Set([agentsUri.toString(), claudeUri.toString()]);
+
+			const testProvider = disposables.add(new CopilotCLICustomizationProvider(
+				mockPromptFileService,
+				mockCopilotCLIAgents,
+				mockCustomInstructionsService,
+				mockPromptsService,
+				new TestLogService(),
+				{ getWorkspaceFolders: () => [workspaceRoot] } as any,
+				{
+					stat: (uri: URI) => existingUris.has(uri.toString())
+						? Promise.resolve({ type: 1, ctime: 0, mtime: 0, size: 0 })
+						: Promise.reject(new Error('not found')),
+				} as any,
+			));
+
+			mockPromptFileService.setInstructions([]);
+			mockCustomInstructionsService.setAgentInstructionUris([]);
+
+			const items = await testProvider.provideChatSessionCustomizations(undefined!);
+			const instrItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Instructions);
+			expect(instrItems).toHaveLength(2);
+			expect(instrItems.every(i => i.groupKey === 'agent-instructions')).toBe(true);
+			expect(instrItems.map(i => i.name)).toEqual(['AGENTS.md', 'CLAUDE.md']);
 		});
 
 		it('uses context-instructions groupKey with badge for instructions with applyTo pattern', async () => {
