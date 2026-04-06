@@ -681,22 +681,23 @@ class ConversationHistorySummarizer {
 
 		let summaryResponse: ChatResponse;
 		try {
-			const toolOpts = mode === SummaryMode.Full ? {
+			const normalizedTools = mode === SummaryMode.Full ? normalizeToolSchema(
+				endpoint.family,
+				this.props.tools?.map(tool => ({
+					function:
+					{
+						name: tool.name,
+						description: tool.description,
+						parameters: tool.inputSchema && Object.keys(tool.inputSchema).length ? tool.inputSchema : undefined
+					}, type: 'function'
+				})),
+				(tool, rule) => {
+					this.logService.warn(`Tool ${tool} failed validation: ${rule}`);
+				},
+			) : undefined;
+			const toolOpts = normalizedTools?.length ? {
 				tool_choice: 'none' as const,
-				tools: normalizeToolSchema(
-					endpoint.family,
-					this.props.tools?.map(tool => ({
-						function:
-						{
-							name: tool.name,
-							description: tool.description,
-							parameters: tool.inputSchema && Object.keys(tool.inputSchema).length ? tool.inputSchema : undefined
-						}, type: 'function'
-					})),
-					(tool, rule) => {
-						this.logService.warn(`Tool ${tool} failed validation: ${rule}`);
-					},
-				),
+				tools: normalizedTools,
 			} : undefined;
 
 			stripCacheBreakpoints(summarizationPrompt);
