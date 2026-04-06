@@ -1045,12 +1045,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					// In auto-approve modes, auto-retry on transient errors (not rate-limited or quota-exceeded)
 					if (result.response.type !== ChatFetchResponseType.Success && this.shouldAutoRetry(result.response)) {
 						this.autopilotRetryCount++;
-						const errorReason = result.response.reason;
 						this._logService.info(`[ToolCallingLoop] Auto-retrying on error (attempt ${this.autopilotRetryCount}/${ToolCallingLoop.MAX_AUTOPILOT_RETRIES}): ${result.response.type}`);
 						if (this.options.request.permissionLevel === 'autopilot') {
-							this.showAutopilotProgress(outputStream, l10n.t('Retrying with Autopilot: {0}', errorReason), l10n.t('Retried with Autopilot: {0}', errorReason));
+							this.showAutopilotProgress(outputStream, l10n.t('Request failed, retrying with Autopilot...'), l10n.t('Request failed, retried with Autopilot'));
 						} else {
-							this.showAutopilotProgress(outputStream, l10n.t('Retrying request: {0}', errorReason), l10n.t('Retried request: {0}', errorReason));
+							this.showAutopilotProgress(outputStream, l10n.t('Request failed, retrying request...'), l10n.t('Request failed, retried request'));
 						}
 						await timeout(1000, token);
 						continue;
