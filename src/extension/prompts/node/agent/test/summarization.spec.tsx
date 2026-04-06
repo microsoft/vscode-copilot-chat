@@ -30,7 +30,7 @@ import { ToolName } from '../../../../tools/common/toolNames';
 import { PromptRenderer } from '../../base/promptRenderer';
 import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 import { PromptRegistry } from '../promptRegistry';
-import { ConversationHistorySummarizationPrompt, extractInlineSummary, InlineSummarizationRequestedMetadata, SummarizedConversationHistory, SummarizedConversationHistoryMetadata, SummarizedConversationHistoryPropsBuilder } from '../summarizedConversationHistory';
+import { ConversationHistorySummarizationPrompt, extractInlineSummary, InlineSummarizationRequestedMetadata, stripToolSearchMessages, SummarizedConversationHistory, SummarizedConversationHistoryMetadata, SummarizedConversationHistoryPropsBuilder } from '../summarizedConversationHistory';
 
 suite('Agent Summarization', () => {
 	let accessor: ITestingServicesAccessor;
@@ -688,5 +688,104 @@ suite('Inline Summarization Prompt', () => {
 		// Inline metadata should be set when triggerSummarize is false
 		const inlineMeta = result.metadata.get(InlineSummarizationRequestedMetadata);
 		expect(inlineMeta).toBeDefined();
+	});
+});
+
+suite('stripToolSearchMessages', () => {
+	function makeAssistantMessage(toolCalls: { id: string; name: string }[], text = 'response'): Raw.ChatMessage {
+		return {
+			role: Raw.ChatRole.Assistant,
+			content: [{ type: Raw.ChatCompletionContentPartKind.Text, text }],
+			toolCalls: toolCalls.map(tc => ({
+				type: 'function' as const,
+				id: tc.id,
+				function: { name: tc.name, arguments: '{}' },
+			})),
+		};
+	}
+
+	function makeToolResult(toolCallId: string, text = 'result'): Raw.ChatMessage {
+		return {
+			role: Raw.ChatRole.Tool,
+			content: [{ type: Raw.ChatCompletionContentPartKind.Text, text }],
+			toolCallId,
+		};
+	}
+
+	function makeUserMessage(text = 'hello'): Raw.ChatMessage {
+		return {
+			role: Raw.ChatRole.User,
+			content: [{ type: Raw.ChatCompletionContentPartKind.Text, text }],
+		};
+	}
+
+	test('returns messages unchanged when no tool_search calls present', () => {
+		const messages = [
+			makeUserMessage(),
+			makeAssistantMessage([{ id: 'tc1', name: 'read_file' }]),
+			makeToolResult('tc1'),
+		];
+		const result = stripToolSearchMessages(messages);
+		expect(result).toBe(messages);
+	});
+
+	test('strips custom tool_search tool_use and tool_result', () => {
+		const messages = [
+			makeUserMessage(),
+			makeAssistantMessage([
+				{ id: 'tc1', name: 'read_file' },
+				{ id: 'tc2', name: 'tool_search' },
+			]),
+			makeToolResult('tc1'),
+			makeToolResult('tc2', '["read_file", "edit_file"]'),
+		];
+		const result = stripToolSearchMessages(messages);
+		expect(result).toHaveLength(3);
+		const assistant = result[1];
+		expect(assistant.role).toBe(Raw.ChatRole.Assistant);
+		if (assistant.role === Raw.ChatRole.Assistant) {
+			expect(assistant.toolCalls).toHaveLength(1);
+			expect(assistant.toolCalls![0].id).toBe('tc1');
+		}
+		expect(result.find(m => m.role === Raw.ChatRole.Tool && m.toolCallId === 'tc2')).toBeUndefined();
+	});
+
+	test('removes toolCalls property when all tool calls are tool_search', () => {
+		const messages = [
+			makeUserMessage(),
+			makeAssistantMessage([{ id: 'tc1', name: 'tool_search' }]),
+			makeToolResult('tc1'),
+		];
+		const result = stripToolSearchMessages(messages);
+		expect(result).toHaveLength(2);
+		const assistant = result[1];
+		if (assistant.role === Raw.ChatRole.Assistant) {
+			expect(assistant.toolCalls).toBeUndefined();
+		}
+	});
+
+	test('does not strip server-side tool_search_tool_regex', () => {
+		const messages = [
+			makeUserMessage(),
+			makeAssistantMessage([{ id: 'tc1', name: 'tool_search_tool_regex' }]),
+			makeToolResult('tc1'),
+		];
+		const result = stripToolSearchMessages(messages);
+		expect(result).toBe(messages);
+	});
+
+	test('preserves non-tool messages', () => {
+		const messages = [
+			makeUserMessage('first'),
+			makeAssistantMessage([{ id: 'tc1', name: 'tool_search' }]),
+			makeToolResult('tc1'),
+			makeUserMessage('second'),
+			makeAssistantMessage([{ id: 'tc2', name: 'edit_file' }]),
+			makeToolResult('tc2'),
+		];
+		const result = stripToolSearchMessages(messages);
+		expect(result).toHaveLength(5);
+		expect(result[0].content[0]).toEqual({ type: Raw.ChatCompletionContentPartKind.Text, text: 'first' });
+		expect(result[2].content[0]).toEqual({ type: Raw.ChatCompletionContentPartKind.Text, text: 'second' });
 	});
 });

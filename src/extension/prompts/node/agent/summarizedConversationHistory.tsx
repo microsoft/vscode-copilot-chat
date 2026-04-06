@@ -14,6 +14,7 @@ import { IHistoricalTurn, ISessionTranscriptService } from '../../../../platform
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { isAnthropicFamily, isGeminiFamily } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { CUSTOM_TOOL_SEARCH_NAME } from '../../../../platform/networking/common/anthropic';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { APIUsage } from '../../../../platform/networking/common/openai';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
@@ -703,6 +704,16 @@ class ConversationHistorySummarizer {
 			stripCacheBreakpoints(summarizationPrompt);
 
 			let messages = ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt);
+
+			// Strip custom client-side tool search (tool_search) tool_use/tool_result
+			// pairs. The summarization call uses ChatLocation.Other but
+			// createMessagesRequestBody still converts tool_search results to
+			// tool_reference blocks (customToolSearchEnabled isn't gated by location).
+			// Without tool search enabled in the request, Anthropic rejects them.
+			if (isAnthropicFamily(endpoint)) {
+				messages = stripToolSearchMessages(messages);
+			}
+
 			// Gemini strictly requires every function_call to have a matching function_response.
 			// When prompt-tsx prunes tool result messages due to token budget, orphaned tool_calls
 			// can remain, causing a 400 INVALID_ARGUMENT error. Strip them for Gemini models.
@@ -901,6 +912,44 @@ function stripCacheBreakpoints(messages: ChatMessage[]): void {
 			return part.type !== Raw.ChatCompletionContentPartKind.CacheBreakpoint;
 		});
 	});
+}
+
+/**
+ * Strip custom client-side tool search (tool_search) tool_use and tool_result
+ * messages from the conversation. The summarization call uses ChatLocation.Other
+ * but createMessagesRequestBody still converts tool_search results to
+ * tool_reference blocks (customToolSearchEnabled isn't gated by location).
+ * Without tool search enabled in the request, Anthropic rejects tool_reference
+ * content blocks with: "Input tag 'tool_reference' found using 'type' does not
+ * match any of the expected tags".
+ */
+export function stripToolSearchMessages(messages: ChatMessage[]): ChatMessage[] {
+	const toolSearchIds = new Set<string>();
+	for (const message of messages) {
+		if (message.role === Raw.ChatRole.Assistant && message.toolCalls) {
+			for (const tc of message.toolCalls) {
+				if (tc.function.name === CUSTOM_TOOL_SEARCH_NAME) {
+					toolSearchIds.add(tc.id);
+				}
+			}
+		}
+	}
+
+	if (toolSearchIds.size === 0) {
+		return messages;
+	}
+
+	return messages.map(message => {
+		if (message.role === Raw.ChatRole.Assistant && message.toolCalls) {
+			const filteredToolCalls = message.toolCalls.filter(tc => !toolSearchIds.has(tc.id));
+			if (filteredToolCalls.length !== message.toolCalls.length) {
+				return { ...message, toolCalls: filteredToolCalls.length > 0 ? filteredToolCalls : undefined };
+			}
+		} else if (message.role === Raw.ChatRole.Tool && message.toolCallId && toolSearchIds.has(message.toolCallId)) {
+			return undefined;
+		}
+		return message;
+	}).filter((m): m is ChatMessage => m !== undefined);
 }
 
 export interface ISummarizedConversationHistoryInfo {
