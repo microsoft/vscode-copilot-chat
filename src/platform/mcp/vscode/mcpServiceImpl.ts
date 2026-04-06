@@ -61,7 +61,7 @@ export class McpService extends AbstractMcpService implements IDisposable {
 	private async _doStartMcpGateway(resource: URI): Promise<TrackedMcpGateway | undefined> {
 		try {
 			// TODO: Pass resource into startMcpGateway once supported, to allow gateway to do per-session initialization if needed
-			const gateway = await lm.startMcpGateway();
+			const gateway = await (lm.startMcpGateway as any)(resource);
 			if (gateway) {
 				return new TrackedMcpGateway(gateway, () => this._gateways.delete(resource));
 			}

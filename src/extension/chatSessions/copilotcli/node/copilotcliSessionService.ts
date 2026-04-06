@@ -714,10 +714,12 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					return session;
 				}
 			}
-
+			const uri = Uri.from({
+				scheme: 'copilotcli', path: `/${sessionId}`,
+			});
 			const [sessionManager, { mcpConfig: mcpServers, disposable: mcpGateway }] = await Promise.all([
 				raceCancellationError(this.getSessionManager(), token),
-				this.mcpHandler.loadMcpConfig(),
+				this.mcpHandler.loadMcpConfig(uri),
 			]);
 			try {
 				const copilotUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl) || undefined;
