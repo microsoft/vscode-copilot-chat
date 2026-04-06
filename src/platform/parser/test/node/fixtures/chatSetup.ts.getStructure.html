@@ -1130,7 +1130,7 @@ class ChatSetupController extends Disposable {
 <EXPRESSION_STATEMENT-105>				this.setStep(ChatSetupStep.SigningIn);
 </EXPRESSION_STATEMENT-105><LEXICAL_DECLARATION-107>				const result = await this.signIn(providerId);
 </LEXICAL_DECLARATION-107><IF_STATEMENT-45>				if (!result.session) {
-<EXPRESSION_STATEMENT-106>					this.telemetryService.publicLog2<InstallChatEvent, InstallChatClassification>('commandCenter.chatInstall', { installResult: 'failedNotSignedIn', installDuration: watch.elapsed(), signUpErrorCode: undefined });
+<EXPRESSION_STATEMENT-106>					this.telemetryService.publicLog2<InstallChatEvent, InstallChatClassification>('commandCenter.ChatInstall', { installResult: 'failedNotSignedIn', installDuration: watch.elapsed(), signUpErrorCode: undefined });
 </EXPRESSION_STATEMENT-106><RETURN_STATEMENT-57>					return false;
 </RETURN_STATEMENT-57>				}
 </IF_STATEMENT-45><EXPRESSION_STATEMENT-107>
@@ -1142,7 +1142,7 @@ class ChatSetupController extends Disposable {
 				message: localize('copilotWorkspaceTrust', "Copilot is currently only supported in trusted workspaces.")
 			});
 </LEXICAL_DECLARATION-108><IF_STATEMENT-46>			if (!trusted) {
-<EXPRESSION_STATEMENT-109>				this.telemetryService.publicLog2<InstallChatEvent, InstallChatClassification>('commandCenter.chatInstall', { installResult: 'failedNotTrusted', installDuration: watch.elapsed(), signUpErrorCode: undefined });
+<EXPRESSION_STATEMENT-109>				this.telemetryService.publicLog2<InstallChatEvent, InstallChatClassification>('commandCenter.ChatInstall', { installResult: 'failedNotTrusted', installDuration: watch.elapsed(), signUpErrorCode: undefined });
 </EXPRESSION_STATEMENT-109><RETURN_STATEMENT-58>				return false;
 </RETURN_STATEMENT-58>			}
 </IF_STATEMENT-46><COMMENT-32>
@@ -1201,7 +1201,7 @@ class ChatSetupController extends Disposable {
 </COMMENT-36>					}
 </TRY_STATEMENT-10><IF_STATEMENT-51>
 					if (!session) {
-<EXPRESSION_STATEMENT-117>						this.telemetryService.publicLog2<InstallChatEvent, InstallChatClassification>('commandCenter.chatInstall', { installResult: 'failedNoSession', installDuration: watch.elapsed(), signUpErrorCode: undefined });
+<EXPRESSION_STATEMENT-117>						this.telemetryService.publicLog2<InstallChatEvent, InstallChatClassification>('commandCenter.ChatInstall', { installResult: 'failedNoSession', installDuration: watch.elapsed(), signUpErrorCode: undefined });
 </EXPRESSION_STATEMENT-117><RETURN_STATEMENT-62>						return false; // unexpected
 </RETURN_STATEMENT-62>					}
 </IF_STATEMENT-51>				}
@@ -1209,19 +1209,19 @@ class ChatSetupController extends Disposable {
 				signUpResult = await this.requests.signUpLimited(session);
 </EXPRESSION_STATEMENT-118><IF_STATEMENT-52>
 				if (typeof signUpResult !== 'boolean'<COMMENT-37> /* error */</COMMENT-37>) {
-<EXPRESSION_STATEMENT-119>					this.telemetryService.publicLog2<InstallChatEvent, InstallChatClassification>('commandCenter.chatInstall', { installResult: 'failedSignUp', installDuration: watch.elapsed(), signUpErrorCode: signUpResult.errorCode });
+<EXPRESSION_STATEMENT-119>					this.telemetryService.publicLog2<InstallChatEvent, InstallChatClassification>('commandCenter.ChatInstall', { installResult: 'failedSignUp', installDuration: watch.elapsed(), signUpErrorCode: signUpResult.errorCode });
 </EXPRESSION_STATEMENT-119>				}
 </IF_STATEMENT-52>			}
 </IF_STATEMENT-49><EXPRESSION_STATEMENT-120>
 			await this.doInstall();
 </EXPRESSION_STATEMENT-120>		} catch (error) {
 <EXPRESSION_STATEMENT-121>			this.logService.error(`[chat setup] install: error ${error}`);
-</EXPRESSION_STATEMENT-121><EXPRESSION_STATEMENT-122>			this.telemetryService.publicLog2<InstallChatEvent, InstallChatClassification>('commandCenter.chatInstall', { installResult: isCancellationError(error) ? 'cancelled' : 'failedInstall', installDuration: watch.elapsed(), signUpErrorCode: undefined });
+</EXPRESSION_STATEMENT-121><EXPRESSION_STATEMENT-122>			this.telemetryService.publicLog2<InstallChatEvent, InstallChatClassification>('commandCenter.ChatInstall', { installResult: isCancellationError(error) ? 'cancelled' : 'failedInstall', installDuration: watch.elapsed(), signUpErrorCode: undefined });
 </EXPRESSION_STATEMENT-122><RETURN_STATEMENT-63>			return false;
 </RETURN_STATEMENT-63>		}
 </TRY_STATEMENT-9><IF_STATEMENT-53>
 		if (typeof signUpResult === 'boolean') {
-<EXPRESSION_STATEMENT-123>			this.telemetryService.publicLog2<InstallChatEvent, InstallChatClassification>('commandCenter.chatInstall', { installResult: wasInstalled && !signUpResult ? 'alreadyInstalled' : 'installed', installDuration: watch.elapsed(), signUpErrorCode: undefined });
+<EXPRESSION_STATEMENT-123>			this.telemetryService.publicLog2<InstallChatEvent, InstallChatClassification>('commandCenter.ChatInstall', { installResult: wasInstalled && !signUpResult ? 'alreadyInstalled' : 'installed', installDuration: watch.elapsed(), signUpErrorCode: undefined });
 </EXPRESSION_STATEMENT-123>		}
 </IF_STATEMENT-53><IF_STATEMENT-54>
 		if (wasInstalled && signUpResult === true) {
