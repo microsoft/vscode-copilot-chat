@@ -348,6 +348,22 @@ describe('CopilotCLICustomizationProvider', () => {
 			expect(instrItems[0].badge).toBeUndefined();
 		});
 
+		it('emits agent instructions not in chatPromptFileService.instructions', async () => {
+			const agentsUri = URI.file('/workspace/AGENTS.md');
+			const claudeUri = URI.file('/workspace/CLAUDE.md');
+			const copilotUri = URI.file('/workspace/.github/copilot-instructions.md');
+			// Agent instructions are NOT in chatPromptFileService.instructions —
+			// they come only from customInstructionsService.getAgentInstructions().
+			mockPromptFileService.setInstructions([]);
+			mockCustomInstructionsService.setAgentInstructionUris([agentsUri, claudeUri, copilotUri]);
+
+			const items = await provider.provideChatSessionCustomizations(undefined!);
+			const instrItems = items.filter(i => i.type === FakeChatSessionCustomizationType.Instructions);
+			expect(instrItems).toHaveLength(3);
+			expect(instrItems.every(i => i.groupKey === 'agent-instructions')).toBe(true);
+			expect(instrItems.map(i => i.name)).toEqual(['AGENTS.md', 'CLAUDE.md', 'copilot-instructions.md']);
+		});
+
 		it('uses context-instructions groupKey with badge for instructions with applyTo pattern', async () => {
 			const uri = URI.file('/workspace/.github/style.instructions.md');
 			mockPromptFileService.setInstructions([{ uri }]);
