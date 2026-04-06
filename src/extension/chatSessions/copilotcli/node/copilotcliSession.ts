@@ -152,6 +152,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		private readonly _agentName: string | undefined,
 		private readonly _sdkSession: Session,
 		private readonly _additionalWorkspaces: IWorkspaceInfo[],
+		private readonly _mcpGatewayDisplayNames: ReadonlyMap<string, string> | undefined,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IChatSessionMetadataStore private readonly _chatSessionMetadataStore: IChatSessionMetadataStore,
@@ -590,7 +591,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					flushPendingInvocationMessages();
 					editToolIds.add(event.data.toolCallId);
 				} else {
-					const responsePart = processToolExecutionStart(event, pendingToolInvocations, getWorkingDirectory(this.workspace));
+					const responsePart = processToolExecutionStart(event, pendingToolInvocations, getWorkingDirectory(this.workspace), this._mcpGatewayDisplayNames);
 					if (responsePart instanceof ChatResponseThinkingProgressPart) {
 						flushPendingInvocationMessages();
 						this._stream?.push(responsePart);

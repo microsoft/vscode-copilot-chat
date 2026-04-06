@@ -73,6 +73,8 @@ export interface ChatSessionMetadataFile {
 	firstUserMessage?: string;
 	/** Custom title set by the user or generated for the session. */
 	customTitle?: string;
+	/** Mapping from MCP gateway server names (as used by the SDK) to user-friendly display names. */
+	mcpGatewayDisplayNames?: Record<string, string>;
 }
 
 export const IChatSessionMetadataStore = createServiceIdentifier<IChatSessionMetadataStore>('IChatSessionMetadataStore');
@@ -100,4 +102,6 @@ export interface IChatSessionMetadataStore {
 	getRequestDetails(sessionId: string): Promise<RequestDetails[]>;
 	updateRequestDetails(sessionId: string, details: (Partial<RequestDetails> & { vscodeRequestId: string })[]): Promise<void>;
 	getSessionAgent(sessionId: string): Promise<string | undefined>;
+	getMcpGatewayDisplayNames(sessionId: string): Promise<Record<string, string> | undefined>;
+	setMcpGatewayDisplayNames(sessionId: string, mappings: Record<string, string>): Promise<void>;
 }

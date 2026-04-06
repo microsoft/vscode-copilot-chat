@@ -1645,6 +1645,69 @@ describe('ChatSessionMetadataStore', () => {
 	});
 
 	// ──────────────────────────────────────────────────────────────────────────
+	// getMcpGatewayDisplayNames / setMcpGatewayDisplayNames
+	// ──────────────────────────────────────────────────────────────────────────
+	describe('getMcpGatewayDisplayNames / setMcpGatewayDisplayNames', () => {
+		it('should store and retrieve MCP gateway display names', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await mockFs.createDirectory(sessionDirectoryUri('session-1'));
+			await store.setMcpGatewayDisplayNames('session-1', { 'my_server': 'My Server', 'github': 'GitHub' });
+
+			const result = await store.getMcpGatewayDisplayNames('session-1');
+			expect(result).toEqual({ 'my_server': 'My Server', 'github': 'GitHub' });
+			store.dispose();
+		});
+
+		it('should return undefined for a session with no MCP gateway names', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
+			}));
+			const store = await createStore();
+
+			const result = await store.getMcpGatewayDisplayNames('session-1');
+			expect(result).toBeUndefined();
+			store.dispose();
+		});
+
+		it('should let new mappings overwrite existing ones and keep unrelated entries', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({}));
+			const store = await createStore();
+
+			await mockFs.createDirectory(sessionDirectoryUri('session-1'));
+			await store.setMcpGatewayDisplayNames('session-1', { 'server_a': 'Server A', 'server_b': 'Server B' });
+			// Second call: server_a gets a new display name, server_c is new
+			await store.setMcpGatewayDisplayNames('session-1', { 'server_a': 'Server A Renamed', 'server_c': 'Server C' });
+
+			const result = await store.getMcpGatewayDisplayNames('session-1');
+			expect(result).toEqual({
+				'server_a': 'Server A Renamed', // Overwritten by second call
+				'server_b': 'Server B',         // Preserved from first call
+				'server_c': 'Server C',         // Added from second call
+			});
+			store.dispose();
+		});
+
+		it('should preserve existing metadata when setting MCP gateway names', async () => {
+			mockFs.mockFile(BULK_METADATA_FILE, JSON.stringify({
+				'session-1': { workspaceFolder: { folderPath: Uri.file('/workspace/a').fsPath, timestamp: 100 } },
+			}));
+			const store = await createStore();
+
+			await mockFs.createDirectory(sessionDirectoryUri('session-1'));
+			await store.setMcpGatewayDisplayNames('session-1', { 'my_server': 'My Server' });
+
+			const fileUri = sessionMetadataFileUri('session-1');
+			const rawContent = await mockFs.readFile(fileUri);
+			const written = JSON.parse(new TextDecoder().decode(rawContent));
+			expect(written.mcpGatewayDisplayNames).toEqual({ 'my_server': 'My Server' });
+			expect(written.workspaceFolder?.folderPath).toBe(Uri.file('/workspace/a').fsPath);
+			store.dispose();
+		});
+	});
+
+	// ──────────────────────────────────────────────────────────────────────────
 	// getRequestDetails / appendRequestDetails
 	// ──────────────────────────────────────────────────────────────────────────
 	describe('getRequestDetails / appendRequestDetails', () => {
