@@ -55,6 +55,8 @@ function createPullRequest(): PullRequestSearchItem {
 		files: { totalCount: 1 },
 		fullDatabaseId: 1,
 		headRefOid: 'abc123',
+		headRefName: 'copilot/test-branch',
+		baseRefName: 'main',
 		body: 'Body',
 	};
 }
