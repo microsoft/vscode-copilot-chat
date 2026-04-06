@@ -1226,4 +1226,68 @@ describe('CopilotCLISession', () => {
 			expect(result.value).toEqual({ approved: false });
 		});
 	});
+
+	describe('session.compaction_complete usage tracking', () => {
+		it('reports compaction token usage to the stream on successful compaction', async () => {
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			const usageSpy = vi.spyOn(stream, 'usage');
+			session.attachStream(stream);
+
+			sdkSession.send = async (options: { prompt: string }) => {
+				sdkSession.emit('user.message', { content: options.prompt });
+				sdkSession.emit('session.compaction_complete', {
+					success: true,
+					compactionTokensUsed: { input: 5000, output: 800, cachedInput: 2000 },
+				});
+				sdkSession.emit('assistant.message', { messageId: 'msg1', content: 'Done' });
+			};
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Hello' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(usageSpy).toHaveBeenCalledWith({
+				completionTokens: 800,
+				promptTokens: 5000,
+			});
+		});
+
+		it('does not report usage for failed compaction', async () => {
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			const usageSpy = vi.spyOn(stream, 'usage');
+			session.attachStream(stream);
+
+			sdkSession.send = async (options: { prompt: string }) => {
+				sdkSession.emit('user.message', { content: options.prompt });
+				sdkSession.emit('session.compaction_complete', {
+					success: false,
+					error: 'Model returned empty response',
+				});
+				sdkSession.emit('assistant.message', { messageId: 'msg1', content: 'Done' });
+			};
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Hello' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(usageSpy).not.toHaveBeenCalled();
+		});
+
+		it('does not report usage when compactionTokensUsed is absent', async () => {
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			const usageSpy = vi.spyOn(stream, 'usage');
+			session.attachStream(stream);
+
+			sdkSession.send = async (options: { prompt: string }) => {
+				sdkSession.emit('user.message', { content: options.prompt });
+				sdkSession.emit('session.compaction_complete', {
+					success: true,
+				});
+				sdkSession.emit('assistant.message', { messageId: 'msg1', content: 'Done' });
+			};
+
+			await session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Hello' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(usageSpy).not.toHaveBeenCalled();
+		});
+	});
 });
