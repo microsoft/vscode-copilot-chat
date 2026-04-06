@@ -106,8 +106,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	) {
 		super();
 
-		const enabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ChatDebugFileLogging, this._experimentationService)
-			|| this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentDebugLogEnabled, this._experimentationService);
+		const enabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ChatDebugFileLogging, this._experimentationService);
 		if (!enabled) {
 			/* __GDPR__
 				"chatDebugFileLogger.disabled" : {
@@ -296,9 +295,27 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		};
 		this._activeSessions.set(sessionId, session);
 
-		// Replay pending core events only for parent sessions that have their own spans
-		// (not for sessions auto-created as a side effect of child parent references)
-		if (!childInfo && hasOwnSpans) {
+		// Write a session_start entry so every JSONL file has a version header.
+		// For parent sessions with their own spans, also replay pending core events.
+		if (childInfo) {
+			// Child sessions get a minimal session_start (no core event replay)
+			this._bufferEntry(sessionId, {
+				v: 1,
+				ts: Date.now(),
+				dur: 0,
+				sid: sessionId,
+				type: 'session_start',
+				name: 'session_start',
+				spanId: `session-start-${sessionId}`,
+				status: 'ok',
+				attrs: {
+					copilotVersion: this._envService.getVersion(),
+					vscodeVersion: this._envService.vscodeVersion,
+					parentSessionId: childInfo.parentSessionId,
+					label: childInfo.label,
+				},
+			});
+		} else if (hasOwnSpans) {
 			this._emitSessionStartAndReplay(sessionId, session);
 		}
 
@@ -474,6 +491,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	 */
 	private _emitSessionStartAndReplay(sessionId: string, session: IActiveLogSession): void {
 		this._bufferEntry(sessionId, {
+			v: 1,
 			ts: Date.now(),
 			dur: 0,
 			sid: sessionId,
@@ -1036,7 +1054,7 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 		if (!session) {
 			return;
 		}
-		let stamped = entry.v ? entry : { v: 1, ...entry };
+		let stamped = entry;
 		// Stamp run index for restart scoping (omit when 0 to save bytes)
 		if (session.runIndex > 0 && !stamped.rIdx) {
 			stamped = { ...stamped, rIdx: session.runIndex };

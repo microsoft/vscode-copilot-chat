@@ -146,7 +146,7 @@ class TestConfigurationService {
 	declare readonly _serviceBrand: undefined;
 	getConfig(key: { defaultValue: unknown }) { return key.defaultValue; }
 	getExperimentBasedConfig(key: { defaultValue: unknown }) {
-		if (key === ConfigKey.Advanced.AgentDebugLogEnabled || key === ConfigKey.Advanced.ChatDebugFileLogging) {
+		if (key === ConfigKey.Advanced.ChatDebugFileLogging) {
 			return true; // Enable debug logging for tests
 		}
 		return key.defaultValue;
@@ -348,10 +348,11 @@ describe('ChatDebugFileLoggerService', () => {
 		expect(childPath!.fsPath).toContain('parent-session');
 		expect(childPath!.fsPath).toContain('title-title-child-id.jsonl');
 
-		// Child should have the LLM request entry
+		// Child should have the session_start + LLM request entry
 		const childEntries = await readLogEntries('title-child-id');
-		expect(childEntries).toHaveLength(1);
-		expect(childEntries[0].type).toBe('llm_request');
+		expect(childEntries).toHaveLength(2);
+		expect(childEntries[0].type).toBe('session_start');
+		expect(childEntries[1].type).toBe('llm_request');
 	});
 
 	it('restarts flush timer when flushIntervalMs config changes at runtime', async () => {
@@ -678,9 +679,10 @@ describe('ChatDebugFileLoggerService', () => {
 
 		const childEntries = await service.readEntries('child-read');
 		const types = childEntries.map(e => e.type);
+		expect(types).toContain('session_start');
 		expect(types).toContain('tool_call');
 		expect(types).toContain('llm_request');
-		expect(childEntries.length).toBe(2);
+		expect(childEntries.length).toBe(3);
 	});
 
 	it('multiple child sessions under same parent each get their own file', async () => {
