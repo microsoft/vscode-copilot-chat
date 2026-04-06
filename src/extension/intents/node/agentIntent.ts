@@ -19,7 +19,6 @@ import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogS
 import { CUSTOM_TOOL_SEARCH_NAME, isAnthropicCustomToolSearchEnabled, isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { modelsWithoutResponsesContextManagement } from '../../../platform/networking/common/openai';
-import { IToolDeferralService } from '../../../platform/networking/common/toolDeferralService';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
 import { IOTelService } from '../../../platform/otel/common/otelService';
@@ -379,7 +378,6 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		@IExperimentationService private readonly expService: IExperimentationService,
 		@IAutomodeService private readonly automodeService: IAutomodeService,
 		@IOTelService override readonly otelService: IOTelService,
-		@IToolDeferralService private readonly toolDeferralService: IToolDeferralService,
 	) {
 		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, otelService);
 	}
@@ -405,15 +403,8 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		}
 
 		const tools = promptContext.tools?.availableTools;
-		// When Anthropic tool search is enabled, deferred tools are sent with
-		// defer_loading: true and don't count against the context window until
-		// the model loads them via tool_search. Only count non-deferred tools
-		// so the budget isn't artificially reduced.
 		const toolSearchEnabled = isAnthropicToolSearchEnabled(this.endpoint, this.configurationService);
-		const effectiveTools = tools && toolSearchEnabled
-			? tools.filter(t => this.toolDeferralService.isNonDeferredTool(t.name))
-			: tools;
-		const toolTokens = effectiveTools?.length ? await this.endpoint.acquireTokenizer().countToolTokens(effectiveTools) : 0;
+		const toolTokens = tools?.length ? await this.endpoint.acquireTokenizer().countToolTokens(tools) : 0;
 
 		const summarizeThresholdOverride = this.configurationService.getConfig<number | undefined>(ConfigKey.Advanced.SummarizeAgentConversationHistoryThreshold);
 		if (typeof summarizeThresholdOverride === 'number' && summarizeThresholdOverride < 100 && summarizeThresholdOverride > 0) {
@@ -441,7 +432,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		const safeBudget = useTruncation ? Number.MAX_SAFE_INTEGER : messageBudget;
 		const endpoint = toolTokens > 0 ? this.endpoint.cloneWithTokenOverride(safeBudget) : this.endpoint;
 
-		this.logService.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}${toolSearchEnabled ? `, totalTools: ${tools?.length ?? 0}, nonDeferredTools: ${effectiveTools?.length ?? 0}` : ''}), summarizationEnabled=${summarizationEnabled}`);
+		this.logService.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}, totalTools: ${tools?.length ?? 0}, toolSearchEnabled: ${toolSearchEnabled}), summarizationEnabled=${summarizationEnabled}`);
 		let result: RenderPromptResult;
 		const props: AgentPromptProps = {
 			endpoint,
@@ -595,7 +586,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				const renderer = PromptRenderer.create(this.instantiationService, this.endpoint, this.prompt, {
 					...renderProps,
 					endpoint: this.endpoint,
-					promptContext: this._buildSummarizationPromptContext(renderProps.promptContext),
+					promptContext: renderProps.promptContext,
 					triggerSummarize: true,
 				});
 				return await renderer.render(progress, token);
@@ -868,7 +859,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		const bgRenderer = PromptRenderer.create(this.instantiationService, this.endpoint, this.prompt, {
 			...snapshotProps,
 			endpoint: this.endpoint,
-			promptContext: this._buildSummarizationPromptContext(snapshotProps.promptContext),
+			promptContext: snapshotProps.promptContext,
 			triggerSummarize: true,
 			summarizationSource: 'background',
 		});
@@ -976,30 +967,6 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				contextLengthBefore,
 			},
 		));
-	}
-
-	/**
-	 * Build a promptContext for summarization that filters availableTools to
-	 * non-deferred tools when Anthropic tool search is enabled. Deferred tool
-	 * schemas are unnecessary in the summarization prompt (which uses
-	 * tool_choice: 'none') and can push the prompt over the token budget.
-	 */
-	private _buildSummarizationPromptContext(promptContext: IBuildPromptContext): IBuildPromptContext {
-		if (!promptContext.tools?.availableTools) {
-			return promptContext;
-		}
-		const toolSearchEnabled = isAnthropicToolSearchEnabled(this.endpoint, this.configurationService);
-		if (!toolSearchEnabled) {
-			return promptContext;
-		}
-		const nonDeferredTools = promptContext.tools.availableTools.filter(t => this.toolDeferralService.isNonDeferredTool(t.name));
-		return {
-			...promptContext,
-			tools: {
-				...promptContext.tools,
-				availableTools: nonDeferredTools,
-			},
-		};
 	}
 
 	/**
