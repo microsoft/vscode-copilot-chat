@@ -23,7 +23,9 @@ import { IMakeChatRequestOptions } from '../../../platform/networking/common/net
 import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
 import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, resolveWorkspaceOTelMetadata, StdAttr, truncateForOTel, workspaceMetadataToOTelAttributes } from '../../../platform/otel/common/index';
 import { IOTelService, ISpanHandle, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
+import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { getCurrentCapturingToken, IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { CodeReviewComment, CodeReviewFileInput, CodeReviewInput } from '../../../platform/review/common/reviewCommand';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { computePromptTokenDetails } from '../../../platform/tokenizer/node/promptTokenDetails';
@@ -49,9 +51,7 @@ import { PseudoStopStartResponseProcessor } from '../../prompt/node/pseudoStartS
 import { ResponseProcessorContext } from '../../prompt/node/responseProcessorContext';
 import { extractInlineSummary, InlineSummarizationRequestedMetadata, SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
 import { ToolFailureEncountered, ToolResultMetadata } from '../../prompts/node/panel/toolCalling';
-import { CodeReviewComment, CodeReviewFileInput, CodeReviewInput } from '../../../platform/review/common/reviewCommand';
 import { reviewFileChanges } from '../../review/node/doReview';
-import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ToolName } from '../../tools/common/toolNames';
 import { IToolsService, ToolCallCancelledError } from '../../tools/common/toolsService';
 import { ReadFileParams } from '../../tools/node/readFileTool';
@@ -1286,8 +1286,13 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					// In auto-approve modes, auto-retry on transient errors (not rate-limited or quota-exceeded)
 					if (result.response.type !== ChatFetchResponseType.Success && this.shouldAutoRetry(result.response)) {
 						this.autopilotRetryCount++;
+						const errorReason = result.response.reason;
 						this._logService.info(`[ToolCallingLoop] Auto-retrying on error (attempt ${this.autopilotRetryCount}/${ToolCallingLoop.MAX_AUTOPILOT_RETRIES}): ${result.response.type}`);
-						this.showAutopilotProgress(outputStream, l10n.t('Retrying with Autopilot...'), l10n.t('Retried with Autopilot'));
+						if (this.options.request.permissionLevel === 'autopilot') {
+							this.showAutopilotProgress(outputStream, l10n.t('Retrying with Autopilot: {0}', errorReason), l10n.t('Retried with Autopilot: {0}', errorReason));
+						} else {
+							this.showAutopilotProgress(outputStream, l10n.t('Retrying request: {0}', errorReason), l10n.t('Retried request: {0}', errorReason));
+						}
 						await timeout(1000, token);
 						continue;
 					}
@@ -1336,7 +1341,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						const autopilotContinue = this.shouldAutopilotContinue(result);
 						if (autopilotContinue) {
 							this._logService.info(`[ToolCallingLoop] Autopilot internal stop hook: continuing because task may not be complete`);
-							this.showAutopilotProgress(outputStream, l10n.t('Continuing with Autopilot...'), l10n.t('Continued with Autopilot'));
+							this.showAutopilotProgress(outputStream, l10n.t('Continuing with Autopilot: Task not yet complete'), l10n.t('Continued with Autopilot: Task not yet complete'));
 							this.stopHookReason = autopilotContinue;
 							result.round.hookContext = formatHookContext([autopilotContinue]);
 							this.autopilotStopHookActive = true;
