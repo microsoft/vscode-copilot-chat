@@ -39,7 +39,7 @@ export function register(accessor: ServicesAccessor): IDisposable {
 				}
 			}
 
-			vscode.window.showInformationMessage(t`Remote workspace index ready to use.`);
+			vscode.window.showInformationMessage(t`Codebase index ready to use.`);
 		});
 	})));
 
@@ -61,7 +61,7 @@ export function register(accessor: ServicesAccessor): IDisposable {
 			const document = await vscode.workspace.openTextDocument({ language: 'markdown' });
 			const editor = await vscode.window.showTextDocument(document);
 
-			await appendText(editor, '# Workspace Index Diagnostics\n');
+			await appendText(editor, '# Codebase Index Diagnostics\n');
 			await appendText(editor, 'Tracked file count: ' + workspaceFileIndex.fileCount + '\n\n');
 
 			await appendText(editor, '## All tracked files\n');
