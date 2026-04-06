@@ -2010,7 +2010,9 @@ export function registerCLIChatCommands(
 		}
 
 		let branchName: string | undefined;
+		let worktreePath: string | undefined;
 		let baseBranchName: string | undefined;
+		let baseWorktreePath: string | undefined;
 
 		try {
 			const sessionId = SessionIdForCLI.parse(resource);
@@ -2021,15 +2023,19 @@ export function registerCLIChatCommands(
 			}
 
 			branchName = worktreeProperties.branchName;
+			worktreePath = worktreeProperties.worktreePath;
 			baseBranchName = worktreeProperties.baseBranchName;
+			baseWorktreePath = worktreeProperties.repositoryPath;
 		} catch (error) {
 			logService.error(`Failed to check worktree properties for merge changes: ${error instanceof Error ? error.message : String(error)}`);
 			return;
 		}
 
 		const contextValueSegments: string[] = [];
-		contextValueSegments.push('source branch name: ' + branchName);
-		contextValueSegments.push('target branch name: ' + baseBranchName);
+		contextValueSegments.push(`source branch name: ${branchName}`);
+		contextValueSegments.push(`source worktree path: ${worktreePath}`);
+		contextValueSegments.push(`target branch name: ${baseBranchName}`);
+		contextValueSegments.push(`target worktree path: ${baseWorktreePath}`);
 
 		const prompt = syncWithRemote
 			? `${builtinSlashSCommands.merge} and ${builtinSlashSCommands.sync}`

@@ -200,6 +200,7 @@ class AnthropicAdapter implements IProtocolAdapter {
 			delta: {
 				stop_reason: this.hadToolCalls ? 'tool_use' : 'end_turn',
 				stop_sequence: null,
+				stop_details: null,
 				container: null
 			},
 			usage: {
@@ -277,6 +278,7 @@ class AnthropicAdapter implements IProtocolAdapter {
 				container: null,
 				stop_reason: null,
 				stop_sequence: null,
+				stop_details: null,
 				usage: {
 					input_tokens: adjustedUsage.prompt_tokens,
 					cache_creation_input_tokens: 0,

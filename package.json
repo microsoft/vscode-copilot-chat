@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.43.0",
+	"version": "0.44.0",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"completionsCoreVersion": "1.378.1799",
@@ -3231,15 +3231,6 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.anthropic.thinking.forceExtendedThinking": {
-						"type": "boolean",
-						"markdownDescription": "%github.copilot.config.anthropic.thinking.forceExtendedThinking%",
-						"default": false,
-						"tags": [
-							"preview",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.backgroundCompaction": {
 						"type": "boolean",
 						"default": false,
@@ -3326,6 +3317,22 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.githubMcpServer.lockdown%",
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.chat.githubMcpServer.channel": {
+						"type": "string",
+						"default": "stable",
+						"enum": [
+							"stable",
+							"insiders"
+						],
+						"enumDescriptions": [
+							"%github.copilot.config.githubMcpServer.channel.stable%",
+							"%github.copilot.config.githubMcpServer.channel.insiders%"
+						],
+						"markdownDescription": "%github.copilot.config.githubMcpServer.channel%",
 						"tags": [
 							"experimental"
 						]
@@ -4026,6 +4033,16 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.edits.batchReplaceStringDescriptions": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "Update tool descriptions to promote `multi_replace_string_in_file` as the primary multi-edit tool.",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.projectLabels.expanded": {
 						"type": "boolean",
 						"default": false,
@@ -4361,10 +4378,10 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.agentHistorySummarizationCacheFriendly": {
+					"github.copilot.chat.agentHistorySummarizationInline": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "%github.copilot.config.agentHistorySummarizationCacheFriendly%",
+						"markdownDescription": "%github.copilot.config.agentHistorySummarizationInline%",
 						"tags": [
 							"advanced",
 							"experimental",
@@ -6119,49 +6136,58 @@
 		"chatAgents": [],
 		"chatPromptFiles": [
 			{
-				"path": "./assets/prompts/plan.prompt.md"
+				"path": "./assets/prompts/plan.prompt.md",
+				"when": "chatSessionType == local"
 			},
 			{
-				"path": "./assets/prompts/init.prompt.md"
+				"path": "./assets/prompts/init.prompt.md",
+				"when": "chatSessionType == local"
 			},
 			{
-				"path": "./assets/prompts/create-prompt.prompt.md"
+				"path": "./assets/prompts/create-prompt.prompt.md",
+				"when": "chatSessionType == local"
 			},
 			{
-				"path": "./assets/prompts/create-instructions.prompt.md"
+				"path": "./assets/prompts/create-instructions.prompt.md",
+				"when": "chatSessionType == local"
 			},
 			{
-				"path": "./assets/prompts/create-skill.prompt.md"
+				"path": "./assets/prompts/create-skill.prompt.md",
+				"when": "chatSessionType == local"
 			},
 			{
-				"path": "./assets/prompts/create-agent.prompt.md"
+				"path": "./assets/prompts/create-agent.prompt.md",
+				"when": "chatSessionType == local"
 			},
 			{
-				"path": "./assets/prompts/create-hook.prompt.md"
+				"path": "./assets/prompts/create-hook.prompt.md",
+				"when": "chatSessionType == local"
 			}
 		],
 		"chatSkills": [
 			{
 				"path": "./assets/prompts/skills/project-setup-info-local/SKILL.md",
-				"when": "config.github.copilot.chat.projectSetupInfoSkill.enabled && !config.github.copilot.chat.newWorkspace.useContext7"
+				"when": "chatSessionType == local && config.github.copilot.chat.projectSetupInfoSkill.enabled && !config.github.copilot.chat.newWorkspace.useContext7"
 			},
 			{
 				"path": "./assets/prompts/skills/project-setup-info-context7/SKILL.md",
-				"when": "config.github.copilot.chat.projectSetupInfoSkill.enabled && config.github.copilot.chat.newWorkspace.useContext7"
+				"when": "chatSessionType == local && config.github.copilot.chat.projectSetupInfoSkill.enabled && config.github.copilot.chat.newWorkspace.useContext7"
 			},
 			{
 				"path": "./assets/prompts/skills/install-vscode-extension/SKILL.md",
-				"when": "config.github.copilot.chat.installExtensionSkill.enabled && config.github.copilot.chat.newWorkspaceCreation.enabled"
+				"when": "chatSessionType == local && config.github.copilot.chat.installExtensionSkill.enabled && config.github.copilot.chat.newWorkspaceCreation.enabled"
 			},
 			{
 				"path": "./assets/prompts/skills/get-search-view-results/SKILL.md",
-				"when": "config.github.copilot.chat.getSearchViewResultsSkill.enabled"
+				"when": "chatSessionType == local && config.github.copilot.chat.getSearchViewResultsSkill.enabled"
 			},
 			{
-				"path": "./assets/prompts/skills/troubleshoot/SKILL.md"
+				"path": "./assets/prompts/skills/troubleshoot/SKILL.md",
+				"when": "chatSessionType == local || chatSessionType == copilotcli"
 			},
 			{
-				"path": "./assets/prompts/skills/agent-customization/SKILL.md"
+				"path": "./assets/prompts/skills/agent-customization/SKILL.md",
+				"when": "chatSessionType == local || chatSessionType == copilotcli"
 			}
 		],
 		"terminal": {
@@ -6271,7 +6297,7 @@
 		"copyfiles": "^2.4.1",
 		"csv-parse": "^6.0.0",
 		"dotenv": "^17.2.0",
-		"electron": "^37.2.1",
+		"electron": "^39.8.5",
 		"esbuild": "^0.25.6",
 		"eslint": "^9.30.0",
 		"eslint-import-resolver-typescript": "^4.4.4",
@@ -6323,10 +6349,10 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "^0.2.81",
-		"@anthropic-ai/sdk": "^0.81.0",
+		"@anthropic-ai/claude-agent-sdk": "^0.2.91",
+		"@anthropic-ai/sdk": "^0.82.0",
 		"@github/blackbird-external-ingest-utils": "^0.3.0",
-		"@github/copilot": "^1.0.12",
+		"@github/copilot": "^1.0.17",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -6374,5 +6400,5 @@
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"zod": "3.25.76"
 	},
-	"vscodeCommit": "f540be8c1abf14ef594d42dd3a99c50f48732a7b"
+	"vscodeCommit": "20b24833bc088c84b778ee89be4c17f15660441a"
 }
