@@ -467,8 +467,9 @@ export function handleHookResponse(
 
 	// Other non-zero exit codes — non-blocking warning
 	if (message.exit_code !== undefined && message.exit_code !== 0) {
-		const warningMessage = message.stderr || message.output || (l10n.t('Exit Code: {0}', message.exit_code));
-		logService.warn(`[ClaudeMessageDispatch] Hook "${message.hook_name}" (${message.hook_event}) non-blocking error (exit ${message.exit_code}): ${warningMessage}`);
+		const warningMessage = message.stderr || message.output;
+		const loggedMessage = warningMessage || l10n.t('Exit Code: {0}', message.exit_code);
+		logService.warn(`[ClaudeMessageDispatch] Hook "${message.hook_name}" (${message.hook_event}) non-blocking error (exit ${message.exit_code}): ${loggedMessage}`);
 		if (warningMessage) {
 			request.stream.hookProgress(hookType, undefined, warningMessage);
 		}

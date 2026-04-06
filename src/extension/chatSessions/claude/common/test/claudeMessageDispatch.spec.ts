@@ -661,12 +661,12 @@ describe('handleHookResponse', () => {
 		expect(request.stream.hookProgress).toHaveBeenCalledWith('PreToolUse', undefined, 'warning text');
 	});
 
-	it('other non-zero exit codes without stderr — fallback exit code warning', () => {
+	it('other non-zero exit codes without stderr — no hookProgress', () => {
 		handleHookResponse(
 			makeHookResponse('hook-1', 'error', { exit_code: 1, hook_event: 'PreToolUse' }),
 			accessor, request, state,
 		);
-		expect(request.stream.hookProgress).toHaveBeenCalledWith('PreToolUse', undefined, expect.stringContaining('1'));
+		expect(request.stream.hookProgress).not.toHaveBeenCalled();
 	});
 
 	// #endregion
