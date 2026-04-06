@@ -145,11 +145,21 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	}
 
 	const thinkingEnabled = !!thinkingConfig;
+<<<<<<< HEAD
 
 	// Build output config with effort level for adaptive thinking
 	const effort = endpoint.supportsAdaptiveThinking
 		? configurationService.getConfig(ConfigKey.AnthropicThinkingEffort)
 		: undefined;
+=======
+	let effort: 'low' | 'medium' | 'high' | undefined;
+	if (thinkingConfig && endpoint.supportsReasoningEffort?.length) {
+		const candidateEffort = configurationService.getConfig(ConfigKey.TeamInternal.AnthropicThinkingEffort) ?? reasoningEffort;
+		if (candidateEffort === 'low' || candidateEffort === 'medium' || candidateEffort === 'high') {
+			effort = candidateEffort;
+		}
+	}
+>>>>>>> b7e094d (Guard reasoning effort parameter against unsupported models (#5010))
 
 	// Build context management configuration
 	const contextManagement = isAllowedConversationAgent && !isSubagent && isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)

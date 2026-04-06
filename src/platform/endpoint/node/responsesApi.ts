@@ -74,7 +74,14 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	const effortConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningEffort, expService);
 	const summaryConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningSummary, expService);
 	const shouldDisableReasoningSummary = endpoint.family === 'gpt-5.3-codex-spark-preview';
+<<<<<<< HEAD
 	const effort = effortConfig === 'default' ? 'medium' : effortConfig;
+=======
+	const effortFromSetting = configService.getConfig(ConfigKey.TeamInternal.ResponsesApiReasoningEffort);
+	const effort = endpoint.supportsReasoningEffort?.length
+		? (effortFromSetting || options.reasoningEffort || 'medium')
+		: undefined;
+>>>>>>> b7e094d (Guard reasoning effort parameter against unsupported models (#5010))
 	const summary = summaryConfig === 'off' || shouldDisableReasoningSummary ? undefined : summaryConfig;
 	if (effort || summary) {
 		body.reasoning = {
