@@ -440,6 +440,53 @@ suite('Agent Summarization', () => {
 		}
 	});
 
+	test('simple mode summarization with small token budget renders zero messages (repro for No messages provided)', async () => {
+		// Repro for: "Prompt failed validation with the reason: No messages provided"
+		//
+		// Root cause: when modelMaxPromptTokens is small enough that the summarization
+		// prompt content exceeds the budget, prompt-tsx prunes all child elements.
+		// After pruning, toChatMessages() silently skips messages whose content is
+		// empty (isEmpty check), producing an empty messages array — without throwing
+		// BudgetExceededError. The downstream makeChatRequest2 then hits the
+		// isValidChatPayload check: "No messages provided".
+		const instaService = accessor.get(IInstantiationService);
+		const endpoint = instaService.createInstance(MockEndpoint, 'claude-sonnet');
+		endpoint.modelMaxPromptTokens = 5; // So small that even a single short message cannot fit
+
+		const toolCallRounds = [
+			new ToolCallRound('ok', [createEditFileToolCall(1)]),
+			new ToolCallRound('ok 2', [createEditFileToolCall(2)]),
+		];
+
+		const turn = new Turn('turnId', { type: 'user', message: 'hello' });
+		const testConversation = new Conversation('sessionId', [turn]);
+
+		const promptContext: IBuildPromptContext = {
+			chatVariables: new ChatVariablesCollection([]),
+			history: [],
+			query: 'edit this file',
+			toolCallRounds,
+			toolCallResults: createEditFileToolResult(1, 2),
+			tools,
+			conversation: testConversation,
+		};
+
+		const baseProps = {
+			priority: 1,
+			endpoint,
+			location: ChatLocation.Panel,
+			promptContext,
+			maxToolResultLength: Infinity,
+		};
+
+		const propsInfo = instaService.createInstance(SummarizedConversationHistoryPropsBuilder).getProps(baseProps);
+		const renderer = PromptRenderer.create(instaService, endpoint, ConversationHistorySummarizationPrompt, { ...propsInfo.props, simpleMode: true });
+		const result = await renderer.render();
+
+		// prompt-tsx prunes all content and silently drops empty messages → 0 messages
+		expect(result.messages.length).toBe(0);
+	});
+
 	test('failure metadata on turn prevents repeated foreground summarization attempts', async () => {
 		// This test verifies the contract that agentIntent.ts relies on:
 		// after a foreground summarization failure, setting SummarizedConversationHistoryMetadata

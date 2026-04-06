@@ -170,7 +170,7 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 				</SystemMessage>
 				{history}
 				{this.props.workingNotebook && <WorkingNotebookSummary priority={this.props.priority - 2} notebook={this.props.workingNotebook} />}
-				<UserMessage>
+				<UserMessage priority={this.props.priority}>
 					Summarize the conversation history so far, paying special attention to the most recent agent commands and tool results that triggered this summarization. Structure your summary using the enhanced format provided in the system message.<br />
 					{isOpus && <>
 						<br />
@@ -664,7 +664,18 @@ class ConversationHistorySummarizer {
 
 	private async getSummary(mode: SummaryMode, propsInfo: ISummarizedConversationHistoryInfo): Promise<SummarizationResult> {
 		const stopwatch = new StopWatch(false);
-		const endpoint = this.props.endpoint;
+
+		// In Full mode, tools are sent alongside the summarization prompt with
+		// tool_choice: 'none'. Reserve budget for them so the rendered messages
+		// plus tools don't exceed the model's context window.
+		const tools = this.props.tools;
+		const toolTokens = mode === SummaryMode.Full && tools?.length
+			? await this.props.endpoint.acquireTokenizer().countToolTokens(tools)
+			: 0;
+		const endpoint = toolTokens > 0
+			? this.props.endpoint.cloneWithTokenOverride(
+				Math.max(1, Math.floor((this.props.endpoint.modelMaxPromptTokens - toolTokens) * 0.9)))
+			: this.props.endpoint;
 
 		let summarizationPrompt: ChatMessage[];
 		const associatedRequestId = this.props.promptContext.conversation?.getLatestTurn().id;
