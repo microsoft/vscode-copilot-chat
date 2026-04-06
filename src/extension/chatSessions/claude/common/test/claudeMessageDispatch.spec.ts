@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { NonNullableUsage, SDKAssistantMessage, SDKCompactBoundaryMessage, SDKHookResponseMessage, SDKHookStartedMessage, SDKResultError, SDKResultSuccess, SDKStatusMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { NonNullableUsage, SDKAssistantMessage, SDKCompactBoundaryMessage, SDKHookProgressMessage, SDKHookResponseMessage, SDKHookStartedMessage, SDKResultError, SDKResultSuccess, SDKStatusMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type Anthropic from '@anthropic-ai/sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
@@ -18,6 +18,7 @@ import {
 	dispatchMessage,
 	handleAssistantMessage,
 	handleCompactBoundary,
+	handleHookProgress,
 	handleHookResponse,
 	handleHookStarted,
 	handleResultMessage,
@@ -26,6 +27,7 @@ import {
 	MessageHandlerRequestContext,
 	MessageHandlerState,
 	messageKey,
+	parseHookJsonOutput,
 	SYNTHETIC_MODEL_ID,
 } from '../claudeMessageDispatch';
 import { ClaudeToolNames } from '../claudeTools';
@@ -76,7 +78,8 @@ function createRequestContext(): MessageHandlerRequestContext {
 			markdown: vi.fn(),
 			push: vi.fn(),
 			progress: vi.fn(),
-		} as Pick<vscode.ChatResponseStream, 'markdown' | 'push' | 'progress'> as vscode.ChatResponseStream,
+			hookProgress: vi.fn(),
+		} as Pick<vscode.ChatResponseStream, 'markdown' | 'push' | 'progress' | 'hookProgress'> as vscode.ChatResponseStream,
 		toolInvocationToken: {} as vscode.ChatParticipantToolToken,
 		token: { isCancellationRequested: false } as vscode.CancellationToken,
 	};
@@ -255,6 +258,24 @@ function makeHookResponse(
 		stderr: overrides.stderr ?? '',
 		exit_code: overrides.exit_code,
 		outcome,
+		uuid: TEST_UUID,
+		session_id: TEST_SESSION,
+	};
+}
+
+function makeHookProgress(
+	hookId = 'hook-1',
+	overrides: Partial<Pick<SDKHookProgressMessage, 'stdout' | 'stderr' | 'output' | 'hook_name' | 'hook_event'>> = {},
+): SDKHookProgressMessage {
+	return {
+		type: 'system',
+		subtype: 'hook_progress',
+		hook_id: hookId,
+		hook_name: overrides.hook_name ?? 'my-hook',
+		hook_event: overrides.hook_event ?? 'PreToolUse',
+		stdout: overrides.stdout ?? '',
+		stderr: overrides.stderr ?? '',
+		output: overrides.output ?? '',
 		uuid: TEST_UUID,
 		session_id: TEST_SESSION,
 	};
@@ -562,31 +583,32 @@ describe('handleHookResponse', () => {
 		expect(state.otelHookSpans.has('hook-1')).toBe(false);
 	});
 
-	it('ends the OTel span with ERROR on failure and surfaces error to user', () => {
+	it('ends the OTel span with ERROR on failure and surfaces error via hookProgress', () => {
 		const mockSpan = createMockSpan();
 		state.otelHookSpans.set('hook-1', mockSpan);
 
 		handleHookResponse(
-			makeHookResponse('hook-1', 'error', { stderr: 'lint failed', hook_name: 'lint-check' }),
+			makeHookResponse('hook-1', 'error', { stderr: 'lint failed', hook_name: 'lint-check', hook_event: 'PreToolUse' }),
 			accessor, request, state,
 		);
 
 		expect(mockSpan.setStatus).toHaveBeenCalledWith(expect.anything(), 'lint failed');
 		expect(mockSpan.end).toHaveBeenCalled();
-		expect(request.stream.markdown).toHaveBeenCalledWith(expect.stringContaining('lint-check'));
-		expect(request.stream.markdown).toHaveBeenCalledWith(expect.stringContaining('lint failed'));
+		expect(request.stream.hookProgress).toHaveBeenCalledWith('PreToolUse', expect.stringContaining('lint failed'));
+		expect(request.stream.markdown).not.toHaveBeenCalled();
 	});
 
-	it('does not surface anything to user on success', () => {
+	it('does not surface anything to user on success with no stdout', () => {
 		const mockSpan = createMockSpan();
 		state.otelHookSpans.set('hook-1', mockSpan);
 
 		handleHookResponse(makeHookResponse('hook-1', 'success'), accessor, request, state);
 
+		expect(request.stream.hookProgress).not.toHaveBeenCalled();
 		expect(request.stream.markdown).not.toHaveBeenCalled();
 	});
 
-	it('handles cancelled outcome', () => {
+	it('handles cancelled outcome — log only, no hookProgress', () => {
 		const mockSpan = createMockSpan();
 		state.otelHookSpans.set('hook-1', mockSpan);
 
@@ -594,16 +616,273 @@ describe('handleHookResponse', () => {
 
 		expect(mockSpan.setStatus).toHaveBeenCalledWith(expect.anything(), 'cancelled');
 		expect(mockSpan.end).toHaveBeenCalled();
+		expect(request.stream.hookProgress).not.toHaveBeenCalled();
 	});
 
 	it('handles response without a matching started span gracefully', () => {
 		// No span in otelHookSpans — should not throw
 		handleHookResponse(
-			makeHookResponse('nonexistent', 'error', { stderr: 'some error', hook_name: 'my-hook' }),
+			makeHookResponse('nonexistent', 'error', { stderr: 'some error', hook_name: 'my-hook', hook_event: 'PreToolUse' }),
 			accessor, request, state,
 		);
-		// Still surfaces the error to user
-		expect(request.stream.markdown).toHaveBeenCalledWith(expect.stringContaining('my-hook'));
+		// Still surfaces the error via hookProgress
+		expect(request.stream.hookProgress).toHaveBeenCalledWith('PreToolUse', expect.stringContaining('some error'));
+	});
+
+	// #region Exit code handling
+
+	it('exit code 2 — blocking error via hookProgress with stderr', () => {
+		handleHookResponse(
+			makeHookResponse('hook-1', 'error', { exit_code: 2, stderr: 'blocked!', hook_event: 'Stop' }),
+			accessor, request, state,
+		);
+		expect(request.stream.hookProgress).toHaveBeenCalledWith('Stop', expect.stringContaining('blocked!'));
+	});
+
+	it('exit code 2 — ignores JSON in stdout', () => {
+		handleHookResponse(
+			makeHookResponse('hook-1', 'error', {
+				exit_code: 2,
+				stderr: 'real error',
+				stdout: '{"decision": "block", "reason": "should be ignored"}',
+				hook_event: 'PostToolUse',
+			}),
+			accessor, request, state,
+		);
+		// Should use stderr, not JSON
+		expect(request.stream.hookProgress).toHaveBeenCalledWith('PostToolUse', expect.stringContaining('real error'));
+	});
+
+	it('other non-zero exit codes — non-blocking warning', () => {
+		handleHookResponse(
+			makeHookResponse('hook-1', 'error', { exit_code: 1, stderr: 'warning text', hook_event: 'PreToolUse' }),
+			accessor, request, state,
+		);
+		expect(request.stream.hookProgress).toHaveBeenCalledWith('PreToolUse', undefined, 'warning text');
+	});
+
+	it('other non-zero exit codes without stderr — no hookProgress', () => {
+		handleHookResponse(
+			makeHookResponse('hook-1', 'error', { exit_code: 1, hook_event: 'PreToolUse' }),
+			accessor, request, state,
+		);
+		expect(request.stream.hookProgress).not.toHaveBeenCalled();
+	});
+
+	// #endregion
+
+	// #region JSON output parsing (exit code 0)
+
+	it('exit code 0 — JSON with continue:false calls hookProgress with stopReason', () => {
+		handleHookResponse(
+			makeHookResponse('hook-1', 'success', {
+				exit_code: 0,
+				stdout: JSON.stringify({ continue: false, stopReason: 'Build failed' }),
+				hook_event: 'UserPromptSubmit',
+			}),
+			accessor, request, state,
+		);
+		expect(request.stream.hookProgress).toHaveBeenCalledWith('UserPromptSubmit', expect.stringContaining('Build failed'));
+	});
+
+	it('exit code 0 — JSON with continue:false and no stopReason uses empty string', () => {
+		handleHookResponse(
+			makeHookResponse('hook-1', 'success', {
+				exit_code: 0,
+				stdout: JSON.stringify({ continue: false }),
+				hook_event: 'Stop',
+			}),
+			accessor, request, state,
+		);
+		expect(request.stream.hookProgress).toHaveBeenCalledWith('Stop', expect.any(String));
+	});
+
+	it('exit code 0 — JSON with decision:block calls hookProgress with reason', () => {
+		handleHookResponse(
+			makeHookResponse('hook-1', 'success', {
+				exit_code: 0,
+				stdout: JSON.stringify({ decision: 'block', reason: 'Tests must pass' }),
+				hook_event: 'PostToolUse',
+			}),
+			accessor, request, state,
+		);
+		expect(request.stream.hookProgress).toHaveBeenCalledWith('PostToolUse', expect.stringContaining('Tests must pass'));
+	});
+
+	it('exit code 0 — JSON with systemMessage shows warning via hookProgress', () => {
+		handleHookResponse(
+			makeHookResponse('hook-1', 'success', {
+				exit_code: 0,
+				stdout: JSON.stringify({ systemMessage: 'Watch out for side effects' }),
+				hook_event: 'PreToolUse',
+			}),
+			accessor, request, state,
+		);
+		expect(request.stream.hookProgress).toHaveBeenCalledWith('PreToolUse', undefined, 'Watch out for side effects');
+	});
+
+	it('exit code 0 — non-JSON stdout logs warning, no hookProgress', () => {
+		const warnSpy = vi.spyOn(services.logService, 'warn');
+		handleHookResponse(
+			makeHookResponse('hook-1', 'success', {
+				exit_code: 0,
+				stdout: 'not valid json {',
+				hook_event: 'PreToolUse',
+			}),
+			accessor, request, state,
+		);
+		expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('non-JSON output'));
+		expect(request.stream.hookProgress).not.toHaveBeenCalled();
+	});
+
+	it('exit code 0 — empty stdout means success, no hookProgress', () => {
+		handleHookResponse(
+			makeHookResponse('hook-1', 'success', { exit_code: 0, stdout: '' }),
+			accessor, request, state,
+		);
+		expect(request.stream.hookProgress).not.toHaveBeenCalled();
+	});
+
+	it('exit code 0 — JSON with continue:true and no systemMessage is silent', () => {
+		handleHookResponse(
+			makeHookResponse('hook-1', 'success', {
+				exit_code: 0,
+				stdout: JSON.stringify({ continue: true }),
+				hook_event: 'PreToolUse',
+			}),
+			accessor, request, state,
+		);
+		expect(request.stream.hookProgress).not.toHaveBeenCalled();
+	});
+
+	// #endregion
+});
+
+// #endregion
+
+// #region handleHookProgress
+
+describe('handleHookProgress', () => {
+	let services: TestServices;
+	let accessor: ServicesAccessor;
+	let request: MessageHandlerRequestContext;
+
+	beforeEach(() => {
+		services = createTestServices();
+		accessor = createAccessor(services);
+		request = createRequestContext();
+	});
+
+	it('shows stdout via hookProgress as system message', () => {
+		handleHookProgress(
+			makeHookProgress('hook-1', { stdout: 'Running lint...', hook_event: 'PreToolUse' }),
+			accessor, request,
+		);
+		expect(request.stream.hookProgress).toHaveBeenCalledWith('PreToolUse', undefined, 'Running lint...');
+	});
+
+	it('falls back to stderr when stdout is empty', () => {
+		handleHookProgress(
+			makeHookProgress('hook-1', { stderr: 'warning output', hook_event: 'PostToolUse' }),
+			accessor, request,
+		);
+		expect(request.stream.hookProgress).toHaveBeenCalledWith('PostToolUse', undefined, 'warning output');
+	});
+
+	it('does not call hookProgress when both stdout and stderr are empty', () => {
+		handleHookProgress(
+			makeHookProgress('hook-1'),
+			accessor, request,
+		);
+		expect(request.stream.hookProgress).not.toHaveBeenCalled();
+	});
+
+	it('trace-logs progress output', () => {
+		const traceSpy = vi.spyOn(services.logService, 'trace');
+		handleHookProgress(
+			makeHookProgress('hook-1', { stdout: 'progress text', hook_name: 'my-hook', hook_event: 'PreToolUse' }),
+			accessor, request,
+		);
+		expect(traceSpy).toHaveBeenCalledWith(expect.stringContaining('Hook progress'));
+		expect(traceSpy).toHaveBeenCalledWith(expect.stringContaining('progress text'));
+	});
+});
+
+// #endregion
+
+// #region parseHookJsonOutput
+
+describe('parseHookJsonOutput', () => {
+	it('parses valid JSON with all fields', () => {
+		const result = parseHookJsonOutput(JSON.stringify({
+			continue: false,
+			stopReason: 'Build failed',
+			systemMessage: 'Warning',
+			decision: 'block',
+			reason: 'Not allowed',
+		}));
+		expect(result).toEqual({
+			continue: false,
+			stopReason: 'Build failed',
+			systemMessage: 'Warning',
+			decision: 'block',
+			reason: 'Not allowed',
+		});
+	});
+
+	it('parses JSON with only some fields', () => {
+		const result = parseHookJsonOutput(JSON.stringify({ continue: false }));
+		expect(result).toEqual({ continue: false });
+	});
+
+	it('returns undefined for non-JSON string', () => {
+		expect(parseHookJsonOutput('not json')).toBeUndefined();
+	});
+
+	it('returns undefined for JSON null', () => {
+		expect(parseHookJsonOutput('null')).toBeUndefined();
+	});
+
+	it('returns undefined for JSON array', () => {
+		expect(parseHookJsonOutput('[]')).toBeUndefined();
+	});
+
+	it('returns undefined for JSON primitive', () => {
+		expect(parseHookJsonOutput('"hello"')).toBeUndefined();
+	});
+
+	it('ignores fields with wrong types via fallback validation', () => {
+		const result = parseHookJsonOutput(JSON.stringify({
+			continue: 'not-a-boolean',
+			stopReason: 42,
+			systemMessage: 'valid string',
+		}));
+		expect(result).toEqual({ systemMessage: 'valid string' });
+	});
+
+	it('returns undefined when all fields have wrong types', () => {
+		const result = parseHookJsonOutput(JSON.stringify({
+			continue: 'true',
+			decision: 'allow',
+		}));
+		expect(result).toBeUndefined();
+	});
+
+	it('ignores unknown fields', () => {
+		const result = parseHookJsonOutput(JSON.stringify({
+			continue: true,
+			unknownField: 'whatever',
+		}));
+		expect(result).toEqual({ continue: true });
+	});
+
+	it('rejects decision values other than block', () => {
+		const result = parseHookJsonOutput(JSON.stringify({
+			decision: 'allow',
+			systemMessage: 'hello',
+		}));
+		// decision: 'allow' fails vLiteral('block'), but systemMessage succeeds
+		expect(result).toEqual({ systemMessage: 'hello' });
 	});
 });
 
