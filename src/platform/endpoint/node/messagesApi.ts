@@ -169,12 +169,16 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	const thinkingEnabled = !!thinkingConfig;
 
-	// Build output config with effort level for thinking, validating reasoningEffort
+	// Build output config with effort level for thinking, validating reasoningEffort.
+	// Only include effort when the endpoint explicitly supports it (supportsReasoningEffort)
+	// to avoid 400 errors from models that don't accept output_config (e.g. Haiku).
 	let effort: 'low' | 'medium' | 'high' | undefined;
-	if (thinkingConfig) {
+	if (thinkingConfig && endpoint.supportsReasoningEffort) {
 		const candidateEffort = configurationService.getConfig(ConfigKey.TeamInternal.AnthropicThinkingEffort) ?? reasoningEffort;
 		if (candidateEffort === 'low' || candidateEffort === 'medium' || candidateEffort === 'high') {
-			effort = candidateEffort;
+			if (endpoint.supportsReasoningEffort.includes(candidateEffort)) {
+				effort = candidateEffort;
+			}
 		}
 	}
 
