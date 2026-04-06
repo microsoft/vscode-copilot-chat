@@ -69,6 +69,41 @@ class AutopilotTestToolCallingLoop extends ToolCallingLoop<IToolCallingLoopOptio
 	public testEnsureAutopilotTools(tools: LanguageModelToolInformation[]): LanguageModelToolInformation[] {
 		return this.ensureAutopilotTools(tools);
 	}
+
+	/**
+	 * Expose hadCodeEdits for testing.
+	 */
+	public testHadCodeEdits(): boolean {
+		return this.hadCodeEdits();
+	}
+
+	/**
+	 * Expose getEditedFilePaths for testing.
+	 */
+	public testGetEditedFilePaths(): URI[] {
+		return this.getEditedFilePaths();
+	}
+
+	/**
+	 * Expose performAutopilotCodeReview for testing.
+	 */
+	public testPerformAutopilotCodeReview(token: CancellationToken): Promise<boolean> {
+		return this.performAutopilotCodeReview(undefined, token);
+	}
+
+	/**
+	 * Set the taskCompleted flag for testing.
+	 */
+	public setTaskCompleted(value: boolean): void {
+		this.taskCompleted = value;
+	}
+
+	/**
+	 * Set a pre-edit snapshot for testing.
+	 */
+	public setPreEditSnapshot(filePath: string, content: string): void {
+		this.preEditSnapshots.set(filePath, content);
+	}
 }
 
 function createMockChatRequest(overrides: Partial<ChatRequest> = {}): ChatRequest {
