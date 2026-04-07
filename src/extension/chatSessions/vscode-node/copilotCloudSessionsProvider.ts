@@ -812,6 +812,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				}
 			}
 		} catch (error) {
+			if (error instanceof vscode.FileSystemError && error.code === 'FileNotFound') {
+				return { matches, localOnly };
+			}
 			this.logService.warn(`Error scanning for local agents in ${folder.uri.toString()}: ${error}`);
 		}
 
