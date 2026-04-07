@@ -695,14 +695,15 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		const isThinkingLocation = location === ChatLocation.Agent || location === ChatLocation.MessagesProxy;
 		const rawEffort = this.options.request.modelConfiguration?.reasoningEffort;
 		const reasoningEffort = typeof rawEffort === 'string' ? rawEffort : undefined;
+		const isSubagent = !!this.options.request.subAgentInvocationId;
 		return this.options.invocation.endpoint.makeChatRequest2({
 			...opts,
 			modelCapabilities: {
 				...opts.modelCapabilities,
 				enableThinking: isThinkingLocation && opts.modelCapabilities?.enableThinking,
 				reasoningEffort,
-				enableToolSearch: isAnthropicToolSearchEnabled(this.options.invocation.endpoint, this._configurationService),
-				enableContextEditing: isAnthropicContextEditingEnabled(this.options.invocation.endpoint, this._configurationService, this._experimentationService),
+				enableToolSearch: !isSubagent && isAnthropicToolSearchEnabled(this.options.invocation.endpoint, this._configurationService),
+				enableContextEditing: !isSubagent && isAnthropicContextEditingEnabled(this.options.invocation.endpoint, this._configurationService, this._experimentationService),
 			},
 			debugName,
 			conversationId: this.options.conversation.sessionId,
