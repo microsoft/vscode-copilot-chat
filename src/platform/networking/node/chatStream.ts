@@ -390,6 +390,7 @@ function sendModelCallTelemetry(telemetryService: ITelemetryService, messageData
 
 		// Send one telemetry event per chunk
 		for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+			const parentToolCallId = telemetryData.properties.parentToolCallId;
 			const modelCallData = TelemetryData.createAndMarkAsIssued({
 				modelCallId,
 				conversationId, // Trajectory identifier linking main and supplementary calls
@@ -402,6 +403,7 @@ function sendModelCallTelemetry(telemetryService: ITelemetryService, messageData
 				...(requestTurn !== undefined && { requestTurn: requestTurn.toString() }), // Add requestTurn only for input calls
 				...(requestOptionsId && { requestOptionsId }), // Add requestOptionsId for input calls
 				...(telemetryData.properties.turnIndex && { turnIndex: telemetryData.properties.turnIndex }), // Add turnIndex from original telemetryData
+				...(parentToolCallId && { parentToolCallId }), // Link subagent calls to parent tool invocation
 			}, telemetryData.measurements); // Include measurements from original telemetryData
 
 			telemetryService.sendInternalMSFTTelemetryEvent(eventName, modelCallData.properties, modelCallData.measurements);

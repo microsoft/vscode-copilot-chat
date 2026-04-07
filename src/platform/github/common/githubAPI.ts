@@ -34,6 +34,7 @@ export interface PullRequestSearchItem {
 	headRefOid: string;
 	baseRefOid?: string;
 	headRefName?: string;
+	baseRefName?: string;
 	body: string;
 }
 
@@ -264,6 +265,7 @@ export async function makeSearchGraphQLRequest(
 						additions
 						deletions
 						headRefName
+						baseRefName
 						files {
 							totalCount
 						}
@@ -332,6 +334,7 @@ export async function getPullRequestFromGlobalId(
 					additions
 					deletions
 					headRefName
+					baseRefName
 					files {
 						totalCount
 					}

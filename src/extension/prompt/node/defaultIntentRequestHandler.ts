@@ -687,9 +687,10 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 
 	protected override async fetch(opts: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
 		const messageSourcePrefix = this.options.location === ChatLocation.Editor ? 'inline' : 'chat';
-		const debugName = this.options.request.subAgentInvocationId ?
+		const baseDebugName = this.options.request.subAgentInvocationId ?
 			`tool/runSubagent${this.options.request.subAgentName ? `-${this.options.request.subAgentName}` : ''}` :
 			`${ChatLocation.toStringShorter(this.options.location)}/${this.options.intent?.id}`;
+		const debugName = this._isInlineSummarizationRequest ? 'inlineSummarizeConversationHistory-full' : baseDebugName;
 		const location = this.options.overrideRequestLocation ?? this.options.location;
 		const isThinkingLocation = location === ChatLocation.Agent || location === ChatLocation.MessagesProxy;
 		return this.options.invocation.endpoint.makeChatRequest2({
@@ -718,7 +719,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				messageId: this.telemetry.telemetryMessageId,
 				conversationId: this.options.conversation.sessionId,
 				messageSource: this.options.intent?.id && this.options.intent.id !== UnknownIntent.ID ? `${messageSourcePrefix}.${this.options.intent.id}` : `${messageSourcePrefix}.user`,
-				subType: this.options.request.subAgentInvocationId ? `subagent` : undefined,
+				subType: this.options.request.subAgentInvocationId ? `subagent` : this.options.request.isSystemInitiated ? 'system-initiated' : undefined,
 				parentRequestId: this.options.request.parentRequestId,
 			},
 			requestKindOptions: this.options.request.subAgentInvocationId

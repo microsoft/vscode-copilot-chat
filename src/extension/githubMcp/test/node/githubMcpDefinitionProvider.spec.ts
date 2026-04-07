@@ -82,6 +82,7 @@ describe('GitHubMcpDefinitionProvider', () => {
 		toolsets?: string[];
 		readonly?: boolean;
 		lockdown?: boolean;
+		channel?: ConfigKey.GitHubMcpChannelValue;
 		hasPermissiveToken?: boolean;
 	}): Promise<GitHubMcpDefinitionProvider> {
 		const serviceCollection = new TestingServiceCollection();
@@ -102,6 +103,9 @@ describe('GitHubMcpDefinitionProvider', () => {
 		}
 		if (configOverrides?.lockdown !== undefined) {
 			await configService.setConfig(ConfigKey.GitHubMcpLockdown, configOverrides.lockdown);
+		}
+		if (configOverrides?.channel !== undefined) {
+			await configService.setConfig(ConfigKey.GitHubMcpChannel, configOverrides.channel);
 		}
 
 		serviceCollection.define(IConfigurationService, configService);
@@ -251,6 +255,38 @@ describe('GitHubMcpDefinitionProvider', () => {
 			expect(definitions[0].version).toBe('default|readonly|lockdown');
 		});
 
+		test('includes X-MCP-Insiders header when channel is insiders', async () => {
+			const insidersProvider = await createProvider({ channel: 'insiders' });
+
+			const definitions = insidersProvider.provideMcpServerDefinitions();
+
+			expect(definitions[0].headers['X-MCP-Insiders']).toBe('true');
+		});
+
+		test('does not include X-MCP-Insiders header when channel is stable', async () => {
+			const stableProvider = await createProvider({ channel: 'stable' });
+
+			const definitions = stableProvider.provideMcpServerDefinitions();
+
+			expect(definitions[0].headers['X-MCP-Insiders']).toBeUndefined();
+		});
+
+		test('version includes insiders flag when channel is insiders', async () => {
+			const insidersProvider = await createProvider({ channel: 'insiders' });
+
+			const definitions = insidersProvider.provideMcpServerDefinitions();
+
+			expect(definitions[0].version).toBe('default|insiders');
+		});
+
+		test('version includes all flags when readonly, lockdown, and insiders are set', async () => {
+			const allFlagsProvider = await createProvider({ readonly: true, lockdown: true, channel: 'insiders' });
+
+			const definitions = allFlagsProvider.provideMcpServerDefinitions();
+
+			expect(definitions[0].version).toBe('default|readonly|lockdown|insiders');
+		});
+
 		test('version is just toolsets when readonly and lockdown are false', async () => {
 			const toolsets = ['issues', 'pull_requests'];
 			const normalProvider = await createProvider({ toolsets, readonly: false, lockdown: false });
@@ -324,6 +360,14 @@ describe('GitHubMcpDefinitionProvider', () => {
 			const eventPromise = Event.toPromise(provider.onDidChangeMcpServerDefinitions);
 
 			await configService.setConfig(ConfigKey.GitHubMcpLockdown, true);
+
+			await eventPromise;
+		});
+
+		test('fires when channel configuration changes', async () => {
+			const eventPromise = Event.toPromise(provider.onDidChangeMcpServerDefinitions);
+
+			await configService.setConfig(ConfigKey.GitHubMcpChannel, 'insiders');
 
 			await eventPromise;
 		});

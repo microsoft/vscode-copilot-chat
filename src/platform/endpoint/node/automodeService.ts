@@ -5,8 +5,8 @@
 
 import { RequestType } from '@vscode/copilot-api';
 import type { ChatRequest } from 'vscode';
+import { FetchedValue } from '../../../shared-fetch-utils/common/fetchedValue';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { TimeoutTimer } from '../../../util/vs/base/common/async';
 import { Disposable, DisposableMap } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatLocation } from '../../../vscodeTypes';
@@ -14,6 +14,7 @@ import { IAuthenticationService } from '../../authentication/common/authenticati
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
+import { createCapiClientFetchedValue } from '../../networking/common/capiClientFetchedValue';
 import { isAbortError } from '../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../networking/common/networking';
 import { IRequestLogger } from '../../requestLogger/node/requestLogger';
@@ -41,108 +42,60 @@ interface AutoModelCacheEntry {
 }
 
 class AutoModeTokenBank extends Disposable {
-	private _token: AutoModeAPIResponse | undefined;
-	private _fetchTokenPromise: Promise<void> | undefined;
-	private _refreshTimer: TimeoutTimer;
+	private readonly _fetchedValue: FetchedValue<AutoModeAPIResponse>;
 	private _usedSinceLastFetch = false;
 
 	constructor(
 		public debugName: string,
-		private readonly _location: ChatLocation,
-		private readonly _capiClientService: ICAPIClientService,
-		private readonly _authService: IAuthenticationService,
-		private readonly _logService: ILogService,
-		private readonly _expService: IExperimentationService,
-		private readonly _envService: IEnvService
+		location: ChatLocation,
+		capiClientService: ICAPIClientService,
+		authService: IAuthenticationService,
+		_logService: ILogService,
+		expService: IExperimentationService,
+		envService: IEnvService,
 	) {
 		super();
-		this._refreshTimer = this._register(new TimeoutTimer());
-		this._register(this._envService.onDidChangeWindowState((state) => {
-			if (state.active && this._usedSinceLastFetch && (!this._token || this._token.expires_at * 1000 - Date.now() < 5 * 60 * 1000)) {
-				// Window is active again, fetch a new token if it's expiring soon or we don't have one
-				this._fetchTokenPromise = this._fetchToken();
-			}
+
+		const expName = location === ChatLocation.Editor
+			? 'copilotchat.autoModelHint.editor'
+			: 'copilotchat.autoModelHint';
+
+		this._fetchedValue = this._register(createCapiClientFetchedValue<AutoModeAPIResponse>(capiClientService, envService, {
+			request: async () => {
+				const authToken = (await authService.getCopilotToken()).token;
+				const autoModeHint = expService.getTreatmentVariable<string>(expName) || 'auto';
+				return {
+					headers: {
+						'Content-Type': 'application/json',
+						'Authorization': `Bearer ${authToken}`,
+					},
+					method: 'POST' as const,
+					json: { auto_mode: { model_hints: [autoModeHint] } },
+				};
+			},
+			requestMetadata: { type: RequestType.AutoModels },
+			parseResponse: async (res) => {
+				if (res.status < 200 || res.status >= 300) {
+					const text = await res.text().catch(() => '');
+					throw new Error(`AutoMode token response status: ${res.status}${text ? `, body: ${text}` : ''}`);
+				}
+				const data = await res.json() as AutoModeAPIResponse;
+				this._usedSinceLastFetch = false;
+				return data;
+			},
+			isStale: (token) => {
+				if (!this._usedSinceLastFetch) {
+					return false;
+				}
+				return token.expires_at * 1000 - Date.now() < 5 * 60 * 1000;
+			},
+			keepCacheHot: true,
 		}));
-		this._fetchTokenPromise = this._fetchToken();
 	}
 
 	async getToken(): Promise<AutoModeAPIResponse> {
-		if (!this._token) {
-			if (this._fetchTokenPromise) {
-				await this._fetchTokenPromise;
-			}
-			// If we still don't have a token (e.g., the awaited promise returned nothing), force a new fetch
-			if (!this._token) {
-				this._fetchTokenPromise = this._fetchToken(true);
-				await this._fetchTokenPromise;
-			}
-		}
-		if (!this._token) {
-			throw new Error(`[${this.debugName}] Failed to fetch AutoMode token: token is undefined after fetch attempt.`);
-		}
 		this._usedSinceLastFetch = true;
-		return this._token;
-	}
-
-
-	private async _fetchToken(force?: boolean): Promise<void> {
-		// If the window isn't active we will skip fetching to save network calls
-		// We will fetch again when the window becomes active
-		if (!this._envService.isActive && !force) {
-			return;
-		}
-		const startTime = Date.now();
-
-		try {
-			const authToken = (await this._authService.getCopilotToken()).token;
-			const headers: Record<string, string> = {
-				'Content-Type': 'application/json',
-				'Authorization': `Bearer ${authToken}`
-			};
-
-			const expName = this._location === ChatLocation.Editor
-				? 'copilotchat.autoModelHint.editor'
-				: 'copilotchat.autoModelHint';
-
-			const autoModeHint = this._expService.getTreatmentVariable<string>(expName) || 'auto';
-
-			const response = await this._capiClientService.makeRequest<Response>({
-				json: {
-					'auto_mode': { 'model_hints': [autoModeHint] }
-				},
-				headers,
-				method: 'POST'
-			}, { type: RequestType.AutoModels });
-			if (!response.ok) {
-				throw new Error(`Response status: ${response.status}, status text: ${response.statusText}`);
-			}
-			const data: AutoModeAPIResponse = await response.json() as AutoModeAPIResponse;
-			// HACK: Boost the autoModeHint model to the front of the list until CAPI fixes their bug
-			const hintIndex = data.available_models.indexOf(autoModeHint);
-			if (hintIndex > 0) {
-				data.available_models.splice(hintIndex, 1);
-				data.available_models.unshift(autoModeHint);
-			}
-			this._logService.trace(`Fetched auto model for ${this.debugName} in ${Date.now() - startTime}ms.`);
-			this._token = data;
-			this._usedSinceLastFetch = false;
-			// Trigger a refresh 5 minutes before expiration
-			if (!this._store.isDisposed) {
-				this._refreshTimer.cancelAndSet(() => {
-					if (!this._usedSinceLastFetch) {
-						this._logService.trace(`[${this.debugName}] Skipping auto mode token refresh because it was not used since last fetch.`);
-						this._token = undefined;
-						return;
-					}
-					this._fetchToken();
-				}, (data.expires_at * 1000) - Date.now() - 5 * 60 * 1000);
-			}
-		} catch (err) {
-			this._logService.error(`[${this.debugName}] Failed to fetch AutoMode token:`, err);
-			this._token = undefined;
-		} finally {
-			this._fetchTokenPromise = undefined;
-		}
+		return this._fetchedValue.resolve();
 	}
 }
 
@@ -324,7 +277,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 				previous_model: entry?.endpoint?.model,
 				turn_number: (entry?.turnCount ?? 0) + 1,
 			};
-			const result = await this._routerDecisionFetcher.getRouterDecision(prompt, token.session_token, token.available_models, undefined, contextSignals);
+			const result = await this._routerDecisionFetcher.getRouterDecision(prompt, token.session_token, token.available_models, undefined, contextSignals, chatRequest?.sessionId, chatRequest?.id);
 
 			if (!result.candidate_models.length) {
 				return { lastRoutedPrompt: prompt, fallbackReason: 'emptyCandidateList' };

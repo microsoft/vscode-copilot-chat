@@ -720,12 +720,12 @@ export class CodeSearchChunkSearch extends Disposable {
 		};
 	}
 
-	public async triggerRemoteIndexing(triggerReason: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
-		const triggerResult = await this.doTriggerRemoteIndexing(triggerReason, onProgress, telemetryInfo, token);
+	public async triggerIndexing(triggerReason: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+		const triggerResult = await this.doTriggerIndexing(triggerReason, onProgress, telemetryInfo, token);
 		if (triggerResult.isOk()) {
-			this._logService.trace(`CodeSearch.triggerRemoteIndexing(${triggerReason}) succeeded`);
+			this._logService.trace(`CodeSearch.triggerIndexing(${triggerReason}) succeeded`);
 		} else {
-			this._logService.trace(`CodeSearch.triggerRemoteIndexing(${triggerReason}) failed. ${triggerResult.err.id}`);
+			this._logService.trace(`CodeSearch.triggerIndexing(${triggerReason}) failed. ${triggerResult.err.id}`);
 		}
 
 		/* __GDPR__
@@ -743,14 +743,6 @@ export class CodeSearchChunkSearch extends Disposable {
 
 		return triggerResult;
 	}
-
-	public async triggerDiffIndexing(): Promise<undefined> {
-		const diffArray = await this.getLocalDiff();
-		if (Array.isArray(diffArray)) {
-			this._embeddingsChunkSearch.tryTriggerReindexing(diffArray, new TelemetryCorrelationId('CodeSearchChunkSearch::triggerDiffIndexing'));
-		}
-	}
-
 
 	@LogExecTime(self => self._logService, 'CodeSearchChunkSearch::openGitRepo')
 	private async openGitRepo(repo: RepoInfo, remoteInfo: ResolvedRepoRemoteInfo): Promise<void> {
@@ -840,7 +832,7 @@ export class CodeSearchChunkSearch extends Disposable {
 		this._codeSearchRepos.delete(repo.rootUri);
 	}
 
-	private async doTriggerRemoteIndexing(triggerReason: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+	private async doTriggerIndexing(triggerReason: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
 		this._logService.trace(`RepoTracker.TriggerRemoteIndexing(${triggerReason}).started`);
 
 		await this.initialize();
@@ -853,7 +845,7 @@ export class CodeSearchChunkSearch extends Disposable {
 				return Result.error(result.err);
 			}
 
-			// If we are forcing external ingest only, we don't want to update the code search repos
+			// If we are forcing external ingest only, we don't care about code search repo states
 			if (externalIndexEnabled === 'force') {
 				return Result.ok(true);
 			}
@@ -864,21 +856,6 @@ export class CodeSearchChunkSearch extends Disposable {
 			status: entry.repo.status,
 		})), null, 4)} `);
 
-		const allRepos = Array.from(this._codeSearchRepos.values(), entry => entry.repo);
-		if (!allRepos.length) {
-			return Result.error(TriggerRemoteIndexingError.noGitRepos);
-		}
-
-		if (allRepos.every(repo => repo.status === CodeSearchRepoStatus.Resolving)) {
-			return Result.error(TriggerRemoteIndexingError.stillResolving);
-		}
-
-		if (allRepos.every(repo => repo.status === CodeSearchRepoStatus.NotResolvable)) {
-			return Result.error(TriggerRemoteIndexingError.noRemoteIndexableRepos);
-		}
-
-		const candidateRepos = allRepos.filter(repo => repo.status !== CodeSearchRepoStatus.NotResolvable && repo.status !== CodeSearchRepoStatus.Resolving);
-
 		const authToken = await this.getGithubAuthToken();
 		if (this._isDisposed) {
 			return Result.ok(true);
@@ -888,6 +865,20 @@ export class CodeSearchChunkSearch extends Disposable {
 			return Result.error(TriggerRemoteIndexingError.noValidAuthToken);
 		}
 
+		const allRepos = Array.from(this._codeSearchRepos.values(), entry => entry.repo);
+		if (!allRepos.length || allRepos.every(repo => repo.status === CodeSearchRepoStatus.NotResolvable)) {
+			if (externalIndexEnabled) {
+				return Result.ok(true);
+			} else {
+				return Result.error(TriggerRemoteIndexingError.notIndexable);
+			}
+		}
+
+		if (allRepos.every(repo => repo.status === CodeSearchRepoStatus.Resolving)) {
+			return Result.error(TriggerRemoteIndexingError.stillResolving);
+		}
+
+		const candidateRepos = allRepos.filter(repo => repo.status !== CodeSearchRepoStatus.NotResolvable && repo.status !== CodeSearchRepoStatus.Resolving);
 		if (candidateRepos.every(repo => repo.status === CodeSearchRepoStatus.Ready)) {
 			return Result.error(TriggerRemoteIndexingError.alreadyIndexed);
 		}

@@ -216,4 +216,40 @@ describe('BackgroundSummarizer', () => {
 		]);
 		expect(summarizer.state).toBe(BackgroundSummarizationState.Completed);
 	});
+
+	test('waitForCompletion resolves without error even when work fails', async () => {
+		// agentIntent.ts calls waitForCompletion without try/catch in the
+		// blocking paths — verify it swallows the error.
+		const summarizer = new BackgroundSummarizer(100_000);
+		summarizer.start(async _token => {
+			throw new Error('network timeout');
+		});
+		// Should not throw
+		await summarizer.waitForCompletion();
+		expect(summarizer.state).toBe(BackgroundSummarizationState.Failed);
+	});
+
+	test('cancel during waitForCompletion leaves state Idle with no result', async () => {
+		// Tests the race where a caller is awaiting completion and cancellation happens
+		const summarizer = new BackgroundSummarizer(100_000);
+		let resolveFn: () => void;
+		const gate = new Promise<void>(resolve => { resolveFn = resolve; });
+		summarizer.start(async _token => {
+			await gate;
+			return { summary: 'test', toolCallRoundId: 'r1' };
+		});
+		// Start awaiting completion (captures the promise but doesn't resolve yet)
+		const completionPromise = summarizer.waitForCompletion();
+		// Cancel while waitForCompletion is pending
+		summarizer.cancel();
+		// Let the work resolve so the promise settles
+		resolveFn!();
+		await completionPromise;
+		await new Promise<void>(resolve => setTimeout(resolve, 0));
+
+		// State should be Idle (cancel resets) and no result available
+		const result = summarizer.consumeAndReset();
+		expect(result).toBeUndefined();
+		expect(summarizer.state).toBe(BackgroundSummarizationState.Idle);
+	});
 });

@@ -8,6 +8,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { IEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -146,7 +147,7 @@ class TestConfigurationService {
 	getConfig(key: { defaultValue: unknown }) { return key.defaultValue; }
 	getExperimentBasedConfig(key: { defaultValue: unknown }) {
 		if (key === ConfigKey.Advanced.ChatDebugFileLogging) {
-			return true; // Enable file logging for tests
+			return true; // Enable debug logging for tests
 		}
 		return key.defaultValue;
 	}
@@ -156,6 +157,12 @@ class TestConfigurationService {
 class TestTelemetryService {
 	declare readonly _serviceBrand: undefined;
 	sendMSFTTelemetryEvent() { }
+}
+
+class TestEnvService {
+	declare readonly _serviceBrand: undefined;
+	readonly vscodeVersion = '1.99.0-test';
+	getVersion() { return '0.0.0-test'; }
 }
 
 describe('ChatDebugFileLoggerService', () => {
@@ -178,6 +185,7 @@ describe('ChatDebugFileLoggerService', () => {
 			new TestConfigurationService() as unknown as IConfigurationService,
 			new NullExperimentationService() as unknown as IExperimentationService,
 			new TestTelemetryService() as unknown as ITelemetryService,
+			new TestEnvService() as unknown as IEnvService,
 		);
 		disposables.add(service);
 	});
@@ -206,11 +214,12 @@ describe('ChatDebugFileLoggerService', () => {
 		await service.flush('session-1');
 		const entries = await readLogEntries('session-1');
 
-		expect(entries).toHaveLength(1);
-		expect(entries[0].type).toBe('tool_call');
-		expect(entries[0].name).toBe('read_file');
-		expect(entries[0].sid).toBe('session-1');
-		expect(entries[0].status).toBe('ok');
+		expect(entries).toHaveLength(2);
+		expect(entries[0].type).toBe('session_start');
+		expect(entries[1].type).toBe('tool_call');
+		expect(entries[1].name).toBe('read_file');
+		expect(entries[1].sid).toBe('session-1');
+		expect(entries[1].status).toBe('ok');
 	});
 
 	it('writes LLM request with token counts', async () => {
@@ -221,10 +230,10 @@ describe('ChatDebugFileLoggerService', () => {
 		await service.flush('session-1');
 		const entries = await readLogEntries('session-1');
 
-		expect(entries).toHaveLength(1);
-		expect(entries[0].type).toBe('llm_request');
-		expect(entries[0].name).toBe('chat:gpt-4o');
-		const attrs = entries[0].attrs as Record<string, unknown>;
+		expect(entries).toHaveLength(2);
+		expect(entries[1].type).toBe('llm_request');
+		expect(entries[1].name).toBe('chat:gpt-4o');
+		const attrs = entries[1].attrs as Record<string, unknown>;
 		expect(attrs.model).toBe('gpt-4o');
 		expect(attrs.inputTokens).toBe(1000);
 		expect(attrs.outputTokens).toBe(500);
@@ -245,8 +254,8 @@ describe('ChatDebugFileLoggerService', () => {
 		await service.flush('session-1');
 		const entries = await readLogEntries('session-1');
 
-		expect(entries[0].status).toBe('error');
-		expect((entries[0].attrs as Record<string, unknown>).error).toBe('Command failed');
+		expect(entries[1].status).toBe('error');
+		expect((entries[1].attrs as Record<string, unknown>).error).toBe('Command failed');
 	});
 
 	it('isDebugLogUri returns true for files under debug-logs', () => {
@@ -302,7 +311,7 @@ describe('ChatDebugFileLoggerService', () => {
 		await service.flush('session-1');
 		const entries = await readLogEntries('session-1');
 
-		const args = (entries[0].attrs as Record<string, unknown>).args as string;
+		const args = (entries[1].attrs as Record<string, unknown>).args as string;
 		expect(args.length).toBeLessThan(longArgs.length);
 		expect(args).toContain('[truncated]');
 	});
@@ -339,10 +348,11 @@ describe('ChatDebugFileLoggerService', () => {
 		expect(childPath!.fsPath).toContain('parent-session');
 		expect(childPath!.fsPath).toContain('title-title-child-id.jsonl');
 
-		// Child should have the LLM request entry
+		// Child should have the session_start + LLM request entry
 		const childEntries = await readLogEntries('title-child-id');
-		expect(childEntries).toHaveLength(1);
-		expect(childEntries[0].type).toBe('llm_request');
+		expect(childEntries).toHaveLength(2);
+		expect(childEntries[0].type).toBe('session_start');
+		expect(childEntries[1].type).toBe('llm_request');
 	});
 
 	it('restarts flush timer when flushIntervalMs config changes at runtime', async () => {
@@ -364,6 +374,7 @@ describe('ChatDebugFileLoggerService', () => {
 			configService as unknown as IConfigurationService,
 			new NullExperimentationService() as unknown as IExperimentationService,
 			new TestTelemetryService() as unknown as ITelemetryService,
+			new TestEnvService() as unknown as IEnvService,
 		);
 		disposables.add(svc);
 		disposables.add(configChangeEmitter);
@@ -511,5 +522,197 @@ describe('ChatDebugFileLoggerService', () => {
 
 		const content = await fs.promises.readFile(modelsPath, 'utf-8');
 		expect(content).toBe('"sentinel"');
+	});
+
+	it('readEntries returns entries from flushed JSONL and unflushed buffer', async () => {
+		await service.startSession('session-read');
+		otelService.fireSpan(makeToolCallSpan('session-read', 'tool_a'));
+		await service.flush('session-read');
+
+		// Fire another span without flushing — it should be in the buffer
+		otelService.fireSpan(makeToolCallSpan('session-read', 'tool_b'));
+
+		const entries = await service.readEntries('session-read');
+		const toolEntries = entries.filter(e => e.type === 'tool_call');
+		expect(toolEntries.length).toBe(2);
+		expect(toolEntries[0].name).toBe('tool_a');
+		expect(toolEntries[1].name).toBe('tool_b');
+	});
+
+	it('readEntries returns empty array for unknown session', async () => {
+		const entries = await service.readEntries('nonexistent-session');
+		expect(entries).toEqual([]);
+	});
+
+	it('readTailEntries returns last N entries from a flushed session', async () => {
+		await service.startSession('session-tail');
+		for (let i = 0; i < 5; i++) {
+			otelService.fireSpan(makeToolCallSpan('session-tail', `tool_${i}`));
+		}
+		await service.flush('session-tail');
+
+		const entries = await service.readTailEntries('session-tail', 2);
+		const toolEntries = entries.filter(e => e.type === 'tool_call');
+		// Should return the last 2 tool entries
+		expect(toolEntries.length).toBe(2);
+		expect(toolEntries[0].name).toBe('tool_3');
+		expect(toolEntries[1].name).toBe('tool_4');
+	});
+
+	it('streamEntries calls onEntry for each parsed line', async () => {
+		await service.startSession('session-stream');
+		otelService.fireSpan(makeToolCallSpan('session-stream', 'tool_x'));
+		otelService.fireSpan(makeChatSpan('session-stream', 'gpt-4o', 100, 50));
+		await service.flush('session-stream');
+
+		const types: string[] = [];
+		await service.streamEntries('session-stream', entry => {
+			types.push(entry.type);
+		});
+		expect(types).toContain('tool_call');
+		expect(types).toContain('llm_request');
+	});
+
+	it('onDidEmitEntry fires for each buffered entry', async () => {
+		await service.startSession('session-emit');
+		const emitted: Array<{ sessionId: string; type: string }> = [];
+		const sub = service.onDidEmitEntry(({ sessionId, entry }) => {
+			emitted.push({ sessionId, type: entry.type });
+		});
+
+		otelService.fireSpan(makeToolCallSpan('session-emit', 'tool_y'));
+
+		sub.dispose();
+
+		const toolEvents = emitted.filter(e => e.type === 'tool_call');
+		expect(toolEvents.length).toBe(1);
+		expect(toolEvents[0].sessionId).toBe('session-emit');
+	});
+
+	// ── Subagent / child session tests ──
+
+	it('startChildSession with parentToolSpanId sets parentSpanId on child_session_ref', async () => {
+		await service.startSession('parent-1');
+		otelService.fireSpan(makeToolCallSpan('parent-1', 'read_file'));
+
+		service.startChildSession('child-1', 'parent-1', 'runSubagent-Explore', 'tool-span-42');
+
+		// Fire a span for the child to trigger _ensureSession → child_session_ref
+		const childSpan = makeChatSpan('child-1', 'claude-haiku', 100, 20);
+		otelService.fireSpan(childSpan);
+
+		await service.flush('parent-1');
+		await service.flush('child-1');
+
+		const parentEntries = await readLogEntries('parent-1');
+		const ref = parentEntries.find(e => e.type === 'child_session_ref');
+		expect(ref).toBeDefined();
+		expect(ref!.parentSpanId).toBe('tool-span-42');
+		expect((ref!.attrs as Record<string, unknown>).label).toBe('runSubagent-Explore');
+		expect((ref!.attrs as Record<string, unknown>).childSessionId).toBe('child-1');
+	});
+
+	it('startChildSession without parentToolSpanId omits parentSpanId', async () => {
+		await service.startSession('parent-2');
+		otelService.fireSpan(makeToolCallSpan('parent-2', 'read_file'));
+
+		service.startChildSession('child-2', 'parent-2', 'title');
+
+		const childSpan = makeChatSpan('child-2', 'gpt-4o-mini', 50, 10);
+		otelService.fireSpan(childSpan);
+
+		await service.flush('parent-2');
+		await service.flush('child-2');
+
+		const parentEntries = await readLogEntries('parent-2');
+		const ref = parentEntries.find(e => e.type === 'child_session_ref');
+		expect(ref).toBeDefined();
+		expect(ref!.parentSpanId).toBeUndefined();
+	});
+
+	it('child session JSONL is written under parent directory', async () => {
+		await service.startSession('parent-dir');
+		otelService.fireSpan(makeToolCallSpan('parent-dir', 'read_file'));
+
+		service.startChildSession('child-dir', 'parent-dir', 'runSubagent-default', 'tool-span-1');
+
+		otelService.fireSpan(makeChatSpan('child-dir', 'claude-opus', 500, 100));
+
+		await service.flush('parent-dir');
+		await service.flush('child-dir');
+
+		const childLogPath = service.getLogPath('child-dir');
+		expect(childLogPath).toBeDefined();
+		expect(childLogPath!.fsPath).toContain('parent-dir');
+		expect(childLogPath!.fsPath).toContain('runSubagent-default-child-dir.jsonl');
+	});
+
+	it('child_session_ref includes childLogFile for direct file read fallback', async () => {
+		await service.startSession('parent-file');
+		otelService.fireSpan(makeToolCallSpan('parent-file', 'read_file'));
+
+		service.startChildSession('child-file', 'parent-file', 'runSubagent-Explore', 'tool-span-2');
+
+		otelService.fireSpan(makeChatSpan('child-file', 'claude-haiku', 100, 20));
+
+		await service.flush('parent-file');
+		await service.flush('child-file');
+
+		const parentEntries = await readLogEntries('parent-file');
+		const ref = parentEntries.find(e => e.type === 'child_session_ref');
+		expect(ref).toBeDefined();
+		expect((ref!.attrs as Record<string, unknown>).childLogFile).toBe('runSubagent-Explore-child-file.jsonl');
+		expect((ref!.attrs as Record<string, unknown>).childSessionId).toBe('child-file');
+	});
+
+	it('readEntries returns child session entries', async () => {
+		await service.startSession('parent-read');
+		otelService.fireSpan(makeToolCallSpan('parent-read', 'read_file'));
+
+		service.startChildSession('child-read', 'parent-read', 'runSubagent-default');
+
+		otelService.fireSpan(makeToolCallSpan('child-read', 'file_search'));
+		otelService.fireSpan(makeChatSpan('child-read', 'claude-haiku', 200, 50));
+
+		await service.flush('parent-read');
+		await service.flush('child-read');
+
+		const childEntries = await service.readEntries('child-read');
+		const types = childEntries.map(e => e.type);
+		expect(types).toContain('session_start');
+		expect(types).toContain('tool_call');
+		expect(types).toContain('llm_request');
+		expect(childEntries.length).toBe(3);
+	});
+
+	it('multiple child sessions under same parent each get their own file', async () => {
+		await service.startSession('parent-multi');
+		otelService.fireSpan(makeToolCallSpan('parent-multi', 'read_file'));
+
+		service.startChildSession('child-a', 'parent-multi', 'runSubagent-Explore', 'tool-a');
+		service.startChildSession('child-b', 'parent-multi', 'runSubagent-default', 'tool-b');
+
+		otelService.fireSpan(makeChatSpan('child-a', 'claude-haiku', 100, 20));
+		otelService.fireSpan(makeChatSpan('child-b', 'claude-haiku', 150, 30));
+
+		await service.flush('parent-multi');
+		await service.flush('child-a');
+		await service.flush('child-b');
+
+		// Parent should have two child_session_ref entries
+		const parentEntries = await readLogEntries('parent-multi');
+		const refs = parentEntries.filter(e => e.type === 'child_session_ref');
+		expect(refs).toHaveLength(2);
+
+		const labels = refs.map(r => (r.attrs as Record<string, unknown>).label);
+		expect(labels).toContain('runSubagent-Explore');
+		expect(labels).toContain('runSubagent-default');
+
+		// Each child has its own log path
+		const pathA = service.getLogPath('child-a');
+		const pathB = service.getLogPath('child-b');
+		expect(pathA).toBeDefined();
+		expect(pathB).toBeDefined();
+		expect(pathA!.fsPath).not.toBe(pathB!.fsPath);
 	});
 });

@@ -123,6 +123,8 @@ export class ToolsService extends BaseToolsService {
 		const isMcpTool = String(name).includes('mcp_');
 		const toolInfo = this.tools.find(t => t.name === String(name));
 		const chatSessionId = getCurrentCapturingToken()?.chatSessionId;
+		const parentChatSessionId = getCurrentCapturingToken()?.parentChatSessionId;
+		const debugLogLabel = getCurrentCapturingToken()?.debugLogLabel;
 		const parentTraceContext = (options as { parentTraceContext?: { traceId: string; spanId: string } }).parentTraceContext;
 		const span = this._otelService.startSpan(`execute_tool ${name}`, {
 			kind: SpanKind.INTERNAL,
@@ -134,6 +136,8 @@ export class ToolsService extends BaseToolsService {
 				[GenAiAttr.TOOL_CALL_ID]: (options as { chatStreamToolCallId?: string }).chatStreamToolCallId ?? '',
 				...(toolInfo?.description ? { [GenAiAttr.TOOL_DESCRIPTION]: toolInfo.description } : {}),
 				...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}),
+				...(parentChatSessionId ? { [CopilotChatAttr.PARENT_CHAT_SESSION_ID]: parentChatSessionId } : {}),
+				...(debugLogLabel ? { [CopilotChatAttr.DEBUG_LOG_LABEL]: debugLogLabel } : {}),
 			},
 		});
 		// Always capture tool call arguments for the debug panel

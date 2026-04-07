@@ -26,7 +26,6 @@ import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { getVerbosityForModelSync } from '../common/chatModelCapabilities';
 import { rawPartAsCompactionData } from '../common/compactionDataContainer';
 import { rawPartAsPhaseData } from '../common/phaseDataContainer';
-import { rawPartAsResponseOutputMessageId } from '../common/responseOutputMessageIdContainer';
 import { getStatefulMarkerAndIndex } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
 
@@ -75,7 +74,9 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	const summaryConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningSummary, expService);
 	const shouldDisableReasoningSummary = endpoint.family === 'gpt-5.3-codex-spark-preview';
 	const effortFromSetting = configService.getConfig(ConfigKey.TeamInternal.ResponsesApiReasoningEffort);
-	const effort = effortFromSetting || options.reasoningEffort || 'medium';
+	const effort = endpoint.supportsReasoningEffort?.length
+		? (effortFromSetting || options.reasoningEffort || 'medium')
+		: undefined;
 	const summary = summaryConfig === 'off' || shouldDisableReasoningSummary ? undefined : summaryConfig;
 	if (effort || summary) {
 		body.reasoning = {
@@ -127,7 +128,8 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 						const assistantMessage: ResponseOutputMessageWithPhase = {
 							role: 'assistant',
 							content: asstContent,
-							id: extractResponseOutputMessageId(message.content) ?? generateUuid(),
+							// I don't think this needs to be round-tripped.
+							id: 'msg_123',
 							status: 'completed',
 							type: 'message',
 							phase: extractPhaseData(message.content),
@@ -230,21 +232,9 @@ function extractThinkingData(content: Raw.ChatCompletionContentPart[]): OpenAI.R
 function extractPhaseData(content: Raw.ChatCompletionContentPart[]): string | undefined {
 	for (const part of content) {
 		if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
-			const phaseData = rawPartAsPhaseData(part);
-			if (phaseData) {
-				return phaseData.phase;
-			}
-		}
-	}
-	return undefined;
-}
-
-function extractResponseOutputMessageId(content: Raw.ChatCompletionContentPart[]): string | undefined {
-	for (const part of content) {
-		if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
-			const id = rawPartAsResponseOutputMessageId(part);
-			if (id) {
-				return id;
+			const phase = rawPartAsPhaseData(part);
+			if (phase) {
+				return phase;
 			}
 		}
 	}
@@ -575,11 +565,9 @@ export class OpenAIResponsesProcessor {
 						} : undefined
 					});
 				} else if (chunk.item.type === 'message') {
-					const phase = (chunk.item as ResponseOutputItemWithPhase).phase;
 					onProgress({
 						text: '',
-						responseOutputMessageId: chunk.item.id,
-						phase,
+						phase: (chunk.item as ResponseOutputItemWithPhase).phase
 					});
 				}
 				return;

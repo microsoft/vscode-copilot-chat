@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Position } from '../../../util/vs/editor/common/core/position';
 import { CurrentDocument } from './xtabCurrentDocument';
 
 /**
@@ -25,13 +24,11 @@ export function isInlineSuggestionFromTextAfterCursor(textAfterCursor: string): 
 }
 
 /**
- * Checks if the position is valid inline suggestion position (middle of the line).
- * Returns `undefined` if it's position where ghost text shouldn't be displayed.
+ * Checks if the cursor position is valid inline suggestion position (middle of the line).
+ * Returns `undefined` if it's a position where ghost text shouldn't be displayed.
  */
-export function isInlineSuggestion(document: CurrentDocument, position: Position): boolean | undefined {
-	const lineIndex = position.lineNumber - 1; // Convert to 0-based
-	const line = document.lines[lineIndex] ?? '';
-	const textAfterCursor = line.substring(position.column - 1);
+export function determineIsInlineSuggestionPosition(document: CurrentDocument): boolean | undefined {
+	const textAfterCursor = document.textAfterCursor();
 	return isInlineSuggestionFromTextAfterCursor(textAfterCursor);
 }
 

@@ -153,6 +153,57 @@ export class ChatSessionWorktreeCheckpointService extends Disposable implements 
 		return this.agentSessionsWorkspace.isAgentSessionsWorkspace;
 	}
 
+	async handleAdditionalWorktreesRequest(sessionId: string): Promise<void> {
+		if (!this._getSessionCheckpointSupport()) {
+			return;
+		}
+
+		const additionalProps = await this.worktreeService.getAdditionalWorktreeProperties(sessionId);
+		for (const props of additionalProps) {
+			if (typeof props === 'string' || props.version === 1) {
+				continue;
+			}
+			const repoUri = Uri.file(props.worktreePath);
+			const repository = await this.gitService.getRepository(repoUri);
+			if (!repository) {
+				this.logService.warn(`[ChatSessionWorktreeCheckpointService][handleAdditionalWorktreesRequest] No repository found for additional worktree ${props.worktreePath}`);
+				continue;
+			}
+			await this._createCheckpoint(sessionId, repository.rootUri, 0);
+		}
+	}
+
+	async handleAdditionalWorktreesRequestCompleted(sessionId: string, requestId: string): Promise<void> {
+		if (!this._getSessionCheckpointSupport()) {
+			return;
+		}
+
+		const additionalProps = await this.worktreeService.getAdditionalWorktreeProperties(sessionId);
+		const additionalCheckpointRefs: { [folderPath: string]: string } = {};
+
+		await Promise.allSettled(additionalProps.map(async (props) => {
+			if (typeof props === 'string' || props.version === 1) {
+				return;
+			}
+			const repoUri = Uri.file(props.worktreePath);
+			const repository = await this.gitService.getRepository(repoUri);
+			if (!repository) {
+				return;
+			}
+
+			const parentCheckpointRef = await this._getLatestCheckpointRef(sessionId);
+			const currentTurn = parentCheckpointRef ? parseInt(parentCheckpointRef.split('/').pop() ?? '0') + 1 : 0;
+			const checkpointRef = await this._createCheckpoint(sessionId, repository.rootUri, currentTurn, parentCheckpointRef);
+			if (checkpointRef) {
+				additionalCheckpointRefs[props.repositoryPath] = checkpointRef;
+			}
+		}));
+
+		if (Object.keys(additionalCheckpointRefs).length > 0) {
+			await this.metadataStore.updateRequestDetails(sessionId, [{ vscodeRequestId: requestId, additionalCheckpointRefs }]);
+		}
+	}
+
 	private async _createCheckpoint(sessionId: string, repositoryUri: Uri, turnNumber: number, parentCheckpointRef?: string): Promise<string | undefined> {
 		const tmpDirName = `vscode-sessions-${sessionId}-${generateUuid()}`;
 		const checkpointIndexFile = path.join(this.extensionContext.globalStorageUri.fsPath, tmpDirName, `checkpoint.index`);
