@@ -22,7 +22,7 @@ import { IExperimentationService } from '../../telemetry/common/nullExperimentat
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
 import { AutoChatEndpoint } from './autoChatEndpoint';
-import { RouterDecisionFetcher, RoutingContextSignals } from './routerDecisionFetcher';
+import { RouterDecisionError, RouterDecisionFetcher, RoutingContextSignals } from './routerDecisionFetcher';
 
 interface AutoModeAPIResponse {
 	available_models: string[];
@@ -293,7 +293,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			return { selectedModel, lastRoutedPrompt: prompt };
 		} catch (e) {
 			const isTimeout = isAbortError(e);
-			const errorCode = (e as any).errorCode;
+			const errorCode = e instanceof RouterDecisionError ? e.errorCode : undefined;
 			const fallbackReason = isTimeout ? 'routerTimeout' : errorCode === 'no_vision_models' ? 'noVisionModels' : 'routerError';
 			this._logService.error(`Failed to get routed model for conversation ${conversationId} (${fallbackReason}):`, (e as Error).message);
 			return { lastRoutedPrompt: prompt, fallbackReason };

@@ -32,6 +32,12 @@ export interface RoutingContextSignals {
 	prompt_char_count?: number;
 }
 
+export class RouterDecisionError extends Error {
+	constructor(message: string, public readonly errorCode?: string) {
+		super(message);
+	}
+}
+
 /**
  * Fetches routing decisions from a classification API to determine which model should handle a query.
  *
@@ -81,9 +87,7 @@ export class RouterDecisionFetcher {
 			try {
 				errorCode = JSON.parse(errorText).error;
 			} catch { /* not JSON */ }
-			const err = new Error(`Router decision request failed with status ${response.status}: ${response.statusText}`);
-			(err as any).errorCode = errorCode;
-			throw err;
+			throw new RouterDecisionError(`Router decision request failed with status ${response.status}: ${response.statusText}`, errorCode);
 		}
 
 		const text = await response.text();
