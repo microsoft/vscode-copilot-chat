@@ -62,7 +62,7 @@ export async function applyPromptOverrides(
 	tools: readonly LanguageModelToolInformation[],
 	fileSystemService: IFileSystemService,
 	logService: ILogService,
-	): Promise<PromptOverrideResult> {
+): Promise<PromptOverrideResult> {
 	const key = fileUri.toString();
 	let content: string;
 	try {
