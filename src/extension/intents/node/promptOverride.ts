@@ -20,7 +20,7 @@ interface PromptOverrideResult {
 	readonly tools: LanguageModelToolInformation[];
 }
 
-const INLINE_PROMPT_OVERRIDE_SOURCE = 'chat.debug.promptOverrideString';
+const INLINE_PROMPT_OVERRIDE_SOURCE = 'github.copilot.chat.debug.promptOverrideString';
 
 /** Tracks which override sources have already had a warning logged, to avoid spamming. */
 const warnedSources = new Set<string>();
