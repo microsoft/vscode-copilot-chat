@@ -5,9 +5,17 @@
 
 import type { ContentBlockParam, DocumentBlockParam, ImageBlockParam, MessageParam, TextBlockParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
-import { expect, suite, test } from 'vitest';
+import { beforeEach, describe, expect, suite, test } from 'vitest';
+import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatLocation } from '../../../chat/common/commonTypes';
+import { ConfigKey, IConfigurationService } from '../../../configuration/common/configurationService';
+import { InMemoryConfigurationService } from '../../../configuration/test/common/inMemoryConfigurationService';
 import { AnthropicMessagesTool, CUSTOM_TOOL_SEARCH_NAME } from '../../../networking/common/anthropic';
-import { addToolsAndSystemCacheControl, buildToolInputSchema, rawMessagesToMessagesAPI } from '../../node/messagesApi';
+import { IChatEndpoint, ICreateEndpointBodyOptions } from '../../../networking/common/networking';
+import { IToolDeferralService } from '../../../networking/common/toolDeferralService';
+import { createPlatformServices } from '../../../test/node/services';
+import { addToolsAndSystemCacheControl, buildToolInputSchema, createMessagesRequestBody, rawMessagesToMessagesAPI } from '../../node/messagesApi';
 
 function assertContentArray(content: MessageParam['content']): ContentBlockParam[] {
 	expect(Array.isArray(content)).toBe(true);
@@ -654,5 +662,166 @@ suite('buildToolInputSchema', function () {
 		};
 		const result = buildToolInputSchema(schema);
 		expect(result).toEqual(schema);
+	});
+});
+
+describe('createMessagesRequestBody reasoning effort', () => {
+	let disposables: DisposableStore;
+	let instantiationService: IInstantiationService;
+	let mockConfig: InMemoryConfigurationService;
+
+	function createMockEndpoint(overrides: Partial<IChatEndpoint> = {}): IChatEndpoint {
+		return {
+			model: 'claude-sonnet-4.5',
+			family: 'claude-sonnet-4.5',
+			modelProvider: 'Anthropic',
+			maxOutputTokens: 8192,
+			modelMaxPromptTokens: 200000,
+			supportsToolCalls: true,
+			supportsVision: true,
+			supportsPrediction: false,
+			showInModelPicker: true,
+			isFallback: false,
+			name: 'test',
+			version: '1.0',
+			policy: 'enabled',
+			urlOrRequestMetadata: 'https://test.com',
+			tokenizer: 0,
+			isDefault: false,
+			processResponseFromChatEndpoint: () => { throw new Error('not implemented'); },
+			acceptChatPolicy: () => { throw new Error('not implemented'); },
+			makeChatRequest2: () => { throw new Error('not implemented'); },
+			createRequestBody: () => { throw new Error('not implemented'); },
+			cloneWithTokenOverride: () => { throw new Error('not implemented'); },
+			interceptBody: () => { },
+			getExtraHeaders: () => ({}),
+			...overrides,
+		} as IChatEndpoint;
+	}
+
+	function createMinimalOptions(overrides: Partial<ICreateEndpointBodyOptions> = {}): ICreateEndpointBodyOptions {
+		return {
+			debugName: 'test',
+			requestId: 'test-request-id',
+			finishedCb: undefined,
+			messages: [{
+				role: Raw.ChatRole.User,
+				content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'Hello' }],
+			}],
+			postOptions: { max_tokens: 8192 },
+			location: ChatLocation.Panel,
+			...overrides,
+		};
+	}
+
+	beforeEach(() => {
+		disposables = new DisposableStore();
+		const services = disposables.add(createPlatformServices(disposables));
+		services.define(IToolDeferralService, {
+			_serviceBrand: undefined,
+			isNonDeferredTool: () => true,
+		});
+		const accessor = services.createTestingAccessor();
+		instantiationService = accessor.get(IInstantiationService);
+		mockConfig = accessor.get(IConfigurationService) as InMemoryConfigurationService;
+	});
+
+	test('includes effort in output_config when model supports reasoning effort and thinking is adaptive', () => {
+		const endpoint = createMockEndpoint({
+			supportsAdaptiveThinking: true,
+			supportsReasoningEffort: ['low', 'medium', 'high'],
+		});
+		const options = createMinimalOptions({
+			enableThinking: true,
+			reasoningEffort: 'high',
+		});
+
+		const body = instantiationService.invokeFunction(createMessagesRequestBody, options, endpoint.model, endpoint);
+
+		expect(body.thinking).toEqual({ type: 'adaptive' });
+		expect(body.output_config).toEqual({ effort: 'high' });
+	});
+
+	test('omits effort when model does not declare supportsReasoningEffort', () => {
+		const endpoint = createMockEndpoint({
+			supportsAdaptiveThinking: true,
+			// supportsReasoningEffort is undefined
+		});
+		const options = createMinimalOptions({
+			enableThinking: true,
+			reasoningEffort: 'high',
+		});
+
+		const body = instantiationService.invokeFunction(createMessagesRequestBody, options, endpoint.model, endpoint);
+
+		expect(body.thinking).toEqual({ type: 'adaptive' });
+		expect(body.output_config).toBeUndefined();
+	});
+
+	test('omits effort when supportsReasoningEffort is an empty array', () => {
+		const endpoint = createMockEndpoint({
+			supportsAdaptiveThinking: true,
+			supportsReasoningEffort: [],
+		});
+		const options = createMinimalOptions({
+			enableThinking: true,
+			reasoningEffort: 'medium',
+		});
+
+		const body = instantiationService.invokeFunction(createMessagesRequestBody, options, endpoint.model, endpoint);
+
+		expect(body.thinking).toEqual({ type: 'adaptive' });
+		expect(body.output_config).toBeUndefined();
+	});
+
+	test('omits effort when thinking is not enabled', () => {
+		const endpoint = createMockEndpoint({
+			supportsAdaptiveThinking: true,
+			supportsReasoningEffort: ['low', 'medium', 'high'],
+		});
+		const options = createMinimalOptions({
+			enableThinking: false,
+			reasoningEffort: 'high',
+		});
+
+		const body = instantiationService.invokeFunction(createMessagesRequestBody, options, endpoint.model, endpoint);
+
+		expect(body.thinking).toBeUndefined();
+		expect(body.output_config).toBeUndefined();
+	});
+
+	test('omits effort when reasoningEffort is an invalid value', () => {
+		const endpoint = createMockEndpoint({
+			supportsAdaptiveThinking: true,
+			supportsReasoningEffort: ['low', 'medium', 'high'],
+		});
+		const options = createMinimalOptions({
+			enableThinking: true,
+			reasoningEffort: 'xhigh' as any,
+		});
+
+		const body = instantiationService.invokeFunction(createMessagesRequestBody, options, endpoint.model, endpoint);
+
+		expect(body.thinking).toEqual({ type: 'adaptive' });
+		expect(body.output_config).toBeUndefined();
+	});
+
+	test('uses budget_tokens thinking when model has maxThinkingBudget but not adaptive', () => {
+		const endpoint = createMockEndpoint({
+			supportsAdaptiveThinking: false,
+			maxThinkingBudget: 32000,
+			minThinkingBudget: 1024,
+			supportsReasoningEffort: ['low', 'medium', 'high'],
+		});
+		mockConfig.setConfig(ConfigKey.AnthropicThinkingBudget, 10000);
+		const options = createMinimalOptions({
+			enableThinking: true,
+			reasoningEffort: 'low',
+		});
+
+		const body = instantiationService.invokeFunction(createMessagesRequestBody, options, endpoint.model, endpoint);
+
+		expect(body.thinking).toEqual({ type: 'enabled', budget_tokens: 8191 });
+		expect(body.output_config).toEqual({ effort: 'low' });
 	});
 });

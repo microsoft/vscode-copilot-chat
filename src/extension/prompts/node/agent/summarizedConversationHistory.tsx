@@ -14,6 +14,7 @@ import { IHistoricalTurn, ISessionTranscriptService } from '../../../../platform
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { isAnthropicFamily, isGeminiFamily } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { CUSTOM_TOOL_SEARCH_NAME } from '../../../../platform/networking/common/anthropic';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { APIUsage } from '../../../../platform/networking/common/openai';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
@@ -170,7 +171,7 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 				</SystemMessage>
 				{history}
 				{this.props.workingNotebook && <WorkingNotebookSummary priority={this.props.priority - 2} notebook={this.props.workingNotebook} />}
-				<UserMessage>
+				<UserMessage priority={this.props.priority}>
 					Summarize the conversation history so far, paying special attention to the most recent agent commands and tool results that triggered this summarization. Structure your summary using the enhanced format provided in the system message.<br />
 					{isOpus && <>
 						<br />
@@ -664,7 +665,18 @@ class ConversationHistorySummarizer {
 
 	private async getSummary(mode: SummaryMode, propsInfo: ISummarizedConversationHistoryInfo): Promise<SummarizationResult> {
 		const stopwatch = new StopWatch(false);
-		const endpoint = this.props.endpoint;
+
+		// In Full mode, tools are sent alongside the summarization prompt with
+		// tool_choice: 'none'. Reserve budget for them so the rendered messages
+		// plus tools don't exceed the model's context window.
+		const tools = this.props.tools;
+		const toolTokens = mode === SummaryMode.Full && tools?.length
+			? await this.props.endpoint.acquireTokenizer().countToolTokens(tools)
+			: 0;
+		const endpoint = toolTokens > 0
+			? this.props.endpoint.cloneWithTokenOverride(
+				Math.max(1, Math.floor((this.props.endpoint.modelMaxPromptTokens - toolTokens) * 0.9)))
+			: this.props.endpoint;
 
 		let summarizationPrompt: ChatMessage[];
 		const associatedRequestId = this.props.promptContext.conversation?.getLatestTurn().id;
@@ -681,27 +693,38 @@ class ConversationHistorySummarizer {
 
 		let summaryResponse: ChatResponse;
 		try {
-			const toolOpts = mode === SummaryMode.Full ? {
+			const normalizedTools = mode === SummaryMode.Full ? normalizeToolSchema(
+				endpoint.family,
+				this.props.tools?.map(tool => ({
+					function:
+					{
+						name: tool.name,
+						description: tool.description,
+						parameters: tool.inputSchema && Object.keys(tool.inputSchema).length ? tool.inputSchema : undefined
+					}, type: 'function'
+				})),
+				(tool, rule) => {
+					this.logService.warn(`Tool ${tool} failed validation: ${rule}`);
+				},
+			) : undefined;
+			const toolOpts = normalizedTools?.length ? {
 				tool_choice: 'none' as const,
-				tools: normalizeToolSchema(
-					endpoint.family,
-					this.props.tools?.map(tool => ({
-						function:
-						{
-							name: tool.name,
-							description: tool.description,
-							parameters: tool.inputSchema && Object.keys(tool.inputSchema).length ? tool.inputSchema : undefined
-						}, type: 'function'
-					})),
-					(tool, rule) => {
-						this.logService.warn(`Tool ${tool} failed validation: ${rule}`);
-					},
-				),
+				tools: normalizedTools,
 			} : undefined;
 
 			stripCacheBreakpoints(summarizationPrompt);
 
 			let messages = ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt);
+
+			// Strip custom client-side tool search (tool_search) tool_use/tool_result
+			// pairs. The summarization call uses ChatLocation.Other but
+			// createMessagesRequestBody still converts tool_search results to
+			// tool_reference blocks (customToolSearchEnabled isn't gated by location).
+			// Without tool search enabled in the request, Anthropic rejects them.
+			if (isAnthropicFamily(endpoint)) {
+				messages = stripToolSearchMessages(messages);
+			}
+
 			// Gemini strictly requires every function_call to have a matching function_response.
 			// When prompt-tsx prunes tool result messages due to token budget, orphaned tool_calls
 			// can remain, causing a 400 INVALID_ARGUMENT error. Strip them for Gemini models.
@@ -900,6 +923,44 @@ function stripCacheBreakpoints(messages: ChatMessage[]): void {
 			return part.type !== Raw.ChatCompletionContentPartKind.CacheBreakpoint;
 		});
 	});
+}
+
+/**
+ * Strip custom client-side tool search (tool_search) tool_use and tool_result
+ * messages from the conversation. The summarization call uses ChatLocation.Other
+ * but createMessagesRequestBody still converts tool_search results to
+ * tool_reference blocks (customToolSearchEnabled isn't gated by location).
+ * Without tool search enabled in the request, Anthropic rejects tool_reference
+ * content blocks with: "Input tag 'tool_reference' found using 'type' does not
+ * match any of the expected tags".
+ */
+export function stripToolSearchMessages(messages: ChatMessage[]): ChatMessage[] {
+	const toolSearchIds = new Set<string>();
+	for (const message of messages) {
+		if (message.role === Raw.ChatRole.Assistant && message.toolCalls) {
+			for (const tc of message.toolCalls) {
+				if (tc.function.name === CUSTOM_TOOL_SEARCH_NAME) {
+					toolSearchIds.add(tc.id);
+				}
+			}
+		}
+	}
+
+	if (toolSearchIds.size === 0) {
+		return messages;
+	}
+
+	return messages.map(message => {
+		if (message.role === Raw.ChatRole.Assistant && message.toolCalls) {
+			const filteredToolCalls = message.toolCalls.filter(tc => !toolSearchIds.has(tc.id));
+			if (filteredToolCalls.length !== message.toolCalls.length) {
+				return { ...message, toolCalls: filteredToolCalls.length > 0 ? filteredToolCalls : undefined };
+			}
+		} else if (message.role === Raw.ChatRole.Tool && message.toolCallId && toolSearchIds.has(message.toolCallId)) {
+			return undefined;
+		}
+		return message;
+	}).filter((m): m is ChatMessage => m !== undefined);
 }
 
 export interface ISummarizedConversationHistoryInfo {

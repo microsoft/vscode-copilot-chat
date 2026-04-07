@@ -289,6 +289,11 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 			});
 		}
 		for (const promptFile of this.chatPromptFileService.customAgentPromptFiles) {
+			// Skip legacy .chatmode.md files — they are a deprecated format
+			// and should not appear in the Copilot CLI agent list.
+			if (promptFile.uri.path.toLowerCase().endsWith('.chatmode.md')) {
+				continue;
+			}
 			const info = this.toCustomAgent(promptFile);
 			if (!info) {
 				continue;
@@ -346,9 +351,16 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 
 export function getAgentFileNameFromFilePath(filePath: URI): string {
 	const nameFromFile = basename(filePath);
-	const indexOfAgentMd = nameFromFile.toLowerCase().indexOf('.agent.md');
-	const agentName = indexOfAgentMd > 0 ? nameFromFile.substring(0, indexOfAgentMd) : nameFromFile;
-	return agentName;
+	const lowerName = nameFromFile.toLowerCase();
+	const indexOfAgentMd = lowerName.indexOf('.agent.md');
+	if (indexOfAgentMd > 0) {
+		return nameFromFile.substring(0, indexOfAgentMd);
+	}
+	const indexOfChatmodeMd = lowerName.indexOf('.chatmode.md');
+	if (indexOfChatmodeMd > 0) {
+		return nameFromFile.substring(0, indexOfChatmodeMd);
+	}
+	return nameFromFile;
 }
 
 

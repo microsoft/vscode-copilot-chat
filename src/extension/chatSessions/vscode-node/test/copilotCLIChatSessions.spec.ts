@@ -267,6 +267,7 @@ describe('CopilotCLIChatSessionContentProvider', () => {
 			fullDatabaseId: 42,
 			headRefOid: 'deadbeef',
 			headRefName: 'copilot/test-branch',
+			baseRefName: 'main',
 			body: '',
 		});
 

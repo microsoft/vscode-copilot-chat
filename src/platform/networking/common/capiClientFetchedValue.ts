@@ -10,7 +10,6 @@ import { FetchedValue } from '../../../shared-fetch-utils/common/fetchedValue';
 import { authBlockedMiddleware } from '../../../shared-fetch-utils/common/middleware/authBlockedMiddleware';
 import { etagMiddleware } from '../../../shared-fetch-utils/common/middleware/etagMiddleware';
 import { serverErrorBackoffMiddleware } from '../../../shared-fetch-utils/common/middleware/serverErrorBackoffMiddleware';
-import { windowActiveMiddleware } from '../../../shared-fetch-utils/common/middleware/windowActiveMiddleware';
 import type { ICAPIClientService } from '../../endpoint/common/capiClient';
 import type { IEnvService } from '../../env/common/envService';
 
@@ -106,7 +105,6 @@ export function createCapiClientFetchedValue<T>(
 		},
 		parseResponse,
 		middleware: [
-			windowActiveMiddleware(envService),
 			etagMiddleware(),
 			authBlockedMiddleware(),
 			serverErrorBackoffMiddleware(),
