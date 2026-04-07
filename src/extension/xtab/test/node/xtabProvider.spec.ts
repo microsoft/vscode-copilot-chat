@@ -2151,16 +2151,28 @@ describe('XtabProvider integration', () => {
 		 * request creation time (i.e. `documentAfterEdits`), and `intermediateUserEdit`
 		 * tracks changes after that. `createRequestWithEdit` sets
 		 * `request.documentBeforeEdits` to the doc *before* the trigger edit, so we
-		 * override it here to match reality.
+		 * construct a request with the intended value here to match reality.
 		 */
 		function createDivergenceRequest(
 			docAtRequestTime: string[],
 			opts: { insertionOffset: number; insertedText: string },
 		): StatelessNextEditRequest {
-			const request = createRequestWithEdit(docAtRequestTime, opts);
-			(request as { documentBeforeEdits: StringText }).documentBeforeEdits =
-				new StringText(docAtRequestTime.join('\n'));
-			return request;
+			const base = createRequestWithEdit(docAtRequestTime, opts);
+			return new StatelessNextEditRequest(
+				base.headerRequestId,
+				base.opportunityId,
+				new StringText(docAtRequestTime.join('\n')),
+				base.documents,
+				base.activeDocumentIdx,
+				base.xtabEditHistory,
+				new DeferredPromise<Result<unknown, NoNextEditReason>>(),
+				base.expandedEditWindowNLines,
+				base.isSpeculative,
+				base.logContext,
+				base.recordingBookmark,
+				base.recording,
+				base.providerRequestStartDateTime,
+			);
 		}
 
 		beforeEach(async () => {

@@ -79,10 +79,37 @@ export function isModelCursorLineCompatible(originalCursorLine: string, currentC
 		return false;
 	}
 
-	return isUserTypingCompatibleWithModelText(userEdit.inserted, modelEdit.inserted);
+	return isUserEditCompatibleWithModelEdit(userEdit, modelEdit, currentCursorLine, modelCursorLine);
 }
 
 const AUTO_CLOSE_PAIRS = new Set(['()', '[]', '{}', '<>', '""', `''`, '``']);
+
+/**
+ * Checks whether the user's edit is compatible with the model's edit.
+ *
+ * For pure insertions, compatibility is determined by whether the model is
+ * continuing the user's inserted text.
+ *
+ * For deletions and replacements, avoid treating an empty inserted string as
+ * universally compatible. In those cases, only accept when the resulting line
+ * already matches the model, or when the model is editing the exact same range
+ * and replacing the exact same original text with a compatible continuation.
+ */
+function isUserEditCompatibleWithModelEdit(userEdit: LineDiff, modelEdit: LineDiff, currentCursorLine: string, modelCursorLine: string): boolean {
+	if (userEdit.replaced.length > 0) {
+		if (currentCursorLine === modelCursorLine) {
+			return true;
+		}
+
+		return userEdit.startOffset === modelEdit.startOffset
+			&& userEdit.endOffset === modelEdit.endOffset
+			&& userEdit.replaced === modelEdit.replaced
+			&& userEdit.inserted.length > 0
+			&& isUserTypingCompatibleWithModelText(userEdit.inserted, modelEdit.inserted);
+	}
+
+	return isUserTypingCompatibleWithModelText(userEdit.inserted, modelEdit.inserted);
+}
 
 /**
  * Checks whether the user's typed text is compatible with the model's new text.

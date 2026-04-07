@@ -124,7 +124,7 @@ describe('isModelCursorLineCompatible', () => {
 
 	describe('model did not change the cursor line', () => {
 
-		it('model kept cursor line identical — always compatible', () => {
+		it('user typed but model kept cursor line identical — incompatible', () => {
 			//  original:  `const x = 1;`
 			//  user typed `2`              → current: `const x = 12;`
 			//  model:     `const x = 1;`   (no change)

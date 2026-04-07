@@ -691,14 +691,54 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	): EditStreaming {
 		const tracer = parentTracer.createSubLogger('streamEdits');
 
-		const targetDocument = request.getActiveDocument().id;
-
 		// Create a local cancellation source linked to the caller's token.
 		// This lets us cancel the fetch immediately on cursor-line divergence
 		// without reaching into the request's CancellationTokenSource (which
 		// is owned by nextEditProvider.ts).
 		const fetchCts = new CancellationTokenSource(cancellationToken);
 		const fetchCancellationToken = fetchCts.token;
+
+		try {
+			return yield* this._streamEditsImpl(
+				request, endpoint, modelServiceConfig, messages, clippedTaggedCurrentDoc,
+				editWindow, editWindowLines, cursorOriginalLinesOffset, editWindowLineRange,
+				promptPieces, prediction, opts, delaySession, tracer, telemetryBuilder,
+				logContext, cancellationToken, originalEditWindow, fetchCts, fetchCancellationToken,
+			);
+		} finally {
+			fetchCts.dispose();
+		}
+	}
+
+	private async *_streamEditsImpl(
+		request: StatelessNextEditRequest,
+		endpoint: IChatEndpoint,
+		modelServiceConfig: xtabPromptOptions.ModelConfiguration,
+		messages: Raw.ChatMessage[],
+		clippedTaggedCurrentDoc: ClippedDocument,
+		editWindow: OffsetRange,
+		editWindowLines: string[],
+		cursorOriginalLinesOffset: number,
+		editWindowLineRange: OffsetRange,
+		promptPieces: PromptPieces,
+		prediction: Prediction | undefined,
+		opts: {
+			responseFormat: xtabPromptOptions.ResponseFormat;
+			shouldRemoveCursorTagFromResponse: boolean;
+			retryState: RetryState.t;
+			aggressivenessLevel: xtabPromptOptions.AggressivenessLevel;
+			userHappinessScore: number | undefined;
+		},
+		delaySession: DelaySession,
+		tracer: ILogger,
+		telemetryBuilder: StatelessNextEditTelemetryBuilder,
+		logContext: InlineEditRequestLogContext,
+		cancellationToken: CancellationToken,
+		originalEditWindow: OffsetRange | undefined,
+		fetchCts: CancellationTokenSource,
+		fetchCancellationToken: CancellationToken,
+	): EditStreaming {
+		const targetDocument = request.getActiveDocument().id;
 
 		const useFetcher = this.configService.getExperimentBasedConfig(ConfigKey.NextEditSuggestionsFetcher, this.expService) || undefined;
 
@@ -948,9 +988,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		// in the model's response doesn't match what the user currently has, the response
 		// is stale and we can cancel early instead of waiting for the full response.
 		//
-		// We check compatibility using the same logic as the edit rebase system:
-		// the model's cursor line must contain the user's current cursor line content
-		// as a substring, meaning the model's edit is a superset of what the user typed.
+		// We check compatibility using `isModelCursorLineCompatible`: the user's
+		// cursor-line change must be contained within the model's cursor-line change range
+		// and match via the helper's `startsWith` / auto-close subsequence rules.
 		const earlyCursorLineDivergenceCancellation = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabEarlyCursorLineDivergenceCancellation, this.expService);
 		let cursorLineDiverged = false;
 		const divergenceCheckedStream: AsyncIterable<string> = earlyCursorLineDivergenceCancellation
@@ -1066,8 +1106,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			logContext.setError(err);
 			// Properly handle the error by pushing it as a result
 			return new NoNextEditReason.Unexpected(ErrorUtils.fromUnknown(err));
-		} finally {
-			fetchCts.dispose();
 		}
 	}
 
