@@ -141,7 +141,7 @@ export class ScenarioAutomationWorkspaceChunkSearchService implements IWorkspace
 		return { chunks };
 	}
 
-	async triggerRemoteIndexing(_trigger: BuildIndexTriggerReason, _onProgress: (message: string) => void, _telemetryInfo: TelemetryCorrelationId, _token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+	async triggerIndexing(_trigger: BuildIndexTriggerReason, _onProgress: (message: string) => void, _telemetryInfo: TelemetryCorrelationId, _token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
 		return Result.ok(true);
 	}
 
