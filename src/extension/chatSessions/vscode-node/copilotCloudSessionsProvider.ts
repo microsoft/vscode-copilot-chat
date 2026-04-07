@@ -788,7 +788,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			for (const [name, type] of entries) {
 				// Only process .md files
-				if (!(type & FileType.File) || !name.endsWith('.md')) {
+				if (!(type & FileType.File) || !name.toLowerCase().endsWith('.md')) {
 					continue;
 				}
 
