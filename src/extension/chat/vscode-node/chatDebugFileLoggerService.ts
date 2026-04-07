@@ -202,15 +202,19 @@ export class ChatDebugFileLoggerService extends Disposable implements IChatDebug
 	startChildSession(childSessionId: string, parentSessionId: string, label: string, parentToolSpanId?: string): void {
 		if (!this._childSessionMap.has(childSessionId)) {
 			this._childSessionMap.set(childSessionId, { parentSessionId, label, parentToolSpanId });
-			// Pre-register the child session ID in the span→session index so that
-			// hook spans (which fire before the child's invoke_agent span completes)
-			// are routed to the child session instead of the parent.
-			this._spanSessionIndex.set(childSessionId, childSessionId);
 		}
 	}
 
 	registerSpanSession(spanId: string, sessionId: string): void {
 		this._spanSessionIndex.set(spanId, sessionId);
+		// Apply same eviction cap as _onSpanCompleted
+		if (this._spanSessionIndex.size > MAX_SPAN_SESSION_INDEX) {
+			const excess = this._spanSessionIndex.size - MAX_SPAN_SESSION_INDEX;
+			const iter = this._spanSessionIndex.keys();
+			for (let i = 0; i < excess; i++) {
+				this._spanSessionIndex.delete(iter.next().value!);
+			}
+		}
 	}
 
 	/**

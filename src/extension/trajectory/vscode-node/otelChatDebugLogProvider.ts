@@ -124,14 +124,15 @@ export class OTelChatDebugLogProviderContribution extends Disposable implements 
 	 * Prefix child entry event IDs that reuse the invoke_agent spanId
 	 * (user_message and subagent entries) so they don't collide with
 	 * parent-session entries (hooks, tool calls) that use the same ID
-	 * as their parentSpanId. Without this, parent hooks get wrongly
-	 * nested under the child node in the tree view.
+	 * as their parentSpanId. Include the entry type in the prefix so
+	 * child-session user_message and subagent events that share a spanId
+	 * don't collide with each other in UI caches or id-based lookups.
 	 */
 	private _prefixChildEventId(evt: vscode.ChatDebugEvent, entry: IDebugLogEntry): void {
 		if (entry.type === 'user_message' || entry.type === 'subagent') {
 			const evtWithId = evt as { id?: string };
 			if (evtWithId.id) {
-				evtWithId.id = `child-${evtWithId.id}`;
+				evtWithId.id = `child-${entry.type}-${evtWithId.id}`;
 			}
 		}
 	}
