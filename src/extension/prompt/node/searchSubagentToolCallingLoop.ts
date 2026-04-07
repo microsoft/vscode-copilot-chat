@@ -35,6 +35,8 @@ export interface ISearchSubagentToolCallingLoopOptions extends IToolCallingLoopO
 	promptText: string;
 	/** Optional pre-generated subagent invocation ID. If not provided, a new UUID will be generated. */
 	subAgentInvocationId?: string;
+	/** The tool_call_id from the parent agent's LLM response that triggered this subagent invocation. */
+	parentToolCallId?: string;
 }
 
 export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubagentToolCallingLoopOptions> {
@@ -153,10 +155,12 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 			// This loop is inside a tool called from another request, so never user initiated
 			userInitiatedRequest: false,
 			telemetryProperties: {
+				requestId: this.options.subAgentInvocationId,
 				messageId: randomUUID(),
 				messageSource: 'chat.editAgent',
 				subType: 'subagent/search',
-				conversationId: this.options.conversation.sessionId
+				conversationId: this.options.conversation.sessionId,
+				parentToolCallId: this.options.parentToolCallId,
 			},
 			requestKindOptions: { kind: 'subagent' }
 		}, token);

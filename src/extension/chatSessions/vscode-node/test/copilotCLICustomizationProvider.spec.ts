@@ -173,7 +173,7 @@ describe('CopilotCLICustomizationProvider', () => {
 	describe('metadata', () => {
 		it('has correct label and icon', () => {
 			expect(CopilotCLICustomizationProvider.metadata.label).toBe('Copilot CLI');
-			expect(CopilotCLICustomizationProvider.metadata.iconId).toBe('worktree');
+			expect(CopilotCLICustomizationProvider.metadata.iconId).toBe('copilot');
 		});
 
 		it('supports Agent, Skill, Instructions, Hook, and Plugins types', () => {
