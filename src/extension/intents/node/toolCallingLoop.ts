@@ -54,7 +54,7 @@ import { ToolName } from '../../tools/common/toolNames';
 import { IToolsService, ToolCallCancelledError } from '../../tools/common/toolsService';
 import { ReadFileParams } from '../../tools/node/readFileTool';
 import { isHookAbortError, processHookResults } from './hookResultProcessor';
-import { applyPromptOverrides } from './promptOverride';
+import { applyConfiguredPromptOverrides } from './promptOverride';
 
 export const enum ToolCallLimitBehavior {
 	Confirm,
@@ -1300,12 +1300,14 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		// Possible the tool call resulted in new tools getting added.
 		availableTools = await this.getAvailableTools(outputStream, token);
 
-		// Apply debug prompt/tool overrides from YAML file, only when the setting is explicitly configured
+		// Apply debug prompt/tool overrides from either inline YAML text or a YAML file.
+		const promptOverride = this._configurationService.getConfig(ConfigKey.Advanced.DebugPromptOverrideString);
 		const promptOverrideFile = this._configurationService.getConfig(ConfigKey.Advanced.DebugPromptOverrideFile);
 		let effectiveBuildPromptResult: IBuildPromptResult = buildPromptResult;
-		if (promptOverrideFile) {
-			const overrideResult = await applyPromptOverrides(
-				URI.file(promptOverrideFile),
+		if (promptOverride || promptOverrideFile) {
+			const overrideResult = await applyConfiguredPromptOverrides(
+				promptOverride,
+				promptOverrideFile,
 				buildPromptResult.messages,
 				availableTools,
 				this._fileSystemService,
