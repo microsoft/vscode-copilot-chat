@@ -7,7 +7,7 @@ import type { AuthenticationGetSessionOptions, AuthenticationSession } from 'vsc
 import { IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { BaseAuthenticationService, GITHUB_SCOPE_ALIGNED, GITHUB_SCOPE_USER_EMAIL, IAuthenticationService, MinimalModeError, StrictAuthenticationPresentationOptions } from './authentication';
-import { CopilotToken, createTestExtendedTokenInfo } from './copilotToken';
+import { CopilotToken } from './copilotToken';
 import { ICopilotTokenManager } from './copilotTokenManager';
 import { ICopilotTokenStore } from './copilotTokenStore';
 
@@ -62,19 +62,6 @@ export class StaticGitHubAuthenticationService extends BaseAuthenticationService
 
 	override async getCopilotToken(force?: boolean): Promise<CopilotToken> {
 		return await super.getCopilotToken(force);
-	}
-
-	/**
-	 * In scenario automation the copilot token may be a noAuth token.
-	 * Return a placeholder so that services checking `copilotToken?.isNoAuthUser`
-	 * (e.g. {@link ScenarioAutomationEndpointProviderImpl}) behave correctly.
-	 */
-	override get copilotToken(): CopilotToken | undefined {
-		const token = this._tokenStore.copilotToken;
-		if (token?.isNoAuthUser) {
-			return new CopilotToken(createTestExtendedTokenInfo());
-		}
-		return token;
 	}
 
 	setCopilotToken(token: CopilotToken): void {
