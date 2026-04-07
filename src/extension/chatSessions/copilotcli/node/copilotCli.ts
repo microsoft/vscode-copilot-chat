@@ -122,11 +122,11 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 		if (isCopilotByokMode()) {
 			const modelName = getCopilotByokModel();
 			if (!modelName) {
-				this.logService.warn('[CopilotCLISession] BYOK mode active but COPILOT_MODEL is not set. Set the COPILOT_MODEL environment variable to specify which model to use (e.g., COPILOT_MODEL=claude-sonnet-4-20250514)');
+				this.logService.warn('[CopilotCLIModels] BYOK mode active but COPILOT_MODEL is not set. Set the COPILOT_MODEL environment variable to specify which model to use (e.g., COPILOT_MODEL=claude-sonnet-4-20250514)');
 				return [];
 			}
 			const limits = getCopilotByokTokenLimits();
-			this.logService.info(`[CopilotCLISession] BYOK mode: using model "${modelName}"`);
+			this.logService.info(`[CopilotCLIModels] BYOK mode: using model "${modelName}"`);
 			return [{
 				id: modelName,
 				name: `${modelName} (BYOK)`,
@@ -500,7 +500,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		// is not required. Skip client-side token validation; the actual BYOK
 		// provider config is passed via SessionOptions.provider.
 		if (isCopilotByokMode()) {
-			this.logService.info('[CopilotCLISession] BYOK mode active, skipping client-side token validation');
+			this.logService.info('[CopilotCLISDK] BYOK mode active, skipping client-side token validation');
 			return {
 				type: 'token',
 				token: '',

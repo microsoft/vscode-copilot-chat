@@ -3,12 +3,22 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { isCopilotOfflineMode } from '../copilotCliEnv';
 
 describe('copilotCliEnv', () => {
+	let originalCopilotOffline: string | undefined;
+
+	beforeEach(() => {
+		originalCopilotOffline = process.env['COPILOT_OFFLINE'];
+	});
+
 	afterEach(() => {
-		delete process.env['COPILOT_OFFLINE'];
+		if (originalCopilotOffline === undefined) {
+			delete process.env['COPILOT_OFFLINE'];
+		} else {
+			process.env['COPILOT_OFFLINE'] = originalCopilotOffline;
+		}
 	});
 
 	it('returns false when COPILOT_OFFLINE is unset', () => {
