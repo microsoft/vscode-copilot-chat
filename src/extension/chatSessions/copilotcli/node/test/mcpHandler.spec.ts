@@ -4,9 +4,15 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { SweCustomAgent } from '@github/copilot/sdk';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
+import { ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
+import { ILogService } from '../../../../../platform/log/common/logService';
+import { IMcpService } from '../../../../../platform/mcp/common/mcpService';
+import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import type { LanguageModelToolInformation } from '../../../../../vscodeTypes';
-import { buildMcpServerMappings, type MCPServerConfig, type McpServerMappings, remapCustomAgentTools } from '../mcpHandler';
+import { createExtensionUnitTestingServices } from '../../../../test/node/services';
+import { buildMcpServerMappings, CopilotCLIMCPHandler, type MCPServerConfig, type McpServerMappings, remapCustomAgentTools } from '../mcpHandler';
 
 function makeAgent(partial: { slug: string; tools?: string[] }): SweCustomAgent {
 	return partial as unknown as SweCustomAgent;
@@ -220,5 +226,55 @@ describe('remapCustomAgentTools', () => {
 		remapCustomAgentTools(agents, mcpMappings, mcpServers, undefined);
 
 		expect(agents[0].tools).toEqual(['gw/toolA']);
+	});
+});
+
+describe('CopilotCLIMCPHandler offline mode', () => {
+	const disposables = new DisposableStore();
+	let originalOffline: string | undefined;
+	let logService: ILogService;
+
+	beforeEach(() => {
+		originalOffline = process.env['COPILOT_OFFLINE'];
+		const services = disposables.add(createExtensionUnitTestingServices());
+		const accessor = services.createTestingAccessor();
+		logService = accessor.get(ILogService);
+	});
+
+	afterEach(() => {
+		disposables.clear();
+		if (originalOffline === undefined) {
+			delete process.env['COPILOT_OFFLINE'];
+		} else {
+			process.env['COPILOT_OFFLINE'] = originalOffline;
+		}
+	});
+
+	it('returns empty MCP config in offline mode', async () => {
+		process.env['COPILOT_OFFLINE'] = 'true';
+
+		const mockConfigService = {
+			getConfig(key: unknown) {
+				if (key === ConfigKey.Advanced.CLIMCPServerEnabled) {
+					return false;
+				}
+				return undefined;
+			},
+			getNonExtensionConfig() {
+				return false;
+			},
+		} as unknown as IConfigurationService;
+
+		const handler = new CopilotCLIMCPHandler(
+			logService,
+			{} as unknown as IAuthenticationService,
+			mockConfigService,
+			{} as unknown as IMcpService,
+		);
+
+		const { mcpConfig, disposable } = await handler.loadMcpConfig();
+		disposables.add(disposable);
+
+		expect(mcpConfig).toBeUndefined();
 	});
 });

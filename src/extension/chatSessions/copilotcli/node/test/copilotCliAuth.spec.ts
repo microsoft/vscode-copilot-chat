@@ -14,6 +14,7 @@ import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { CopilotCLISDK } from '../copilotCli';
+import { isCopilotByokMode } from '../copilotCliEnv';
 
 type TokenAuthInfo = Extract<NonNullable<SessionOptions['authInfo']>, { type: 'token' }>;
 type HmacAuthInfo = Extract<NonNullable<SessionOptions['authInfo']>, { type: 'hmac' }>;
@@ -190,6 +191,47 @@ describe('CopilotCLISDK Authentication', () => {
 			expect(authInfo.type).toBe('token');
 			expect(authInfo.token).toBe('');
 			expect(authInfo.host).toBe('https://github.com');
+		} finally {
+			if (originalBaseUrl === undefined) {
+				delete process.env['COPILOT_PROVIDER_BASE_URL'];
+			} else {
+				process.env['COPILOT_PROVIDER_BASE_URL'] = originalBaseUrl;
+			}
+		}
+	});
+
+	it('should allow empty-token auth to pass validation guards when BYOK mode is active', async () => {
+		const originalBaseUrl = process.env['COPILOT_PROVIDER_BASE_URL'];
+		process.env['COPILOT_PROVIDER_BASE_URL'] = 'http://localhost:11434/v1';
+		try {
+			const mockConfigService = {
+				getConfig() {
+					return undefined;
+				}
+			} as unknown as IConfigurationService;
+
+			const mockAuthService = {
+				async getGitHubSession(): Promise<undefined> {
+					throw new Error('getGitHubSession should not be called in BYOK mode');
+				}
+			} as unknown as IAuthenticationService;
+
+			const sdk = new TestCopilotCLISDK(
+				createMockExtensionContext(),
+				createMockEnvService(),
+				logService,
+				instantiationService,
+				mockAuthService,
+				mockConfigService
+			);
+
+			const authInfo = await sdk.getAuthInfo() as TokenAuthInfo;
+
+			// Simulate the guard condition from copilotCLIChatSessions.ts / copilotCLIChatSessionsContribution.ts:
+			// if ((authInfo.type === 'token' && !authInfo.token) && !proxyUrl && !isCopilotByokMode()) { throw ... }
+			const proxyUrl = mockConfigService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl);
+			const wouldThrow = (authInfo.type === 'token' && !authInfo.token) && !proxyUrl && !isCopilotByokMode();
+			expect(wouldThrow).toBe(false);
 		} finally {
 			if (originalBaseUrl === undefined) {
 				delete process.env['COPILOT_PROVIDER_BASE_URL'];

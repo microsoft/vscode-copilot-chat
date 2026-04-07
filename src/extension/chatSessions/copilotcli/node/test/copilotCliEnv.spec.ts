@@ -4,20 +4,37 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { isCopilotOfflineMode } from '../copilotCliEnv';
+import { getCopilotByokProvider, isCopilotOfflineMode } from '../copilotCliEnv';
+
+const BYOK_ENV_KEYS = [
+	'COPILOT_PROVIDER_BASE_URL',
+	'COPILOT_PROVIDER_TYPE',
+	'COPILOT_PROVIDER_WIRE_API',
+	'COPILOT_PROVIDER_API_KEY',
+	'COPILOT_PROVIDER_BEARER_TOKEN',
+	'COPILOT_PROVIDER_MODEL_LIMITS_ID',
+	'COPILOT_PROVIDER_MAX_PROMPT_TOKENS',
+	'COPILOT_PROVIDER_MAX_OUTPUT_TOKENS',
+	'COPILOT_PROVIDER_AZURE_API_VERSION',
+	'COPILOT_OFFLINE',
+] as const;
 
 describe('copilotCliEnv', () => {
-	let originalCopilotOffline: string | undefined;
+	const savedEnv: Record<string, string | undefined> = {};
 
 	beforeEach(() => {
-		originalCopilotOffline = process.env['COPILOT_OFFLINE'];
+		for (const key of BYOK_ENV_KEYS) {
+			savedEnv[key] = process.env[key];
+		}
 	});
 
 	afterEach(() => {
-		if (originalCopilotOffline === undefined) {
-			delete process.env['COPILOT_OFFLINE'];
-		} else {
-			process.env['COPILOT_OFFLINE'] = originalCopilotOffline;
+		for (const key of BYOK_ENV_KEYS) {
+			if (savedEnv[key] === undefined) {
+				delete process.env[key];
+			} else {
+				process.env[key] = savedEnv[key];
+			}
 		}
 	});
 
@@ -35,5 +52,57 @@ describe('copilotCliEnv', () => {
 		process.env['COPILOT_OFFLINE'] = 'false';
 
 		expect(isCopilotOfflineMode()).toBe(false);
+	});
+
+	describe('getCopilotByokProvider', () => {
+		it('returns undefined when COPILOT_PROVIDER_BASE_URL is not set', () => {
+			delete process.env['COPILOT_PROVIDER_BASE_URL'];
+
+			expect(getCopilotByokProvider()).toBeUndefined();
+		});
+
+		it('returns provider config with base URL only', () => {
+			process.env['COPILOT_PROVIDER_BASE_URL'] = 'http://localhost:11434/v1';
+
+			const provider = getCopilotByokProvider();
+
+			expect(provider).toBeDefined();
+			expect(provider!.baseUrl).toBe('http://localhost:11434/v1');
+		});
+
+		it('includes all optional provider fields when set', () => {
+			process.env['COPILOT_PROVIDER_BASE_URL'] = 'https://my-azure.openai.azure.com';
+			process.env['COPILOT_PROVIDER_TYPE'] = 'azure';
+			process.env['COPILOT_PROVIDER_WIRE_API'] = 'completions';
+			process.env['COPILOT_PROVIDER_API_KEY'] = 'sk-test-key';
+			process.env['COPILOT_PROVIDER_BEARER_TOKEN'] = 'bearer-tok';
+			process.env['COPILOT_PROVIDER_MODEL_LIMITS_ID'] = 'gpt-4o';
+			process.env['COPILOT_PROVIDER_MAX_PROMPT_TOKENS'] = '64000';
+			process.env['COPILOT_PROVIDER_MAX_OUTPUT_TOKENS'] = '4096';
+			process.env['COPILOT_PROVIDER_AZURE_API_VERSION'] = '2024-02-15-preview';
+
+			const provider = getCopilotByokProvider();
+
+			expect(provider).toBeDefined();
+			expect(provider!.baseUrl).toBe('https://my-azure.openai.azure.com');
+			expect(provider!.type).toBe('azure');
+			expect(provider!.wireApi).toBe('completions');
+			expect(provider!.apiKey).toBe('sk-test-key');
+			expect(provider!.bearerToken).toBe('bearer-tok');
+			expect(provider!.modelLimitsId).toBe('gpt-4o');
+			expect(provider!.maxPromptTokens).toBe(64000);
+			expect(provider!.maxOutputTokens).toBe(4096);
+			expect(provider!.azure).toEqual({ apiVersion: '2024-02-15-preview' });
+		});
+
+		it('omits azure config when COPILOT_PROVIDER_AZURE_API_VERSION is not set', () => {
+			process.env['COPILOT_PROVIDER_BASE_URL'] = 'http://localhost:11434/v1';
+			delete process.env['COPILOT_PROVIDER_AZURE_API_VERSION'];
+
+			const provider = getCopilotByokProvider();
+
+			expect(provider).toBeDefined();
+			expect(provider!.azure).toBeUndefined();
+		});
 	});
 });

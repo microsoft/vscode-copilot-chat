@@ -288,4 +288,73 @@ describe('CopilotCLIModels', () => {
 			expect(result).toEqual([]);
 		});
 	});
+
+	describe('BYOK mode', () => {
+		let originalBaseUrl: string | undefined;
+		let originalModel: string | undefined;
+		let originalMaxPrompt: string | undefined;
+		let originalMaxOutput: string | undefined;
+
+		beforeEach(() => {
+			originalBaseUrl = process.env['COPILOT_PROVIDER_BASE_URL'];
+			originalModel = process.env['COPILOT_MODEL'];
+			originalMaxPrompt = process.env['COPILOT_PROVIDER_MAX_PROMPT_TOKENS'];
+			originalMaxOutput = process.env['COPILOT_PROVIDER_MAX_OUTPUT_TOKENS'];
+		});
+
+		afterEach(() => {
+			const restore = (key: string, value: string | undefined) => {
+				if (value === undefined) {
+					delete process.env[key];
+				} else {
+					process.env[key] = value;
+				}
+			};
+			restore('COPILOT_PROVIDER_BASE_URL', originalBaseUrl);
+			restore('COPILOT_MODEL', originalModel);
+			restore('COPILOT_PROVIDER_MAX_PROMPT_TOKENS', originalMaxPrompt);
+			restore('COPILOT_PROVIDER_MAX_OUTPUT_TOKENS', originalMaxOutput);
+		});
+
+		it('returns synthetic model in BYOK mode with COPILOT_MODEL set', async () => {
+			process.env['COPILOT_PROVIDER_BASE_URL'] = 'http://localhost:11434/v1';
+			process.env['COPILOT_MODEL'] = 'llama3';
+
+			const { models } = createModels({ hasSession: false });
+
+			const result = await models.getModels();
+
+			expect(result).toHaveLength(1);
+			expect(result[0].id).toBe('llama3');
+			expect(result[0].name).toBe('llama3 (BYOK)');
+			expect(result[0].maxContextWindowTokens).toBe(128_000);
+		});
+
+		it('returns synthetic model with custom token limits', async () => {
+			process.env['COPILOT_PROVIDER_BASE_URL'] = 'http://localhost:11434/v1';
+			process.env['COPILOT_MODEL'] = 'llama3';
+			process.env['COPILOT_PROVIDER_MAX_PROMPT_TOKENS'] = '32000';
+			process.env['COPILOT_PROVIDER_MAX_OUTPUT_TOKENS'] = '8000';
+
+			const { models } = createModels({ hasSession: false });
+
+			const result = await models.getModels();
+
+			expect(result).toHaveLength(1);
+			expect(result[0].maxInputTokens).toBe(32000);
+			expect(result[0].maxOutputTokens).toBe(8000);
+			expect(result[0].maxContextWindowTokens).toBe(32000);
+		});
+
+		it('returns empty array in BYOK mode when COPILOT_MODEL is not set', async () => {
+			process.env['COPILOT_PROVIDER_BASE_URL'] = 'http://localhost:11434/v1';
+			delete process.env['COPILOT_MODEL'];
+
+			const { models } = createModels({ hasSession: false });
+
+			const result = await models.getModels();
+
+			expect(result).toEqual([]);
+		});
+	});
 });
