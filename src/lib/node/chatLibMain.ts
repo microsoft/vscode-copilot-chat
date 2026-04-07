@@ -424,7 +424,11 @@ class OverridableConfigurationService extends DefaultsOnlyConfigurationService {
 		if (existing === value) {
 			return;
 		}
-		this._overrides.set(key.id, value);
+		if (value === undefined) {
+			this._overrides.delete(key.id);
+		} else {
+			this._overrides.set(key.id, value);
+		}
 		const fullyQualifiedKey = key.fullyQualifiedId;
 		this._onDidChangeConfiguration.fire({
 			affectsConfiguration: (section) => {
