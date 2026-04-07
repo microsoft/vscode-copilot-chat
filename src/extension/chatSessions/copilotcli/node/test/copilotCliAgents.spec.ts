@@ -202,4 +202,28 @@ Second body`)]);
 		expect(second.map(a => a.agent.name)).toEqual(['Second']);
 		expect(sdk.getPackage).toHaveBeenCalled();
 	});
+
+	it('filters out legacy .chatmode.md files', async () => {
+		const chatmodeFile = new PromptFileParser().parse(
+			URI.file('/workspace/.github/chatmodes/test.chatmode.md'),
+			`---
+name: TestMode
+description: A legacy chatmode
+---
+Body`
+		);
+		const agentFile = parsePromptFile('real.agent.md', `---
+name: RealAgent
+description: A real agent
+---
+Body`);
+		const { agents } = createAgents({
+			sdkAgentsByCall: [[]],
+			promptAgents: [chatmodeFile, agentFile]
+		});
+
+		const result = await agents.getAgents();
+		expect(result).toHaveLength(1);
+		expect(result[0].agent.name).toBe('RealAgent');
+	});
 });
