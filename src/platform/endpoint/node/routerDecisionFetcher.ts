@@ -48,11 +48,14 @@ export class RouterDecisionFetcher {
 	) {
 	}
 
-	async getRouterDecision(query: string, autoModeToken: string, availableModels: string[], stickyThreshold?: number, contextSignals?: RoutingContextSignals, conversationId?: string, vscodeRequestId?: string): Promise<RouterDecisionResponse> {
+	async getRouterDecision(query: string, autoModeToken: string, availableModels: string[], stickyThreshold?: number, contextSignals?: RoutingContextSignals, conversationId?: string, vscodeRequestId?: string, hasImage?: boolean): Promise<RouterDecisionResponse> {
 		const startTime = Date.now();
 		const requestBody: Record<string, unknown> = { prompt: query, available_models: availableModels, ...contextSignals };
 		if (stickyThreshold !== undefined) {
 			requestBody.sticky_threshold = stickyThreshold;
+		}
+		if (hasImage) {
+			requestBody.has_image = true;
 		}
 		const copilotToken = (await this._authService.getCopilotToken()).token;
 		const abortController = new AbortController();
@@ -73,7 +76,14 @@ export class RouterDecisionFetcher {
 		}
 
 		if (!response.ok) {
-			throw new Error(`Router decision request failed with status ${response.status}: ${response.statusText}`);
+			const errorText = await response.text().catch(() => '');
+			let errorCode: string | undefined;
+			try {
+				errorCode = JSON.parse(errorText).error;
+			} catch { /* not JSON */ }
+			const err = new Error(`Router decision request failed with status ${response.status}: ${response.statusText}`);
+			(err as any).errorCode = errorCode;
+			throw err;
 		}
 
 		const text = await response.text();

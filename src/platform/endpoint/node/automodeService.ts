@@ -201,7 +201,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 					"automode.routerFallback" : {
 						"owner": "lramos15",
 						"comment": "Reports when the auto mode router is skipped or fails and falls back to default model selection",
-						"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The reason the router was skipped or failed (hasImage, noMatchingEndpoint, routerError, routerTimeout)" }
+						"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The reason the router was skipped or failed (noVisionModels, noMatchingEndpoint, routerError, routerTimeout)" }
 					}
 				*/
 				this._telemetryService.sendMSFTTelemetryEvent('automode.routerFallback', {
@@ -252,10 +252,6 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		const prompt = chatRequest?.prompt?.trim();
 		const lastRoutedPrompt = entry?.lastRoutedPrompt ?? prompt;
 
-		if (hasImage(chatRequest)) {
-			return { lastRoutedPrompt, fallbackReason: 'hasImage' };
-		}
-
 		if (!this._isRouterEnabled(chatRequest) || conversationId === 'unknown') {
 			return { lastRoutedPrompt };
 		}
@@ -277,7 +273,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 				previous_model: entry?.endpoint?.model,
 				turn_number: (entry?.turnCount ?? 0) + 1,
 			};
-			const result = await this._routerDecisionFetcher.getRouterDecision(prompt, token.session_token, token.available_models, undefined, contextSignals, chatRequest?.sessionId, chatRequest?.id);
+			const result = await this._routerDecisionFetcher.getRouterDecision(prompt, token.session_token, token.available_models, undefined, contextSignals, chatRequest?.sessionId, chatRequest?.id, hasImage(chatRequest));
 
 			if (!result.candidate_models.length) {
 				return { lastRoutedPrompt: prompt, fallbackReason: 'emptyCandidateList' };
@@ -297,7 +293,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			return { selectedModel, lastRoutedPrompt: prompt };
 		} catch (e) {
 			const isTimeout = isAbortError(e);
-			const fallbackReason = isTimeout ? 'routerTimeout' : 'routerError';
+			const errorCode = (e as any).errorCode;
+			const fallbackReason = isTimeout ? 'routerTimeout' : errorCode === 'no_vision_models' ? 'noVisionModels' : 'routerError';
 			this._logService.error(`Failed to get routed model for conversation ${conversationId} (${fallbackReason}):`, (e as Error).message);
 			return { lastRoutedPrompt: prompt, fallbackReason };
 		}
