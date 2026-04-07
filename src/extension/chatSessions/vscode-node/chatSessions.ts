@@ -190,7 +190,10 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const gitService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IGitService));
 		const sessionTracker = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionTracker));
 		const terminalIntegration = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLITerminalIntegration));
-		const branchNameGenerator = copilotcliAgentInstaService.createInstance(GitBranchNameGenerator);
+		const aiGeneratedBranchNames = instantiationService.invokeFunction(accessor =>
+			accessor.get(IConfigurationService).getConfig(ConfigKey.Advanced.CLIAIGenerateBranchNames)
+		);
+		const branchNameGenerator = aiGeneratedBranchNames ? copilotcliAgentInstaService.createInstance(GitBranchNameGenerator) : undefined;
 
 		const copilotcliChatSessionParticipant = this._register(copilotcliAgentInstaService.createInstance(
 			CopilotCLIChatSessionParticipant,
