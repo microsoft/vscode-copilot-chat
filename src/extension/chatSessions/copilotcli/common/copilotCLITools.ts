@@ -5,7 +5,7 @@
 
 import type { SessionEvent, ToolExecutionCompleteEvent, ToolExecutionStartEvent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
-import type { CancellationToken, ChatParticipantToolToken, ChatPromptReference, ChatSimpleToolResultData, ChatTerminalToolInvocationData, ExtendedChatResponsePart, LanguageModelToolDefinition, LanguageModelToolInformation, LanguageModelToolInvocationOptions, LanguageModelToolResult2 } from 'vscode';
+import type { CancellationToken, ChatPromptReference, ChatSimpleToolResultData, ChatTerminalToolInvocationData, ExtendedChatResponsePart, LanguageModelToolDefinition, LanguageModelToolInformation, LanguageModelToolInvocationOptions, LanguageModelToolResult2 } from 'vscode';
 import { ILogger } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { isLocation } from '../../../../util/common/types';
@@ -1532,47 +1532,6 @@ function formatUpdateTodoInvocationCompleted(invocation: ChatToolInvocationPart,
 	};
 }
 
-
-export async function updateTodoList(
-	event: ToolExecutionStartEvent,
-	toolsService: IToolsService,
-	toolInvocationToken: ChatParticipantToolToken,
-	token: CancellationToken
-) {
-	const toolData = event.data as ToolCall;
-
-	if (toolData.toolName !== 'update_todo' || !toolData.arguments.todos) {
-		return;
-	}
-	const { todoList } = parseTodoMarkdown(toolData.arguments.todos);
-	if (!todoList.length) {
-		return;
-	}
-
-	await toolsService.invokeTool(ToolName.CoreManageTodoList, {
-		input: {
-			operation: 'write',
-			todoList: todoList.map((item, i) => ({
-				id: i,
-				title: item.title,
-				description: '',
-				status: item.status
-			} satisfies IManageTodoListToolInputParams['todoList'][number])),
-		} satisfies IManageTodoListToolInputParams,
-		toolInvocationToken,
-	}, token);
-}
-
-
-interface IManageTodoListToolInputParams {
-	readonly operation?: 'write' | 'read'; // Optional in write-only mode
-	readonly todoList: readonly {
-		readonly id: number;
-		readonly title: string;
-		readonly description: string;
-		readonly status: 'not-started' | 'in-progress' | 'completed';
-	}[];
-}
 
 /**
  * No-op formatter for tool invocations that do not require custom formatting.

@@ -105,6 +105,21 @@ class MockSdkSession {
 		// placeholder for user input responses
 	}
 
+	private _todosSnapshot: { counts: { pending: number; in_progress: number; done: number; blocked: number; total: number }; todos?: { id: string; title: string; status: string }[] } = {
+		counts: { pending: 0, in_progress: 0, done: 0, blocked: 0, total: 0 },
+		todos: [],
+	};
+
+	readonly todos = {
+		read: (_params?: { detail?: string }) => {
+			return this._todosSnapshot;
+		}
+	};
+
+	setTodosSnapshot(snapshot: typeof this._todosSnapshot): void {
+		this._todosSnapshot = snapshot;
+	}
+
 	public lastSendOptions: { prompt: string; mode?: string } | undefined;
 	public currentMode: string | undefined;
 
@@ -1224,6 +1239,144 @@ describe('CopilotCLISession', () => {
 			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
 
 			expect(result.value).toEqual({ approved: false });
+		});
+	});
+
+	describe('session.todos_changed', () => {
+		it('invokes CoreManageTodoList when todos_changed event fires with todos', async () => {
+			let resolveSend: () => void;
+			sdkSession.send = async () => new Promise<void>(r => { resolveSend = r; });
+
+			sdkSession.setTodosSnapshot({
+				counts: { pending: 1, in_progress: 1, done: 1, blocked: 0, total: 3 },
+				todos: [
+					{ id: '1', title: 'Setup project', status: 'done' },
+					{ id: '2', title: 'Implement feature', status: 'in_progress' },
+					{ id: '3', title: 'Write tests', status: 'pending' },
+				],
+			});
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const requestPromise = session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Do work' }, [], undefined, authInfo, CancellationToken.None);
+			await new Promise(r => setTimeout(r, 0));
+
+			sdkSession.emit('session.todos_changed', { source: 'todos' });
+			await new Promise(r => setTimeout(r, 0));
+
+			const todoCall = toolsService.invokeToolCalls.find(c => c.name === 'manage_todo_list');
+			expect(todoCall).toBeTruthy();
+			const input = todoCall!.input as { operation: string; todoList: { id: number; title: string; status: string }[] };
+			expect(input.operation).toBe('write');
+			expect(input.todoList).toHaveLength(3);
+			expect(input.todoList[0]).toEqual({ id: 0, title: 'Setup project', description: '', status: 'completed' });
+			expect(input.todoList[1]).toEqual({ id: 1, title: 'Implement feature', description: '', status: 'in-progress' });
+			expect(input.todoList[2]).toEqual({ id: 2, title: 'Write tests', description: '', status: 'not-started' });
+
+			resolveSend!();
+			await requestPromise;
+		});
+
+		it('maps blocked status to completed', async () => {
+			let resolveSend: () => void;
+			sdkSession.send = async () => new Promise<void>(r => { resolveSend = r; });
+
+			sdkSession.setTodosSnapshot({
+				counts: { pending: 0, in_progress: 0, done: 0, blocked: 1, total: 1 },
+				todos: [
+					{ id: '1', title: 'Blocked task', status: 'blocked' },
+				],
+			});
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const requestPromise = session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Do work' }, [], undefined, authInfo, CancellationToken.None);
+			await new Promise(r => setTimeout(r, 0));
+
+			sdkSession.emit('session.todos_changed', { source: 'todos' });
+			await new Promise(r => setTimeout(r, 0));
+
+			const todoCall = toolsService.invokeToolCalls.find(c => c.name === 'manage_todo_list');
+			expect(todoCall).toBeTruthy();
+			const input = todoCall!.input as { todoList: { status: string }[] };
+			expect(input.todoList[0].status).toBe('completed');
+
+			resolveSend!();
+			await requestPromise;
+		});
+
+		it('does not invoke CoreManageTodoList when todos list is empty', async () => {
+			let resolveSend: () => void;
+			sdkSession.send = async () => new Promise<void>(r => { resolveSend = r; });
+
+			sdkSession.setTodosSnapshot({
+				counts: { pending: 0, in_progress: 0, done: 0, blocked: 0, total: 0 },
+				todos: [],
+			});
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const requestPromise = session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Do work' }, [], undefined, authInfo, CancellationToken.None);
+			await new Promise(r => setTimeout(r, 0));
+
+			sdkSession.emit('session.todos_changed', { source: 'todos' });
+			await new Promise(r => setTimeout(r, 0));
+
+			const todoCall = toolsService.invokeToolCalls.find(c => c.name === 'manage_todo_list');
+			expect(todoCall).toBeUndefined();
+
+			resolveSend!();
+			await requestPromise;
+		});
+
+		it('does not invoke CoreManageTodoList when snapshot has no todos property (counts-only)', async () => {
+			let resolveSend: () => void;
+			sdkSession.send = async () => new Promise<void>(r => { resolveSend = r; });
+
+			sdkSession.setTodosSnapshot({
+				counts: { pending: 1, in_progress: 0, done: 0, blocked: 0, total: 1 },
+			});
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const requestPromise = session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Do work' }, [], undefined, authInfo, CancellationToken.None);
+			await new Promise(r => setTimeout(r, 0));
+
+			sdkSession.emit('session.todos_changed', { source: 'todos' });
+			await new Promise(r => setTimeout(r, 0));
+
+			const todoCall = toolsService.invokeToolCalls.find(c => c.name === 'manage_todo_list');
+			expect(todoCall).toBeUndefined();
+
+			resolveSend!();
+			await requestPromise;
+		});
+
+		it('handles errors from todos.read gracefully', async () => {
+			let resolveSend: () => void;
+			sdkSession.send = async () => new Promise<void>(r => { resolveSend = r; });
+
+			sdkSession.todos.read = () => { throw new Error('database error'); };
+
+			const session = await createSession();
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const requestPromise = session.handleRequest({ id: '', toolInvocationToken: undefined as never }, { prompt: 'Do work' }, [], undefined, authInfo, CancellationToken.None);
+			await new Promise(r => setTimeout(r, 0));
+
+			// Should not throw
+			sdkSession.emit('session.todos_changed', { source: 'todos' });
+			await new Promise(r => setTimeout(r, 0));
+
+			const todoCall = toolsService.invokeToolCalls.find(c => c.name === 'manage_todo_list');
+			expect(todoCall).toBeUndefined();
+
+			resolveSend!();
+			await requestPromise;
 		});
 	});
 });

@@ -24,11 +24,12 @@ import { truncate } from '../../../../util/vs/base/common/strings';
 import { ThemeIcon } from '../../../../util/vs/base/common/themables';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
+import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { IChatSessionMetadataStore } from '../../common/chatSessionMetadataStore';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../../common/workspaceInfo';
-import { enrichToolInvocationWithSubagentMetadata, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, ToolCall, updateTodoList } from '../common/copilotCLITools';
+import { enrichToolInvocationWithSubagentMetadata, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, ToolCall } from '../common/copilotCLITools';
 import { getCopilotCLISessionStateDir } from './cliHelpers';
 import type { CopilotCliBridgeSpanProcessor } from './copilotCliBridgeSpanProcessor';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
@@ -607,11 +608,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 							this._stream?.push(responsePart);
 						}
 
-						if ((event.data as ToolCall).toolName === 'update_todo') {
-							updateTodoList(event, this._toolsService, request.toolInvocationToken, token).catch(error => {
-								this.logService.error(`[CopilotCLISession] Failed to invoke todo tool for toolCallId ${event.data.toolCallId}`, error);
-							});
-						}
 					}
 				}
 				this.logService.trace(`[CopilotCLISession] Start Tool ${event.data.toolName || '<unknown>'}`);
@@ -711,6 +707,29 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					resultKind,
 					event.data.error?.message,
 				);
+			})));
+			disposables.add(toDisposable(this._sdkSession.on('session.todos_changed', () => {
+				(async () => {
+					const snapshot = await this._sdkSession.todos.read({ detail: 'summary' });
+					if (!('todos' in snapshot) || !snapshot.todos?.length) {
+						return;
+					}
+					await this._toolsService.invokeTool(ToolName.CoreManageTodoList, {
+						input: {
+							operation: 'write',
+							todoList: snapshot.todos.map((item, i: number) => ({
+								id: i,
+								title: item.title,
+								description: '',
+								status: item.status === 'pending' ? 'not-started' :
+									(item.status === 'in_progress' ? 'in-progress' : 'completed'),
+							})),
+						},
+						toolInvocationToken: request.toolInvocationToken,
+					}, token);
+				})().catch(error => {
+					this.logService.error('[CopilotCLISession] Failed to read todos after todos_changed event', error);
+				});
 			})));
 
 			if (!token.isCancellationRequested) {
