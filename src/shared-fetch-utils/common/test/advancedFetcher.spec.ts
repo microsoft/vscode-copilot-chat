@@ -9,7 +9,7 @@ import type { FetchMiddleware, HttpFetchFn, HttpHeaders, HttpRequest, HttpRespon
 import { AuthBlockedError, authBlockedMiddleware } from '../middleware/authBlockedMiddleware';
 import { etagMiddleware } from '../middleware/etagMiddleware';
 import { ServerBackoffError, serverErrorBackoffMiddleware } from '../middleware/serverErrorBackoffMiddleware';
-import { windowActiveMiddleware } from '../middleware/windowActiveMiddleware';
+import { WindowInactiveError, windowActiveMiddleware } from '../middleware/windowActiveMiddleware';
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -314,32 +314,13 @@ describe('windowActiveMiddleware', () => {
 		expect(inner).toHaveBeenCalledTimes(1);
 	});
 
-	it('returns cached response when window is inactive', async () => {
-		const provider = { isActive: true };
-		const inner = vi.fn<HttpFetchFn>()
-			.mockResolvedValueOnce(makeResponse(200))
-			.mockResolvedValueOnce(makeResponse(200));
-		const fetch = windowActiveMiddleware(provider)(inner);
-
-		// First call (active) → caches
-		const first = await fetch(defaultRequest);
-		expect(first.status).toBe(200);
-
-		// Become inactive
-		provider.isActive = false;
-		const second = await fetch(defaultRequest);
-		expect(second.status).toBe(200); // cached
-		expect(inner).toHaveBeenCalledTimes(1);
-	});
-
-	it('fetches anyway when inactive with no cache', async () => {
+	it('throws WindowInactiveError when window is inactive', async () => {
 		const provider: WindowStateProvider = { isActive: false };
 		const inner = stubFetch(makeResponse(200));
 		const fetch = windowActiveMiddleware(provider)(inner);
 
-		const result = await fetch(defaultRequest);
-		expect(result.status).toBe(200);
-		expect(inner).toHaveBeenCalledTimes(1);
+		await expect(fetch(defaultRequest)).rejects.toThrow(WindowInactiveError);
+		expect(inner).not.toHaveBeenCalled();
 	});
 });
 
@@ -410,24 +391,16 @@ describe('createAdvancedFetch', () => {
 
 	it('applies middleware stack', async () => {
 		const provider = { isActive: false };
-		let fetchCount = 0;
 
 		const fetchFn = createAdvancedFetch({
 			request: defaultRequest,
-			httpFetch: async () => {
-				fetchCount++;
-				return makeResponse(fetchCount * 100);
-			},
+			httpFetch: async () => makeResponse(200),
 			parseResponse: async (res) => res.status,
 			middleware: [windowActiveMiddleware(provider)],
 		});
 
-		// First call (inactive, no cache) → fetches
-		expect(await fetchFn()).toBe(100);
-
-		// Second call (still inactive) → returns cached response
-		expect(await fetchFn()).toBe(100);
-		expect(fetchCount).toBe(1);
+		// Inactive → middleware throws
+		await expect(fetchFn()).rejects.toThrow(WindowInactiveError);
 	});
 
 	it('composes with FetchedValue', async () => {
@@ -483,15 +456,14 @@ describe('full middleware stack', () => {
 		expect(inner).toHaveBeenCalledTimes(1);
 	});
 
-	it('etag + window inactive returns cached response without network', async () => {
+	it('window inactive throws WindowInactiveError', async () => {
 		// Prime the cache
 		await fetch(authedRequest);
 		expect(inner).toHaveBeenCalledTimes(1);
 
-		// Become inactive
+		// Become inactive → middleware throws before reaching network
 		provider.isActive = false;
-		const res = await fetch(authedRequest);
-		expect(res.status).toBe(200); // cached
+		await expect(fetch(authedRequest)).rejects.toThrow(WindowInactiveError);
 		expect(inner).toHaveBeenCalledTimes(1); // no additional call
 	});
 

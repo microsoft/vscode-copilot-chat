@@ -850,6 +850,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				activeDoc.workspaceRoot,
 				pseudoEditWindow,
 				tracer,
+				() => chatResponseFailure ? mapChatFetcherErrorToNoNextEditReason(chatResponseFailure) : undefined,
 			);
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.UnifiedWithXml) {
 			const linesIter = linesStream[Symbol.asyncIterator]();

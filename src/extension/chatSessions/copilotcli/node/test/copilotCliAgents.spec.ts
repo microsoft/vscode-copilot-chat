@@ -49,9 +49,13 @@ class TestChatPromptFileService extends Disposable implements IChatPromptFileSer
 	readonly onDidChangeCustomAgents: Event<void> = this._onDidChangeCustomAgents.event;
 	readonly onDidChangeInstructions: Event<void> = Event.None;
 	readonly onDidChangeSkills: Event<void> = Event.None;
+	readonly onDidChangeHooks: Event<void> = Event.None;
+	readonly onDidChangePlugins: Event<void> = Event.None;
 	readonly customAgents: readonly import('vscode').ChatResource[] = [];
 	readonly instructions: readonly import('vscode').ChatResource[] = [];
 	readonly skills: readonly import('vscode').ChatResource[] = [];
+	readonly hooks: readonly import('vscode').ChatResource[] = [];
+	readonly plugins: readonly import('vscode').ChatResource[] = [];
 
 	constructor(private _customAgentPromptFiles: ParsedPromptFile[] = []) {
 		super();
@@ -197,5 +201,29 @@ Second body`)]);
 		expect(first.map(a => a.agent.name)).toEqual(['First']);
 		expect(second.map(a => a.agent.name)).toEqual(['Second']);
 		expect(sdk.getPackage).toHaveBeenCalled();
+	});
+
+	it('filters out legacy .chatmode.md files', async () => {
+		const chatmodeFile = new PromptFileParser().parse(
+			URI.file('/workspace/.github/chatmodes/test.chatmode.md'),
+			`---
+name: TestMode
+description: A legacy chatmode
+---
+Body`
+		);
+		const agentFile = parsePromptFile('real.agent.md', `---
+name: RealAgent
+description: A real agent
+---
+Body`);
+		const { agents } = createAgents({
+			sdkAgentsByCall: [[]],
+			promptAgents: [chatmodeFile, agentFile]
+		});
+
+		const result = await agents.getAgents();
+		expect(result).toHaveLength(1);
+		expect(result[0].agent.name).toBe('RealAgent');
 	});
 });

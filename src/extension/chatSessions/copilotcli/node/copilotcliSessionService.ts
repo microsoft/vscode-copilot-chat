@@ -197,7 +197,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					process.env['COPILOT_OTEL_EXPORTER_TYPE'] = 'file';
 					process.env['COPILOT_OTEL_FILE_EXPORTER_PATH'] = devNull;
 				}
-				return new internal.LocalSessionManager({ telemetryService: new internal.NoopTelemetryService(), flushDebounceMs: undefined, settings: undefined, version: undefined });
+				return new internal.LocalSessionManager({ telemetryService: new internal.NoopTelemetryService(), telemetryBinder: undefined, flushDebounceMs: undefined, settings: undefined, version: undefined });
 			}
 			catch (error) {
 				this.logService.error(`Failed to initialize Copilot CLI Session Manager: ${error}`);

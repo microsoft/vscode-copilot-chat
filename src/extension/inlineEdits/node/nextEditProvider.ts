@@ -346,6 +346,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			}
 			isRebasedCachedEdit = !!cachedEdit.rebasedEdit;
 			isSubsequentCachedEdit = cachedEdit.subsequentN !== undefined && cachedEdit.subsequentN > 0;
+			isFromSpeculativeRequest = cachedEdit.source.isSpeculative;
 			req = cachedEdit.source;
 			logContext.setIsCachedResult(cachedEdit.source.log);
 			currentDocument = documentAtInvocationTime;

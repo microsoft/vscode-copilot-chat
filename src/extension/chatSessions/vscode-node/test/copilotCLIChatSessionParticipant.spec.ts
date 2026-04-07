@@ -2097,8 +2097,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			await vi.runAllTimersAsync();
 			await handlerPromise;
 
-			// 3 attempts total (after 2s, 4s, and 8s delays)
-			expect(findPr).toHaveBeenCalledTimes(3);
+			// 5 attempts total (after 2s, 4s, 8s, 16s, and 32s delays)
+			expect(findPr).toHaveBeenCalledTimes(5);
 			// Should NOT have persisted any PR URL since all attempts failed
 			const setPropsCallsWithPrUrl = (worktree.setWorktreeProperties as ReturnType<typeof vi.fn>).mock.calls
 				.filter((args: unknown[]) => (args[1] as { pullRequestUrl?: string })?.pullRequestUrl !== undefined);

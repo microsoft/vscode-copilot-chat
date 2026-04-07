@@ -1535,13 +1535,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 	}
 
-	private static readonly _PR_DETECTION_RETRY_COUNT = 3;
+	private static readonly _PR_DETECTION_RETRY_COUNT = 5;
 	private static readonly _PR_DETECTION_INITIAL_DELAY_MS = 2_000;
 
 	private async handlePullRequestCreated(session: ICopilotCLISession): Promise<void> {
 		const sessionId = session.sessionId;
 		let prUrl = session.createdPullRequestUrl;
-		let prState = 'open';
+		let prState = '';
 
 		this.logService.debug(`[CopilotCLIChatSessionParticipant] handlePullRequestCreated for ${sessionId}: createdPullRequestUrl=${prUrl ?? 'none'}`);
 
@@ -1559,7 +1559,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				this.logService.debug(`[CopilotCLIChatSessionParticipant] No PR URL from session, attempting retry detection for ${sessionId}, branch=${worktreeProperties.branchName}`);
 				const prResult = await this.detectPullRequestWithRetry(sessionId);
 				prUrl = prResult?.url;
-				prState = prResult?.state ?? 'open';
+				prState = prResult?.state ?? prUrl ? 'open' : '';
 			} else {
 				this.logService.debug(`[CopilotCLIChatSessionParticipant] Skipping retry detection for ${sessionId}: branch=${worktreeProperties.branchName ?? 'none'}, repoPath=${!!worktreeProperties.repositoryPath}`);
 			}
@@ -2266,7 +2266,9 @@ export function registerCLIChatCommands(
 		}
 
 		let branchName: string | undefined;
+		let worktreePath: string | undefined;
 		let baseBranchName: string | undefined;
+		let baseWorktreePath: string | undefined;
 
 		try {
 			const sessionId = SessionIdForCLI.parse(resource);
@@ -2284,8 +2286,10 @@ export function registerCLIChatCommands(
 		}
 
 		const contextValueSegments: string[] = [];
-		contextValueSegments.push('source branch name: ' + branchName);
-		contextValueSegments.push('target branch name: ' + baseBranchName);
+		contextValueSegments.push(`source branch name: ${branchName}`);
+		contextValueSegments.push(`source worktree path: ${worktreePath}`);
+		contextValueSegments.push(`target branch name: ${baseBranchName}`);
+		contextValueSegments.push(`target worktree path: ${baseWorktreePath}`);
 
 		const prompt = syncWithRemote
 			? `${builtinSlashSCommands.merge} and ${builtinSlashSCommands.sync}`

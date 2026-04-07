@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { FetchBlockedError } from './fetchTypes';
+
 export interface FetchedValueOptions<T> {
 	/**
 	 * The async function that fetches the value from the network.
@@ -13,7 +15,7 @@ export interface FetchedValueOptions<T> {
 	 * Determines whether the current cached value is stale and should be re-fetched.
 	 * Called by {@link FetchedValue.resolve} to decide if a new fetch is needed.
 	 *
-	 * When `value` is `undefined` (no cached value), the value is always considered stale
+	 * Before the value has been fetched for the first time, the value is always considered stale
 	 * and this function is not called.
 	 */
 	isStale: (value: T) => boolean;
@@ -55,6 +57,7 @@ export interface FetchedValueOptions<T> {
  */
 export class FetchedValue<T> {
 	private _value: T | undefined;
+	private _hasFetched = false;
 	private _inflightFetch: Promise<T> | undefined;
 	private _disposed = false;
 	private _keepCacheHotTimer: ReturnType<typeof setInterval> | undefined;
@@ -73,7 +76,7 @@ export class FetchedValue<T> {
 	}
 
 	/**
-	 * The current cached value, or `undefined` if no value has been fetched yet
+	 * The current cached value, or `undefined` if no value has been fetched yet.
 	 *
 	 * This is a synchronous accessor — it never triggers a fetch.
 	 */
@@ -91,8 +94,8 @@ export class FetchedValue<T> {
 	 */
 	async resolve(force?: boolean): Promise<T> {
 		this._throwIfDisposed();
-		if (!force && this._value !== undefined && !this._isStale(this._value)) {
-			return this._value;
+		if (!force && this._hasFetched && !this._isStale(this._value as T)) {
+			return this._value as T;
 		}
 		if (this._inflightFetch) {
 			return this._inflightFetch;
@@ -108,6 +111,7 @@ export class FetchedValue<T> {
 	dispose(): void {
 		this._disposed = true;
 		this._value = undefined;
+		this._hasFetched = false;
 		this._inflightFetch = undefined;
 		this._fetch = undefined;
 		if (this._keepCacheHotTimer !== undefined) {
@@ -118,10 +122,18 @@ export class FetchedValue<T> {
 
 	private async _doFetch(): Promise<T> {
 		this._throwIfDisposed();
-		const newValue = await this._fetch!();
-		this._throwIfDisposed();
-		this._value = newValue;
-		return newValue;
+		try {
+			const newValue = await this._fetch!();
+			this._throwIfDisposed();
+			this._value = newValue;
+			this._hasFetched = true;
+			return newValue;
+		} catch (err) {
+			if (err instanceof FetchBlockedError && this._hasFetched) {
+				return this._value as T;
+			}
+			throw err;
+		}
 	}
 
 	private _throwIfDisposed(): void {
