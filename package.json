@@ -2822,13 +2822,6 @@
 				"category": "GitHub Copilot"
 			},
 			{
-				"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
-				"title": "%github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR%",
-				"enablement": "!chatSessionRequestInProgress",
-				"icon": "$(git-pull-request)",
-				"category": "GitHub Copilot"
-			},
-			{
 				"command": "github.copilot.chat.copilotCLI.addFileReference",
 				"title": "%github.copilot.command.chat.copilotCLI.addFileReference%",
 				"enablement": "github.copilot.chat.copilotCLI.hasSession",
@@ -4850,11 +4843,6 @@
 					"command": "github.copilot.chat.checkoutPullRequestReroute",
 					"when": "chatSessionType == copilot-cloud-agent && !github.vscode-pull-request-github.activated && gitOpenRepositoryCount != 0",
 					"group": "navigation@0"
-				},
-				{
-					"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
-					"when": "chatSessionType == copilotcli && isSessionsWindow && sessions.hasPullRequest",
-					"group": "navigation@9"
 				}
 			],
 			"chat/input/editing/sessionApplyActions": [
@@ -5216,10 +5204,6 @@
 				},
 				{
 					"command": "github.copilot.chat.createDraftPullRequestCopilotCLIAgentSession.createDraftPR",
-					"when": "false"
-				},
-				{
-					"command": "github.copilot.chat.openPullRequestCopilotCLIAgentSession.openPR",
 					"when": "false"
 				},
 				{
