@@ -159,4 +159,43 @@ describe('CopilotCLISDK Authentication', () => {
 		expect(authInfo.token).toBe('');
 		expect(authInfo.host).toBe('https://github.com');
 	});
+
+	it('should skip token validation and return empty token when BYOK mode is active', async () => {
+		const originalBaseUrl = process.env['COPILOT_PROVIDER_BASE_URL'];
+		process.env['COPILOT_PROVIDER_BASE_URL'] = 'http://localhost:11434/v1';
+		try {
+			const mockConfigService = {
+				getConfig() {
+					return undefined;
+				}
+			} as unknown as IConfigurationService;
+
+			const mockAuthService = {
+				async getGitHubSession(): Promise<undefined> {
+					throw new Error('getGitHubSession should not be called in BYOK mode');
+				}
+			} as unknown as IAuthenticationService;
+
+			const sdk = new TestCopilotCLISDK(
+				createMockExtensionContext(),
+				createMockEnvService(),
+				logService,
+				instantiationService,
+				mockAuthService,
+				mockConfigService
+			);
+
+			const authInfo = await sdk.getAuthInfo() as TokenAuthInfo;
+
+			expect(authInfo.type).toBe('token');
+			expect(authInfo.token).toBe('');
+			expect(authInfo.host).toBe('https://github.com');
+		} finally {
+			if (originalBaseUrl === undefined) {
+				delete process.env['COPILOT_PROVIDER_BASE_URL'];
+			} else {
+				process.env['COPILOT_PROVIDER_BASE_URL'] = originalBaseUrl;
+			}
+		}
+	});
 });

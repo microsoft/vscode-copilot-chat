@@ -48,6 +48,7 @@ import { IChatDelegationSummaryService } from '../common/delegationSummaryServic
 import { getCopilotCLISessionDir, getCopilotCLISessionEventsFile, getCopilotCLIWorkspaceFile } from './cliHelpers';
 import { getAgentFileNameFromFilePath, ICopilotCLIAgents, ICopilotCLISDK } from './copilotCli';
 import { CopilotCliBridgeSpanProcessor } from './copilotCliBridgeSpanProcessor';
+import { getCopilotByokProvider } from './copilotCliEnv';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { ICopilotCLISkills } from './copilotCLISkills';
 import { ICopilotCLIMCPHandler, McpServerMappings, remapCustomAgentTools } from './mcpHandler';
@@ -687,6 +688,13 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			allOptions.systemMessage = systemMessage;
 		}
 		allOptions.sessionCapabilities = new Set(['plan-mode', 'memory', 'cli-documentation', 'ask-user', 'interactive-mode', 'system-notifications']);
+
+		// In BYOK mode, pass the provider config so the SDK routes requests
+		// to the custom provider instead of GitHub's Copilot API.
+		const byokProvider = getCopilotByokProvider();
+		if (byokProvider) {
+			allOptions.provider = byokProvider;
+		}
 
 		return {
 			sessionOptions: allOptions as Readonly<SessionOptions>,

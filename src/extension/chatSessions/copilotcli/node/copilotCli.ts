@@ -22,6 +22,7 @@ import { basename } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IChatPromptFileService } from '../../common/chatPromptFileService';
+import { getCopilotByokModel, getCopilotByokTokenLimits, isCopilotByokMode } from './copilotCliEnv';
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
 import { ensureRipgrepShim } from './ripgrepShim';
@@ -30,6 +31,8 @@ const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 const COPILOT_CLI_REQUEST_MAP_KEY = 'github.copilot.cli.requestMap';
 // Store last used Agent for a Session.
 const COPILOT_CLI_SESSION_AGENTS_MEMENTO_KEY = 'github.copilot.cli.sessionAgents';
+/** Default context window size for BYOK models when no explicit limit is provided via COPILOT_PROVIDER_MAX_PROMPT_TOKENS. */
+const BYOK_DEFAULT_CONTEXT_WINDOW_TOKENS = 128_000;
 /**
  * @deprecated Use empty strings to represent default model/agent instead.
  * Left here for backward compatibility (for state stored by older versions of Chat extension).
@@ -104,7 +107,7 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 	}
 
 	public async getModels(): Promise<CopilotCLIModelInfo[]> {
-		if (!this._authenticationService.anyGitHubSession) {
+		if (!this._authenticationService.anyGitHubSession && !isCopilotByokMode()) {
 			return [];
 		}
 
@@ -113,6 +116,26 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 	}
 
 	private async _getAvailableModels(): Promise<CopilotCLIModelInfo[]> {
+		// In BYOK mode, the SDK's getAvailableModels queries the Copilot API
+		// which requires auth. Instead, build a synthetic model entry from
+		// the COPILOT_MODEL env var that the CLI SDK will use at session time.
+		if (isCopilotByokMode()) {
+			const modelName = getCopilotByokModel();
+			if (!modelName) {
+				this.logService.warn('[CopilotCLISession] BYOK mode active but COPILOT_MODEL is not set. Set the COPILOT_MODEL environment variable to specify which model to use (e.g., COPILOT_MODEL=claude-sonnet-4-20250514)');
+				return [];
+			}
+			const limits = getCopilotByokTokenLimits();
+			this.logService.info(`[CopilotCLISession] BYOK mode: using model "${modelName}"`);
+			return [{
+				id: modelName,
+				name: `${modelName} (BYOK)`,
+				maxInputTokens: limits.maxPromptTokens,
+				maxOutputTokens: limits.maxOutputTokens,
+				maxContextWindowTokens: limits.maxPromptTokens ?? BYOK_DEFAULT_CONTEXT_WINDOW_TOKENS,
+			}];
+		}
+
 		const [{ getAvailableModels }, authInfo] = await Promise.all([this.copilotCLISDK.getPackage(), this.copilotCLISDK.getAuthInfo()]);
 		try {
 			const models = await getAvailableModels(authInfo);
@@ -457,6 +480,19 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 						api: overrideProxyUrl
 					}
 				}
+			};
+		}
+
+		// When COPILOT_PROVIDER_BASE_URL is set, the CLI uses a custom provider
+		// instead of GitHub Copilot's model routing and GitHub authentication
+		// is not required. Skip client-side token validation; the actual BYOK
+		// provider config is passed via SessionOptions.provider.
+		if (isCopilotByokMode()) {
+			this.logService.info('[CopilotCLISession] BYOK mode active, skipping client-side token validation');
+			return {
+				type: 'token',
+				token: '',
+				host: 'https://github.com'
 			};
 		}
 

@@ -16,6 +16,7 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import type { LanguageModelToolInformation } from '../../../../vscodeTypes';
 import { GitHubMcpDefinitionProvider } from '../../../githubMcp/common/githubMcpDefinitionProvider';
+import { isCopilotOfflineMode } from './copilotCliEnv';
 
 const toolInvalidCharRe = /[^a-z0-9_-]/gi;
 
@@ -140,6 +141,10 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 	}
 
 	private async addBuiltInGitHubServer(config: Record<string, MCPServerConfig>): Promise<void> {
+		if (isCopilotOfflineMode()) {
+			this.logService.info('[CopilotCLIMCPHandler] Offline mode active, skipping GitHub MCP server setup');
+			return;
+		}
 		try {
 			const githubId = this.normalizeServerName('gitHub');
 			if (!githubId) {

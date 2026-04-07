@@ -28,6 +28,7 @@ import { IToolsService } from '../../../tools/common/toolsService';
 import { IChatSessionMetadataStore } from '../../common/chatSessionMetadataStore';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { getWorkingDirectory, isIsolationEnabled, IWorkspaceInfo } from '../../common/workspaceInfo';
+import { isCopilotByokMode } from './copilotCliEnv';
 import { enrichToolInvocationWithSubagentMetadata, getAffectedUrisForEditTool, isCopilotCliEditToolCall, isCopilotCLIToolThatCouldRequirePermissions, processToolExecutionComplete, processToolExecutionStart, ToolCall, updateTodoList } from '../common/copilotCLITools';
 import { getCopilotCLISessionStateDir } from './cliHelpers';
 import type { CopilotCliBridgeSpanProcessor } from './copilotCliBridgeSpanProcessor';
@@ -765,7 +766,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		if (token.isCancellationRequested) {
 			return;
 		}
-		if (authInfo) {
+		if (authInfo && !isCopilotByokMode()) {
 			this._sdkSession.setAuthInfo(authInfo);
 		}
 		if (modelId && modelId !== currentModel) {

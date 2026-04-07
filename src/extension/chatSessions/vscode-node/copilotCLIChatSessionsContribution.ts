@@ -45,6 +45,7 @@ import { ICustomSessionTitleService } from '../copilotcli/common/customSessionTi
 import { IChatDelegationSummaryService } from '../copilotcli/common/delegationSummaryService';
 import { getCopilotCLISessionDir } from '../copilotcli/node/cliHelpers';
 import { ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK, isWelcomeView } from '../copilotcli/node/copilotCli';
+import { isCopilotByokMode } from '../copilotcli/node/copilotCliEnv';
 import { CopilotCLIPromptResolver } from '../copilotcli/node/copilotcliPromptResolver';
 import { builtinSlashSCommands, CopilotCLICommand, copilotCLICommands, ICopilotCLISession } from '../copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../copilotcli/node/copilotcliSessionService';
@@ -1274,7 +1275,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				this.logService.error(`Authorization failed`);
 				throw new Error(vscode.l10n.t('Authorization failed. Please sign into GitHub and try again.'));
 			}
-			if ((authInfo.type === 'token' && !authInfo.token) && !this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl)) {
+			if ((authInfo.type === 'token' && !authInfo.token) && !this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl) && !isCopilotByokMode()) {
 				this.logService.error(`Authorization failed`);
 				throw new Error(vscode.l10n.t('Authorization failed. Please sign into GitHub and try again.'));
 			}
