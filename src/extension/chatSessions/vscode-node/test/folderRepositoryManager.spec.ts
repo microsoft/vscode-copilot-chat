@@ -16,6 +16,7 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { LanguageModelTextPart, LanguageModelToolResult2 } from '../../../../vscodeTypes';
 import { MockChatResponseStream } from '../../../test/node/testHelpers';
 import type { IToolsService } from '../../../tools/common/toolsService';
+import { RepositoryProperties } from '../../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
 import { ChatSessionWorktreeFile, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../../common/chatSessionWorktreeService';
 import { IFolderRepositoryManager } from '../../common/folderRepositoryManager';
@@ -58,43 +59,51 @@ class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>()
  */
 class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFolderService>() {
 	private _sessionWorkspaceFolders = new Map<string, vscode.Uri>();
-	private _recentFolders: { folder: vscode.Uri; lastAccessTime: number }[] = [];
+	private _sessionWorkspaceFolderRepositories = new Map<string, vscode.Uri | undefined>();
 	private _workspaceChanges = new Map<string, readonly ChatSessionWorktreeFile[] | undefined>();
 
-	override trackSessionWorkspaceFolder = vi.fn(async (sessionId: string, workspaceFolderUri: string): Promise<void> => {
+	override trackSessionWorkspaceFolder = vi.fn(async (sessionId: string, workspaceFolderUri: string, repositoryProperties?: RepositoryProperties): Promise<void> => {
 		this._sessionWorkspaceFolders.set(sessionId, vscode.Uri.file(workspaceFolderUri));
+		this._sessionWorkspaceFolderRepositories.set(sessionId, repositoryProperties?.repositoryPath ? vscode.Uri.file(repositoryProperties.repositoryPath) : undefined);
 	});
 
 	override deleteTrackedWorkspaceFolder = vi.fn(async (sessionId: string): Promise<void> => {
 		this._sessionWorkspaceFolders.delete(sessionId);
-	});
-
-	override deleteRecentFolder = vi.fn(async (folder: vscode.Uri): Promise<void> => {
-		this._recentFolders = this._recentFolders.filter(entry => entry.folder.fsPath !== folder.fsPath);
+		this._sessionWorkspaceFolderRepositories.delete(sessionId);
 	});
 
 	override getSessionWorkspaceFolder = vi.fn(async (sessionId: string): Promise<vscode.Uri | undefined> => {
 		return this._sessionWorkspaceFolders.get(sessionId);
 	});
 
-	override getRecentFolders = vi.fn(async (): Promise<{ folder: vscode.Uri; lastAccessTime: number }[]> => {
-		return this._recentFolders;
+	override getSessionWorkspaceFolderEntry = vi.fn(async (sessionId: string) => {
+		const folder = this._sessionWorkspaceFolders.get(sessionId);
+		if (!folder) {
+			return undefined;
+		}
+
+		return {
+			folderPath: folder.fsPath,
+			timestamp: Date.now()
+		};
 	});
 
-	override getWorkspaceChanges = vi.fn(async (workspaceFolderUri: vscode.Uri): Promise<readonly ChatSessionWorktreeFile[] | undefined> => {
-		return this._workspaceChanges.get(workspaceFolderUri.toString());
+	override getRepositoryProperties = vi.fn(async (_sessionId: string): Promise<RepositoryProperties | undefined> => {
+		return undefined;
 	});
 
-	setTestRecentFolders(folders: { folder: vscode.Uri; lastAccessTime: number }[]): void {
-		this._recentFolders = folders;
-	}
+	override handleRequestCompleted = vi.fn(async (_sessionId: string): Promise<void> => { });
+
+	override getWorkspaceChanges = vi.fn(async (sessionId: string): Promise<readonly ChatSessionWorktreeFile[] | undefined> => {
+		return this._workspaceChanges.get(sessionId);
+	});
 
 	setTestSessionWorkspaceFolder(sessionId: string, folder: vscode.Uri): void {
 		this._sessionWorkspaceFolders.set(sessionId, folder);
 	}
 
-	setTestWorkspaceChanges(folder: vscode.Uri, changes: readonly ChatSessionWorktreeFile[] | undefined): void {
-		this._workspaceChanges.set(folder.toString(), changes);
+	override clearWorkspaceChanges(sessionId: string): void {
+		this._workspaceChanges.delete(sessionId);
 	}
 }
 
@@ -145,6 +154,9 @@ class FakeGitService extends mock<IGitService>() {
 
 	setTestActiveRepository(repo: RepoContext | undefined): void {
 		this._activeRepo = repo;
+		if (repo) {
+			this._repositories.set(repo.rootUri.fsPath, repo);
+		}
 	}
 }
 
@@ -200,20 +212,17 @@ export class FakeFolderRepositoryManager extends mock<IFolderRepositoryManager>(
 	private _folderRepoInfo = new Map<string, {
 		folder: vscode.Uri | undefined;
 		repository: vscode.Uri | undefined;
+		repositoryProperties?: RepositoryProperties;
 		worktree: vscode.Uri | undefined;
 		trusted: boolean | undefined;
 		worktreeProperties: ChatSessionWorktreeProperties | undefined;
 	}>();
 
-	override setUntitledSessionFolder = vi.fn((sessionId: string, folderUri: vscode.Uri): void => {
+	override setNewSessionFolder = vi.fn((sessionId: string, folderUri: vscode.Uri): void => {
 		if (!sessionId.startsWith('untitled:') && !sessionId.startsWith('untitled-')) {
 			throw new Error(`Cannot set folder for non-untitled session: ${sessionId}`);
 		}
 		this._untitledSessionFolders.set(sessionId, folderUri);
-	});
-
-	override getUntitledSessionFolder = vi.fn((sessionId: string): vscode.Uri | undefined => {
-		return this._untitledSessionFolders.get(sessionId);
 	});
 
 	override getFolderRepository = vi.fn(async (
@@ -222,7 +231,7 @@ export class FakeFolderRepositoryManager extends mock<IFolderRepositoryManager>(
 		_token: vscode.CancellationToken
 	) => {
 		const info = this._folderRepoInfo.get(sessionId);
-		return info ?? { folder: undefined, repository: undefined, worktree: undefined, trusted: undefined, worktreeProperties: undefined };
+		return info ?? { folder: undefined, repository: undefined, repositoryProperties: undefined, worktree: undefined, trusted: undefined, worktreeProperties: undefined };
 	});
 
 	override initializeFolderRepository = vi.fn(async (
@@ -234,6 +243,7 @@ export class FakeFolderRepositoryManager extends mock<IFolderRepositoryManager>(
 		return {
 			folder: info?.folder,
 			repository: info?.repository,
+			repositoryProperties: info?.repositoryProperties,
 			worktree: info?.worktree,
 			trusted: info?.trusted ?? true,
 			worktreeProperties: info?.worktreeProperties
@@ -244,7 +254,7 @@ export class FakeFolderRepositoryManager extends mock<IFolderRepositoryManager>(
 		return Promise.resolve([]);
 	});
 
-	override deleteUntitledSessionFolder = vi.fn((sessionId: string): void => {
+	override deleteNewSessionFolder = vi.fn((sessionId: string): void => {
 		this._untitledSessionFolders.delete(sessionId);
 	});
 
@@ -255,13 +265,10 @@ export class FakeFolderRepositoryManager extends mock<IFolderRepositoryManager>(
 		return { repository: undefined, headBranchName: undefined };
 	});
 
-	override getLastUsedFolderIdInUntitledWorkspace = vi.fn((): string | undefined => {
-		return undefined;
-	});
-
 	setTestFolderRepositoryInfo(sessionId: string, info: {
 		folder: vscode.Uri | undefined;
 		repository: vscode.Uri | undefined;
+		repositoryProperties?: RepositoryProperties;
 		worktree: vscode.Uri | undefined;
 		trusted: boolean | undefined;
 		worktreeProperties: ChatSessionWorktreeProperties | undefined;
@@ -314,35 +321,13 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 		disposables.clear();
 	});
 
-	describe('setUntitledSessionFolder', () => {
-		it('stores folder for untitled session', () => {
-			const sessionId = 'untitled:test-123';
-			const folderUri = vscode.Uri.file('/my/folder');
-
-			manager.setUntitledSessionFolder(sessionId, folderUri);
-
-			// Should store in memory only - workspace folder tracking happens in initializeFolderRepository
-			expect(manager.getUntitledSessionFolder(sessionId)?.fsPath).toBe(vscode.Uri.file('/my/folder').fsPath);
-		});
-
-
-		it('accepts session ID starting with untitled-', () => {
-			const sessionId = 'untitled-test-456';
-			const folderUri = vscode.Uri.file('/another/folder');
-
-			manager.setUntitledSessionFolder(sessionId, folderUri);
-
-			expect(manager.getUntitledSessionFolder(sessionId)?.fsPath).toBe(vscode.Uri.file('/another/folder').fsPath);
-		});
-	});
-
 	describe('getFolderRepository', () => {
 		it('returns folder info from memory for untitled sessions', async () => {
 			const sessionId = 'untitled:test-123';
 			const folderUri = vscode.Uri.file('/my/folder');
 			const token = disposables.add(new CancellationTokenSource()).token;
 
-			manager.setUntitledSessionFolder(sessionId, folderUri);
+			manager.setNewSessionFolder(sessionId, folderUri);
 
 			const result = await manager.getFolderRepository(sessionId, undefined, token);
 
@@ -481,7 +466,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			const stream = new MockChatResponseStream();
 			const folderUri = vscode.Uri.file('/my/repo');
 
-			manager.setUntitledSessionFolder(sessionId, folderUri);
+			manager.setNewSessionFolder(sessionId, folderUri);
 			gitService.setTestRepository(folderUri, {
 				rootUri: folderUri,
 				kind: 'repository'
@@ -496,7 +481,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				version: 1
 			} satisfies ChatSessionWorktreeProperties);
 
-			const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+			const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 
 			expect(result.worktree?.fsPath).toBe(vscode.Uri.file('/my/repo-worktree').fsPath);
 			expect(result.repository?.fsPath).toBe(vscode.Uri.file('/my/repo').fsPath);
@@ -509,7 +494,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			const stream = new MockChatResponseStream();
 			const folderUri = vscode.Uri.file('/my/repo');
 
-			manager.setUntitledSessionFolder(sessionId, folderUri);
+			manager.setNewSessionFolder(sessionId, folderUri);
 			gitService.setTestRepository(folderUri, {
 				rootUri: folderUri,
 				kind: 'repository'
@@ -517,7 +502,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 
 			(worktreeService.createWorktree as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
-			const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+			const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 
 			expect(result.worktree).toBeUndefined();
 			expect(result.repository?.fsPath).toBe(vscode.Uri.file('/my/repo').fsPath);
@@ -530,10 +515,10 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			const stream = new MockChatResponseStream();
 			const folderUri = vscode.Uri.file('/plain/folder');
 
-			manager.setUntitledSessionFolder(sessionId, folderUri);
+			manager.setNewSessionFolder(sessionId, folderUri);
 			// No git repo set for this folder
 
-			const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+			const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 
 			expect(result.folder?.fsPath).toBe(vscode.Uri.file('/plain/folder').fsPath);
 			expect(result.repository).toBeUndefined();
@@ -562,169 +547,11 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				new MockFileSystemService()
 			);
 
-			manager.setUntitledSessionFolder(sessionId, folderUri);
+			manager.setNewSessionFolder(sessionId, folderUri);
 
-			const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+			const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 
 			expect(result.trusted).toBe(false);
-		});
-	});
-
-	describe('getFolderMRU', () => {
-		it('combines data from all sources', async () => {
-			gitService.setTestRecentRepositories([
-				{ rootUri: vscode.Uri.file('/repo1'), lastAccessTime: 1000 },
-				{ rootUri: vscode.Uri.file('/repo2'), lastAccessTime: 2000 }
-			]);
-			workspaceFolderService.setTestRecentFolders([
-				{ folder: vscode.Uri.file('/folder1'), lastAccessTime: 1500 }
-			]);
-
-			const result = await manager.getFolderMRU();
-
-			// Should have items from both sources
-			expect(result.length).toBeGreaterThan(0);
-		});
-
-		it('deduplicates entries', async () => {
-			const duplicateUri = vscode.Uri.file('/same/path');
-			gitService.setTestRecentRepositories([
-				{ rootUri: duplicateUri, lastAccessTime: 1000 }
-			]);
-			workspaceFolderService.setTestRecentFolders([
-				{ folder: duplicateUri, lastAccessTime: 2000 }
-			]);
-
-			const result = await manager.getFolderMRU();
-
-			// Should only have one entry for the duplicate path
-			const paths = result.map(r => r.folder.fsPath);
-			const uniquePaths = [...new Set(paths)];
-			expect(paths.length).toBe(uniquePaths.length);
-		});
-
-		it('sorts by last access time descending', async () => {
-			gitService.setTestRecentRepositories([
-				{ rootUri: vscode.Uri.file('/old'), lastAccessTime: 1000 },
-				{ rootUri: vscode.Uri.file('/new'), lastAccessTime: 3000 },
-				{ rootUri: vscode.Uri.file('/middle'), lastAccessTime: 2000 }
-			]);
-
-			const result = await manager.getFolderMRU();
-
-			expect(result[0].folder.fsPath).toBe(vscode.Uri.file('/new').fsPath);
-			expect(result[1].folder.fsPath).toBe(vscode.Uri.file('/middle').fsPath);
-			expect(result[2].folder.fsPath).toBe(vscode.Uri.file('/old').fsPath);
-		});
-	});
-
-	describe('deleteUntitledSessionFolder', () => {
-		it('clears in-memory tracking for session', () => {
-			const sessionId = 'untitled:test-123';
-			const folderUri = vscode.Uri.file('/my/folder');
-
-			manager.setUntitledSessionFolder(sessionId, folderUri);
-			expect(manager.getUntitledSessionFolder(sessionId)).toBeDefined();
-
-			manager.deleteUntitledSessionFolder(sessionId);
-
-			expect(manager.getUntitledSessionFolder(sessionId)).toBeUndefined();
-		});
-	});
-
-	describe('deleteMRUEntry', () => {
-		it('removes entry from untitled session folders', async () => {
-			const sessionId = 'untitled:test-123';
-			const folderUri = vscode.Uri.file('/my/folder');
-
-			manager.setUntitledSessionFolder(sessionId, folderUri);
-			expect(manager.getUntitledSessionFolder(sessionId)).toBeDefined();
-
-			await manager.deleteMRUEntry(folderUri);
-
-			expect(manager.getUntitledSessionFolder(sessionId)).toBeUndefined();
-		});
-
-		it('removes entry from workspace folder service', async () => {
-			const folderUri = vscode.Uri.file('/workspace/folder');
-
-			workspaceFolderService.setTestRecentFolders([
-				{ folder: folderUri, lastAccessTime: Date.now() }
-			]);
-
-			// Verify it's there before deletion
-			const result = await manager.getFolderMRU();
-			expect(result.length).toBeGreaterThan(0);
-
-			await manager.deleteMRUEntry(folderUri);
-
-			// Verify deleteRecentFolder was called on workspace folder service
-			expect((workspaceFolderService.deleteRecentFolder).mock.calls.length).toBe(1);
-		});
-
-		it('handles URI equality comparison', async () => {
-			const folderPath = '/my/folder';
-			const sessionId = 'untitled:test-456';
-
-			manager.setUntitledSessionFolder(sessionId, vscode.Uri.file(folderPath));
-
-			// Delete using a different URI instance with same path
-			await manager.deleteMRUEntry(vscode.Uri.file(folderPath));
-
-			expect(manager.getUntitledSessionFolder(sessionId)).toBeUndefined();
-		});
-
-		it('removes all matching entries', async () => {
-			const folderUri = vscode.Uri.file('/duplicate/folder');
-			const session1 = 'untitled:dup-1';
-			const session2 = 'untitled:dup-2';
-
-			manager.setUntitledSessionFolder(session1, folderUri);
-			manager.setUntitledSessionFolder(session2, folderUri);
-
-			await manager.deleteMRUEntry(folderUri);
-
-			expect(manager.getUntitledSessionFolder(session1)).toBeUndefined();
-			expect(manager.getUntitledSessionFolder(session2)).toBeUndefined();
-		});
-
-		it('does not affect other folders when deleting one', async () => {
-			const folder1 = vscode.Uri.file('/folder/1');
-			const folder2 = vscode.Uri.file('/folder/2');
-			const session1 = 'untitled:test-1';
-			const session2 = 'untitled:test-2';
-
-			manager.setUntitledSessionFolder(session1, folder1);
-			manager.setUntitledSessionFolder(session2, folder2);
-
-			await manager.deleteMRUEntry(folder1);
-
-			expect(manager.getUntitledSessionFolder(session1)).toBeUndefined();
-			expect(manager.getUntitledSessionFolder(session2)).toBeDefined();
-		});
-
-		it('handles non-existent folder deletion gracefully', async () => {
-			const nonExistentUri = vscode.Uri.file('/non/existent/path');
-
-			// Should not throw
-			await expect(manager.deleteMRUEntry(nonExistentUri)).resolves.toBeUndefined();
-		});
-
-		it('deduplicates after deletion from untitled session folders', async () => {
-			const folderUri = vscode.Uri.file('/my/folder');
-
-			manager.setUntitledSessionFolder('untitled:1', folderUri);
-			manager.setUntitledSessionFolder('untitled:2', folderUri);
-
-			let mru = await manager.getFolderMRU();
-			const beforeCount = mru.filter(entry => entry.folder.fsPath === folderUri.fsPath).length;
-
-			await manager.deleteMRUEntry(folderUri);
-
-			mru = await manager.getFolderMRU();
-			const afterCount = mru.filter(entry => entry.folder.fsPath === folderUri.fsPath).length;
-
-			expect(afterCount).toBeLessThan(beforeCount);
 		});
 	});
 
@@ -738,14 +565,14 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			const stream = new MockChatResponseStream();
 			toolsService.nextConfirmationButton = 'Copy Changes';
 
-			manager.setUntitledSessionFolder(sessionId, folderUri);
+			manager.setNewSessionFolder(sessionId, folderUri);
 			gitService.setTestRepository(folderUri, {
 				rootUri: folderUri,
 				kind: 'repository',
 				changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [], mergeChanges: [], untrackedChanges: [] }
 			} as unknown as RepoContext);
 
-			await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+			await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 			expect(toolsService.invokeTool).toHaveBeenCalledWith(
 				'vscode_get_modified_files_confirmation',
 				expect.objectContaining({
@@ -770,14 +597,14 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			const stream = new MockChatResponseStream();
 			toolsService.nextConfirmationButton = 'Copy Changes';
 
-			manager.setUntitledSessionFolder(sessionId, folderUri);
+			manager.setNewSessionFolder(sessionId, folderUri);
 			gitService.setTestRepository(folderUri, {
 				rootUri: folderUri,
 				kind: 'repository',
 				changes: { indexChanges: [], workingTree: [{ path: 'file.ts' }], mergeChanges: [], untrackedChanges: [] }
 			} as unknown as RepoContext);
 
-			await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+			await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 			expect(toolsService.invokeTool).toHaveBeenCalled();
 		});
 
@@ -787,14 +614,14 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			const token = disposables.add(new CancellationTokenSource()).token;
 			const stream = new MockChatResponseStream();
 
-			manager.setUntitledSessionFolder(sessionId, folderUri);
+			manager.setNewSessionFolder(sessionId, folderUri);
 			gitService.setTestRepository(folderUri, {
 				rootUri: folderUri,
 				kind: 'repository',
 				changes: { indexChanges: [], workingTree: [], mergeChanges: [], untrackedChanges: [] }
 			} as unknown as RepoContext);
 
-			await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+			await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 			expect(toolsService.invokeTool).not.toHaveBeenCalled();
 		});
 
@@ -804,9 +631,9 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			const token = disposables.add(new CancellationTokenSource()).token;
 			const stream = new MockChatResponseStream();
 
-			manager.setUntitledSessionFolder(sessionId, folderUri);
+			manager.setNewSessionFolder(sessionId, folderUri);
 
-			await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+			await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 			expect(toolsService.invokeTool).not.toHaveBeenCalled();
 		});
 
@@ -817,14 +644,14 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			const stream = new MockChatResponseStream();
 			toolsService.nextConfirmationButton = 'Cancel';
 
-			manager.setUntitledSessionFolder(sessionId, folderUri);
+			manager.setNewSessionFolder(sessionId, folderUri);
 			gitService.setTestRepository(folderUri, {
 				rootUri: folderUri,
 				kind: 'repository',
 				changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [], mergeChanges: [], untrackedChanges: [] }
 			} as unknown as RepoContext);
 
-			const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+			const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 			expect(result.cancelled).toBe(true);
 		});
 
@@ -839,7 +666,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [], mergeChanges: [], untrackedChanges: [] }
 			} as unknown as RepoContext);
 
-			await manager.initializeFolderRepository(undefined, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+			await manager.initializeFolderRepository(undefined, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 			expect(toolsService.invokeTool).toHaveBeenCalledWith(
 				'vscode_get_modified_files_confirmation',
 				expect.objectContaining({
@@ -860,7 +687,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			const token = disposables.add(new CancellationTokenSource()).token;
 			const stream = new MockChatResponseStream();
 
-			await manager.initializeFolderRepository(undefined, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+			await manager.initializeFolderRepository(undefined, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 			expect(toolsService.invokeTool).not.toHaveBeenCalled();
 		});
 
@@ -886,7 +713,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [], mergeChanges: [], untrackedChanges: [] }
 			} as unknown as RepoContext);
 
-			await manager.initializeFolderRepository(undefined, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+			await manager.initializeFolderRepository(undefined, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 			expect(toolsService.invokeTool).not.toHaveBeenCalled();
 		});
 	});
@@ -922,7 +749,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				const token = disposables.add(new CancellationTokenSource()).token;
 				const stream = new MockChatResponseStream();
 
-				const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+				const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 
 				expect(worktreeService.createWorktree).not.toHaveBeenCalled();
 				expect(result.worktreeProperties).toBeDefined();
@@ -938,9 +765,9 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				const token = disposables.add(new CancellationTokenSource()).token;
 				const stream = new MockChatResponseStream();
 
-				manager.setUntitledSessionFolder(sessionId, vscode.Uri.file(worktreeFolderPath));
+				manager.setNewSessionFolder(sessionId, vscode.Uri.file(worktreeFolderPath));
 
-				const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+				const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 
 				expect(worktreeService.createWorktree).not.toHaveBeenCalled();
 				expect(result.worktreeProperties).toBeDefined();
@@ -967,7 +794,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				const token = disposables.add(new CancellationTokenSource()).token;
 				const stream = new MockChatResponseStream();
 
-				await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+				await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 
 				expect(toolsService.invokeTool).not.toHaveBeenCalled();
 				expect(worktreeService.createWorktree).not.toHaveBeenCalled();
@@ -985,9 +812,9 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				const token = disposables.add(new CancellationTokenSource()).token;
 				const stream = new MockChatResponseStream();
 
-				manager.setUntitledSessionFolder(sessionId, vscode.Uri.file(worktreeFolderPath));
+				manager.setNewSessionFolder(sessionId, vscode.Uri.file(worktreeFolderPath));
 
-				await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+				await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 
 				expect(toolsService.invokeTool).not.toHaveBeenCalled();
 				expect(worktreeService.createWorktree).not.toHaveBeenCalled();
@@ -1006,9 +833,9 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				const token = disposables.add(new CancellationTokenSource()).token;
 				const stream = new MockChatResponseStream();
 
-				manager.setUntitledSessionFolder(sessionId, vscode.Uri.file(worktreeFolderPath));
+				manager.setNewSessionFolder(sessionId, vscode.Uri.file(worktreeFolderPath));
 
-				const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+				const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 
 				// Should use repositoryPath from worktreeProperties, not from git service
 				expect(result.repository?.fsPath).toBe(vscode.Uri.file(originalRepoPath).fsPath);
@@ -1032,7 +859,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				const token = disposables.add(new CancellationTokenSource()).token;
 				const stream = new MockChatResponseStream();
 
-				const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+				const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 
 				// Trust should be checked on the original repository path, not the worktree folder
 				expect(workspaceService.trustRequests.some(uri => uri.fsPath === vscode.Uri.file(originalRepoPath).fsPath)).toBe(true);
@@ -1066,7 +893,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				const token = disposables.add(new CancellationTokenSource()).token;
 				const stream = new MockChatResponseStream();
 
-				const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+				const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 
 				expect(worktreeService.createWorktree).toHaveBeenCalled();
 				expect(result.worktreeProperties).toBeDefined();
@@ -1113,7 +940,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			const stream = new MockChatResponseStream();
 			const folderUri = vscode.Uri.file('/my/repo');
 
-			manager.setUntitledSessionFolder(sessionId, folderUri);
+			manager.setNewSessionFolder(sessionId, folderUri);
 			gitService.setTestRepository(folderUri, {
 				rootUri: folderUri,
 				kind: 'repository'
@@ -1128,12 +955,13 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				version: 1
 			} satisfies ChatSessionWorktreeProperties);
 
-			await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, branch: 'feature-branch' }, token);
+			await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, branch: 'feature-branch', folder: undefined }, token);
 
 			expect(worktreeService.createWorktree).toHaveBeenCalledWith(
 				expect.anything(),
 				expect.anything(),
-				'feature-branch'
+				'feature-branch',
+				undefined,
 			);
 		});
 
@@ -1143,7 +971,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			const stream = new MockChatResponseStream();
 			const folderUri = vscode.Uri.file('/my/repo');
 
-			manager.setUntitledSessionFolder(sessionId, folderUri);
+			manager.setNewSessionFolder(sessionId, folderUri);
 			gitService.setTestRepository(folderUri, {
 				rootUri: folderUri,
 				kind: 'repository'
@@ -1158,11 +986,12 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				version: 1
 			} satisfies ChatSessionWorktreeProperties);
 
-			await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
+			await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, folder: undefined }, token);
 
 			expect(worktreeService.createWorktree).toHaveBeenCalledWith(
 				expect.anything(),
 				expect.anything(),
+				undefined,
 				undefined
 			);
 		});
@@ -1187,7 +1016,7 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			const folderUri = vscode.Uri.file('/selected/folder');
 			const token = disposables.add(new CancellationTokenSource()).token;
 
-			manager.setUntitledSessionFolder(sessionId, folderUri);
+			manager.setNewSessionFolder(sessionId, folderUri);
 
 			const result = await manager.getFolderRepository(sessionId, undefined, token);
 

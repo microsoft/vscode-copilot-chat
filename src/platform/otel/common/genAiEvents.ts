@@ -6,6 +6,7 @@
 import { GenAiAttr, GenAiOperationName, StdAttr } from './genAiAttributes';
 import { truncateForOTel } from './messageFormatters';
 import type { IOTelService } from './otelService';
+import { type WorkspaceOTelMetadata, workspaceMetadataToOTelAttributes } from './workspaceOTelMetadata';
 
 /**
  * Emit OTel GenAI standard events via the IOTelService abstraction.
@@ -112,5 +113,127 @@ export function emitAgentTurnEvent(
 		[GenAiAttr.USAGE_INPUT_TOKENS]: inputTokens,
 		[GenAiAttr.USAGE_OUTPUT_TOKENS]: outputTokens,
 		'tool_call_count': toolCallCount,
+	});
+}
+
+// ── Agent Activity & Outcome Events ──
+
+export function emitEditFeedbackEvent(
+	otel: IOTelService,
+	outcome: string,
+	languageId: string,
+	participant: string,
+	requestId: string,
+	editSurface: string,
+	hasRemainingEdits: boolean,
+	isNotebook: boolean,
+	workspace?: WorkspaceOTelMetadata,
+): void {
+	otel.emitLogRecord(`copilot_chat.edit.feedback: ${outcome}`, {
+		'event.name': 'copilot_chat.edit.feedback',
+		'outcome': outcome,
+		'language_id': languageId,
+		'participant': participant,
+		'request_id': requestId,
+		'edit_surface': editSurface,
+		'has_remaining_edits': hasRemainingEdits,
+		'is_notebook': isNotebook,
+		...workspaceMetadataToOTelAttributes(workspace),
+	});
+}
+
+export function emitEditHunkActionEvent(
+	otel: IOTelService,
+	outcome: string,
+	languageId: string,
+	requestId: string,
+	lineCount: number,
+	linesAdded: number,
+	linesRemoved: number,
+	workspace?: WorkspaceOTelMetadata,
+): void {
+	otel.emitLogRecord(`copilot_chat.edit.hunk.action: ${outcome}`, {
+		'event.name': 'copilot_chat.edit.hunk.action',
+		'outcome': outcome,
+		'language_id': languageId,
+		'request_id': requestId,
+		'line_count': lineCount,
+		'lines_added': linesAdded,
+		'lines_removed': linesRemoved,
+		...workspaceMetadataToOTelAttributes(workspace),
+	});
+}
+
+export function emitInlineDoneEvent(
+	otel: IOTelService,
+	accepted: boolean,
+	languageId: string,
+	editCount: number,
+	editLineCount: number,
+	replyType: string,
+	isNotebook: boolean,
+	workspace?: WorkspaceOTelMetadata,
+): void {
+	otel.emitLogRecord(`copilot_chat.inline.done: ${accepted ? 'accepted' : 'rejected'}`, {
+		'event.name': 'copilot_chat.inline.done',
+		'accepted': accepted,
+		'language_id': languageId,
+		'edit_count': editCount,
+		'edit_line_count': editLineCount,
+		'reply_type': replyType,
+		'is_notebook': isNotebook,
+		...workspaceMetadataToOTelAttributes(workspace),
+	});
+}
+
+export function emitEditSurvivalEvent(
+	otel: IOTelService,
+	editSource: string,
+	survivalRateFourGram: number,
+	survivalRateNoRevert: number,
+	timeDelayMs: number,
+	didBranchChange: boolean,
+	requestId: string,
+	workspace?: WorkspaceOTelMetadata,
+): void {
+	otel.emitLogRecord(`copilot_chat.edit.survival: ${editSource}`, {
+		'event.name': 'copilot_chat.edit.survival',
+		'edit_source': editSource,
+		'survival_rate_four_gram': survivalRateFourGram,
+		'survival_rate_no_revert': survivalRateNoRevert,
+		'time_delay_ms': timeDelayMs,
+		'did_branch_change': didBranchChange,
+		'request_id': requestId,
+		...workspaceMetadataToOTelAttributes(workspace),
+	});
+}
+
+export function emitUserFeedbackEvent(
+	otel: IOTelService,
+	rating: string,
+	participant: string,
+	conversationId: string,
+	requestId: string,
+): void {
+	otel.emitLogRecord(`copilot_chat.user.feedback: ${rating}`, {
+		'event.name': 'copilot_chat.user.feedback',
+		'rating': rating,
+		'participant': participant,
+		'conversation_id': conversationId,
+		'request_id': requestId,
+	});
+}
+
+export function emitCloudSessionInvokeEvent(
+	otel: IOTelService,
+	partnerAgent: string,
+	model: string,
+	requestId: string,
+): void {
+	otel.emitLogRecord(`copilot_chat.cloud.session.invoke: ${partnerAgent}`, {
+		'event.name': 'copilot_chat.cloud.session.invoke',
+		'partner_agent': partnerAgent,
+		'model': model,
+		'request_id': requestId,
 	});
 }

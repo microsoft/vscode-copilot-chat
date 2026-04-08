@@ -6,4 +6,5 @@
 export interface INesConfigs {
 	isAsyncCompletions: boolean;
 	isEagerBackupRequest: boolean;
+	isCheckEditWindowOnReuse: boolean;
 }

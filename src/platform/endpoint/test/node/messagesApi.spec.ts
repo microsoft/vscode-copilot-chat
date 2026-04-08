@@ -5,9 +5,17 @@
 
 import type { ContentBlockParam, DocumentBlockParam, ImageBlockParam, MessageParam, TextBlockParam, ToolReferenceBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
-import { expect, suite, test } from 'vitest';
+import { beforeEach, describe, expect, suite, test } from 'vitest';
+import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatLocation } from '../../../chat/common/commonTypes';
+import { ConfigKey, IConfigurationService } from '../../../configuration/common/configurationService';
+import { InMemoryConfigurationService } from '../../../configuration/test/common/inMemoryConfigurationService';
 import { AnthropicMessagesTool, CUSTOM_TOOL_SEARCH_NAME } from '../../../networking/common/anthropic';
-import { addToolsAndSystemCacheControl, rawMessagesToMessagesAPI } from '../../node/messagesApi';
+import { IChatEndpoint, ICreateEndpointBodyOptions } from '../../../networking/common/networking';
+import { IToolDeferralService } from '../../../networking/common/toolDeferralService';
+import { createPlatformServices } from '../../../test/node/services';
+import { addToolsAndSystemCacheControl, buildToolInputSchema, createMessagesRequestBody, rawMessagesToMessagesAPI } from '../../node/messagesApi';
 
 function assertContentArray(content: MessageParam['content']): ContentBlockParam[] {
 	expect(Array.isArray(content)).toBe(true);
@@ -370,9 +378,32 @@ suite('rawMessagesToMessagesAPI', function () {
 
 		const toolResult = findToolResult(result.messages);
 		expect(toolResult).toBeDefined();
-		expect(toolResult!.cache_control).toEqual({ type: 'ephemeral' });
-		// The dummy whitespace-only text block should be filtered out
+		// Orphaned cache breakpoint with no content to attach to is silently dropped
+		expect(toolResult!.cache_control).toBeUndefined();
 		expect(toolResult!.content).toBeUndefined();
+	});
+
+	test('cache breakpoint before content defers cache_control to next block', function () {
+		const messages: Raw.ChatMessage[] = [
+			{
+				role: Raw.ChatRole.User,
+				content: [
+					{ type: Raw.ChatCompletionContentPartKind.CacheBreakpoint, cacheType: 'ephemeral' },
+					{ type: Raw.ChatCompletionContentPartKind.Text, text: 'hello world' },
+				],
+			},
+		];
+
+		const result = rawMessagesToMessagesAPI(messages);
+
+		expect(result.messages).toHaveLength(1);
+		const content = assertContentArray(result.messages[0].content);
+		expect(content).toHaveLength(1);
+		expect(content[0]).toEqual({
+			type: 'text',
+			text: 'hello world',
+			cache_control: { type: 'ephemeral' },
+		});
 	});
 });
 
@@ -575,5 +606,222 @@ suite('addToolsAndSystemCacheControl', function () {
 		addToolsAndSystemCacheControl(tools, messagesResult);
 
 		expect(system[0].cache_control).toEqual({ type: 'ephemeral' });
+	});
+});
+
+suite('buildToolInputSchema', function () {
+
+	test('returns default schema when input is undefined', function () {
+		const result = buildToolInputSchema(undefined);
+		expect(result).toEqual({ type: 'object', properties: {} });
+	});
+
+	test('strips $schema from the input', function () {
+		const result = buildToolInputSchema({
+			$schema: 'https://json-schema.org/draft/2020-12/schema',
+			type: 'object',
+			properties: { query: { type: 'string' } },
+			required: ['query'],
+		});
+		expect(result).toEqual({
+			type: 'object',
+			properties: { query: { type: 'string' } },
+			required: ['query'],
+		});
+		expect(result).not.toHaveProperty('$schema');
+	});
+
+	test('preserves $defs and additionalProperties', function () {
+		const defs = { Foo: { type: 'object', properties: { x: { type: 'number' } } } };
+		const result = buildToolInputSchema({
+			type: 'object',
+			properties: { foo: { $ref: '#/$defs/Foo' } },
+			$defs: defs,
+			additionalProperties: false,
+		});
+		expect(result.$defs).toEqual(defs);
+		expect(result.additionalProperties).toBe(false);
+	});
+
+	test('defaults properties to empty object when not provided', function () {
+		const result = buildToolInputSchema({ type: 'object' });
+		expect(result.properties).toEqual({});
+	});
+
+	test('overrides default properties when provided in schema', function () {
+		const props = { name: { type: 'string' } };
+		const result = buildToolInputSchema({ type: 'object', properties: props });
+		expect(result.properties).toEqual(props);
+	});
+
+	test('passes through a plain schema without $schema unchanged', function () {
+		const schema = {
+			type: 'object',
+			properties: { id: { type: 'number' } },
+			required: ['id'],
+		};
+		const result = buildToolInputSchema(schema);
+		expect(result).toEqual(schema);
+	});
+});
+
+describe('createMessagesRequestBody reasoning effort', () => {
+	let disposables: DisposableStore;
+	let instantiationService: IInstantiationService;
+	let mockConfig: InMemoryConfigurationService;
+
+	function createMockEndpoint(overrides: Partial<IChatEndpoint> = {}): IChatEndpoint {
+		return {
+			model: 'claude-sonnet-4.5',
+			family: 'claude-sonnet-4.5',
+			modelProvider: 'Anthropic',
+			maxOutputTokens: 8192,
+			modelMaxPromptTokens: 200000,
+			supportsToolCalls: true,
+			supportsVision: true,
+			supportsPrediction: false,
+			showInModelPicker: true,
+			isFallback: false,
+			name: 'test',
+			version: '1.0',
+			policy: 'enabled',
+			urlOrRequestMetadata: 'https://test.com',
+			tokenizer: 0,
+			isDefault: false,
+			processResponseFromChatEndpoint: () => { throw new Error('not implemented'); },
+			acceptChatPolicy: () => { throw new Error('not implemented'); },
+			makeChatRequest2: () => { throw new Error('not implemented'); },
+			createRequestBody: () => { throw new Error('not implemented'); },
+			cloneWithTokenOverride: () => { throw new Error('not implemented'); },
+			interceptBody: () => { },
+			getExtraHeaders: () => ({}),
+			...overrides,
+		} as IChatEndpoint;
+	}
+
+	function createMinimalOptions(overrides: Partial<ICreateEndpointBodyOptions> = {}): ICreateEndpointBodyOptions {
+		return {
+			debugName: 'test',
+			requestId: 'test-request-id',
+			finishedCb: undefined,
+			messages: [{
+				role: Raw.ChatRole.User,
+				content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'Hello' }],
+			}],
+			postOptions: { max_tokens: 8192 },
+			location: ChatLocation.Panel,
+			...overrides,
+		};
+	}
+
+	beforeEach(() => {
+		disposables = new DisposableStore();
+		const services = disposables.add(createPlatformServices(disposables));
+		services.define(IToolDeferralService, {
+			_serviceBrand: undefined,
+			isNonDeferredTool: () => true,
+		});
+		const accessor = services.createTestingAccessor();
+		instantiationService = accessor.get(IInstantiationService);
+		mockConfig = accessor.get(IConfigurationService) as InMemoryConfigurationService;
+	});
+
+	test('includes effort in output_config when model supports reasoning effort and thinking is adaptive', () => {
+		const endpoint = createMockEndpoint({
+			supportsAdaptiveThinking: true,
+			supportsReasoningEffort: ['low', 'medium', 'high'],
+		});
+		const options = createMinimalOptions({
+			enableThinking: true,
+			reasoningEffort: 'high',
+		});
+
+		const body = instantiationService.invokeFunction(createMessagesRequestBody, options, endpoint.model, endpoint);
+
+		expect(body.thinking).toEqual({ type: 'adaptive' });
+		expect(body.output_config).toEqual({ effort: 'high' });
+	});
+
+	test('omits effort when model does not declare supportsReasoningEffort', () => {
+		const endpoint = createMockEndpoint({
+			supportsAdaptiveThinking: true,
+			// supportsReasoningEffort is undefined
+		});
+		const options = createMinimalOptions({
+			enableThinking: true,
+			reasoningEffort: 'high',
+		});
+
+		const body = instantiationService.invokeFunction(createMessagesRequestBody, options, endpoint.model, endpoint);
+
+		expect(body.thinking).toEqual({ type: 'adaptive' });
+		expect(body.output_config).toBeUndefined();
+	});
+
+	test('omits effort when supportsReasoningEffort is an empty array', () => {
+		const endpoint = createMockEndpoint({
+			supportsAdaptiveThinking: true,
+			supportsReasoningEffort: [],
+		});
+		const options = createMinimalOptions({
+			enableThinking: true,
+			reasoningEffort: 'medium',
+		});
+
+		const body = instantiationService.invokeFunction(createMessagesRequestBody, options, endpoint.model, endpoint);
+
+		expect(body.thinking).toEqual({ type: 'adaptive' });
+		expect(body.output_config).toBeUndefined();
+	});
+
+	test('omits effort when thinking is not enabled', () => {
+		const endpoint = createMockEndpoint({
+			supportsAdaptiveThinking: true,
+			supportsReasoningEffort: ['low', 'medium', 'high'],
+		});
+		const options = createMinimalOptions({
+			enableThinking: false,
+			reasoningEffort: 'high',
+		});
+
+		const body = instantiationService.invokeFunction(createMessagesRequestBody, options, endpoint.model, endpoint);
+
+		expect(body.thinking).toBeUndefined();
+		expect(body.output_config).toBeUndefined();
+	});
+
+	test('omits effort when reasoningEffort is an invalid value', () => {
+		const endpoint = createMockEndpoint({
+			supportsAdaptiveThinking: true,
+			supportsReasoningEffort: ['low', 'medium', 'high'],
+		});
+		const options = createMinimalOptions({
+			enableThinking: true,
+			reasoningEffort: 'xhigh' as any,
+		});
+
+		const body = instantiationService.invokeFunction(createMessagesRequestBody, options, endpoint.model, endpoint);
+
+		expect(body.thinking).toEqual({ type: 'adaptive' });
+		expect(body.output_config).toBeUndefined();
+	});
+
+	test('uses budget_tokens thinking when model has maxThinkingBudget but not adaptive', () => {
+		const endpoint = createMockEndpoint({
+			supportsAdaptiveThinking: false,
+			maxThinkingBudget: 32000,
+			minThinkingBudget: 1024,
+			supportsReasoningEffort: ['low', 'medium', 'high'],
+		});
+		mockConfig.setConfig(ConfigKey.AnthropicThinkingBudget, 10000);
+		const options = createMinimalOptions({
+			enableThinking: true,
+			reasoningEffort: 'low',
+		});
+
+		const body = instantiationService.invokeFunction(createMessagesRequestBody, options, endpoint.model, endpoint);
+
+		expect(body.thinking).toEqual({ type: 'enabled', budget_tokens: 8191 });
+		expect(body.output_config).toEqual({ effort: 'low' });
 	});
 });

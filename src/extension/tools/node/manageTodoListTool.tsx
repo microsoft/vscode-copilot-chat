@@ -14,6 +14,7 @@ import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
  */
 class ManageTodoListTool implements ICopilotTool<unknown> {
 	public static readonly toolName = ToolName.CoreManageTodoList;
+	public static readonly nonDeferred = true;
 
 	alternativeDefinition(tool: vscode.LanguageModelToolInformation, endpoint?: IChatEndpoint): vscode.LanguageModelToolInformation {
 		if (!isGpt5PlusFamily(endpoint)) {

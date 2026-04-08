@@ -39,12 +39,13 @@ export abstract class BaseCAPIClientService extends CAPIClient implements ICAPIC
 	}
 
 	override makeRequest<T>(request: MakeRequestOptions, requestMetadata: RequestMetadata): Promise<T> {
-		// Inject AB Exp Context header if available
+		// Inject AB Exp Context headers (legacy VScode-ABExpContext and new standardized X-Copilot-Client-Exp-Assignment-Context) if available
 		if (this.abExpContext) {
 			if (!request.headers) {
 				request.headers = {};
 			}
 			request.headers['VScode-ABExpContext'] = this.abExpContext;
+			request.headers['X-Copilot-Client-Exp-Assignment-Context'] = this.abExpContext;
 		}
 		// Expected high request volume events that we don't need to collect fetch telemetry for
 		if (

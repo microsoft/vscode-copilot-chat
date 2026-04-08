@@ -19,6 +19,8 @@ import { buildRemoteIndexCommandId } from './commands';
 
 const reauthenticateCommandId = '_copilot.workspaceIndex.signInAgain';
 
+const codebaseSemanticSearchDocsLink = 'https://aka.ms/vscode-copilot-workspace-remote-index';
+
 interface WorkspaceIndexStateReporter {
 	readonly onDidChangeIndexState: Event<void>;
 
@@ -48,20 +50,18 @@ export class MockWorkspaceIndexStateReporter extends Disposable implements Works
 }
 
 interface ChatStatusItemState {
-	readonly title: {
-		readonly title: string;
-		readonly learnMoreLink: string;
+	readonly primary: {
+		readonly message: string;
 		readonly busy?: boolean;
 	};
-	readonly details: {
+	readonly details?: {
 		readonly message: string;
 		readonly busy: boolean;
-	} | undefined;
+	};
 }
 
-
 const spinnerCodicon = '$(loading~spin)';
-const statusTitle = t`Workspace Index`;
+const statusTitle = t`Codebase Semantic Index`;
 
 export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 
@@ -87,9 +87,8 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 
 		// Write an initial status
 		this._writeStatusItem({
-			title: {
-				title: t`Checking index status`,
-				learnMoreLink: 'https://aka.ms/copilot-chat-workspace-remote-index', // Top level overview of index
+			primary: {
+				message: t`Checking index status`,
 				busy: true
 			},
 			details: undefined
@@ -113,127 +112,128 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 			return;
 		}
 
-		const remotelyIndexedMessage = Object.freeze({
-			title: t('Codebase index ready'),
-			learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
-		});
-
 		// If we have remote index info, prioritize showing information related to it
 		switch (state.remoteIndexState.status) {
 			case 'initializing':
 				return this._writeStatusItem({
-					title: {
-						title: t('Codebase index'),
-						learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
-					},
-					details: {
-						message: t('Discovering repos'),
+					primary: {
+						message: t('Checking index status'),
 						busy: true,
 					},
 				});
 
 			case 'loaded': {
-				if (state.remoteIndexState.repos.length > 0) {
-					if (state.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.NotIndexable)) {
-						break;
-					}
+				// See if any repos are still being checked/resolved
+				if (state.remoteIndexState.repos.some(repo => repo.status === CodeSearchRepoStatus.CheckingStatus || repo.status === CodeSearchRepoStatus.Resolving)) {
+					return this._writeStatusItem({
+						primary: {
+							message: t('Checking repo statuses'),
+							busy: true,
+						},
+					});
+				}
 
-					// All repos are ready, check if external ingest is building
-					if (state.remoteIndexState.externalIngestState?.status === CodeSearchRepoStatus.BuildingIndex) {
+				// See if we are still building any indexes
+				if (state.remoteIndexState.repos.some(repo => repo.status === CodeSearchRepoStatus.BuildingIndex)
+					|| state.remoteIndexState.externalIngestState?.status === CodeSearchRepoStatus.BuildingIndex
+				) {
+					return this._writeStatusItem({
+						primary: {
+							message: t('Building Index'),
+							busy: true,
+						},
+					});
+				}
+
+				// Check if we have any errors
+				const readyRepos = state.remoteIndexState.repos.filter(repo => repo.status === CodeSearchRepoStatus.Ready);
+				const errorRepos = state.remoteIndexState.repos.filter(repo => repo.status === CodeSearchRepoStatus.CouldNotCheckIndexStatus || repo.status === CodeSearchRepoStatus.NotAuthorized);
+				if (errorRepos.length > 0) {
+					const inaccessibleRepo = errorRepos[0].remoteInfo;
+					if (readyRepos.length) {
 						return this._writeStatusItem({
-							title: remotelyIndexedMessage,
-							details: {
-								message: state.remoteIndexState.externalIngestState.progressMessage || t('Building'),
-								busy: true,
-							},
-						});
-					}
-
-					if (state.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.Ready)) {
-						return this._writeStatusItem({
-							title: remotelyIndexedMessage,
-							details: undefined
-						});
-					}
-
-					if (state.remoteIndexState.repos.some(repo => repo.status === CodeSearchRepoStatus.CheckingStatus || repo.status === CodeSearchRepoStatus.Resolving)) {
-						return this._writeStatusItem({
-							title: {
-								title: t('Codebase index'),
-								learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
-							},
-							details: {
-								message: t('Checking status'),
-								busy: true,
-							},
-						});
-					}
-
-					if (state.remoteIndexState.repos.some(repo => repo.status === CodeSearchRepoStatus.BuildingIndex)) {
-						return this._writeStatusItem({
-							title: remotelyIndexedMessage,
-							details: {
-								message: t('Building'),
-								busy: true,
-							},
-						});
-					}
-
-					if (state.remoteIndexState.repos.some(repo => repo.status === CodeSearchRepoStatus.NotYetIndexed)) {
-						if (id !== this.currentUpdateRequestId) {
-							return;
-						}
-
-						return this._writeStatusItem({
-							title: {
-								title: state.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.NotYetIndexed)
-									? t('Index not yet built')
-									: t('Index not yet built for a repo in the workspace'),
-								learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
+							primary: {
+								message: t('{0} repos with indexes', readyRepos.length),
 							},
 							details: {
-								message: `[${t`Build index`}](command:${buildRemoteIndexCommandId} "${t('Build Remote Workspace Index')}")`,
+								message: t(`[Try re-authenticating for {0} additional repos](${commandUri(reauthenticateCommandId, [inaccessibleRepo])} "${t('Try signing in again to use the codebase index')}")`, errorRepos.length),
 								busy: false,
-							}
+							},
 						});
-					}
-
-					// We have a potential mix of statuses
-					const readyRepos = state.remoteIndexState.repos.filter(repo => repo.status === CodeSearchRepoStatus.Ready);
-					const errorRepos = state.remoteIndexState.repos.filter(repo => repo.status === CodeSearchRepoStatus.CouldNotCheckIndexStatus || repo.status === CodeSearchRepoStatus.NotAuthorized);
-
-					if (errorRepos.length > 0) {
-						const inaccessibleRepo = errorRepos[0].remoteInfo satisfies ResolvedRepoRemoteInfo | undefined;
-
+					} else {
 						return this._writeStatusItem({
-							title: {
-								title: readyRepos.length
-									? t('{0} repos with indexes', readyRepos.length)
-									: t('Index unavailable'),
-								learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
+							primary: {
+								message: t('Index unavailable'),
 							},
 							details: {
-								message: readyRepos.length
-									? t(`[Try re-authenticating for {0} additional repos](${commandUri(reauthenticateCommandId, [inaccessibleRepo])} "${t('Try signing in again to access the remote workspace index')}")`, errorRepos.length)
-									: t(`[Try re-authenticating](${commandUri(reauthenticateCommandId, [inaccessibleRepo])} "${t('Try signing in again to access the remote workspace index ')}")`),
+								message: t(`[Try re-authenticating](${commandUri(reauthenticateCommandId, [inaccessibleRepo])} "${t('Try signing in again to use the codebase index')}")`),
 								busy: false,
 							},
 						});
 					}
 				}
 
+				// See if we have any unindexed repos
+				if (state.remoteIndexState.repos.some(repo => repo.status === CodeSearchRepoStatus.NotYetIndexed)) {
+					return this._writeStatusItem({
+						primary: {
+							message: state.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.NotYetIndexed)
+								? t('Index not yet built')
+								: t('Index not yet built for a repo in the workspace'),
+						},
+						details: {
+							message: `[${t`Build index`}](command:${buildRemoteIndexCommandId} "${t('Build Codebase Index')}")`,
+							busy: false,
+						}
+					});
+				}
+
+				// See if we're fully indexed
+				if (
+					// Either with external ingest
+					state.remoteIndexState.externalIngestState?.status === CodeSearchRepoStatus.Ready
+					// Or if external ingest is disabled but all repos are indexed.
+					// This isn't 100% true because files outside of the repos aren't indexed in this case
+					|| (
+						!state.remoteIndexState.externalIngestState
+						&& state.remoteIndexState.repos.length > 0
+						&& state.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.Ready)
+					)
+				) {
+					return this._writeStatusItem({
+						primary: {
+							message: t('Index ready')
+						},
+					});
+				}
+
+				// External indexing is enabled but not yet fully built
+				if (typeof state.remoteIndexState.externalIngestState !== 'undefined') {
+					return this._writeStatusItem({
+						primary: {
+							message: t('Out of date'),
+						},
+						details: {
+							message: `[${t`Update index`}](command:${buildRemoteIndexCommandId} "${t('Update Codebase Index')}")`,
+							busy: false,
+						}
+					});
+				}
+
 				break;
 			}
 			case 'disabled': {
-				return this._writeStatusItem({
-					title: {
-						title: t('Codebase index not available'),
-						learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
-					},
-					details: undefined
-				});
+				// fallthrough
+				break;
 			}
 		}
+
+		this._writeStatusItem({
+			primary: {
+				message: t('Codebase index not available'),
+			},
+			details: undefined
+		});
 	}
 
 	private _writeStatusItem(values: ChatStatusItemState | undefined) {
@@ -248,12 +248,12 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 
 		this._statusItem.title = {
 			label: statusTitle,
-			link: values.title.learnMoreLink
+			link: codebaseSemanticSearchDocsLink,
 		};
 
 		this._statusItem.description = coalesce([
-			values.title.title,
-			values.title.busy ? spinnerCodicon : undefined,
+			values.primary.message,
+			values.primary.busy ? spinnerCodicon : undefined,
 		]).join(' ');
 
 		if (values.details) {

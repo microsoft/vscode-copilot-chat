@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import { env, Uri, window, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ILogger, ILogService } from '../../../../platform/log/common/logService';
@@ -91,7 +92,7 @@ export class NesFeedbackSubmitter {
 			}
 
 			// Get GitHub auth token - need permissive session for repo access
-			const session = await this._authenticationService.getGitHubSession('permissive', { createIfNone: true });
+			const session = await this._authenticationService.getGitHubSession('permissive', { createIfNone: { detail: l10n.t('Sign in to GitHub to submit feedback.') } });
 			if (!session) {
 				window.showErrorMessage('GitHub authentication required with repo access. Please sign in to GitHub.');
 				return;

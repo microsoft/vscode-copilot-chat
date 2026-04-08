@@ -249,6 +249,7 @@ export interface Repository {
 	add(paths: string[]): Promise<void>;
 	revert(paths: string[]): Promise<void>;
 	clean(paths: string[]): Promise<void>;
+	restore(paths: string[], options?: { staged?: boolean; ref?: string }): Promise<void>;
 
 	apply(patch: string, reverse?: boolean): Promise<void>;
 	diff(cached?: boolean): Promise<string>;

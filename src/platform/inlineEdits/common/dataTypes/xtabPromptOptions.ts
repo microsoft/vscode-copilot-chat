@@ -94,6 +94,8 @@ export type LintOptions = {
 	showCode: LintOptionShowCode;
 	maxLints: number;
 	maxLineDistance: number;
+	/** When set to a value > 0, also include linter diagnostics from the N most recently edited/viewed files. */
+	nRecentFiles: number;
 }
 
 /**
@@ -347,7 +349,8 @@ export const DEFAULT_CURSOR_PREDICTION_LINT_OPTIONS: LintOptions = {
 	maxLints: 5,
 	showCode: LintOptionShowCode.YES_WITH_SURROUNDING,
 	tagName: 'linter',
-	warnings: LintOptionWarning.YES_IF_NO_ERRORS
+	warnings: LintOptionWarning.YES_IF_NO_ERRORS,
+	nRecentFiles: 0,
 };
 
 // TODO: consider a better per language setting/experiment approach
@@ -364,16 +367,17 @@ export interface ModelConfiguration {
 	includePostScript?: boolean;
 	currentFile?: Partial<CurrentFileOptions>;
 	recentlyViewedDocuments?: Partial<RecentlyViewedDocumentsOptions>;
-	lintOptions: LintOptions | undefined;
+	lintOptions: Partial<LintOptions> | undefined;
 	supportsNextCursorLinePrediction?: boolean;
 }
 
-export const LINT_OPTIONS_VALIDATOR: IValidator<LintOptions> = vObj({
-	'tagName': vRequired(vString()),
-	'warnings': vRequired(vEnum(LintOptionWarning.YES, LintOptionWarning.NO, LintOptionWarning.YES_IF_NO_ERRORS)),
-	'showCode': vRequired(vEnum(LintOptionShowCode.NO, LintOptionShowCode.YES, LintOptionShowCode.YES_WITH_SURROUNDING)),
-	'maxLints': vRequired(vNumber()),
-	'maxLineDistance': vRequired(vNumber()),
+export const LINT_OPTIONS_VALIDATOR: IValidator<Partial<LintOptions>> = vObj({
+	'tagName': vString(),
+	'warnings': vEnum(LintOptionWarning.YES, LintOptionWarning.NO, LintOptionWarning.YES_IF_NO_ERRORS),
+	'showCode': vEnum(LintOptionShowCode.NO, LintOptionShowCode.YES, LintOptionShowCode.YES_WITH_SURROUNDING),
+	'maxLints': vNumber(),
+	'maxLineDistance': vNumber(),
+	'nRecentFiles': vNumber(),
 });
 
 export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vObj({
@@ -387,7 +391,7 @@ export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vOb
 	'supportsNextCursorLinePrediction': vUnion(vBoolean(), vUndefined()),
 });
 
-export function parseLintOptionString(optionString: string): LintOptions | undefined {
+export function parseLintOptionString(optionString: string, defaults: LintOptions): LintOptions {
 	try {
 		const parsed = JSON.parse(optionString);
 
@@ -396,7 +400,7 @@ export function parseLintOptionString(optionString: string): LintOptions | undef
 			throw new Error(`Lint options validation failed: ${lintValidation.error.message}`);
 		}
 
-		return lintValidation.content;
+		return { ...defaults, ...lintValidation.content };
 	} catch (e) {
 		throw new Error(`Failed to parse lint options string: ${e}`);
 	}

@@ -30,7 +30,7 @@ import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/t
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
-import { isAnthropicFamily, isGeminiFamily } from '../common/chatModelCapabilities';
+import { isGeminiFamily } from '../common/chatModelCapabilities';
 import { IDomainService } from '../common/domainService';
 import { CustomModel, IChatModelInformation, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createMessagesRequestBody, processResponseFromMessagesEndpoint } from './messagesApi';
@@ -192,7 +192,7 @@ export class ChatEndpoint implements IChatEndpoint {
 
 			const betaFeatures: string[] = [];
 
-			if (!this.supportsAdaptiveThinking || this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicForceExtendedThinking, this._expService)) {
+			if (!this.supportsAdaptiveThinking) {
 				betaFeatures.push('interleaved-thinking-2025-05-14');
 			}
 
@@ -341,19 +341,6 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	protected customizeCapiBody(body: IEndpointBody, options: ICreateEndpointBodyOptions): IEndpointBody {
-		// Chat Completions API: set thinking_budget for Anthropic models when thinking is enabled
-		if (isAnthropicFamily(this) && options.enableThinking) {
-			const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._expService);
-			if (configuredBudget && configuredBudget > 0) {
-				const minBudget = this.minThinkingBudget ?? 1024;
-				const normalizedBudget = configuredBudget < minBudget ? minBudget : configuredBudget;
-				const maxBudget = this.maxThinkingBudget ?? 32000;
-				const thinkingBudget = Math.min(maxBudget, this._maxOutputTokens - 1, normalizedBudget);
-				if (thinkingBudget > 0) {
-					body.thinking_budget = thinkingBudget;
-				}
-			}
-		}
 
 		// Apply Gemini function calling mode if configured
 		const hasTools = !!options.requestOptions?.tools?.length;
@@ -406,7 +393,7 @@ export class ChatEndpoint implements IChatEndpoint {
 			useWebSocket
 			&& options.conversationId
 			&& options.turnId
-			&& this._chatWebSocketService.hasActiveConnection(options.conversationId, options.turnId)
+			&& this._chatWebSocketService.hasActiveConnection(options.conversationId)
 		);
 		const response = await this._makeChatRequest2({
 			...options,

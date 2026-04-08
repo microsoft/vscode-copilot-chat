@@ -16,6 +16,8 @@ import { IEnvService } from '../../../platform/env/common/envService';
 import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -207,6 +209,7 @@ class EditIntentRequestHandler {
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ITelemetryService protected readonly telemetryService: ITelemetryService,
 		@IEditLogService private readonly editLogService: IEditLogService,
+		@IOTelService private readonly otelService: IOTelService,
 	) { }
 
 	async getResult(): Promise<vscode.ChatResult> {
@@ -266,6 +269,7 @@ class EditIntentRequestHandler {
 				editStepCount: this.conversation.turns.length,
 				sessionDuration: Date.now() - turn.startTime,
 			});
+			GenAiMetrics.incrementAgentEditResponseCount(this.otelService, Boolean(result.errorDetails) ? 'error' : 'success');
 		}
 
 		await this.editLogService.markCompleted(turn.id, result.errorDetails ? 'error' : 'success');
@@ -329,6 +333,7 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 		@ICommandService protected readonly commandService: ICommandService,
 		@ITelemetryService protected readonly telemetryService: ITelemetryService,
 		@INotebookService private readonly notebookService: INotebookService,
+		@IOTelService protected readonly otelService: IOTelService,
 	) { }
 
 	getAvailableTools(): vscode.LanguageModelToolInformation[] | Promise<vscode.LanguageModelToolInformation[]> | undefined {

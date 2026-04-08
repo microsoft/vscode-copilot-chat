@@ -221,7 +221,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 	): Promise<NesCompletionList | undefined> {
 		const label = `NES | ${basename(document.uri.fsPath)} (v${document.version})`;
 
-		const capturingToken = new CapturingToken(label, undefined, true, true);
+		const capturingToken = new CapturingToken(label, undefined);
 
 		assert(context.changeHint === undefined || NesChangeHint.is(context.changeHint), 'Expected changeHint to be of type TriggerNes or undefined');
 		const changeHint = context.changeHint as NesChangeHint | undefined;
@@ -273,6 +273,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		const documentVersion = (isNotebookCell(document.uri) ? findNotebook(document.uri, workspace.notebookDocuments)?.version : undefined) || document.version;
 		const logContext = new InlineEditRequestLogContext(doc.id.uri, documentVersion, context);
 		logContext.recordingBookmark = this.model.debugRecorder.createBookmark();
+		this.logger.addLive(logContext);
 
 		const telemetryBuilder = new NextEditProviderTelemetryBuilder(this._gitExtensionService, this._notebookService, this._workspaceService, this.model.nextEditProvider.ID, doc, this.model.debugRecorder, logContext.recordingBookmark);
 		telemetryBuilder.setOpportunityId(context.requestUuid);
@@ -477,6 +478,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 
 			throw e;
 		} finally {
+			logContext.markCompleted();
 			requestCancellationTokenSource.dispose();
 			this.logger.add(logContext);
 		}

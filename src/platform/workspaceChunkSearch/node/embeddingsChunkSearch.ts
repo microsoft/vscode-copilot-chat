@@ -12,7 +12,6 @@ import { ResourceMap } from '../../../util/vs/base/common/map';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ComputeBatchInfo } from '../../chunking/common/chunkingEndpointClient';
-import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { logExecTime, LogExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
@@ -20,7 +19,7 @@ import { ICodeSearchAuthenticationService } from '../../remoteCodeSearch/node/co
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId } from '../common/workspaceChunkSearch';
+import { StrategySearchResult, StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions } from '../common/workspaceChunkSearch';
 import { BuildIndexTriggerReason } from './codeSearch/codeSearchRepo';
 import { WorkspaceChunkEmbeddingsIndex } from './workspaceChunkEmbeddingsIndex';
 import { IWorkspaceFileIndex } from './workspaceFileIndex';
@@ -42,9 +41,7 @@ export enum LocalEmbeddingsIndexStatus {
  *
  * This can be costly so it is only available for smaller workspaces.
  */
-export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunkSearchStrategy {
-
-	readonly id = WorkspaceChunkSearchStrategyId.Embeddings;
+export class EmbeddingsChunkSearch extends Disposable {
 
 	/** Max workspace size that will be automatically indexed. */
 	private static readonly defaultAutomaticIndexingFileCap = 750;
@@ -75,7 +72,6 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 		@ISimulationTestContext _simulationTestContext: ISimulationTestContext,
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@ICodeSearchAuthenticationService private readonly _codeSearchAuthService: ICodeSearchAuthenticationService,
-		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@ILogService private readonly _logService: ILogService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
@@ -99,10 +95,6 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	async prepareSearchWorkspace(telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<void> {
-		if (!this.isEmbeddingSearchEnabled()) {
-			return;
-		}
-
 		// We're potentially going to index a lot of files due to expanded indexing, prompt the user to confirm first.
 		// This both informs them that indexing may take some time and also reduces load for cases when
 		// the extra indexing was unexpected.
@@ -129,10 +121,6 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	async searchWorkspace(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<StrategySearchResult | undefined> {
-		if (!this.isEmbeddingSearchEnabled()) {
-			return undefined;
-		}
-
 		return logExecTime(this._logService, 'EmbeddingsChunkSearch.searchWorkspace', async () => {
 			// kick off resolve early but don't await it until actually needed
 			const resolvedQuery = query.resolveQueryEmbeddings(token);
@@ -162,10 +150,6 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 				workspaceSearchCorrelationId: telemetryInfo.correlationId,
 			}, { execTime });
 		});
-	}
-
-	private isEmbeddingSearchEnabled() {
-		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.WorkspaceEnableEmbeddingsSearch, this._experimentationService);
 	}
 
 	@LogExecTime(self => self._logService, 'EmbeddingsChunkSearch::searchSubsetOfFiles')

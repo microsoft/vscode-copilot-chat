@@ -370,26 +370,18 @@ export interface ExtractSessionIdResult {
 
 /**
  * Extracts and validates the session ID from HTTP request headers.
- * The API key format is `nonce.sessionId` where the nonce is used for auth
- * and the sessionId identifies which Claude session is making the request.
+ * Reads the `Authorization: Bearer <nonce>.<sessionId>` header set via `ANTHROPIC_AUTH_TOKEN`.
  *
- * Checks `x-api-key` header first (used by SDK), then `Authorization: Bearer` (used by CLI).
+ * The `x-api-key` header is intentionally ignored to prevent the user's personal
+ * `ANTHROPIC_API_KEY` environment variable from interfering with authentication.
  */
 export function extractSessionId(headers: http.IncomingHttpHeaders, expectedNonce: string): ExtractSessionIdResult {
 	let apiKey: string | undefined;
 
-	// Check x-api-key header (used by SDK)
-	const apiKeyHeader = headers['x-api-key'];
-	if (typeof apiKeyHeader === 'string') {
-		apiKey = apiKeyHeader;
-	}
-
-	// Check Authorization header with Bearer prefix (used by CLI with ANTHROPIC_AUTH_TOKEN)
-	if (!apiKey) {
-		const authHeader = headers['authorization'];
-		if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-			apiKey = authHeader.slice(7); // Remove "Bearer " prefix
-		}
+	// Check Authorization header with Bearer prefix (set via ANTHROPIC_AUTH_TOKEN)
+	const authHeader = headers['authorization'];
+	if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+		apiKey = authHeader.slice(7); // Remove "Bearer " prefix
 	}
 
 	if (!apiKey) {
@@ -502,7 +494,17 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 		if (typeof this.requestHeaders['anthropic-beta'] === 'string') {
 			const filtered = filterSupportedBetas(this.requestHeaders['anthropic-beta']);
 			if (filtered) {
-				headers['anthropic-beta'] = filtered;
+				if (headers['anthropic-beta']) {
+					// Merge SDK's filtered betas with base endpoint's betas (e.g. config-driven
+					// context-management) instead of overwriting, deduplicating exact matches.
+					const allBetas = new Set([
+						...headers['anthropic-beta'].split(',').map(b => b.trim()),
+						...filtered.split(',').map(b => b.trim()),
+					]);
+					headers['anthropic-beta'] = [...allBetas].join(',');
+				} else {
+					headers['anthropic-beta'] = filtered;
+				}
 			}
 		}
 		return headers;

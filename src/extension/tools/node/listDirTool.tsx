@@ -26,6 +26,7 @@ interface IListDirParams {
 
 class ListDirTool implements vscode.LanguageModelTool<IListDirParams> {
 	public static readonly toolName = ToolName.ListDirectory;
+	public static readonly nonDeferred = true;
 
 	private _promptContext: IBuildPromptContext | undefined;
 

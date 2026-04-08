@@ -9,7 +9,7 @@ import { Event } from '../../../../../util/vs/base/common/event';
 import { Disposable, IDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../../util/vs/base/common/uuid';
-import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents } from '../copilotCli';
+import { CLIAgentInfo, ICopilotCLIAgents } from '../copilotCli';
 import { ICopilotCLIImageSupport } from '../copilotCLIImageSupport';
 import { ICopilotCLISkills } from '../copilotCLISkills';
 import { ICopilotCLIMCPHandler } from '../mcpHandler';
@@ -23,6 +23,7 @@ export class MockCliSdkSession {
 	constructor(public readonly sessionId: string, public readonly startTime: Date) { }
 	getChatContextMessages(): Promise<{}[]> { return Promise.resolve(this.messages); }
 	getEvents(): {}[] { return this.events; }
+	getSelectedModel(): Promise<string | undefined> { return Promise.resolve(undefined); }
 	isAbortable(): boolean { return !this.aborted; }
 	abort(): Promise<void> {
 		this.aborted = true;
@@ -72,23 +73,14 @@ export class MockCliSdkSessionManager {
 export class NullCopilotCLIAgents implements ICopilotCLIAgents {
 	_serviceBrand: undefined;
 	readonly onDidChangeAgents: Event<void> = Event.None;
-	async getAgents(): Promise<SweCustomAgent[]> {
+	async getAgents(): Promise<readonly CLIAgentInfo[]> {
 		return [];
-	}
-	async getDefaultAgent(): Promise<string> {
-		return COPILOT_CLI_DEFAULT_AGENT_ID;
 	}
 	async getSessionAgent(_sessionId: string): Promise<string | undefined> {
 		return undefined;
 	}
 	resolveAgent(_agentId: string): Promise<SweCustomAgent | undefined> {
 		return Promise.resolve(undefined);
-	}
-	setDefaultAgent(_agent: string | undefined): Promise<void> {
-		return Promise.resolve();
-	}
-	trackSessionAgent(_sessionId: string, agent: string | undefined): Promise<void> {
-		return Promise.resolve();
 	}
 }
 

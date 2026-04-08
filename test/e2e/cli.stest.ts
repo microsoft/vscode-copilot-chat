@@ -3,30 +3,38 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { SessionOptions } from '@github/copilot/sdk';
+import type { SessionOptions } from '@github/copilot/sdk';
 import assert from 'assert';
 import * as fs from 'fs/promises';
 import * as http from 'http';
 import { platform, tmpdir } from 'os';
 import * as path from 'path';
-import type { ChatParticipantToolToken, ChatPromptReference } from 'vscode';
+import type { ChatParticipantToolToken, ChatPromptReference, ChatResource } from 'vscode';
 import { OpenAIAdapterFactoryForSTests } from '../../src/extension/agents/node/adapters/openaiAdapterForSTests';
 import { ILanguageModelServer, ILanguageModelServerConfig, LanguageModelServer } from '../../src/extension/agents/node/langModelServer';
+import { IAgentSessionsWorkspace } from '../../src/extension/chatSessions/common/agentSessionsWorkspace';
+import { IChatPromptFileService } from '../../src/extension/chatSessions/common/chatPromptFileService';
+import { IChatSessionMetadataStore } from '../../src/extension/chatSessions/common/chatSessionMetadataStore';
+import { IChatSessionWorkspaceFolderService } from '../../src/extension/chatSessions/common/chatSessionWorkspaceFolderService';
+import { IChatSessionWorktreeService } from '../../src/extension/chatSessions/common/chatSessionWorktreeService';
+import { MockChatSessionMetadataStore } from '../../src/extension/chatSessions/common/test/mockChatSessionMetadataStore';
 import { emptyWorkspaceInfo, IWorkspaceInfo } from '../../src/extension/chatSessions/common/workspaceInfo';
 import { ICustomSessionTitleService } from '../../src/extension/chatSessions/copilotcli/common/customSessionTitleService';
 import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../src/extension/chatSessions/copilotcli/common/delegationSummaryService';
-import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/chatSessions/copilotcli/node/copilotCli';
+import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/chatSessions/copilotcli/node/copilotCli';
 import { CopilotCLIImageSupport, ICopilotCLIImageSupport } from '../../src/extension/chatSessions/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLIPromptResolver } from '../../src/extension/chatSessions/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../src/extension/chatSessions/copilotcli/node/copilotcliSession';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../src/extension/chatSessions/copilotcli/node/copilotcliSessionService';
 import { CopilotCLISkills, ICopilotCLISkills } from '../../src/extension/chatSessions/copilotcli/node/copilotCLISkills';
 import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../src/extension/chatSessions/copilotcli/node/mcpHandler';
-import { IUserQuestionHandler, UserInputRequest, UserInputResponse } from '../../src/extension/chatSessions/copilotcli/node/userInputHelpers';
+import { IPromptVariablesService, NullPromptVariablesService } from '../../src/extension/prompt/node/promptVariablesService';
+import { IQuestion, IQuestionAnswer, IUserQuestionHandler } from '../../src/extension/chatSessions/copilotcli/node/userInputHelpers';
 import { ChatSummarizerProvider } from '../../src/extension/prompt/node/summarizer';
 import { MockChatResponseStream, TestChatRequest } from '../../src/extension/test/node/testHelpers';
 import { IToolsService } from '../../src/extension/tools/common/toolsService';
 import { TestToolsService } from '../../src/extension/tools/node/test/testToolsService';
+import { IChatDebugFileLoggerService, NullChatDebugFileLoggerService } from '../../src/platform/chat/common/chatDebugFileLoggerService';
 import { IEndpointProvider } from '../../src/platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../src/platform/filesystem/common/fileSystemService';
 import { NodeFileSystemService } from '../../src/platform/filesystem/node/fileSystemServiceImpl';
@@ -38,9 +46,9 @@ import { createServiceIdentifier } from '../../src/util/common/services';
 import { ChatReferenceDiagnostic } from '../../src/util/common/test/shims/chatTypes';
 import { disposableTimeout, IntervalTimer } from '../../src/util/vs/base/common/async';
 import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
+import { Event, Emitter } from '../../src/util/vs/base/common/event';
 import { Lazy } from '../../src/util/vs/base/common/lazy';
-import { DisposableStore, IReference } from '../../src/util/vs/base/common/lifecycle';
-import { Mutable } from '../../src/util/vs/base/common/types';
+import { Disposable, DisposableStore, IReference } from '../../src/util/vs/base/common/lifecycle';
 import { URI } from '../../src/util/vs/base/common/uri';
 import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
@@ -61,6 +69,37 @@ class TestCopilotCLIToolsService extends TestToolsService {
 		}
 
 		return super.invokeTool(name, options, token);
+	}
+}
+export class MockChatPromptFileService extends Disposable implements IChatPromptFileService {
+	declare _serviceBrand: undefined;
+	customAgents: ChatResource[] = [];
+	instructions: ChatResource[] = [];
+	skills: ChatResource[] = [];
+	readonly hooks: readonly ChatResource[] = [];
+	readonly plugins: readonly ChatResource[] = [];
+	private readonly _onDidChangeCustomAgents = this._register(new Emitter<void>());
+	private readonly _onDidChangeInstructions = this._register(new Emitter<void>());
+	private readonly _onDidChangeSkills = this._register(new Emitter<void>());
+	readonly onDidChangeHooks = Event.None;
+	readonly onDidChangePlugins = Event.None;
+
+	get onDidChangeCustomAgents() {
+		return this._onDidChangeCustomAgents.event;
+	}
+
+	get onDidChangeInstructions() {
+		return this._onDidChangeInstructions.event;
+	}
+
+	get onDidChangeSkills() {
+		return this._onDidChangeSkills.event;
+	}
+	get customAgentPromptFiles() {
+		return [];
+	}
+	constructor() {
+		super();
 	}
 }
 
@@ -94,7 +133,7 @@ function restoreEnvVariablesAfterTests() {
 function sessionOptionsFor(workingDirectory: Uri | undefined) {
 	return {
 		workingDirectory,
-		workspaceInfo: {
+		workspace: {
 			folder: workingDirectory,
 			repository: undefined,
 			worktree: undefined,
@@ -156,18 +195,20 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 		}
 	}
 
-	class TestCopilotCLISessionOptions extends CopilotCLISessionOptions {
-		constructor(options: { model?: string; workingDirectory?: Uri; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers'] }, logger: ILogService, private readonly testOptions: Pick<SessionOptions, 'authInfo' | 'copilotUrl'>) {
-			super(options, logger);
+	class TestCopilotCLISessionService extends CopilotCLISessionService {
+		override async monitorSessionFiles() {
+			// Override to do nothing in tests
 		}
-		override toSessionOptions() {
-			const options = super.toSessionOptions();
-			const mutableOptions = options as Mutable<typeof options>;
-			mutableOptions.authInfo = this.testOptions.authInfo ?? options.authInfo;
-			mutableOptions.copilotUrl = this.testOptions.copilotUrl ?? options.copilotUrl;
+		protected override async createSessionsOptions(options: { model?: string; workingDirectory?: Uri; workspace: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers']; sessionId?: string; debugTargetSessionIds?: readonly string[] }) {
+			const testOptionsProvider = this.instantiationService.invokeFunction((accessor) => accessor.get(ITestSessionOptionsProvider));
+			const overrideOptions = await testOptionsProvider.getOptions();
+			const result = await super.createSessionsOptions({ ...options, agent: undefined });
+			const mutableOptions = result.sessionOptions as SessionOptions;
+			mutableOptions.authInfo = overrideOptions.authInfo ?? result.sessionOptions.authInfo;
+			mutableOptions.copilotUrl = overrideOptions.copilotUrl ?? result.sessionOptions.copilotUrl;
 			mutableOptions.enableStreaming = true;
 			mutableOptions.skipCustomInstructions = true;
-			return options;
+			return result;
 		}
 	}
 
@@ -237,21 +278,8 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 		constructor(
 		) {
 		}
-		async askUserQuestion(question: UserInputRequest, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<UserInputResponse | undefined> {
+		async askUserQuestion(question: IQuestion, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<IQuestionAnswer | undefined> {
 			return undefined;
-		}
-	}
-
-	class TestCopilotCLISessionService extends CopilotCLISessionService {
-		override async monitorSessionFiles() {
-			// Override to do nothing in tests
-		}
-		protected override async createSessionsOptions(options: { model?: string; workingDirectory?: Uri; workspaceInfo: IWorkspaceInfo; mcpServers?: SessionOptions['mcpServers'] }): Promise<CopilotCLISessionOptions> {
-			const testOptionsProvider = this.instantiationService.invokeFunction((accessor) => accessor.get(ITestSessionOptionsProvider));
-			const overrideOptions = await testOptionsProvider.getOptions();
-			const sessionOptions = new TestCopilotCLISessionOptions(options, this.logService, overrideOptions);
-
-			return sessionOptions;
 		}
 	}
 
@@ -274,6 +302,40 @@ async function registerChatServices(testingServiceCollection: TestingServiceColl
 	testingServiceCollection.define(IToolsService, new SyncDescriptor(TestCopilotCLIToolsService, [new Set()]));
 	testingServiceCollection.define(IUserQuestionHandler, new SyncDescriptor(UserQuestionHandler));
 	testingServiceCollection.define(IChatDelegationSummaryService, delegatingSummarizerProvider);
+	testingServiceCollection.define(IChatPromptFileService, new SyncDescriptor(MockChatPromptFileService));
+	testingServiceCollection.define(IChatSessionMetadataStore, new SyncDescriptor(MockChatSessionMetadataStore));
+	testingServiceCollection.define(IAgentSessionsWorkspace, { _serviceBrand: undefined, isAgentSessionsWorkspace: false } as IAgentSessionsWorkspace);
+	testingServiceCollection.define(IChatSessionWorkspaceFolderService, {
+		_serviceBrand: undefined,
+		async deleteTrackedWorkspaceFolder() { },
+		async trackSessionWorkspaceFolder() { },
+		async getSessionWorkspaceFolder() { return undefined; },
+		async getSessionWorkspaceFolderEntry() { return undefined; },
+		async getRepositoryProperties() { return undefined; },
+		async handleRequestCompleted() { },
+		async getWorkspaceChanges() { return undefined; },
+		clearWorkspaceChanges() { },
+	} as IChatSessionWorkspaceFolderService);
+	testingServiceCollection.define(IChatSessionWorktreeService, {
+		_serviceBrand: undefined,
+		async createWorktree() { return undefined; },
+		async getWorktreeProperties() { return undefined; },
+		async setWorktreeProperties() { },
+		async getWorktreeRepository() { return undefined; },
+		async getWorktreePath() { return undefined; },
+		async applyWorktreeChanges() { },
+		async updateWorktreeBranch() { },
+		async getSessionIdForWorktree() { return undefined; },
+		async getWorktreeChanges() { return undefined; },
+		async handleRequestCompleted() { },
+		async getAdditionalWorktreeProperties() { return []; },
+		async setAdditionalWorktreeProperties() { },
+		async handleRequestCompletedForWorktree() { },
+		async cleanupWorktreeOnArchive() { return { cleaned: false }; },
+		async recreateWorktreeOnUnarchive() { return { recreated: false }; },
+	} as IChatSessionWorktreeService);
+	testingServiceCollection.define(IPromptVariablesService, new SyncDescriptor(NullPromptVariablesService));
+	testingServiceCollection.define(IChatDebugFileLoggerService, new NullChatDebugFileLoggerService());
 	const simulationWorkspace = new SimulationWorkspace();
 	simulationWorkspace.setupServices(testingServiceCollection);
 
@@ -504,7 +566,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 				const session = await new Promise<IReference<ICopilotCLISession>>((resolve, reject) => {
 					const interval = disposables.add(new IntervalTimer());
 					interval.cancelAndSet(async () => {
-						const session = await sessionService.getSession(sessionId, { readonly: false, ...sessionOptionsFor(workingDirectory) }, CancellationToken.None);
+						const session = await sessionService.getSession({ sessionId, ...sessionOptionsFor(workingDirectory) }, CancellationToken.None);
 						if (session) {
 							interval.dispose();
 							resolve(session);

@@ -77,13 +77,13 @@
 		{
 			"type": "node",
 			"request": "launch",
-			"name": "Launch Copilot Extension - Watch Mode - Sessions OSS",
+			"name": "Launch Copilot Extension - Watch Mode - Agents OSS",
 			"runtimeExecutable": "${workspaceFolder}/../vscode/scripts/code.sh",
 			"windows": {
 				"runtimeExecutable": "${workspaceFolder}/../vscode/scripts/code.bat",
 			},
 			"runtimeArgs": [
-				"--sessions"
+				"--agents"
 			],
 			"attachSimplePort": 5870,
 			"args": [

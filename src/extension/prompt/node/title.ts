@@ -47,8 +47,6 @@ export class ChatTitleProvider implements vscode.ChatTitleProvider {
 		const capturingToken = new CapturingToken(
 			'title',
 			undefined,
-			false,
-			false,
 			undefined,
 			undefined,
 			undefined,

@@ -108,7 +108,7 @@ export class TerminalSlashCommand implements IClaudeSlashCommandHandler {
 			// Set capturing token only after terminal is successfully created to avoid leaking stale session state
 			this.sessionStateService.setCapturingTokenForSession(
 				sessionId,
-				new CapturingToken(`Claude CLI (${sessionId})`, 'claude', false)
+				new CapturingToken(`Claude CLI (${sessionId})`, 'claude')
 			);
 
 			this.logService.info(`[TerminalSlashCommand] Created terminal with Claude CLI configured on port ${config.port}, command: ${cliCommand}, sessionId: ${sessionId}`);
