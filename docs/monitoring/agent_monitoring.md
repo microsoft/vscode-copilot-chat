@@ -46,6 +46,8 @@ Open Copilot Chat and send any message — for example, ask a question in Agent 
 
 Open http://localhost:18888 → **Traces**. You'll see `invoke_agent` spans with nested `chat` and `execute_tool` children.
 
+![Screenshot showing agent interaction traces in the Aspire Dashboard with spans for invoke_agent, chat, and execute_tool.](../media/trace-aspire-dashboard.png)
+
 ### Teardown
 
 ```bash
