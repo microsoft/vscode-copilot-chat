@@ -168,6 +168,7 @@
 	"copilot.edits.description": "Edit files in your workspace",
 	"copilot.agent.description": "Edit files in your workspace in agent mode",
 	"copilot.agent.compact.description": "Free up context by compacting the conversation history. Optionally include extra instructions for compaction.",
+	"copilot.chronicle.description": "Session history tools and insights (standup)",
 	"copilot.workspace.explain.description": "Explain how the code in your active editor works",
 	"copilot.workspace.edit.description": "Edit files in your workspace",
 	"copilot.workspace.review.description": "Review the selected code in your active editor",
@@ -392,7 +393,6 @@
 	"github.copilot.config.agentHistorySummarizationMode": "Mode for agent history summarization.",
 	"github.copilot.config.backgroundCompaction": "Enable background compaction of conversation history.",
 	"github.copilot.config.agentHistorySummarizationInline": "Summarize conversation inline within the agent loop instead of a separate LLM call, maximizing prompt cache hits.",
-
 	"github.copilot.config.useResponsesApiTruncation": "Use Responses API for truncation.",
 	"github.copilot.config.enableReadFileV2": "Enable version 2 of the read file tool.",
 	"github.copilot.config.enableAskAgent": "Enable the Ask agent for answering questions.",

@@ -1508,6 +1508,10 @@
 						"description": "%copilot.agent.compact.description%"
 					},
 					{
+						"name": "chronicle",
+						"description": "%copilot.chronicle.description%"
+					},
+					{
 						"name": "explain",
 						"description": "%copilot.workspace.explain.description%"
 					},
