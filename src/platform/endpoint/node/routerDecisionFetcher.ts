@@ -48,7 +48,7 @@ export class RouterDecisionFetcher {
 	) {
 	}
 
-	async getRouterDecision(query: string, autoModeToken: string, availableModels: string[], stickyThreshold?: number, contextSignals?: RoutingContextSignals): Promise<RouterDecisionResponse> {
+	async getRouterDecision(query: string, autoModeToken: string, availableModels: string[], stickyThreshold?: number, contextSignals?: RoutingContextSignals, conversationId?: string, vscodeRequestId?: string): Promise<RouterDecisionResponse> {
 		const startTime = Date.now();
 		const requestBody: Record<string, unknown> = { prompt: query, available_models: availableModels, ...contextSignals };
 		if (stickyThreshold !== undefined) {
@@ -100,20 +100,28 @@ export class RouterDecisionFetcher {
 			"automode.routerDecision" : {
 				"owner": "lramos15",
 				"comment": "Reports the routing decision made by the auto mode router API",
+				"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The conversation ID in which the routing decision was made" },
+				"vscodeRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The VS Code chat request ID in which the routing decision was made" },
 				"predictedLabel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The predicted classification label (needs_reasoning or no_reasoning)" },
+				"candidateModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The top candidate model recommended by the router before any overrides" },
 				"confidence": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The confidence score of the routing decision" },
 				"latencyMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "The latency of the router API call in milliseconds" },
-				"e2eLatencyMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "The end-to-end latency of the router request in milliseconds, including network overhead" }
+				"e2eLatencyMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "The end-to-end latency of the router request in milliseconds, including network overhead" },
+				"stickyOverride": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the router applied a sticky override (1) or not (0)" }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('automode.routerDecision',
 			{
+				conversationId: conversationId ?? '',
+				vscodeRequestId: vscodeRequestId ?? '',
 				predictedLabel: result.predicted_label,
+				candidateModel: result.candidate_models[0] ?? '',
 			},
 			{
 				confidence: result.confidence,
 				latencyMs: result.latency_ms,
 				e2eLatencyMs: e2eLatencyMs,
+				stickyOverride: result.sticky_override ? 1 : 0,
 			}
 		);
 		return result;

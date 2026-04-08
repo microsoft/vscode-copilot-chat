@@ -368,7 +368,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 				previous_model: entry?.endpoint?.model,
 				turn_number: (entry?.turnCount ?? 0) + 1,
 			};
-			const result = await this._routerDecisionFetcher.getRouterDecision(prompt, token.session_token, token.available_models, undefined, contextSignals);
+const result = await this._routerDecisionFetcher.getRouterDecision(prompt, token.session_token, token.available_models, undefined, contextSignals, conversationId, chatRequest?.id);
 
 			if (!result.candidate_models.length) {
 				return { lastRoutedPrompt: prompt, fallbackReason: 'emptyCandidateList' };
@@ -465,7 +465,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			};
 
 			const result = await this._routerDecisionFetcher.getRouterDecision(
-				prompt, token.session_token, token.available_models, undefined, contextSignals);
+					prompt, token.session_token, token.available_models, undefined, contextSignals, conversationId);
 
 			if (!result.candidate_models.length) {
 				this._logService.trace('[AutomodeService] resolveEndpointForSummarization: empty candidates');
