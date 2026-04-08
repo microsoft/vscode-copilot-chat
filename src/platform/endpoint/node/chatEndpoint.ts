@@ -34,7 +34,7 @@ import { isGeminiFamily } from '../common/chatModelCapabilities';
 import { IDomainService } from '../common/domainService';
 import { CustomModel, IChatModelInformation, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createMessagesRequestBody, processResponseFromMessagesEndpoint } from './messagesApi';
-import { createResponsesRequestBody, processResponseFromChatEndpoint } from './responsesApi';
+import { createResponsesRequestBody, getResponsesApiCompactionThreshold, processResponseFromChatEndpoint } from './responsesApi';
 
 /**
  * The default processor for the stream format from CAPI
@@ -368,7 +368,8 @@ export class ChatEndpoint implements IChatEndpoint {
 		cancellationToken?: CancellationToken | undefined
 	): Promise<AsyncIterableObject<ChatCompletion>> {
 		if (this.useResponsesApi) {
-			return processResponseFromChatEndpoint(this._instantiationService, telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData);
+			const compactionThreshold = getResponsesApiCompactionThreshold(this._configurationService, this._expService, this);
+			return processResponseFromChatEndpoint(this._instantiationService, telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData, compactionThreshold);
 		} else if (this.useMessagesApi) {
 			return processResponseFromMessagesEndpoint(this._instantiationService, telemetryService, logService, response, finishCallback, telemetryData);
 		} else if (!this._supportsStreaming) {
