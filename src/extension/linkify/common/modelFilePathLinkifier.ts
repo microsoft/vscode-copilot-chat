@@ -139,7 +139,9 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 				descriptiveWithAnchor = textBasename === targetBasename;
 			} else {
 				// Text is truly descriptive (e.g., "widget initialization") - allow it
-				descriptiveWithAnchor = true;
+				// But reject text that looks like a command or path rather than a description
+				const textLooksLikeCommand = /[=\\/]|--\w/.test(text);
+				descriptiveWithAnchor = !textLooksLikeCommand;
 			}
 		}
 

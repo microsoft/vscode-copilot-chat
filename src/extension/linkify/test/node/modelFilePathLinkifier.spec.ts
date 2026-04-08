@@ -174,6 +174,24 @@ suite('Model File Path Linkifier', () => {
 		expect(anchor.title).toBe('src/file.ts#L1287-L1290');
 		assertPartsEqual([anchor], [expected]);
 	});
+
+	test('Should NOT linkify command-like text with anchor containing equals sign', async () => {
+		const service = createTestLinkifierService('src/common/spawnAsync.ts');
+		const result = await linkify(service, '[code-insiders --extensionDevelopmentPath=d:\\src\\test-byok-ext](src/common/spawnAsync.ts#L10)');
+		assertPartsEqual(result.parts, ['code-insiders --extensionDevelopmentPath=d:\\src\\test-byok-ext']);
+	});
+
+	test('Should NOT linkify command-like text with anchor containing flags', async () => {
+		const service = createTestLinkifierService('src/file.ts');
+		const result = await linkify(service, '[npm install --save-dev typescript](src/file.ts#L5)');
+		assertPartsEqual(result.parts, ['npm install --save-dev typescript']);
+	});
+
+	test('Should NOT linkify command-like text with anchor containing backslash', async () => {
+		const service = createTestLinkifierService('src/file.ts');
+		const result = await linkify(service, '[d:\\src\\test-byok-ext](src/file.ts#L5)');
+		assertPartsEqual(result.parts, ['d:\\src\\test-byok-ext']);
+	});
 });
 
 suite('Model File Path Linkifier Remote Workspace', () => {
