@@ -18,12 +18,12 @@ The fastest way to see Copilot Chat traces locally — no cloud account required
 ```bash
 docker run --rm -d \
   -p 18888:18888 \
-  -p 4317:18889 \
+  -p 4318:18890 \
   --name aspire-dashboard \
   mcr.microsoft.com/dotnet/aspire-dashboard:latest
 ```
 
-This exposes the dashboard UI on port `18888` and an OTLP (gRPC) endpoint on port `4317`.
+This exposes the dashboard UI on port `18888` and an OTLP (HTTP) endpoint on port `4318`.
 
 ### 2. Configure VS Code
 
@@ -32,8 +32,7 @@ Open **Settings** (`Ctrl+,`) and add:
 ```json
 {
   "github.copilot.chat.otel.enabled": true,
-  "github.copilot.chat.otel.exporterType": "otlp-grpc",
-  "github.copilot.chat.otel.otlpEndpoint": "http://localhost:4317"
+  "github.copilot.chat.otel.captureContent": true
 }
 ```
 
