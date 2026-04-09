@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
-import { IChatSessionMetadataStore, RequestDetails, WorkspaceFolderEntry } from '../chatSessionMetadataStore';
+import { IChatSessionMetadataStore, RepositoryProperties, RequestDetails, WorkspaceFolderEntry } from '../chatSessionMetadataStore';
 import { ChatSessionWorktreeProperties } from '../chatSessionWorktreeService';
 import { IWorkspaceInfo } from '../workspaceInfo';
 
@@ -38,6 +38,13 @@ export class MockChatSessionMetadataStore implements IChatSessionMetadataStore {
 		this._workspaceFolders.set(sessionId, entry);
 	}
 
+	async storeRepositoryProperties(_sessionId: string, _properties: RepositoryProperties): Promise<void> {
+	}
+
+	async getRepositoryProperties(_sessionId: string): Promise<RepositoryProperties | undefined> {
+		return undefined;
+	}
+
 	async getSessionIdForWorktree(_folder: vscode.Uri): Promise<string | undefined> {
 		return undefined;
 	}
@@ -59,10 +66,6 @@ export class MockChatSessionMetadataStore implements IChatSessionMetadataStore {
 
 	async getSessionWorkspaceFolderEntry(sessionId: string): Promise<WorkspaceFolderEntry | undefined> {
 		return undefined;
-	}
-
-	async getUsedWorkspaceFolders(): Promise<WorkspaceFolderEntry[]> {
-		return Array.from(this._workspaceFolders.values());
 	}
 
 	async getAdditionalWorkspaces(sessionId: string): Promise<IWorkspaceInfo[]> {

@@ -20,6 +20,8 @@ export interface IReplaceStringToolParams {
 	newString: string;
 }
 
+export const replaceStringBatchDescription = 'This is a tool for making edits in an existing file in the workspace. For moving or renaming files, use run in terminal tool with the \'mv\' command instead. For larger edits, split them into smaller edits and batch them with multi_replace_string_in_file in a single call. Before editing, always ensure you have the context to understand the file\'s contents and context. To edit a file, provide: 1) filePath (absolute path), 2) oldString (MUST be the exact literal text to replace including all whitespace, indentation, newlines, and surrounding code etc), and 3) newString (MUST be the exact literal text to replace `oldString` with (also including all whitespace, indentation, newlines, and surrounding code etc.). Ensure the resulting code is correct and idiomatic.). Each use of this tool replaces exactly ONE occurrence of oldString.\n\nCRITICAL for `oldString`: Must uniquely identify the single instance to change. Include at least 3 lines of context BEFORE and AFTER the target text, matching whitespace and indentation precisely. If this string matches multiple locations, or does not match exactly, the tool will fail. Never use \'Lines 123-456 omitted\' from summarized documents or ...existing code... comments in the oldString or newString.';
+
 export class ReplaceStringTool<T extends IReplaceStringToolParams = IReplaceStringToolParams> extends AbstractReplaceStringTool<T> {
 	public static toolName = ToolName.ReplaceString;
 	public static readonly nonDeferred = true;

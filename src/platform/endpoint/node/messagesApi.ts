@@ -149,8 +149,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	if (options.enableThinking) {
 		const configuredBudget = configurationService.getConfig(ConfigKey.AnthropicThinkingBudget);
 		const thinkingExplicitlyDisabled = configuredBudget === 0;
-		const forceExtendedThinking = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicForceExtendedThinking, experimentationService);
-		if (endpoint.supportsAdaptiveThinking && !thinkingExplicitlyDisabled && !forceExtendedThinking) {
+		if (endpoint.supportsAdaptiveThinking && !thinkingExplicitlyDisabled) {
 			thinkingConfig = { type: 'adaptive' };
 		} else if (!thinkingExplicitlyDisabled && endpoint.maxThinkingBudget && endpoint.minThinkingBudget) {
 			const maxTokens = options.postOptions.max_tokens ?? 1024;
@@ -169,11 +168,9 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	}
 
 	const thinkingEnabled = !!thinkingConfig;
-
-	// Build output config with effort level for thinking, validating reasoningEffort
 	let effort: 'low' | 'medium' | 'high' | undefined;
-	if (thinkingConfig) {
-		const candidateEffort = reasoningEffort;
+	if (thinkingConfig && endpoint.supportsReasoningEffort?.length) {
+		const candidateEffort = configurationService.getConfig(ConfigKey.TeamInternal.AnthropicThinkingEffort) ?? reasoningEffort;
 		if (candidateEffort === 'low' || candidateEffort === 'medium' || candidateEffort === 'high') {
 			effort = candidateEffort;
 		}

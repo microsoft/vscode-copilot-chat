@@ -79,7 +79,7 @@ export interface IWorkspaceChunkSearchService extends IDisposable {
 		token: CancellationToken,
 	): Promise<WorkspaceChunkSearchResult>;
 
-	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>>;
+	triggerIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>>;
 
 	deleteExternalIngestWorkspaceIndex(): Promise<void>;
 }
@@ -174,12 +174,12 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 		return impl.searchFileChunks(sizing, query, options, telemetryInfo, progress, token);
 	}
 
-	async triggerRemoteIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+	async triggerIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
 		const impl = await raceCancellationError(this.tryInit(false), token);
 		if (!impl) {
 			throw new Error('Workspace chunk search service not available');
 		}
-		return impl.triggerRemoteIndexing(trigger, onProgress, telemetryInfo, token);
+		return impl.triggerIndexing(trigger, onProgress, telemetryInfo, token);
 	}
 
 	async deleteExternalIngestWorkspaceIndex(): Promise<void> {
@@ -248,8 +248,8 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		return this._codeSearchChunkSearch.isAvailable(new TelemetryCorrelationId('WorkspaceChunkSearchServiceImpl.isAvailable'), false, CancellationToken.None);
 	}
 
-	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
-		return this._codeSearchChunkSearch.triggerRemoteIndexing(trigger, onProgress, telemetryInfo, token);
+	triggerIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+		return this._codeSearchChunkSearch.triggerIndexing(trigger, onProgress, telemetryInfo, token);
 	}
 
 	deleteExternalIngestWorkspaceIndex(): Promise<void> {
@@ -606,7 +606,7 @@ export class NullWorkspaceChunkSearchService implements IWorkspaceChunkSearchSer
 	searchFileChunks(sizing: WorkspaceChunkSearchSizing, query: WorkspaceChunkQuery, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, progress: vscode.Progress<vscode.ChatResponsePart> | undefined, token: CancellationToken): Promise<WorkspaceChunkSearchResult> {
 		throw new Error('Method not implemented.');
 	}
-	triggerRemoteIndexing(_trigger?: BuildIndexTriggerReason, _onProgress?: (message: string) => void, _telemetryInfo?: TelemetryCorrelationId, _token?: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+	triggerIndexing(_trigger?: BuildIndexTriggerReason, _onProgress?: (message: string) => void, _telemetryInfo?: TelemetryCorrelationId, _token?: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
 		return Promise.resolve(Result.ok(true));
 	}
 	deleteExternalIngestWorkspaceIndex(): Promise<void> {

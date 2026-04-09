@@ -142,7 +142,6 @@ export class ToolsContribution extends Disposable {
 			}
 
 			const selected = await vscode.window.showQuickPick(items, {
-				title: l10n.t('Memory'),
 				placeHolder: l10n.t('Select a memory file to view'),
 			});
 

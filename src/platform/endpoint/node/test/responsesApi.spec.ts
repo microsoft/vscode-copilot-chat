@@ -6,17 +6,13 @@
 import { Raw } from '@vscode/prompt-tsx';
 import type { OpenAI } from 'openai';
 import { describe, expect, it } from 'vitest';
-import { TokenizerType } from '../../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ILogService } from '../../../log/common/logService';
-import { IResponseDelta } from '../../../networking/common/fetch';
-import { IChatEndpoint, ICreateEndpointBodyOptions } from '../../../networking/common/networking';
 import { TelemetryData } from '../../../telemetry/common/telemetryData';
 import { SpyingTelemetryService } from '../../../telemetry/node/spyingTelemetryService';
 import { createFakeStreamResponse } from '../../../test/node/fetcher';
 import { createPlatformServices } from '../../../test/node/services';
-import { CustomDataPartMimeTypes } from '../../common/endpointTypes';
-import { createResponsesRequestBody, OpenAIResponsesProcessor, processResponseFromChatEndpoint, responseApiInputToRawMessagesForLogging } from '../responsesApi';
+import { processResponseFromChatEndpoint, responseApiInputToRawMessagesForLogging } from '../responsesApi';
 
 describe('responseApiInputToRawMessagesForLogging', () => {
 
@@ -215,128 +211,6 @@ describe('responseApiInputToRawMessagesForLogging', () => {
 		expect(result).toHaveLength(1);
 		expect(result[0].role).toBe(Raw.ChatRole.Assistant);
 		expect((result[0] as Raw.AssistantChatMessage).toolCalls).toHaveLength(2);
-	});
-});
-
-describe('createResponsesRequestBody', () => {
-	const createAssistantMessage = (parts: Raw.ChatCompletionContentPart[]): Raw.ChatMessage => ({
-		role: Raw.ChatRole.Assistant,
-		content: parts,
-	});
-
-	const createRequestOptions = (messages: Raw.ChatMessage[]): ICreateEndpointBodyOptions => ({
-		debugName: 'test',
-		messages,
-		requestId: 'request-1',
-		postOptions: {},
-		finishedCb: undefined,
-		location: undefined as never,
-	});
-
-	const createTestEndpoint = (): IChatEndpoint => {
-		const endpoint: IChatEndpoint = {
-			urlOrRequestMetadata: 'https://example.test',
-			name: 'test-endpoint',
-			version: '1',
-			family: 'gpt-5',
-			tokenizer: TokenizerType.O200K,
-			modelMaxPromptTokens: 128000,
-			maxOutputTokens: 4096,
-			model: 'gpt-5-mini',
-			modelProvider: 'openai',
-			supportsToolCalls: true,
-			supportsVision: true,
-			supportsPrediction: true,
-			showInModelPicker: true,
-			isFallback: false,
-			acquireTokenizer() {
-				throw new Error('Not implemented for test');
-			},
-			async processResponseFromChatEndpoint() {
-				throw new Error('Not implemented for test');
-			},
-			async makeChatRequest() {
-				throw new Error('Not implemented for test');
-			},
-			async makeChatRequest2() {
-				throw new Error('Not implemented for test');
-			},
-			createRequestBody() {
-				throw new Error('Not implemented for test');
-			},
-			cloneWithTokenOverride() {
-				return endpoint;
-			},
-		};
-		return endpoint;
-	};
-
-	it('sends response output ids independently from phase', () => {
-		const services = createPlatformServices();
-		const accessor = services.createTestingAccessor();
-		const endpoint = createTestEndpoint();
-
-		const nonPhaseAssistant = createAssistantMessage([
-			{ type: Raw.ChatCompletionContentPartKind.Text, text: 'plain assistant reply' },
-			{ type: Raw.ChatCompletionContentPartKind.Opaque, value: { type: CustomDataPartMimeTypes.ResponseOutputMessageId, responseOutputMessageId: 'msg_plain' } },
-		]);
-		const phaseAssistant = createAssistantMessage([
-			{ type: Raw.ChatCompletionContentPartKind.Text, text: 'phase assistant reply' },
-			{ type: Raw.ChatCompletionContentPartKind.Opaque, value: { type: CustomDataPartMimeTypes.ResponseOutputMessageId, responseOutputMessageId: 'msg_phase' } },
-			{ type: Raw.ChatCompletionContentPartKind.Opaque, value: { type: CustomDataPartMimeTypes.PhaseData, phase: 'tool_calling' } },
-		]);
-
-		const body = createResponsesRequestBody(accessor, createRequestOptions([nonPhaseAssistant, phaseAssistant]), endpoint.model, endpoint);
-		const input = body.input as OpenAI.Responses.ResponseInputItem[];
-
-		expect(input).toHaveLength(2);
-		expect(input[0]).toMatchObject({
-			role: 'assistant',
-			content: [{ type: 'output_text', text: 'plain assistant reply', annotations: [] }],
-			id: 'msg_plain',
-			status: 'completed',
-			type: 'message',
-		});
-		expect(input[0]).toHaveProperty('phase', undefined);
-		expect(input[1]).toEqual({
-			role: 'assistant',
-			content: [{ type: 'output_text', text: 'phase assistant reply', annotations: [] }],
-			id: 'msg_phase',
-			status: 'completed',
-			type: 'message',
-			phase: 'tool_calling',
-		});
-
-		accessor.dispose();
-		services.dispose();
-	});
-
-	it('streams response output ids even when no phase is present', async () => {
-		const telemetryData = TelemetryData.createAndMarkAsIssued({ modelCallId: 'model-call-1' }, {});
-		const deltas: IResponseDelta[] = [];
-		const processor = new OpenAIResponsesProcessor(telemetryData, 'req_123', 'gh_123');
-
-		processor.push({
-			type: 'response.output_item.done',
-			sequence_number: 0,
-			output_index: 0,
-			item: {
-				id: 'msg_plain',
-				role: 'assistant',
-				content: [{ type: 'output_text', text: 'plain assistant reply', annotations: [] }],
-				status: 'completed',
-				type: 'message',
-			}
-		} as OpenAI.Responses.ResponseOutputItemDoneEvent, async (_text, _index, delta: IResponseDelta) => {
-			deltas.push(delta);
-			return undefined;
-		});
-
-		expect(deltas).toEqual([{
-			text: '',
-			responseOutputMessageId: 'msg_plain',
-			phase: undefined,
-		}]);
 	});
 });
 

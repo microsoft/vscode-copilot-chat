@@ -12,7 +12,7 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { constObservable, observableValue } from '../../../../util/vs/base/common/observableInternal';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { IChatSessionMetadataStore, WorkspaceFolderEntry } from '../../common/chatSessionMetadataStore';
+import { IChatSessionMetadataStore, RepositoryProperties, WorkspaceFolderEntry } from '../../common/chatSessionMetadataStore';
 import { ChatSessionWorkspaceFolderService } from '../chatSessionWorkspaceFolderServiceImpl';
 
 /**
@@ -71,11 +71,16 @@ class MockLogService extends mock<ILogService>() {
 
 class MockMetadataStore extends mock<IChatSessionMetadataStore>() {
 	private readonly _data = new Map<string, WorkspaceFolderEntry>();
+	private readonly _repoData = new Map<string, RepositoryProperties>();
 	override storeWorktreeInfo = vi.fn(async () => { });
 	override storeWorkspaceFolderInfo = vi.fn(async (_sessionId: string, _entry: WorkspaceFolderEntry) => {
 		this._data.set(_sessionId, _entry);
 	});
+	override storeRepositoryProperties = vi.fn(async (_sessionId: string, properties: RepositoryProperties) => {
+		this._repoData.set(_sessionId, properties);
+	});
 	override getWorktreeProperties = vi.fn(async () => undefined);
+	override getRepositoryProperties = vi.fn(async (_sessionId: string) => this._repoData.get(_sessionId));
 	override getSessionWorkspaceFolder = vi.fn(async (_sessionId: string): Promise<vscode.Uri | undefined> => {
 		const entry = this._data.get(_sessionId);
 		if (entry?.folderPath) {
@@ -83,9 +88,9 @@ class MockMetadataStore extends mock<IChatSessionMetadataStore>() {
 		}
 		return undefined;
 	});
-	override getUsedWorkspaceFolders = vi.fn(async (): Promise<WorkspaceFolderEntry[]> => Array.from(this._data.values()));
 	override deleteSessionMetadata = vi.fn(async (_sessionId: string) => {
 		this._data.delete(_sessionId);
+		this._repoData.delete(_sessionId);
 	});
 }
 
@@ -301,127 +306,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 		});
 	});
 
-	describe('getRecentFolders', () => {
-		it('should return empty array when no folders tracked', async () => {
-			const result = await service.getRecentFolders();
-			expect(result).toEqual([]);
-		});
-
-		it('should return tracked folders sorted by access time (newest first)', async () => {
-			// Add folders with controlled timestamps
-			await service.trackSessionWorkspaceFolder('session-1', vscode.Uri.file('/path/1').fsPath);
-			// Small delay to ensure different timestamps
-			await new Promise(resolve => setTimeout(resolve, 10));
-			await service.trackSessionWorkspaceFolder('session-2', vscode.Uri.file('/path/2').fsPath);
-			await new Promise(resolve => setTimeout(resolve, 10));
-			await service.trackSessionWorkspaceFolder('session-3', vscode.Uri.file('/path/3').fsPath);
-
-			const result = await service.getRecentFolders();
-
-			expect(result.length).toBe(3);
-			// Most recent first
-			expect(result[0].folder.fsPath).toBe(vscode.Uri.file('/path/3').fsPath);
-			expect(result[1].folder.fsPath).toBe(vscode.Uri.file('/path/2').fsPath);
-			expect(result[2].folder.fsPath).toBe(vscode.Uri.file('/path/1').fsPath);
-		});
-
-		it('should include lastAccessTime for each folder', async () => {
-			await service.trackSessionWorkspaceFolder('session-1', vscode.Uri.file('/path/1').fsPath);
-			const result = await service.getRecentFolders();
-
-			expect(result.length).toBeGreaterThan(0);
-			expect(result[0]).toHaveProperty('lastAccessTime');
-			expect(typeof result[0].lastAccessTime).toBe('number');
-		});
-
-		it('should filter out entries with missing folderPath', async () => {
-			// Override mock to return entries with and without folderPath
-			metadataStore.getUsedWorkspaceFolders.mockResolvedValueOnce([
-				{ folderPath: vscode.Uri.file('/path/1').fsPath, timestamp: Date.now() },
-				{ folderPath: '', timestamp: Date.now() },
-			]);
-
-			const result = await service.getRecentFolders();
-
-			// Should only include the valid entry
-			expect(result.length).toBe(1);
-			expect(result[0].folder.fsPath).toBe(vscode.Uri.file('/path/1').fsPath);
-		});
-
-		it('should return entries from metadata store with valid folderPath', async () => {
-			metadataStore.getUsedWorkspaceFolders.mockResolvedValueOnce([
-				{ folderPath: vscode.Uri.file('/some/path').fsPath, timestamp: Date.now() }
-			]);
-
-			const result = await service.getRecentFolders();
-
-			expect(result.length).toBe(1);
-			expect(result[0].folder.fsPath).toBe(vscode.Uri.file('/some/path').fsPath);
-		});
-
-		it('should handle entries with missing fields gracefully', async () => {
-			// Override mock to return entries with missing fields
-			metadataStore.getUsedWorkspaceFolders.mockResolvedValueOnce([
-				{ folderPath: '', timestamp: 0 } as WorkspaceFolderEntry
-			]);
-
-			// Should not throw
-			const result = await service.getRecentFolders();
-			expect(Array.isArray(result)).toBe(true);
-			expect(result.length).toBe(0);
-		});
-	});
-
-	describe('deleteRecentFolder', () => {
-		it('should handle UUID entries (empty folderPath)', async () => {
-			// Manually inject entry with no folderPath
-			const data = {
-				'session-1': { timestamp: Date.now() }
-			};
-			await extensionContext.globalState.update('github.copilot.cli.sessionWorkspaceFolders', data);
-
-			// Should not throw
-			await expect(service.deleteRecentFolder(vscode.Uri.file('/some/path'))).resolves.toBeUndefined();
-		});
-
-		it('should exclude deleted folder from subsequent getRecentFolders calls', async () => {
-			await service.trackSessionWorkspaceFolder('session-1', vscode.Uri.file('/path/1').fsPath);
-			await service.trackSessionWorkspaceFolder('session-2', vscode.Uri.file('/path/2').fsPath);
-
-			await service.deleteRecentFolder(vscode.Uri.file('/path/1'));
-
-			const recent = await service.getRecentFolders();
-			const paths = recent.map(r => r.folder.fsPath);
-			expect(paths).not.toContain(vscode.Uri.file('/path/1').fsPath);
-			expect(paths).toContain(vscode.Uri.file('/path/2').fsPath);
-		});
-
-		it('should not affect session workspace folder tracking after delete', async () => {
-			await service.trackSessionWorkspaceFolder('session-1', vscode.Uri.file('/path/1').fsPath);
-
-			await service.deleteRecentFolder(vscode.Uri.file('/path/1'));
-
-			// The session folder itself should still be retrievable (deleteRecentFolder only hides from MRU)
-			const folder = await service.getSessionWorkspaceFolder('session-1');
-			expect(folder?.fsPath).toBe(vscode.Uri.file('/path/1').fsPath);
-		});
-	});
-
 	describe('cleanupOldEntries', () => {
-		it('should handle large number of entries from metadata store', async () => {
-			const entries: WorkspaceFolderEntry[] = [];
-			for (let i = 0; i < 100; i++) {
-				entries.push({
-					folderPath: vscode.Uri.file(`/old/path/${i}`).fsPath,
-					timestamp: Date.now() - 10000 + i
-				});
-			}
-			metadataStore.getUsedWorkspaceFolders.mockResolvedValueOnce(entries);
-
-			const result = await service.getRecentFolders();
-			expect(result.length).toBe(100);
-		});
-
 		it('should keep newer entries and remove older ones', async () => {
 			const MAX_ENTRIES = 1500;
 
@@ -455,54 +340,6 @@ describe('ChatSessionWorkspaceFolderService', () => {
 	});
 
 	describe('integration scenarios', () => {
-		it('should maintain data across multiple operations', async () => {
-			await service.trackSessionWorkspaceFolder('session-1', vscode.Uri.file('/path/1').fsPath);
-			await service.trackSessionWorkspaceFolder('session-2', vscode.Uri.file('/path/2').fsPath);
-			await service.trackSessionWorkspaceFolder('session-3', vscode.Uri.file('/path/3').fsPath);
-
-			let recent = await service.getRecentFolders();
-			expect(recent.length).toBe(3);
-
-			await service.deleteRecentFolder(vscode.Uri.file('/path/2'));
-
-			recent = await service.getRecentFolders();
-			expect(recent.length).toBe(2);
-
-			const folder1 = await service.getSessionWorkspaceFolder('session-1');
-			const folder3 = await service.getSessionWorkspaceFolder('session-3');
-			expect(folder1?.fsPath).toBe(vscode.Uri.file('/path/1').fsPath);
-			expect(folder3?.fsPath).toBe(vscode.Uri.file('/path/3').fsPath);
-		});
-
-		it('should handle rapid concurrent operations', async () => {
-			const operations = [];
-			for (let i = 0; i < 50; i++) {
-				operations.push(
-					service.trackSessionWorkspaceFolder(`session-${i}`, vscode.Uri.file(`/path/${i}`).fsPath)
-				);
-			}
-
-			await Promise.all(operations);
-
-			const recent = await service.getRecentFolders();
-			expect(recent.length).toBe(50);
-		});
-
-		it('should maintain consistency after delete and re-track', async () => {
-			const sessionId = 'session-1';
-			const folderPath = vscode.Uri.file('/path/1').fsPath;
-
-			await service.trackSessionWorkspaceFolder(sessionId, folderPath);
-			await service.deleteTrackedWorkspaceFolder(sessionId);
-			await service.trackSessionWorkspaceFolder(sessionId, folderPath);
-
-			const result = await service.getSessionWorkspaceFolder(sessionId);
-			expect(result?.fsPath).toBe(folderPath);
-
-			const recent = await service.getRecentFolders();
-			expect(recent.length).toBe(1);
-		});
-
 		describe('getWorkspaceChanges - cache invalidation', () => {
 			let headCommitHash: ReturnType<typeof observableValue<string | undefined>>;
 
@@ -535,10 +372,14 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
 				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
 
-				const folderUri = vscode.Uri.file('/repo');
+				const sessionId = 'session-1';
+				await metadataStore.storeRepositoryProperties(sessionId, {
+					repositoryPath: '/repo',
+					branchName: 'main',
+				});
 
-				const first = await service.getWorkspaceChanges(folderUri);
-				const second = await service.getWorkspaceChanges(folderUri);
+				const first = await service.getWorkspaceChanges(sessionId);
+				const second = await service.getWorkspaceChanges(sessionId);
 
 				expect(first).toBe(second);
 				// getRepository is called once for the first call, the second uses cache
@@ -550,12 +391,16 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
 				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
 
-				const folderUri = vscode.Uri.file('/repo');
+				const sessionId = 'session-1';
+				await metadataStore.storeRepositoryProperties(sessionId, {
+					repositoryPath: '/repo',
+					branchName: 'main',
+				});
 
-				await service.getWorkspaceChanges(folderUri);
-				service.clearWorkspaceChanges(folderUri);
+				await service.getWorkspaceChanges(sessionId);
+				service.clearWorkspaceChanges(sessionId);
 
-				await service.getWorkspaceChanges(folderUri);
+				await service.getWorkspaceChanges(sessionId);
 				expect(gitService.getRepository).toHaveBeenCalledTimes(2);
 			});
 
@@ -564,27 +409,39 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
 				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
 
-				const folderUri = vscode.Uri.file('/repo');
+				const sessionId = 'session-1';
+				await metadataStore.storeRepositoryProperties(sessionId, {
+					repositoryPath: '/repo',
+					branchName: 'main',
+				});
 
-				await service.getWorkspaceChanges(folderUri);
-				await service.handleRequestCompleted(folderUri);
+				await service.getWorkspaceChanges(sessionId);
+				await service.handleRequestCompleted(sessionId);
 
-				await service.getWorkspaceChanges(folderUri);
+				await service.getWorkspaceChanges(sessionId);
 				expect(gitService.getRepository).toHaveBeenCalledTimes(2);
 			});
 
 			it('should return empty array when repository has no changes', async () => {
 				const repo = makeRepoContext({ changes: undefined });
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
+				await metadataStore.storeRepositoryProperties('session-1', {
+					repositoryPath: '/repo',
+					branchName: 'main',
+				});
 
-				const result = await service.getWorkspaceChanges(vscode.Uri.file('/repo'));
+				const result = await service.getWorkspaceChanges('session-1');
 				expect(result).toEqual([]);
 			});
 
 			it('should return empty array when no repository is found', async () => {
 				gitService.getRepository = vi.fn().mockResolvedValue(undefined);
+				await metadataStore.storeRepositoryProperties('session-1', {
+					repositoryPath: '/repo',
+					branchName: 'main',
+				});
 
-				const result = await service.getWorkspaceChanges(vscode.Uri.file('/no-repo'));
+				const result = await service.getWorkspaceChanges('session-1');
 				expect(result).toEqual([]);
 			});
 
@@ -593,15 +450,19 @@ describe('ChatSessionWorkspaceFolderService', () => {
 				gitService.getRepository = vi.fn().mockResolvedValue(repo);
 				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 1, deletions: 0 });
 
-				const folderUri = vscode.Uri.file('/repo');
+				const sessionId = 'session-1';
+				await metadataStore.storeRepositoryProperties(sessionId, {
+					repositoryPath: '/repo',
+					branchName: 'main',
+				});
 
 				// Clear cache between calls to force re-entry into getWorkspaceChanges
-				await service.getWorkspaceChanges(folderUri);
-				service.clearWorkspaceChanges(folderUri);
-				await service.getWorkspaceChanges(folderUri);
+				await service.getWorkspaceChanges(sessionId);
+				service.clearWorkspaceChanges(sessionId);
+				await service.getWorkspaceChanges(sessionId);
 
-				service.clearWorkspaceChanges(folderUri);
-				await service.getWorkspaceChanges(folderUri);
+				service.clearWorkspaceChanges(sessionId);
+				await service.getWorkspaceChanges(sessionId);
 
 				// All 3 calls should have hit getRepository (cache was manually cleared each time)
 				expect(gitService.getRepository).toHaveBeenCalledTimes(3);
@@ -623,23 +484,35 @@ describe('ChatSessionWorkspaceFolderService', () => {
 					});
 				gitService.diffIndexWithHEADShortStats = vi.fn().mockResolvedValue({ insertions: 0, deletions: 0 });
 
-				await service.getWorkspaceChanges(folder1);
-				await service.getWorkspaceChanges(folder2);
+				const sessionId1 = 'session-1';
+				const sessionId2 = 'session-2';
 
-				// Invalidate only folder1's cache
-				service.clearWorkspaceChanges(folder1);
+				await service.trackSessionWorkspaceFolder(sessionId1, folder1.fsPath, {
+					repositoryPath: folder1.fsPath,
+					branchName: 'main',
+				});
+				await service.trackSessionWorkspaceFolder(sessionId2, folder2.fsPath, {
+					repositoryPath: folder2.fsPath,
+					branchName: 'main',
+				});
 
-				// folder2 should still use cache
-				await service.getWorkspaceChanges(folder2);
-				// folder1 needs refresh
-				await service.getWorkspaceChanges(folder1);
+				await service.getWorkspaceChanges(sessionId1);
+				await service.getWorkspaceChanges(sessionId2);
 
-				// folder1: called twice (initial + after invalidation), folder2: called once (cached)
+				// Invalidate only sessionId1's cache
+				service.clearWorkspaceChanges(sessionId1);
+
+				// sessionId2 should still use cache
+				await service.getWorkspaceChanges(sessionId2);
+				// sessionId1 needs refresh
+				await service.getWorkspaceChanges(sessionId1);
+
+				// sessionId1: called twice (initial + after invalidation), sessionId2: called once (cached)
 				const calls = (gitService.getRepository as ReturnType<typeof vi.fn>).mock.calls;
-				const folder1Calls = calls.filter((c: URI[]) => c[0].fsPath === folder1.fsPath).length;
-				const folder2Calls = calls.filter((c: URI[]) => c[0].fsPath === folder2.fsPath).length;
-				expect(folder1Calls).toBe(2);
-				expect(folder2Calls).toBe(1);
+				const sessionId1Calls = calls.filter((c: URI[]) => c[0].fsPath === folder1.fsPath).length;
+				const sessionId2Calls = calls.filter((c: URI[]) => c[0].fsPath === folder2.fsPath).length;
+				expect(sessionId1Calls).toBe(2);
+				expect(sessionId2Calls).toBe(1);
 			});
 		});
 	});

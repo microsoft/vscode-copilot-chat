@@ -30,7 +30,7 @@ import { ToolName } from '../../../../tools/common/toolNames';
 import { PromptRenderer } from '../../base/promptRenderer';
 import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 import { PromptRegistry } from '../promptRegistry';
-import { ConversationHistorySummarizationPrompt, SummarizedConversationHistoryMetadata, SummarizedConversationHistoryPropsBuilder } from '../summarizedConversationHistory';
+import { ConversationHistorySummarizationPrompt, extractInlineSummary, InlineSummarizationRequestedMetadata, stripToolSearchMessages, SummarizedConversationHistory, SummarizedConversationHistoryMetadata, SummarizedConversationHistoryPropsBuilder } from '../summarizedConversationHistory';
 
 suite('Agent Summarization', () => {
 	let accessor: ITestingServicesAccessor;
@@ -360,4 +360,479 @@ suite('Agent Summarization', () => {
 	test('summary for previous turn, no tool call rounds', async () => testSummarizeWithNoRoundsInCurrentTurn(TestPromptType.Agent));
 	test('FullSummarization - summary for previous turn, no tool call rounds', async () => testSummarizeWithNoRoundsInCurrentTurn(TestPromptType.FullSummarization));
 	test('SimpleSummarization - summary for previous turn, no tool call rounds', async () => testSummarizeWithNoRoundsInCurrentTurn(TestPromptType.SimpleSummarization));
+
+	function createSummarizationTestContext() {
+		const instaService = accessor.get(IInstantiationService);
+		const endpoint = instaService.createInstance(MockEndpoint, undefined);
+
+		const toolCallRounds = [
+			new ToolCallRound('ok', [createEditFileToolCall(1)]),
+			new ToolCallRound('ok 2', [createEditFileToolCall(2)]),
+			new ToolCallRound('ok 3', [createEditFileToolCall(3)]),
+		];
+
+		const turn = new Turn('turnId', { type: 'user', message: 'hello' });
+		const testConversation = new Conversation('sessionId', [turn]);
+
+		const promptContext: IBuildPromptContext = {
+			chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
+			history: [],
+			query: 'edit this file',
+			toolCallRounds,
+			toolCallResults: createEditFileToolResult(1, 2, 3),
+			tools,
+			conversation: testConversation,
+		};
+
+		const historyProps = {
+			priority: 1,
+			endpoint,
+			location: ChatLocation.Panel,
+			promptContext,
+			maxToolResultLength: Infinity,
+			enableCacheBreakpoints: true,
+			triggerSummarize: true,
+		};
+
+		return { instaService, endpoint, toolCallRounds, turn, testConversation, promptContext, historyProps };
+	}
+
+	test('failed summarization throws from renderer (fallback is in agentIntent)', async () => {
+		// Keep the summary tiny-budgeted so the failure is immediate. The PromptRenderer propagates the error;
+		// the fallback to a no-cache-breakpoints render lives in agentIntent.ts's
+		// renderWithSummarization, not here.
+		chatResponse[0] = 'summary that is definitely too large for one token';
+		const { instaService, endpoint, historyProps } = createSummarizationTestContext();
+
+		const renderer = PromptRenderer.create(instaService, endpoint, SummarizedConversationHistory, {
+			...historyProps,
+			maxSummaryTokens: 1,
+		});
+		await expect(renderer.render()).rejects.toThrow('Summary too large');
+	});
+
+	test('successful summarization records metadata on render result', async () => {
+		chatResponse[0] = 'summarized successfully!';
+		const { instaService, endpoint, historyProps } = createSummarizationTestContext();
+
+		const renderer = PromptRenderer.create(instaService, endpoint, SummarizedConversationHistory, historyProps);
+		const result = await renderer.render();
+
+		const summaryMeta = result.metadata.get(SummarizedConversationHistoryMetadata);
+		expect(summaryMeta).toBeDefined();
+		expect(summaryMeta!.text).toBe('summarized successfully!');
+		expect(summaryMeta!.toolCallRoundId).toBeTruthy();
+	});
+
+	test('failed summarization does not set round.summary', async () => {
+		chatResponse[0] = 'summary that is definitely too large for one token';
+		const { instaService, endpoint, toolCallRounds, historyProps } = createSummarizationTestContext();
+
+		const renderer = PromptRenderer.create(instaService, endpoint, SummarizedConversationHistory, {
+			...historyProps,
+			maxSummaryTokens: 1,
+		});
+		await expect(renderer.render()).rejects.toThrow('Summary too large');
+
+		// None of the rounds should have summary set since summarization failed
+		for (const round of toolCallRounds) {
+			expect(round.summary).toBeUndefined();
+		}
+	});
+
+	test('simple mode summarization with small token budget renders zero messages (repro for No messages provided)', async () => {
+		// Repro for: "Prompt failed validation with the reason: No messages provided"
+		//
+		// Root cause: when modelMaxPromptTokens is small enough that the summarization
+		// prompt content exceeds the budget, prompt-tsx prunes all child elements.
+		// After pruning, toChatMessages() silently skips messages whose content is
+		// empty (isEmpty check), producing an empty messages array — without throwing
+		// BudgetExceededError. The downstream makeChatRequest2 then hits the
+		// isValidChatPayload check: "No messages provided".
+		const instaService = accessor.get(IInstantiationService);
+		const endpoint = instaService.createInstance(MockEndpoint, 'claude-sonnet');
+		endpoint.modelMaxPromptTokens = 5; // So small that even a single short message cannot fit
+
+		const toolCallRounds = [
+			new ToolCallRound('ok', [createEditFileToolCall(1)]),
+			new ToolCallRound('ok 2', [createEditFileToolCall(2)]),
+		];
+
+		const turn = new Turn('turnId', { type: 'user', message: 'hello' });
+		const testConversation = new Conversation('sessionId', [turn]);
+
+		const promptContext: IBuildPromptContext = {
+			chatVariables: new ChatVariablesCollection([]),
+			history: [],
+			query: 'edit this file',
+			toolCallRounds,
+			toolCallResults: createEditFileToolResult(1, 2),
+			tools,
+			conversation: testConversation,
+		};
+
+		const baseProps = {
+			priority: 1,
+			endpoint,
+			location: ChatLocation.Panel,
+			promptContext,
+			maxToolResultLength: Infinity,
+		};
+
+		const propsInfo = instaService.createInstance(SummarizedConversationHistoryPropsBuilder).getProps(baseProps);
+		const renderer = PromptRenderer.create(instaService, endpoint, ConversationHistorySummarizationPrompt, { ...propsInfo.props, simpleMode: true });
+		const result = await renderer.render();
+
+		// prompt-tsx prunes all content and silently drops empty messages → 0 messages
+		expect(result.messages.length).toBe(0);
+	});
+
+	test('failure metadata on turn prevents repeated foreground summarization attempts', async () => {
+		// This test verifies the contract that agentIntent.ts relies on:
+		// after a foreground summarization failure, setting SummarizedConversationHistoryMetadata
+		// with outcome !== 'success' on the turn causes the retry guard to skip summarization.
+
+		const turn = new Turn('turnId', { type: 'user', message: 'hello' });
+
+		// Simulate what agentIntent.ts does after a failed foreground summarization
+		turn.setMetadata(new SummarizedConversationHistoryMetadata(
+			'', // no toolCallRoundId for failures
+			'', // no summary text for failures
+			{
+				model: 'test-model',
+				source: 'foreground',
+				outcome: 'budgetExceeded',
+				contextLengthBefore: 100_000,
+			},
+		));
+
+		// Verify the retry guard condition from renderWithSummarization matches
+		const previousForegroundSummary = turn.getMetadata(SummarizedConversationHistoryMetadata);
+		expect(previousForegroundSummary).toBeDefined();
+		expect(previousForegroundSummary!.source).toBe('foreground');
+		expect(previousForegroundSummary!.outcome).toBe('budgetExceeded');
+		expect(previousForegroundSummary!.outcome).not.toBe('success');
+
+		// The guard condition: source === 'foreground' && outcome && outcome !== 'success'
+		const shouldSkip = previousForegroundSummary!.source === 'foreground'
+			&& !!previousForegroundSummary!.outcome
+			&& previousForegroundSummary!.outcome !== 'success';
+		expect(shouldSkip).toBe(true);
+
+		// Also verify that successful summarization does NOT trigger the skip guard
+		turn.setMetadata(new SummarizedConversationHistoryMetadata(
+			'roundId',
+			'summary text',
+			{
+				model: 'test-model',
+				source: 'foreground',
+				outcome: 'success',
+			},
+		));
+		const successMeta = turn.getMetadata(SummarizedConversationHistoryMetadata);
+		const shouldSkipAfterSuccess = successMeta!.source === 'foreground'
+			&& !!successMeta!.outcome
+			&& successMeta!.outcome !== 'success';
+		expect(shouldSkipAfterSuccess).toBe(false);
+	});
+});
+
+suite('extractInlineSummary', () => {
+	test('extracts clean summary tags', () => {
+		const text = 'Some preamble\n<summary>\nThis is the summary content.\n</summary>\nSome trailing text';
+		const result = extractInlineSummary(text);
+		expect(result).toBe('This is the summary content.');
+	});
+
+	test('extracts summary with no closing tag', () => {
+		const text = 'Preamble text\n<summary>\nThis is a partial summary that was cut off';
+		const result = extractInlineSummary(text);
+		expect(result).toBe('This is a partial summary that was cut off');
+	});
+
+	test('returns undefined when no tags found', () => {
+		const text = 'This is just a normal response with no summary tags at all.';
+		const result = extractInlineSummary(text);
+		expect(result).toBeUndefined();
+	});
+
+	test('uses first complete summary when multiple blocks exist', () => {
+		const text = '<summary>First summary</summary>\n<summary>Second summary</summary>';
+		const result = extractInlineSummary(text);
+		expect(result).toBe('First summary');
+	});
+
+	test('handles empty summary tags', () => {
+		const text = '<summary></summary>';
+		const result = extractInlineSummary(text);
+		expect(result).toBe('');
+	});
+
+	test('handles summary with analysis tags inside', () => {
+		const text = '<summary>\n<analysis>Some analysis</analysis>\n\n1. Overview: test\n2. Details: test\n</summary>';
+		const result = extractInlineSummary(text);
+		expect(result).toContain('1. Overview: test');
+		expect(result).toContain('<analysis>Some analysis</analysis>');
+	});
+
+	test('trims whitespace from extracted summary', () => {
+		const text = '<summary>\n\n  Padded summary text  \n\n</summary>';
+		const result = extractInlineSummary(text);
+		expect(result).toBe('Padded summary text');
+	});
+});
+
+suite('Inline Summarization Prompt', () => {
+	let accessor: ITestingServicesAccessor;
+
+	beforeAll(() => {
+		const services = createExtensionUnitTestingServices();
+		services.define(IWorkspaceService, new SyncDescriptor(
+			TestWorkspaceService,
+			[
+				[URI.file('/workspace')],
+				[]
+			]
+		));
+		services.define(IChatMLFetcher, new StaticChatMLFetcher([]));
+		accessor = services.createTestingAccessor();
+	});
+
+	afterAll(() => {
+		accessor.dispose();
+	});
+
+	test('inlineSummarization=true appends summarization user message and metadata', async () => {
+		const instaService = accessor.get(IInstantiationService);
+		const endpoint = instaService.createInstance(MockEndpoint, undefined);
+		const turn = new Turn('turnId', { type: 'user', message: 'hello' });
+		const conversation = new Conversation('sessionId', [turn]);
+
+		const firstTurn = new Turn('id1', { type: 'user', message: 'previous turn message' });
+		firstTurn.setResponse(TurnStatus.Success, { type: 'user', message: 'response' }, 'responseId', {
+			metadata: {
+				toolCallRounds: [
+					new ToolCallRound('ok', [{
+						id: 'tooluse_1',
+						name: ToolName.EditFile,
+						arguments: JSON.stringify({ filePath: '/workspace/file.ts', code: 'test' })
+					}]),
+				]
+			}
+		} as ICopilotChatResultIn);
+
+		const promptContext: IBuildPromptContext = {
+			chatVariables: new ChatVariablesCollection([]),
+			history: [firstTurn],
+			query: 'continue',
+			toolCallRounds: [
+				new ToolCallRound('ok 2', [{
+					id: 'tooluse_2',
+					name: ToolName.EditFile,
+					arguments: JSON.stringify({ filePath: '/workspace/file.ts', code: 'test2' })
+				}]),
+			],
+			toolCallResults: {
+				'tooluse_2': new LanguageModelToolResult([new LanguageModelTextPart('success')]),
+			},
+			tools: {
+				availableTools: [],
+				toolInvocationToken: null as never,
+				toolReferences: [],
+			},
+			conversation,
+		};
+
+		const customizations = await PromptRegistry.resolveAllCustomizations(instaService, endpoint);
+		const props: AgentPromptProps = {
+			priority: 1,
+			endpoint,
+			location: ChatLocation.Panel,
+			promptContext,
+			enableCacheBreakpoints: true,
+			inlineSummarization: true,
+			customizations,
+		};
+
+		const renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, props);
+		const result = await renderer.render();
+
+		// Should have InlineSummarizationRequestedMetadata set
+		const inlineMeta = result.metadata.get(InlineSummarizationRequestedMetadata);
+		expect(inlineMeta).toBeDefined();
+
+		// The last user message should contain summarization instructions
+		const userMessages = result.messages.filter(m => m.role === Raw.ChatRole.User);
+		const lastUserMessage = userMessages[userMessages.length - 1];
+		const lastMessageText = lastUserMessage.content.map(c => 'text' in c ? c.text : '').join('');
+		expect(lastMessageText).toContain('summary');
+		expect(lastMessageText).toContain('Do NOT call any tools');
+
+		// Should NOT have the separate-call summarization metadata
+		const summaryMeta = result.metadata.get(SummarizedConversationHistoryMetadata);
+		expect(summaryMeta).toBeUndefined();
+	});
+
+	test('inlineSummarization=true sets metadata when triggerSummarize is false', async () => {
+		const instaService = accessor.get(IInstantiationService);
+		const endpoint = instaService.createInstance(MockEndpoint, undefined);
+
+		const firstTurn = new Turn('id1', { type: 'user', message: 'previous turn message' });
+		firstTurn.setResponse(TurnStatus.Success, { type: 'user', message: 'response' }, 'responseId', {
+			metadata: {
+				toolCallRounds: [
+					new ToolCallRound('ok', [{
+						id: 'tooluse_1',
+						name: ToolName.EditFile,
+						arguments: JSON.stringify({ filePath: '/workspace/file.ts', code: 'test' })
+					}]),
+				]
+			}
+		} as ICopilotChatResultIn);
+
+		const promptContext: IBuildPromptContext = {
+			chatVariables: new ChatVariablesCollection([]),
+			history: [firstTurn],
+			query: 'continue',
+			toolCallRounds: [
+				new ToolCallRound('ok 2', [{
+					id: 'tooluse_2',
+					name: ToolName.EditFile,
+					arguments: JSON.stringify({ filePath: '/workspace/file.ts', code: 'test2' })
+				}]),
+			],
+			toolCallResults: {
+				'tooluse_2': new LanguageModelToolResult([new LanguageModelTextPart('success')]),
+			},
+			tools: {
+				availableTools: [],
+				toolInvocationToken: null as never,
+				toolReferences: [],
+			},
+		};
+
+		// When both triggerSummarize and inlineSummarization are true,
+		// triggerSummarize should take precedence (inlineSummarization condition
+		// requires triggerSummarize to be false).
+		// We test this indirectly: inlineSummarization=true with triggerSummarize=false
+		// should set InlineSummarizationRequestedMetadata, but if triggerSummarize were
+		// also true, the inline path would be skipped.
+		const customizations = await PromptRegistry.resolveAllCustomizations(instaService, endpoint);
+		const propsInlineOnly: AgentPromptProps = {
+			priority: 1,
+			endpoint,
+			location: ChatLocation.Panel,
+			promptContext,
+			enableCacheBreakpoints: true,
+			triggerSummarize: false,
+			inlineSummarization: true,
+			customizations,
+		};
+
+		const renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, propsInlineOnly);
+		const result = await renderer.render();
+
+		// Inline metadata should be set when triggerSummarize is false
+		const inlineMeta = result.metadata.get(InlineSummarizationRequestedMetadata);
+		expect(inlineMeta).toBeDefined();
+	});
+});
+
+suite('stripToolSearchMessages', () => {
+	function makeAssistantMessage(toolCalls: { id: string; name: string }[], text = 'response'): Raw.ChatMessage {
+		return {
+			role: Raw.ChatRole.Assistant,
+			content: [{ type: Raw.ChatCompletionContentPartKind.Text, text }],
+			toolCalls: toolCalls.map(tc => ({
+				type: 'function' as const,
+				id: tc.id,
+				function: { name: tc.name, arguments: '{}' },
+			})),
+		};
+	}
+
+	function makeToolResult(toolCallId: string, text = 'result'): Raw.ChatMessage {
+		return {
+			role: Raw.ChatRole.Tool,
+			content: [{ type: Raw.ChatCompletionContentPartKind.Text, text }],
+			toolCallId,
+		};
+	}
+
+	function makeUserMessage(text = 'hello'): Raw.ChatMessage {
+		return {
+			role: Raw.ChatRole.User,
+			content: [{ type: Raw.ChatCompletionContentPartKind.Text, text }],
+		};
+	}
+
+	test('returns messages unchanged when no tool_search calls present', () => {
+		const messages = [
+			makeUserMessage(),
+			makeAssistantMessage([{ id: 'tc1', name: 'read_file' }]),
+			makeToolResult('tc1'),
+		];
+		const result = stripToolSearchMessages(messages);
+		expect(result).toBe(messages);
+	});
+
+	test('strips custom tool_search tool_use and tool_result', () => {
+		const messages = [
+			makeUserMessage(),
+			makeAssistantMessage([
+				{ id: 'tc1', name: 'read_file' },
+				{ id: 'tc2', name: 'tool_search' },
+			]),
+			makeToolResult('tc1'),
+			makeToolResult('tc2', '["read_file", "edit_file"]'),
+		];
+		const result = stripToolSearchMessages(messages);
+		expect(result).toHaveLength(3);
+		const assistant = result[1];
+		expect(assistant.role).toBe(Raw.ChatRole.Assistant);
+		if (assistant.role === Raw.ChatRole.Assistant) {
+			expect(assistant.toolCalls).toHaveLength(1);
+			expect(assistant.toolCalls![0].id).toBe('tc1');
+		}
+		expect(result.find(m => m.role === Raw.ChatRole.Tool && m.toolCallId === 'tc2')).toBeUndefined();
+	});
+
+	test('removes toolCalls property when all tool calls are tool_search', () => {
+		const messages = [
+			makeUserMessage(),
+			makeAssistantMessage([{ id: 'tc1', name: 'tool_search' }]),
+			makeToolResult('tc1'),
+		];
+		const result = stripToolSearchMessages(messages);
+		expect(result).toHaveLength(2);
+		const assistant = result[1];
+		if (assistant.role === Raw.ChatRole.Assistant) {
+			expect(assistant.toolCalls).toBeUndefined();
+		}
+	});
+
+	test('does not strip server-side tool_search_tool_regex', () => {
+		const messages = [
+			makeUserMessage(),
+			makeAssistantMessage([{ id: 'tc1', name: 'tool_search_tool_regex' }]),
+			makeToolResult('tc1'),
+		];
+		const result = stripToolSearchMessages(messages);
+		expect(result).toBe(messages);
+	});
+
+	test('preserves non-tool messages', () => {
+		const messages = [
+			makeUserMessage('first'),
+			makeAssistantMessage([{ id: 'tc1', name: 'tool_search' }]),
+			makeToolResult('tc1'),
+			makeUserMessage('second'),
+			makeAssistantMessage([{ id: 'tc2', name: 'edit_file' }]),
+			makeToolResult('tc2'),
+		];
+		const result = stripToolSearchMessages(messages);
+		expect(result).toHaveLength(5);
+		expect(result[0].content[0]).toEqual({ type: Raw.ChatCompletionContentPartKind.Text, text: 'first' });
+		expect(result[2].content[0]).toEqual({ type: Raw.ChatCompletionContentPartKind.Text, text: 'second' });
+	});
 });
