@@ -54,6 +54,8 @@ export enum ToolName {
 	CoreManageTodoList = 'manage_todo_list',
 	CoreRunInTerminal = 'run_in_terminal',
 	CoreGetTerminalOutput = 'get_terminal_output',
+	CoreSendToTerminal = 'send_to_terminal',
+	CoreKillTerminal = 'kill_terminal',
 	CoreTerminalSelection = 'terminal_selection',
 	CoreTerminalLastCommand = 'terminal_last_command',
 	CoreCreateAndRunTask = 'create_and_run_task',
@@ -209,6 +211,8 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.SearchViewResults]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreTerminalSelection]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreTerminalLastCommand]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreSendToTerminal]: ToolCategory.Core,
+	[ToolName.CoreKillTerminal]: ToolCategory.Core,
 
 	// Testing
 	[ToolName.TestFailure]: ToolCategory.Testing,
