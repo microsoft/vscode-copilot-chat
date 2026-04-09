@@ -362,9 +362,9 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				toolOutcome: outcome, // Props named "outcome" often get stuck in the kusto pipeline
 				isV2: isParamsV2(options.input) ? 'true' : 'false',
 				isEntireFile: isParamsV2(options.input) && options.input.offset === undefined && options.input.limit === undefined ? 'true' : 'false',
-				fileType,
-				nameField,
-				model,
+				fileType: fileType,
+				nameField: nameField,
+				model: model,
 			},
 			{
 				linesRead: end - start,
@@ -386,10 +386,10 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 			const plaintextProps = {
 				skillName: skillInfo.skillName,
 				skillPath: uri.toString(),
-				extensionId,
-				extensionVersion,
+				extensionId: extensionId,
+				extensionVersion: extensionVersion,
 				skillStorage: skillInfo.storage,
-				contentHash,
+				contentHash: contentHash,
 			};
 
 			this.telemetryService.sendGHTelemetryEvent('skillContentRead',
@@ -398,7 +398,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 					extensionIdHash: extensionId ? String(hash(extensionId)) : '',
 					extensionVersion: plaintextProps.extensionVersion,
 					skillStorage: plaintextProps.skillStorage,
-					contentHash,
+					contentHash: plaintextProps.contentHash,
 				}
 			);
 
