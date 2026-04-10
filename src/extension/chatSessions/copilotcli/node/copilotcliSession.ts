@@ -780,7 +780,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		if (token.isCancellationRequested) {
 			return;
 		}
-		if (authInfo && !isCopilotByokMode()) {
+		if (authInfo && !isCopilotByokMode(this.configurationService)) {
 			this._sdkSession.setAuthInfo(authInfo);
 		}
 		if (modelId && modelId !== currentModel) {

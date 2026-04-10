@@ -5,6 +5,7 @@
 
 import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import type { Uri } from 'vscode';
+import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { Event } from '../../../../../util/vs/base/common/event';
 import { Disposable, IDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../../util/vs/base/common/uri';
@@ -13,6 +14,23 @@ import { CLIAgentInfo, ICopilotCLIAgents } from '../copilotCli';
 import { ICopilotCLIImageSupport } from '../copilotCLIImageSupport';
 import { ICopilotCLISkills } from '../copilotCLISkills';
 import { ICopilotCLIMCPHandler } from '../mcpHandler';
+
+/**
+ * Creates a mock `IConfigurationService` for testing BYOK functionality.
+ * When `overrides` is provided, `getConfig` returns the mapped value and `isConfigured` returns true for those keys.
+ * Otherwise all settings return `undefined` / not configured.
+ */
+export function createMockConfigService(overrides?: Map<unknown, unknown>): IConfigurationService {
+	return {
+		getConfig(key: unknown) {
+			return overrides?.get(key);
+		},
+		isConfigured(key: unknown) {
+			return overrides?.has(key) ?? false;
+		},
+		onDidChangeConfiguration: Event.None,
+	} as unknown as IConfigurationService;
+}
 
 export class MockCliSdkSession {
 	public emittedEvents: { event: string; content: string | undefined }[] = [];

@@ -277,4 +277,35 @@ describe('CopilotCLIMCPHandler offline mode', () => {
 
 		expect(mcpConfig).toBeUndefined();
 	});
+
+	it('returns empty MCP config when offline setting is enabled', async () => {
+		delete process.env['COPILOT_OFFLINE'];
+
+		const mockConfigService = {
+			getConfig(key: unknown) {
+				if (key === ConfigKey.Advanced.CLIOffline) {
+					return true;
+				}
+				if (key === ConfigKey.Advanced.CLIMCPServerEnabled) {
+					return false;
+				}
+				return undefined;
+			},
+			getNonExtensionConfig() {
+				return false;
+			},
+		} as unknown as IConfigurationService;
+
+		const handler = new CopilotCLIMCPHandler(
+			logService,
+			{} as unknown as IAuthenticationService,
+			mockConfigService,
+			{} as unknown as IMcpService,
+		);
+
+		const { mcpConfig, disposable } = await handler.loadMcpConfig();
+		disposables.add(disposable);
+
+		expect(mcpConfig).toBeUndefined();
+	});
 });

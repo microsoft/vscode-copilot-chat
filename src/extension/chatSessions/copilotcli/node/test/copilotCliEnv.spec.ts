@@ -4,7 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { getCopilotByokProvider, isCopilotOfflineMode } from '../copilotCliEnv';
+import { ConfigKey } from '../../../../../platform/configuration/common/configurationService';
+import { getCopilotByokProvider, isCopilotByokMode, isCopilotOfflineMode } from '../copilotCliEnv';
+import { createMockConfigService } from './testHelpers';
 
 const BYOK_ENV_KEYS = [
 	'COPILOT_PROVIDER_BASE_URL',
@@ -21,6 +23,7 @@ const BYOK_ENV_KEYS = [
 
 describe('copilotCliEnv', () => {
 	const savedEnv: Record<string, string | undefined> = {};
+	const emptyConfigService = createMockConfigService();
 
 	beforeEach(() => {
 		for (const key of BYOK_ENV_KEYS) {
@@ -39,32 +42,32 @@ describe('copilotCliEnv', () => {
 	});
 
 	it('returns false when COPILOT_OFFLINE is unset', () => {
-		expect(isCopilotOfflineMode()).toBe(false);
+		expect(isCopilotOfflineMode(emptyConfigService)).toBe(false);
 	});
 
 	it('returns true when COPILOT_OFFLINE is "true"', () => {
 		process.env['COPILOT_OFFLINE'] = 'true';
 
-		expect(isCopilotOfflineMode()).toBe(true);
+		expect(isCopilotOfflineMode(emptyConfigService)).toBe(true);
 	});
 
 	it('returns false when COPILOT_OFFLINE is "false"', () => {
 		process.env['COPILOT_OFFLINE'] = 'false';
 
-		expect(isCopilotOfflineMode()).toBe(false);
+		expect(isCopilotOfflineMode(emptyConfigService)).toBe(false);
 	});
 
 	describe('getCopilotByokProvider', () => {
 		it('returns undefined when COPILOT_PROVIDER_BASE_URL is not set', () => {
 			delete process.env['COPILOT_PROVIDER_BASE_URL'];
 
-			expect(getCopilotByokProvider()).toBeUndefined();
+			expect(getCopilotByokProvider(emptyConfigService)).toBeUndefined();
 		});
 
 		it('returns provider config with base URL only', () => {
 			process.env['COPILOT_PROVIDER_BASE_URL'] = 'http://localhost:11434/v1';
 
-			const provider = getCopilotByokProvider();
+			const provider = getCopilotByokProvider(emptyConfigService);
 
 			expect(provider).toBeDefined();
 			expect(provider!.baseUrl).toBe('http://localhost:11434/v1');
@@ -81,7 +84,7 @@ describe('copilotCliEnv', () => {
 			process.env['COPILOT_PROVIDER_MAX_OUTPUT_TOKENS'] = '4096';
 			process.env['COPILOT_PROVIDER_AZURE_API_VERSION'] = '2024-02-15-preview';
 
-			const provider = getCopilotByokProvider();
+			const provider = getCopilotByokProvider(emptyConfigService);
 
 			expect(provider).toBeDefined();
 			expect(provider!.baseUrl).toBe('https://my-azure.openai.azure.com');
@@ -99,10 +102,41 @@ describe('copilotCliEnv', () => {
 			process.env['COPILOT_PROVIDER_BASE_URL'] = 'http://localhost:11434/v1';
 			delete process.env['COPILOT_PROVIDER_AZURE_API_VERSION'];
 
-			const provider = getCopilotByokProvider();
+			const provider = getCopilotByokProvider(emptyConfigService);
 
 			expect(provider).toBeDefined();
 			expect(provider!.azure).toBeUndefined();
+		});
+	});
+
+	describe('extension settings override env vars', () => {
+		it('isCopilotByokMode returns true when setting is configured', () => {
+			delete process.env['COPILOT_PROVIDER_BASE_URL'];
+			const configService = createMockConfigService(new Map([[ConfigKey.Advanced.CLIProviderBaseUrl, 'http://localhost:11434/v1']]));
+
+			expect(isCopilotByokMode(configService)).toBe(true);
+		});
+
+		it('isCopilotOfflineMode returns true when setting is enabled', () => {
+			delete process.env['COPILOT_OFFLINE'];
+			const configService = createMockConfigService(new Map([[ConfigKey.Advanced.CLIOffline, true]]));
+
+			expect(isCopilotOfflineMode(configService)).toBe(true);
+		});
+
+		it('getCopilotByokProvider uses settings over env vars', () => {
+			process.env['COPILOT_PROVIDER_BASE_URL'] = 'http://env-url';
+			process.env['COPILOT_PROVIDER_API_KEY'] = 'env-key';
+			const configService = createMockConfigService(new Map([
+				[ConfigKey.Advanced.CLIProviderBaseUrl, 'http://settings-url'],
+				[ConfigKey.Advanced.CLIProviderApiKey, 'settings-key'],
+			]));
+
+			const provider = getCopilotByokProvider(configService);
+
+			expect(provider).toBeDefined();
+			expect(provider!.baseUrl).toBe('http://settings-url');
+			expect(provider!.apiKey).toBe('settings-key');
 		});
 	});
 });

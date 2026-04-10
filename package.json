@@ -4589,6 +4589,93 @@
 							"advanced"
 						]
 					},
+					"github.copilot.chat.cli.provider.baseUrl": {
+						"type": "string",
+						"markdownDescription": "%github.copilot.config.cli.provider.baseUrl%",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.cli.provider.type": {
+						"type": "string",
+						"enum": [
+							"openai",
+							"azure",
+							"anthropic"
+						],
+						"markdownDescription": "%github.copilot.config.cli.provider.type%",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.cli.provider.wireApi": {
+						"type": "string",
+						"enum": [
+							"completions",
+							"responses"
+						],
+						"markdownDescription": "%github.copilot.config.cli.provider.wireApi%",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.cli.provider.apiKey": {
+						"type": "string",
+						"markdownDescription": "%github.copilot.config.cli.provider.apiKey%",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.cli.provider.bearerToken": {
+						"type": "string",
+						"markdownDescription": "%github.copilot.config.cli.provider.bearerToken%",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.cli.provider.model": {
+						"type": "string",
+						"markdownDescription": "%github.copilot.config.cli.provider.model%",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.cli.provider.modelLimitsId": {
+						"type": "string",
+						"markdownDescription": "%github.copilot.config.cli.provider.modelLimitsId%",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.cli.provider.maxPromptTokens": {
+						"type": "integer",
+						"markdownDescription": "%github.copilot.config.cli.provider.maxPromptTokens%",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.cli.provider.maxOutputTokens": {
+						"type": "integer",
+						"markdownDescription": "%github.copilot.config.cli.provider.maxOutputTokens%",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.cli.provider.azureApiVersion": {
+						"type": "string",
+						"markdownDescription": "%github.copilot.config.cli.provider.azureApiVersion%",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.cli.offline": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.offline%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.searchSubagent.enabled": {
 						"type": "boolean",
 						"default": false,

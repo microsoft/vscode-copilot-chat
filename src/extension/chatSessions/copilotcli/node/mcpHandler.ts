@@ -141,7 +141,7 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 	}
 
 	private async addBuiltInGitHubServer(config: Record<string, MCPServerConfig>): Promise<void> {
-		if (isCopilotOfflineMode()) {
+		if (isCopilotOfflineMode(this.configurationService)) {
 			this.logService.info('[CopilotCLIMCPHandler] Offline mode active, skipping GitHub MCP server setup');
 			return;
 		}

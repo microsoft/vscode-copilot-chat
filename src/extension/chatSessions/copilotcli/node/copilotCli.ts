@@ -64,26 +64,41 @@ export const ICopilotCLIModels = createServiceIdentifier<ICopilotCLIModels>('ICo
 
 export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 	declare _serviceBrand: undefined;
-	private readonly _availableModels: Lazy<Promise<CopilotCLIModelInfo[]>>;
+	private _availableModelsPromise: Promise<CopilotCLIModelInfo[]> | undefined;
 	private readonly _onDidChange = this._register(new Emitter<void>());
 	constructor(
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
-		this._availableModels = new Lazy<Promise<CopilotCLIModelInfo[]>>(() => this._getAvailableModels());
 		// Eagerly fetch available models so that they're ready when needed.
-		this._availableModels.value
-			.then(() => this._onDidChange.fire())
-			.catch((error) => {
-				this.logService.error('[CopilotCLIModels] Failed to fetch available models', error);
-			});
+		this._fetchModels();
 		this._register(this._authenticationService.onDidAuthenticationChange(() => {
 			// Auth changed which means models could've changed. Fire the event
 			this._onDidChange.fire();
 		}));
+		this._register(this.configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(ConfigKey.Advanced.CLIProviderBaseUrl.fullyQualifiedId)
+				|| e.affectsConfiguration(ConfigKey.Advanced.CLIProviderModel.fullyQualifiedId)
+				|| e.affectsConfiguration(ConfigKey.Advanced.CLIProviderMaxPromptTokens.fullyQualifiedId)
+				|| e.affectsConfiguration(ConfigKey.Advanced.CLIProviderMaxOutputTokens.fullyQualifiedId)) {
+				this.logService.info('[CopilotCLIModels] BYOK settings changed, refreshing models');
+				this._availableModelsPromise = undefined;
+				this._fetchModels();
+			}
+		}));
+	}
+
+	private _fetchModels(): void {
+		this._availableModelsPromise = this._getAvailableModels();
+		this._availableModelsPromise
+			.then(() => this._onDidChange.fire())
+			.catch((error) => {
+				this.logService.error('[CopilotCLIModels] Failed to fetch available models', error);
+			});
 	}
 	async resolveModel(modelId: string): Promise<string | undefined> {
 		const models = await this.getModels();
@@ -107,25 +122,27 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 	}
 
 	public async getModels(): Promise<CopilotCLIModelInfo[]> {
-		if (!this._authenticationService.anyGitHubSession && !isCopilotByokMode()) {
+		if (!this._authenticationService.anyGitHubSession && !isCopilotByokMode(this.configurationService)) {
 			return [];
 		}
 
-		// No need to query sdk multiple times, cache the result, this cannot change during a vscode session.
-		return this._availableModels.value;
+		if (!this._availableModelsPromise) {
+			this._fetchModels();
+		}
+		return this._availableModelsPromise ?? this._getAvailableModels();
 	}
 
 	private async _getAvailableModels(): Promise<CopilotCLIModelInfo[]> {
 		// In BYOK mode, the SDK's getAvailableModels queries the Copilot API
 		// which requires auth. Instead, build a synthetic model entry from
 		// the COPILOT_MODEL env var that the CLI SDK will use at session time.
-		if (isCopilotByokMode()) {
-			const modelName = getCopilotByokModel();
+		if (isCopilotByokMode(this.configurationService)) {
+			const modelName = getCopilotByokModel(this.configurationService);
 			if (!modelName) {
-				this.logService.warn('[CopilotCLIModels] BYOK mode active but COPILOT_MODEL is not set. Set the COPILOT_MODEL environment variable to specify which model to use (e.g., COPILOT_MODEL=claude-sonnet-4-20250514)');
+				this.logService.warn('[CopilotCLIModels] BYOK mode active but COPILOT_MODEL is not set. Configure the model via github.copilot.chat.cli.provider.model in settings or the COPILOT_MODEL environment variable.');
 				return [];
 			}
-			const limits = getCopilotByokTokenLimits();
+			const limits = getCopilotByokTokenLimits(this.configurationService);
 			this.logService.info(`[CopilotCLIModels] BYOK mode: using model "${modelName}"`);
 			return [{
 				id: modelName,
@@ -170,7 +187,7 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 		};
 		this._register(lm.registerLanguageModelChatProvider('copilotcli', provider));
 
-		void this._availableModels.value.then(() => this._onDidChange.fire());
+		void this.getModels().then(() => this._onDidChange.fire());
 	}
 
 	private async _provideLanguageModelChatInfo(): Promise<vscode.LanguageModelChatInformation[]> {
@@ -499,7 +516,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		// instead of GitHub Copilot's model routing and GitHub authentication
 		// is not required. Skip client-side token validation; the actual BYOK
 		// provider config is passed via SessionOptions.provider.
-		if (isCopilotByokMode()) {
+		if (isCopilotByokMode(this.configurationService)) {
 			this.logService.info('[CopilotCLISDK] BYOK mode active, skipping client-side token validation');
 			return {
 				type: 'token',

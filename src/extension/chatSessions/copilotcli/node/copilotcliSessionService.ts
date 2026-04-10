@@ -691,8 +691,9 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 		// In BYOK mode, pass the provider config so the SDK routes requests
 		// to the custom provider instead of GitHub's Copilot API.
-		const byokProvider = getCopilotByokProvider();
+		const byokProvider = getCopilotByokProvider(this.configurationService);
 		if (byokProvider) {
+			this.logService.info(`[CopilotCLISession] BYOK provider: baseUrl=${byokProvider.baseUrl}, type=${byokProvider.type ?? 'default'}, apiKey=${byokProvider.apiKey ? '***' : 'none'}, bearerToken=${byokProvider.bearerToken ? '***' : 'none'}`);
 			allOptions.provider = byokProvider;
 		}
 

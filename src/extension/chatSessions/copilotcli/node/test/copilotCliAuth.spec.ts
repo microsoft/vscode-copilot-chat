@@ -6,7 +6,7 @@
 import type { SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
-import { ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
+import { ConfigKey } from '../../../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../../platform/log/common/logService';
@@ -15,6 +15,7 @@ import { IInstantiationService } from '../../../../../util/vs/platform/instantia
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { CopilotCLISDK } from '../copilotCli';
 import { isCopilotByokMode } from '../copilotCliEnv';
+import { createMockConfigService } from './testHelpers';
 
 type TokenAuthInfo = Extract<NonNullable<SessionOptions['authInfo']>, { type: 'token' }>;
 type HmacAuthInfo = Extract<NonNullable<SessionOptions['authInfo']>, { type: 'hmac' }>;
@@ -59,14 +60,7 @@ describe('CopilotCLISDK Authentication', () => {
 
 	it('should skip token validation when proxy URL is configured', async () => {
 		// Mock configuration to return a proxy URL
-		const mockConfigService = {
-			getConfig(key: unknown) {
-				if (key === ConfigKey.Shared.DebugOverrideProxyUrl) {
-					return 'https://proxy.example.com';
-				}
-				return undefined;
-			}
-		} as unknown as IConfigurationService;
+		const mockConfigService = createMockConfigService(new Map([[ConfigKey.Shared.DebugOverrideProxyUrl, 'https://proxy.example.com']]));
 
 		const mockAuthService = {
 			async getGitHubSession(): Promise<undefined> {
@@ -96,11 +90,7 @@ describe('CopilotCLISDK Authentication', () => {
 		let getGitHubSessionCalled = false;
 
 		// Mock configuration to return no proxy URLs
-		const mockConfigService = {
-			getConfig() {
-				return undefined;
-			}
-		} as unknown as IConfigurationService;
+		const mockConfigService = createMockConfigService();
 
 		const mockAuthService = {
 			async getGitHubSession() {
@@ -133,11 +123,7 @@ describe('CopilotCLISDK Authentication', () => {
 
 	it('should return empty token when getGitHubSession returns undefined and no proxy is configured', async () => {
 		// Mock configuration to return no proxy URLs
-		const mockConfigService = {
-			getConfig() {
-				return undefined;
-			}
-		} as unknown as IConfigurationService;
+		const mockConfigService = createMockConfigService();
 
 		const mockAuthService = {
 			async getGitHubSession() {
@@ -165,11 +151,7 @@ describe('CopilotCLISDK Authentication', () => {
 		const originalBaseUrl = process.env['COPILOT_PROVIDER_BASE_URL'];
 		process.env['COPILOT_PROVIDER_BASE_URL'] = 'http://localhost:11434/v1';
 		try {
-			const mockConfigService = {
-				getConfig() {
-					return undefined;
-				}
-			} as unknown as IConfigurationService;
+			const mockConfigService = createMockConfigService();
 
 			const mockAuthService = {
 				async getGitHubSession(): Promise<undefined> {
@@ -204,11 +186,7 @@ describe('CopilotCLISDK Authentication', () => {
 		const originalBaseUrl = process.env['COPILOT_PROVIDER_BASE_URL'];
 		process.env['COPILOT_PROVIDER_BASE_URL'] = 'http://localhost:11434/v1';
 		try {
-			const mockConfigService = {
-				getConfig() {
-					return undefined;
-				}
-			} as unknown as IConfigurationService;
+			const mockConfigService = createMockConfigService();
 
 			const mockAuthService = {
 				async getGitHubSession(): Promise<undefined> {
@@ -228,9 +206,9 @@ describe('CopilotCLISDK Authentication', () => {
 			const authInfo = await sdk.getAuthInfo() as TokenAuthInfo;
 
 			// Simulate the guard condition from copilotCLIChatSessions.ts / copilotCLIChatSessionsContribution.ts:
-			// if ((authInfo.type === 'token' && !authInfo.token) && !proxyUrl && !isCopilotByokMode()) { throw ... }
+			// if ((authInfo.type === 'token' && !authInfo.token) && !proxyUrl && !isCopilotByokMode(configService)) { throw ... }
 			const proxyUrl = mockConfigService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl);
-			const wouldThrow = (authInfo.type === 'token' && !authInfo.token) && !proxyUrl && !isCopilotByokMode();
+			const wouldThrow = (authInfo.type === 'token' && !authInfo.token) && !proxyUrl && !isCopilotByokMode(mockConfigService);
 			expect(wouldThrow).toBe(false);
 		} finally {
 			if (originalBaseUrl === undefined) {

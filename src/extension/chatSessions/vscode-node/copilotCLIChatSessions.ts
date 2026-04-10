@@ -1011,7 +1011,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				this.logService.error(`Authorization failed`);
 				throw new Error(vscode.l10n.t('Authorization failed. Please sign into GitHub and try again.'));
 			}
-			if ((authInfo.type === 'token' && !authInfo.token) && !this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl) && !isCopilotByokMode()) {
+			if ((authInfo.type === 'token' && !authInfo.token) && !this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl) && !isCopilotByokMode(this.configurationService)) {
 				this.logService.error(`Authorization failed`);
 				throw new Error(vscode.l10n.t('Authorization failed. Please sign into GitHub and try again.'));
 			}
