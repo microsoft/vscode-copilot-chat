@@ -10,22 +10,30 @@
  */
 
 /**
- * Maximum size (in characters) for a single OTel span/log attribute value.
- * Aligned with common backend limits (Jaeger 64KB, Tempo 100KB).
- * Matches gemini-cli's approach of capping content to prevent OTLP batch failures.
- */
-const MAX_OTEL_ATTRIBUTE_LENGTH = 64_000;
-
-/**
  * Truncate a string to fit within OTel attribute size limits.
- * Returns the original string if within bounds, otherwise truncates with a suffix.
+ *
+ * By default no truncation is applied, so observability platforms such as
+ * Langfuse receive complete, parseable data.  To re-enable truncation set the
+ * COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH environment variable to a positive integer
+ * (e.g. "64000").  An explicit `maxLength` argument always takes precedence
+ * over the environment variable.
  */
-export function truncateForOTel(value: string, maxLength: number = MAX_OTEL_ATTRIBUTE_LENGTH): string {
-	if (value.length <= maxLength) {
+export function truncateForOTel(value: string, maxLength?: number): string {
+	let limit = maxLength;
+	if (limit === undefined) {
+		const raw = typeof process !== 'undefined' ? process.env['COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH'] : undefined;
+		if (raw) {
+			const n = parseInt(raw, 10);
+			if (Number.isFinite(n) && n > 0) {
+				limit = n;
+			}
+		}
+	}
+	if (limit === undefined || value.length <= limit) {
 		return value;
 	}
 	const suffix = `...[truncated, original ${value.length} chars]`;
-	return value.substring(0, maxLength - suffix.length) + suffix;
+	return value.substring(0, limit - suffix.length) + suffix;
 }
 
 export interface OTelChatMessage {

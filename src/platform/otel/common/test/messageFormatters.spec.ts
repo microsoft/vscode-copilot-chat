@@ -183,22 +183,72 @@ describe('truncateForOTel', () => {
 		expect(truncateForOTel(s, 100)).toBe(s);
 	});
 
-	it('truncates strings over the limit with suffix', () => {
+	it('truncates strings over the explicit limit with suffix', () => {
 		const s = 'a'.repeat(200);
 		const result = truncateForOTel(s, 100);
 		expect(result.length).toBeLessThanOrEqual(100);
 		expect(result).toContain('...[truncated, original 200 chars]');
 	});
 
-	it('uses default 64000 limit', () => {
-		const s = 'x'.repeat(64_001);
-		const result = truncateForOTel(s);
-		expect(result.length).toBeLessThanOrEqual(64_000);
-		expect(result).toContain('...[truncated');
+	it('does not truncate by default (no env var set)', () => {
+		const saved = process.env['COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH'];
+		delete process.env['COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH'];
+		try {
+			const s = 'x'.repeat(100_000);
+			expect(truncateForOTel(s)).toBe(s);
+		} finally {
+			if (saved !== undefined) {
+				process.env['COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH'] = saved;
+			}
+		}
 	});
 
-	it('does not truncate at exactly 64000', () => {
-		const s = 'x'.repeat(64_000);
-		expect(truncateForOTel(s)).toBe(s);
+	it('truncates when COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH env var is set', () => {
+		const saved = process.env['COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH'];
+		process.env['COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH'] = '64000';
+		try {
+			const s = 'x'.repeat(64_001);
+			const result = truncateForOTel(s);
+			expect(result.length).toBeLessThanOrEqual(64_000);
+			expect(result).toContain('...[truncated');
+		} finally {
+			if (saved !== undefined) {
+				process.env['COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH'] = saved;
+			} else {
+				delete process.env['COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH'];
+			}
+		}
+	});
+
+	it('ignores invalid COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH values', () => {
+		const saved = process.env['COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH'];
+		process.env['COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH'] = 'invalid';
+		try {
+			const s = 'x'.repeat(100_000);
+			expect(truncateForOTel(s)).toBe(s);
+		} finally {
+			if (saved !== undefined) {
+				process.env['COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH'] = saved;
+			} else {
+				delete process.env['COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH'];
+			}
+		}
+	});
+
+	it('explicit maxLength overrides env var', () => {
+		const saved = process.env['COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH'];
+		process.env['COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH'] = '64000';
+		try {
+			// explicit limit of 100 should override the env var
+			const s = 'a'.repeat(200);
+			const result = truncateForOTel(s, 100);
+			expect(result.length).toBeLessThanOrEqual(100);
+		} finally {
+			if (saved !== undefined) {
+				process.env['COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH'] = saved;
+			} else {
+				delete process.env['COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH'];
+			}
+		}
 	});
 });

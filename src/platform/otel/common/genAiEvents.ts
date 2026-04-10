@@ -51,7 +51,7 @@ export function emitInferenceDetailsEvent(
 		attributes[StdAttr.ERROR_TYPE] = error.type;
 	}
 
-	// Full content capture with truncation to prevent OTLP batch failures
+	// Full content capture (truncation only if COPILOT_OTEL_MAX_ATTRIBUTE_LENGTH is set)
 	if (otel.config.captureContent) {
 		if (request.messages !== undefined) {
 			attributes[GenAiAttr.INPUT_MESSAGES] = truncateForOTel(JSON.stringify(request.messages));
