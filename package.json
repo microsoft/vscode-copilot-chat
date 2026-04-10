@@ -4591,6 +4591,7 @@
 					},
 					"github.copilot.chat.cli.provider.baseUrl": {
 						"type": "string",
+						"default": "",
 						"markdownDescription": "%github.copilot.config.cli.provider.baseUrl%",
 						"tags": [
 							"advanced"
@@ -4598,6 +4599,7 @@
 					},
 					"github.copilot.chat.cli.provider.type": {
 						"type": "string",
+						"default": "",
 						"enum": [
 							"openai",
 							"azure",
@@ -4610,6 +4612,7 @@
 					},
 					"github.copilot.chat.cli.provider.wireApi": {
 						"type": "string",
+						"default": "",
 						"enum": [
 							"completions",
 							"responses"
@@ -4621,6 +4624,7 @@
 					},
 					"github.copilot.chat.cli.provider.apiKey": {
 						"type": "string",
+						"default": "",
 						"markdownDescription": "%github.copilot.config.cli.provider.apiKey%",
 						"tags": [
 							"advanced"
@@ -4628,6 +4632,7 @@
 					},
 					"github.copilot.chat.cli.provider.bearerToken": {
 						"type": "string",
+						"default": "",
 						"markdownDescription": "%github.copilot.config.cli.provider.bearerToken%",
 						"tags": [
 							"advanced"
@@ -4635,6 +4640,7 @@
 					},
 					"github.copilot.chat.cli.provider.model": {
 						"type": "string",
+						"default": "",
 						"markdownDescription": "%github.copilot.config.cli.provider.model%",
 						"tags": [
 							"advanced"
@@ -4642,6 +4648,7 @@
 					},
 					"github.copilot.chat.cli.provider.modelLimitsId": {
 						"type": "string",
+						"default": "",
 						"markdownDescription": "%github.copilot.config.cli.provider.modelLimitsId%",
 						"tags": [
 							"advanced"
@@ -4649,6 +4656,7 @@
 					},
 					"github.copilot.chat.cli.provider.maxPromptTokens": {
 						"type": "integer",
+						"default": 0,
 						"markdownDescription": "%github.copilot.config.cli.provider.maxPromptTokens%",
 						"tags": [
 							"advanced"
@@ -4656,6 +4664,7 @@
 					},
 					"github.copilot.chat.cli.provider.maxOutputTokens": {
 						"type": "integer",
+						"default": 0,
 						"markdownDescription": "%github.copilot.config.cli.provider.maxOutputTokens%",
 						"tags": [
 							"advanced"
@@ -4663,6 +4672,7 @@
 					},
 					"github.copilot.chat.cli.provider.azureApiVersion": {
 						"type": "string",
+						"default": "",
 						"markdownDescription": "%github.copilot.config.cli.provider.azureApiVersion%",
 						"tags": [
 							"advanced"

@@ -618,16 +618,16 @@ export namespace ConfigKey {
 		export const CLISessionController = defineSetting<boolean>('chat.cli.sessionController.enabled', ConfigType.Simple, false);
 		export const CLISessionControllerForSessionsApp = defineSetting<boolean>('chat.cli.sessionControllerForSessionsApp.enabled', ConfigType.Simple, false);
 		export const CLITerminalLinks = defineSetting<boolean>('chat.cli.terminalLinks.enabled', ConfigType.Simple, true);
-		export const CLIProviderBaseUrl = defineSetting<string | undefined>('chat.cli.provider.baseUrl', ConfigType.Simple, undefined);
-		export const CLIProviderType = defineSetting<string | undefined>('chat.cli.provider.type', ConfigType.Simple, undefined);
-		export const CLIProviderWireApi = defineSetting<string | undefined>('chat.cli.provider.wireApi', ConfigType.Simple, undefined);
-		export const CLIProviderApiKey = defineSetting<string | undefined>('chat.cli.provider.apiKey', ConfigType.Simple, undefined);
-		export const CLIProviderBearerToken = defineSetting<string | undefined>('chat.cli.provider.bearerToken', ConfigType.Simple, undefined);
-		export const CLIProviderModel = defineSetting<string | undefined>('chat.cli.provider.model', ConfigType.Simple, undefined);
-		export const CLIProviderModelLimitsId = defineSetting<string | undefined>('chat.cli.provider.modelLimitsId', ConfigType.Simple, undefined);
-		export const CLIProviderMaxPromptTokens = defineSetting<number | undefined>('chat.cli.provider.maxPromptTokens', ConfigType.Simple, undefined);
-		export const CLIProviderMaxOutputTokens = defineSetting<number | undefined>('chat.cli.provider.maxOutputTokens', ConfigType.Simple, undefined);
-		export const CLIProviderAzureApiVersion = defineSetting<string | undefined>('chat.cli.provider.azureApiVersion', ConfigType.Simple, undefined);
+		export const CLIProviderBaseUrl = defineSetting<string>('chat.cli.provider.baseUrl', ConfigType.Simple, '');
+		export const CLIProviderType = defineSetting<string>('chat.cli.provider.type', ConfigType.Simple, '');
+		export const CLIProviderWireApi = defineSetting<string>('chat.cli.provider.wireApi', ConfigType.Simple, '');
+		export const CLIProviderApiKey = defineSetting<string>('chat.cli.provider.apiKey', ConfigType.Simple, '');
+		export const CLIProviderBearerToken = defineSetting<string>('chat.cli.provider.bearerToken', ConfigType.Simple, '');
+		export const CLIProviderModel = defineSetting<string>('chat.cli.provider.model', ConfigType.Simple, '');
+		export const CLIProviderModelLimitsId = defineSetting<string>('chat.cli.provider.modelLimitsId', ConfigType.Simple, '');
+		export const CLIProviderMaxPromptTokens = defineSetting<number>('chat.cli.provider.maxPromptTokens', ConfigType.Simple, 0);
+		export const CLIProviderMaxOutputTokens = defineSetting<number>('chat.cli.provider.maxOutputTokens', ConfigType.Simple, 0);
+		export const CLIProviderAzureApiVersion = defineSetting<string>('chat.cli.provider.azureApiVersion', ConfigType.Simple, '');
 		export const CLIOffline = defineSetting<boolean>('chat.cli.offline', ConfigType.Simple, false);
 		export const RequestLoggerMaxEntries = defineAndMigrateSetting<number>('chat.advanced.debug.requestLogger.maxEntries', 'chat.debug.requestLogger.maxEntries', 100);
 
