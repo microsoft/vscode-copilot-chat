@@ -343,6 +343,38 @@ suite('ReadFile', () => {
 			testAccessor.dispose();
 		});
 
+		test('reads chat response resources without requiring an open tab', async () => {
+			const resourceUri = URI.parse('vscode-chat-response-resource://session/tool/call-1/0/file.md');
+			const resourceDoc = createTextDocumentData(resourceUri, 'linked resource line 1\nlinked resource line 2', 'markdown').document;
+
+			const services = createExtensionUnitTestingServices();
+			services.define(IWorkspaceService, new SyncDescriptor(
+				TestWorkspaceService,
+				[
+					[],
+					[resourceDoc],
+				]
+			));
+
+			const testAccessor = services.createTestingAccessor();
+			const readFileTool = testAccessor.get(IInstantiationService).createInstance(ReadFileTool);
+
+			const input: IReadFileParamsV2 = {
+				filePath: resourceUri.toString()
+			};
+
+			const prepareResult = await readFileTool.prepareInvocation(
+				{ input },
+				CancellationToken.None
+			);
+
+			expect(prepareResult).toBeDefined();
+			expect((prepareResult!.invocationMessage as MarkdownString).value).toBe(`Reading [](${resourceUri.toString()})`);
+			expect((prepareResult!.pastTenseMessage as MarkdownString).value).toBe(`Read [](${resourceUri.toString()})`);
+
+			testAccessor.dispose();
+		});
+
 		test('should return "Reading skill/Read skill" message for skill files with line range', async () => {
 			const testDoc = createTextDocumentData(URI.file('/workspace/test.skill.md'), 'line 1\nline 2\nline 3\nline 4\nline 5', 'markdown').document;
 

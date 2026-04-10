@@ -164,6 +164,42 @@ export interface AssertFileOkForToolOptions {
 	readOnly?: boolean;
 }
 
+async function isUriAllowedWithoutWorkspaceMembership(
+	uri: URI,
+	normalizedUri: URI,
+	tabsAndEditorsService: ITabsAndEditorsService,
+	customInstructionsService: ICustomInstructionsService,
+	diskSessionResources: IChatDiskSessionResources,
+	chatDebugFileLogger: IChatDebugFileLoggerService,
+	sessionTranscriptService: ISessionTranscriptService,
+	buildPromptContext?: IBuildPromptContext,
+	options?: AssertFileOkForToolOptions,
+): Promise<boolean> {
+	if (uri.scheme === Schemas.untitled) {
+		return true;
+	}
+	if (options?.readOnly && uri.scheme === 'vscode-chat-response-resource') {
+		return true;
+	}
+	if (await isExternalInstructionsFile(normalizedUri, customInstructionsService, buildPromptContext)) {
+		return true;
+	}
+	if (diskSessionResources.isSessionResourceUri(normalizedUri)) {
+		return true;
+	}
+	if (chatDebugFileLogger.isDebugLogUri(normalizedUri)) {
+		return true;
+	}
+	if (sessionTranscriptService.isTranscriptUri(normalizedUri)) {
+		return true;
+	}
+	if (tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri))) {
+		return true;
+	}
+
+	return false;
+}
+
 export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, buildPromptContext?: IBuildPromptContext, options?: AssertFileOkForToolOptions): Promise<void> {
 	const workspaceService = accessor.get(IWorkspaceService);
 	const tabsAndEditorsService = accessor.get(ITabsAndEditorsService);
@@ -183,23 +219,17 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 	if (options?.readOnly && isUriUnderAdditionalReadAccessPaths(normalizedUri, configurationService)) {
 		return;
 	}
-	if (uri.scheme === Schemas.untitled) {
-		return;
-	}
-	const fileOpenInSomeTab = tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri));
-	if (fileOpenInSomeTab) {
-		return;
-	}
-	if (diskSessionResources.isSessionResourceUri(normalizedUri)) {
-		return;
-	}
-	if (chatDebugFileLogger.isDebugLogUri(normalizedUri)) {
-		return;
-	}
-	if (sessionTranscriptService.isTranscriptUri(normalizedUri)) {
-		return;
-	}
-	if (await isExternalInstructionsFile(normalizedUri, customInstructionsService, buildPromptContext)) {
+	if (await isUriAllowedWithoutWorkspaceMembership(
+		uri,
+		normalizedUri,
+		tabsAndEditorsService,
+		customInstructionsService,
+		diskSessionResources,
+		chatDebugFileLogger,
+		sessionTranscriptService,
+		buildPromptContext,
+		options,
+	)) {
 		return;
 	}
 	throw new Error(`File ${promptPathRepresentationService.getFilePath(normalizedUri)} is outside of the workspace, and not open in an editor, and can't be read`);
@@ -281,29 +311,24 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 
 	const normalizedUri = normalizePath(uri);
 
-	// Not external if: in workspace, untitled, instructions file, session resource, or open in editor
+	// Not external if: in workspace, under configured read-only paths, or otherwise allowlisted for read-only access.
 	if (workspaceService.getWorkspaceFolder(normalizedUri)) {
 		return false;
 	}
 	if (options?.readOnly && isUriUnderAdditionalReadAccessPaths(normalizedUri, configurationService)) {
 		return false;
 	}
-	if (uri.scheme === Schemas.untitled || uri.scheme === 'vscode-chat-response-resource') {
-		return false;
-	}
-	if (await isExternalInstructionsFile(normalizedUri, customInstructionsService, buildPromptContext)) {
-		return false;
-	}
-	if (diskSessionResources.isSessionResourceUri(normalizedUri)) {
-		return false;
-	}
-	if (chatDebugFileLogger.isDebugLogUri(normalizedUri)) {
-		return false;
-	}
-	if (sessionTranscriptService.isTranscriptUri(normalizedUri)) {
-		return false;
-	}
-	if (tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri))) {
+	if (await isUriAllowedWithoutWorkspaceMembership(
+		uri,
+		normalizedUri,
+		tabsAndEditorsService,
+		customInstructionsService,
+		diskSessionResources,
+		chatDebugFileLogger,
+		sessionTranscriptService,
+		buildPromptContext,
+		options,
+	)) {
 		return false;
 	}
 

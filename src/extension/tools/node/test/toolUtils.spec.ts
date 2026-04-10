@@ -154,6 +154,17 @@ suite('toolUtils - additionalReadAccessPaths', () => {
 			await expect(invokeAssertFileOkForTool(URI.file('/external/file.ts'), true))
 				.rejects.toThrow(/outside of the workspace/);
 		});
+
+		test('chat response resources are allowed for read-only access', async () => {
+			const resourceUri = URI.parse('vscode-chat-response-resource://session/tool/call-1/0/file.md');
+			await expect(invokeAssertFileOkForTool(resourceUri, true)).resolves.toBeUndefined();
+		});
+
+		test('chat response resources are not allowlisted outside read-only access', async () => {
+			const resourceUri = URI.parse('vscode-chat-response-resource://session/tool/call-1/0/file.md');
+			await expect(invokeAssertFileOkForTool(resourceUri))
+				.rejects.toThrow(/outside of the workspace/);
+		});
 	});
 
 	describe('isFileExternalAndNeedsConfirmation', () => {
@@ -196,6 +207,11 @@ suite('toolUtils - additionalReadAccessPaths', () => {
 			await configService.setConfig(ConfigKey.AdditionalReadAccessPaths, ['/allowed']);
 			await expect(invokeIsFileExternalAndNeedsConfirmation(URI.file('/disallowed/file.ts'), true))
 				.rejects.toThrow(/does not exist/);
+		});
+
+		test('chat response resources do not need confirmation for read-only access', async () => {
+			const resourceUri = URI.parse('vscode-chat-response-resource://session/tool/call-1/0/file.md');
+			expect(await invokeIsFileExternalAndNeedsConfirmation(resourceUri, true)).toBe(false);
 		});
 	});
 
