@@ -11,6 +11,11 @@ export class RealUrlOpener implements IUrlOpener {
 	declare readonly _serviceBrand: undefined;
 
 	async open(target: string): Promise<void> {
-		await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(target));
+		const uri = vscode.Uri.parse(target, true);
+		if (uri.scheme !== 'https' && uri.scheme !== 'http') {
+			throw new Error(`Unsupported URI scheme: ${uri.scheme}`);
+		}
+
+		await vscode.commands.executeCommand('vscode.open', uri);
 	}
 }
