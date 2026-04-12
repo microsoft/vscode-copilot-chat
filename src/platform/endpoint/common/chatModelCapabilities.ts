@@ -135,14 +135,21 @@ export function isGpt53Codex(model: LanguageModelChat | IChatEndpoint | string) 
 	return family.startsWith('gpt-5.3-codex');
 }
 
-export function isVSCModelA(model: LanguageModelChat | IChatEndpoint) {
+export type VSCModelVariant = 'A' | 'B' | 'C' | 'D';
 
+export function isVSCModelA(model: LanguageModelChat | IChatEndpoint, override?: VSCModelVariant | null) {
+	if (override !== undefined && override !== null) {
+		return override === 'A';
+	}
 	const ID_hash = getCachedSha256Hash(getModelId(model));
 	const family_hash = getCachedSha256Hash(model.family);
 	return VSC_MODEL_HASHES_A.includes(ID_hash) || VSC_MODEL_HASHES_A.includes(family_hash);
 }
 
-export function isVSCModelB(model: LanguageModelChat | IChatEndpoint) {
+export function isVSCModelB(model: LanguageModelChat | IChatEndpoint, override?: VSCModelVariant | null) {
+	if (override !== undefined && override !== null) {
+		return override === 'B';
+	}
 	const ID_hash = getCachedSha256Hash(getModelId(model));
 	const family_hash = getCachedSha256Hash(model.family);
 	return VSC_MODEL_HASHES_B.includes(ID_hash) || VSC_MODEL_HASHES_B.includes(family_hash);
@@ -154,13 +161,19 @@ export function isVSCModelReplaceStringSet(model: LanguageModelChat | IChatEndpo
 	return VSC_MODEL_HASHES_EDIT_TOOL_SET.includes(ID_hash) || VSC_MODEL_HASHES_EDIT_TOOL_SET.includes(family_hash);
 }
 
-export function isVSCModelC(model: LanguageModelChat | IChatEndpoint) {
+export function isVSCModelC(model: LanguageModelChat | IChatEndpoint, override?: VSCModelVariant | null) {
+	if (override !== undefined && override !== null) {
+		return override === 'C';
+	}
 	const ID_hash = getCachedSha256Hash(getModelId(model));
 	const family_hash = getCachedSha256Hash(model.family);
 	return VSC_MODEL_HASHES_C.includes(ID_hash) || VSC_MODEL_HASHES_C.includes(family_hash);
 }
 
-export function isVSCModelD(model: LanguageModelChat | IChatEndpoint) {
+export function isVSCModelD(model: LanguageModelChat | IChatEndpoint, override?: VSCModelVariant | null) {
+	if (override !== undefined && override !== null) {
+		return override === 'D';
+	}
 	const ID_hash = getCachedSha256Hash(getModelId(model));
 	const family_hash = getCachedSha256Hash(model.family);
 	return VSC_MODEL_HASHES_D.includes(ID_hash) || VSC_MODEL_HASHES_D.includes(family_hash);

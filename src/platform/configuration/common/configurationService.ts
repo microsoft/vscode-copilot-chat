@@ -24,7 +24,7 @@ import { ResponseProcessor } from '../../inlineEdits/common/responseProcessor';
 import { FetcherId } from '../../networking/common/fetcherService';
 import { AlternativeNotebookFormat } from '../../notebook/common/alternativeContentFormat';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { IValidator, vBoolean, vNumber, vString } from './validator';
+import { IValidator, vBoolean, vEnum, vNullable, vNumber, vString } from './validator';
 
 export const CopilotConfigPrefix = 'github.copilot';
 
@@ -687,6 +687,9 @@ export namespace ConfigKey {
 
 		/** Simulate GitHub authentication failures for testing. Can't be TeamInternal because we lose these flags as part of testing. */
 		export const DebugGitHubAuthFailWith = defineSetting<'NotAuthorized' | 'RequestFailed' | 'ParseFailed' | 'HTTP401' | 'RateLimited' | 'GitHubLoginFailed' | null>('chat.debug.githubAuthFailWith', ConfigType.Simple, null);
+
+		/** Override which VSC model variant is active. Only one can be true; when set, the others return false. */
+		export const DebugVSCModelOverride = defineSetting<'A' | 'B' | 'C' | 'D' | null>('chat.debug.vscModelOverride', ConfigType.Simple, null, vNullable(vEnum('A', 'B', 'C', 'D')));
 
 		// Agent debug logging settings — fileLogging.enabled is the canonical toggle
 		/** @deprecated Use ChatDebugFileLogging instead. Kept during experiment transition. */
