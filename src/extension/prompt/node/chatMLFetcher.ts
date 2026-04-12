@@ -180,7 +180,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			uiKind: ChatLocation.toString(location)
 		});
 
-		const modelOverride = this._configurationService.getConfig(ConfigKey.Advanced.DebugVSCModelOverride);
+		const modelOverride = this._configurationService.getConfig(ConfigKey.Advanced.CustomizationVSCModelOverride);
 		const customMetadata = modelOverride
 			? {
 				...opts.customMetadata,

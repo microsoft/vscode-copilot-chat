@@ -107,12 +107,12 @@ export const PromptRegistry = new class {
 		instantiationService: IInstantiationService,
 		endpoint: IChatEndpoint,
 	): Promise<AgentPromptCustomizations> {
-		const modelOverride = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService).getConfig(ConfigKey.Advanced.DebugVSCModelOverride));
+		const modelOverride = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService).getConfig(ConfigKey.Advanced.CustomizationVSCModelOverride));
 		const promptResolverCtor = await this.getPromptResolver(endpoint, modelOverride);
 		const agentPrompt = promptResolverCtor ? instantiationService.createInstance(promptResolverCtor) : undefined;
 
 		if (modelOverride) {
-			instantiationService.invokeFunction(accessor => accessor.get(ILogService).info(`[PromptRegistry] Using debug VSC model override '${modelOverride}' with resolver '${promptResolverCtor?.name ?? 'default'}' for endpoint family '${endpoint.family}'`));
+			instantiationService.invokeFunction(accessor => accessor.get(ILogService).info(`[PromptRegistry] Using VSC model override '${modelOverride}' with resolver '${promptResolverCtor?.name ?? 'default'}' for endpoint family '${endpoint.family}'`));
 		}
 
 		return {

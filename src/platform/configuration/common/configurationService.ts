@@ -689,7 +689,7 @@ export namespace ConfigKey {
 		export const DebugGitHubAuthFailWith = defineSetting<'NotAuthorized' | 'RequestFailed' | 'ParseFailed' | 'HTTP401' | 'RateLimited' | 'GitHubLoginFailed' | null>('chat.debug.githubAuthFailWith', ConfigType.Simple, null);
 
 		/** Override which VSC model variant is active. Only one can be true; when set, the others return false. */
-		export const DebugVSCModelOverride = defineSetting<'A' | 'B' | 'C' | 'D' | null>('chat.debug.vscModelOverride', ConfigType.Simple, null, vNullable(vEnum('A', 'B', 'C', 'D')));
+		export const CustomizationVSCModelOverride = defineSetting<'A' | 'B' | 'C' | 'D' | null>('chat.customization.vscModelOverride', ConfigType.Simple, null, vNullable(vEnum('A', 'B', 'C', 'D')));
 
 		// Agent debug logging settings — fileLogging.enabled is the canonical toggle
 		/** @deprecated Use ChatDebugFileLogging instead. Kept during experiment transition. */
