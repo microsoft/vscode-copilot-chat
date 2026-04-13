@@ -17,7 +17,7 @@ import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/commo
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { MarkdownString } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { IAgentMemoryService, RepoMemoryEntry } from '../../common/agentMemoryService';
+import { IAgentMemoryService, MemoryPromptResponse, RepoMemoryEntry, UserMemoryEntry } from '../../common/agentMemoryService';
 import { MemoryTool } from '../memoryTool';
 
 /**
@@ -45,6 +45,7 @@ class MockCapturingTelemetryService extends NullTelemetryService {
 class MockAgentMemoryService implements IAgentMemoryService {
 	declare readonly _serviceBrand: undefined;
 	storedMemories: RepoMemoryEntry[] = [];
+	storedUserMemories: UserMemoryEntry[] = [];
 
 	async checkMemoryEnabled(): Promise<boolean> {
 		return true;
@@ -59,8 +60,18 @@ class MockAgentMemoryService implements IAgentMemoryService {
 		return true;
 	}
 
+	async storeUserMemory(memory: UserMemoryEntry): Promise<boolean> {
+		this.storedUserMemories.push(memory);
+		return true;
+	}
+
+	async getMemoryPrompt(_repoNwo?: string): Promise<MemoryPromptResponse | undefined> {
+		return undefined;
+	}
+
 	clearMemories(): void {
 		this.storedMemories = [];
+		this.storedUserMemories = [];
 	}
 }
 
@@ -80,6 +91,14 @@ class DisabledMockAgentMemoryService implements IAgentMemoryService {
 
 	async storeRepoMemory(_memory: RepoMemoryEntry): Promise<boolean> {
 		return false;
+	}
+
+	async storeUserMemory(_memory: UserMemoryEntry): Promise<boolean> {
+		return false;
+	}
+
+	async getMemoryPrompt(_repoNwo?: string): Promise<MemoryPromptResponse | undefined> {
+		return undefined;
 	}
 }
 

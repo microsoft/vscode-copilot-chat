@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it } from 'vitest';
-import { isRepoMemoryEntry, normalizeCitations } from '../agentMemoryService';
+import { isRepoMemoryEntry, normalizeCitations, type MemoryPromptResponse, type UserMemoryEntry } from '../agentMemoryService';
 
 describe('AgentMemoryService', () => {
 	describe('isRepoMemoryEntry', () => {
@@ -124,6 +124,61 @@ describe('AgentMemoryService', () => {
 		it('should handle empty string', () => {
 			const result = normalizeCitations('');
 			expect(result).toEqual([]);
+		});
+	});
+
+	describe('UserMemoryEntry', () => {
+		it('should accept entry with required fields only', () => {
+			const entry: UserMemoryEntry = {
+				subject: 'preferences',
+				fact: 'Prefer tabs over spaces',
+			};
+			expect(entry.subject).toBe('preferences');
+			expect(entry.fact).toBe('Prefer tabs over spaces');
+			expect(entry.citations).toBeUndefined();
+			expect(entry.reason).toBeUndefined();
+		});
+
+		it('should accept entry with all optional fields', () => {
+			const entry: UserMemoryEntry = {
+				subject: 'preferences',
+				fact: 'Prefer tabs over spaces',
+				citations: ['src/editorconfig:1'],
+				reason: 'User stated this during onboarding',
+			};
+			expect(entry.citations).toEqual(['src/editorconfig:1']);
+			expect(entry.reason).toBe('User stated this during onboarding');
+		});
+
+		it('should accept string citations for backward compatibility', () => {
+			const entry: UserMemoryEntry = {
+				subject: 'preferences',
+				fact: 'Prefer tabs over spaces',
+				citations: 'src/editorconfig:1, src/other.ts:5',
+			};
+			expect(typeof entry.citations).toBe('string');
+		});
+
+		it('should not include category field (user memories have no category)', () => {
+			const entry: UserMemoryEntry = {
+				subject: 'preferences',
+				fact: 'Prefer tabs over spaces',
+			};
+			expect('category' in entry).toBe(false);
+		});
+	});
+
+	describe('MemoryPromptResponse', () => {
+		it('should hold a prompt string', () => {
+			const response: MemoryPromptResponse = {
+				prompt: 'The following are repository memories for owner/repo...',
+			};
+			expect(response.prompt).toBe('The following are repository memories for owner/repo...');
+		});
+
+		it('should accept an empty prompt string', () => {
+			const response: MemoryPromptResponse = { prompt: '' };
+			expect(response.prompt).toBe('');
 		});
 	});
 });

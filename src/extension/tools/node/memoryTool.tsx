@@ -15,7 +15,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { URI } from '../../../util/vs/base/common/uri';
 import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
-import { IAgentMemoryService, RepoMemoryEntry } from '../common/agentMemoryService';
+import { IAgentMemoryService, RepoMemoryEntry, UserMemoryEntry } from '../common/agentMemoryService';
 import { IMemoryCleanupService } from '../common/memoryCleanupService';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
@@ -285,10 +285,23 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		}
 
 		// Route /memories/session/* to session-scoped local storage
-		// Everything else under /memories/* goes to user-scoped storage
-		const scope: MemoryScope = isSessionPath(path) ? 'session' : 'user';
-		const result = await this._dispatchLocal(params, scope, sessionResource);
-		this._sendLocalTelemetry(params.command, scope, result.outcome, requestId, model);
+		if (isSessionPath(path)) {
+			const result = await this._dispatchLocal(params, 'session', sessionResource);
+			this._sendLocalTelemetry(params.command, 'session', result.outcome, requestId, model);
+			return result.text;
+		}
+
+		// Route user-scope creates through CAPI when enabled
+		const capiEnabled = await this.agentMemoryService.checkMemoryEnabled();
+		if (capiEnabled && params.command === 'create') {
+			const result = await this._userCreate(params as ICreateParams);
+			this._sendLocalTelemetry(params.command, 'user', result.outcome, requestId, model);
+			return result.text;
+		}
+
+		// Fall back to local file-based user memory
+		const result = await this._dispatchLocal(params, 'user', sessionResource);
+		this._sendLocalTelemetry(params.command, 'user', result.outcome, requestId, model);
 		return result.text;
 	}
 
@@ -339,6 +352,41 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		} catch (error) {
 			this.logService.error('[MemoryTool] Error creating repo memory:', error);
 			return { text: `Error: Cannot create repository memory: ${error.message}`, outcome: 'error' };
+		}
+	}
+
+	private async _userCreate(params: ICreateParams): Promise<MemoryToolResult> {
+		try {
+			const filename = params.path.split('/').pop() || 'memory';
+			const pathHint = filename.replace(/\.\w+$/, '');
+
+			let entry: UserMemoryEntry;
+			try {
+				const parsed = JSON.parse(params.file_text);
+				entry = {
+					subject: parsed.subject || pathHint,
+					fact: parsed.fact || '',
+					citations: parsed.citations || '',
+					reason: parsed.reason || '',
+				};
+			} catch {
+				entry = {
+					subject: pathHint,
+					fact: params.file_text,
+					citations: '',
+					reason: 'Stored from memory tool create command.',
+				};
+			}
+
+			const success = await this.agentMemoryService.storeUserMemory(entry);
+			if (success) {
+				return { text: `File created successfully at: ${params.path}`, outcome: 'success' };
+			} else {
+				return { text: 'Error: Failed to store user memory entry.', outcome: 'error' };
+			}
+		} catch (error) {
+			this.logService.error('[MemoryTool] Error creating user memory:', error);
+			return { text: `Error: Cannot create user memory: ${error.message}`, outcome: 'error' };
 		}
 	}
 

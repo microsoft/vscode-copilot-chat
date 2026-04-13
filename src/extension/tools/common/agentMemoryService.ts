@@ -27,6 +27,24 @@ export interface RepoMemoryEntry {
 }
 
 /**
+ * User memory entry format for user-scoped memories.
+ */
+export interface UserMemoryEntry {
+	subject: string;
+	fact: string;
+	citations?: string | string[];
+	reason?: string;
+}
+
+/**
+ * Response from the unified /prompt endpoint.
+ * Contains combined memory context text for both repo and user scopes.
+ */
+export interface MemoryPromptResponse {
+	prompt: string;
+}
+
+/**
  * Type guard to validate if an object is a valid RepoMemoryEntry.
  * Accepts both new format (citations: string[]) and legacy format (citations: string).
  */
@@ -76,8 +94,8 @@ export function normalizeCitations(citations: string | string[] | undefined): st
 }
 
 /**
- * Service for managing repository memories via the Copilot Memory service (CAPI).
- * Memories are stored in the cloud and available when Copilot Memory is enabled for the repository.
+ * Service for managing memories via the Copilot Memory service (CAPI).
+ * Memories are stored in the cloud and available when Copilot Memory is enabled.
  */
 export interface IAgentMemoryService {
 	readonly _serviceBrand: undefined;
@@ -100,6 +118,19 @@ export interface IAgentMemoryService {
 	 * Returns true if stored successfully, false if Copilot Memory is not enabled or if storing fails.
 	 */
 	storeRepoMemory(memory: RepoMemoryEntry): Promise<boolean>;
+
+	/**
+	 * Store a user-scoped memory to Copilot Memory service.
+	 * Returns true if stored successfully, false if not enabled or if storing fails.
+	 */
+	storeUserMemory(memory: UserMemoryEntry): Promise<boolean>;
+
+	/**
+	 * Fetch the unified memory prompt from the /prompt endpoint.
+	 * Returns combined repo + user memory context text, or undefined on failure.
+	 * Pass repoNwo to include repo-scoped memories alongside user memories.
+	 */
+	getMemoryPrompt(repoNwo?: string): Promise<MemoryPromptResponse | undefined>;
 }
 
 export const IAgentMemoryService = createServiceIdentifier<IAgentMemoryService>('IAgentMemoryService');
@@ -328,6 +359,104 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 		} catch (error) {
 			this.logService.warn(`[AgentMemoryService] Failed to store repo memory: ${error}`);
 			return false;
+		}
+	}
+
+	async storeUserMemory(memory: UserMemoryEntry): Promise<boolean> {
+		try {
+			if (!this.isCAPIMemorySyncConfigEnabled()) {
+				this.logService.debug('[AgentMemoryService] Copilot Memory not enabled, skipping user memory store');
+				return false;
+			}
+
+			const session = await this.authenticationService.getGitHubSession('any', { silent: true });
+			if (!session) {
+				this.logService.warn('[AgentMemoryService] No GitHub session available for storing user memory');
+				return false;
+			}
+
+			const username = session.account.label;
+			const citations = normalizeCitations(memory.citations) ?? [];
+
+			// Derive base URL from capiPingURL (strips /_ping suffix)
+			const capiBase = this.capiClientService.capiPingURL.replace(/\/_ping$/, '');
+			const url = `${capiBase}/agents/swe/internal/memory/v0/users/${encodeURIComponent(username)}`;
+
+			const response = await fetch(url, {
+				method: 'PUT',
+				headers: {
+					'Authorization': `Bearer ${session.accessToken}`,
+					'Content-Type': 'application/json',
+					'X-GitHub-Api-Version': '2025-10-01',
+				},
+				body: JSON.stringify({
+					subject: memory.subject,
+					fact: memory.fact,
+					citations,
+					reason: memory.reason,
+					source: { agent: 'vscode' },
+				}),
+			});
+
+			if (!response.ok) {
+				this.logService.warn(`[AgentMemoryService] Failed to store user memory: ${response.statusText}`);
+				return false;
+			}
+
+			this.logService.info(`[AgentMemoryService] Stored user memory for ${username}: ${memory.subject}`);
+			return true;
+		} catch (error) {
+			this.logService.warn(`[AgentMemoryService] Failed to store user memory: ${error}`);
+			return false;
+		}
+	}
+
+	async getMemoryPrompt(repoNwo?: string): Promise<MemoryPromptResponse | undefined> {
+		try {
+			if (!this.isCAPIMemorySyncConfigEnabled()) {
+				this.logService.debug('[AgentMemoryService] Copilot Memory not enabled, skipping prompt fetch');
+				return undefined;
+			}
+
+			const session = await this.authenticationService.getGitHubSession('any', { silent: true });
+			if (!session) {
+				this.logService.warn('[AgentMemoryService] No GitHub session available for fetching memory prompt');
+				return undefined;
+			}
+
+			const username = session.account.label;
+			const capiBase = this.capiClientService.capiPingURL.replace(/\/_ping$/, '');
+
+			const params = new URLSearchParams({ user: username });
+			if (repoNwo) {
+				params.set('repo', repoNwo);
+			}
+			const url = `${capiBase}/agents/swe/internal/memory/v0/prompt?${params.toString()}`;
+
+			const response = await fetch(url, {
+				method: 'GET',
+				headers: {
+					'Authorization': `Bearer ${session.accessToken}`,
+					'X-GitHub-Api-Version': '2025-10-01',
+				},
+			});
+
+			if (!response.ok) {
+				this.logService.warn(`[AgentMemoryService] Failed to fetch memory prompt: ${response.statusText}`);
+				return undefined;
+			}
+
+			const data = await response.json() as { prompt?: string };
+			if (typeof data?.prompt !== 'string') {
+				this.logService.warn('[AgentMemoryService] Unexpected response shape from /prompt endpoint');
+				return undefined;
+			}
+
+			this.logService.info(`[AgentMemoryService] Fetched unified memory prompt (${data.prompt.length} chars)`);
+			return { prompt: data.prompt };
+		} catch (error) {
+			this.logService.warn(`[AgentMemoryService] Failed to fetch memory prompt: ${error}`);
+			return undefined;
 		}
 	}
 }

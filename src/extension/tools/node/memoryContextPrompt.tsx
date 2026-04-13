@@ -8,8 +8,10 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
+import { IGitService, getGithubRepoIdFromFetchUrl, getOrderedRemoteUrlsFromContext, toGithubNwo } from '../../../platform/git/common/gitService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Tag } from '../../prompts/node/base/tag';
 import { IAgentMemoryService, normalizeCitations, RepoMemoryEntry } from '../common/agentMemoryService';
@@ -32,21 +34,57 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
+		@IGitService private readonly gitService: IGitService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		super(props);
+	}
+
+	private async getRepoNwo(): Promise<string | undefined> {
+		try {
+			const workspaceFolders = this.workspaceService.getWorkspaceFolders();
+			if (!workspaceFolders || workspaceFolders.length === 0) {
+				return undefined;
+			}
+			const repo = await this.gitService.getRepository(workspaceFolders[0]);
+			if (!repo) {
+				return undefined;
+			}
+			for (const remoteUrl of getOrderedRemoteUrlsFromContext(repo)) {
+				const repoId = getGithubRepoIdFromFetchUrl(remoteUrl);
+				if (repoId) {
+					return toGithubNwo(repoId);
+				}
+			}
+			return undefined;
+		} catch {
+			return undefined;
+		}
 	}
 
 	async render() {
 		const enableCopilotMemory = this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
 		const enableMemoryTool = this.configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, this.experimentationService);
 
-		const userMemoryContent = enableMemoryTool ? await this.getUserMemoryContent() : undefined;
-		const sessionMemoryFiles = enableMemoryTool ? await this.getSessionMemoryFiles(this.props.sessionResource) : undefined;
-		const repoMemories = enableCopilotMemory ? await this.agentMemoryService.getRepoMemories() : undefined;
-		const localRepoMemoryFiles = (enableMemoryTool && !enableCopilotMemory) ? await this.getLocalRepoMemoryFiles() : undefined;
-
 		if (!enableMemoryTool && !enableCopilotMemory) {
 			return null;
+		}
+
+		const userMemoryContent = enableMemoryTool ? await this.getUserMemoryContent() : undefined;
+		const sessionMemoryFiles = enableMemoryTool ? await this.getSessionMemoryFiles(this.props.sessionResource) : undefined;
+		const localRepoMemoryFiles = (enableMemoryTool && !enableCopilotMemory) ? await this.getLocalRepoMemoryFiles() : undefined;
+
+		// When CAPI memory is enabled, fetch from the unified /prompt endpoint
+		let memoryPromptText: string | undefined;
+		let repoMemories: RepoMemoryEntry[] | undefined;
+		if (enableCopilotMemory) {
+			const repoNwo = await this.getRepoNwo();
+			const promptResponse = await this.agentMemoryService.getMemoryPrompt(repoNwo);
+			memoryPromptText = promptResponse?.prompt;
+			// Fall back to individual repo memories if /prompt endpoint is unavailable
+			if (!memoryPromptText) {
+				repoMemories = await this.agentMemoryService.getRepoMemories();
+			}
 		}
 
 		this._sendContextReadTelemetry(
@@ -84,7 +122,12 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 						}
 					</Tag>
 				)}
-				{repoMemories && repoMemories.length > 0 && (
+				{memoryPromptText && (
+					<Tag name='memory_context'>
+						{memoryPromptText}
+					</Tag>
+				)}
+				{!memoryPromptText && repoMemories && repoMemories.length > 0 && (
 					<Tag name='repository_memories'>
 						The following are recent memories stored for this repository from previous agent interactions. These memories may contain useful context about the codebase conventions, patterns, and practices. However, be aware that memories might be obsolete or incorrect or may not apply to your current task. Use the citations provided to verify the accuracy of any relevant memory before relying on it.<br />
 						<br />
