@@ -105,8 +105,8 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			this.initialization
 		]);
 
-		const localModelId = await this.getPreferredLocalCLIModelId();
-		const options = await getCommonTerminalOptions(name, this._authenticationService, this.context.extensionPath, localModelId);
+		const localModelIds = await this.getLocalCLIModelIds();
+		const options = await getCommonTerminalOptions(name, this._authenticationService, this.context.extensionPath, localModelIds);
 		if (shellPathAndArgs) {
 			options.iconPath = shellPathAndArgs.iconPath ?? options.iconPath;
 		}
@@ -285,7 +285,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		}
 	}
 
-	private async getPreferredLocalCLIModelId(): Promise<string | undefined> {
+	private async getLocalCLIModelIds(): Promise<string | undefined> {
 		try {
 			let localModels = await vscode.lm.selectChatModels({ vendor: LOCAL_MODEL_VENDOR });
 			if (localModels.length === 0) {
@@ -293,7 +293,8 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				localModels = allModels.filter(model => model.vendor === LOCAL_MODEL_VENDOR || model.family.startsWith(LOCAL_MODEL_FAMILY_PREFIX));
 			}
 
-			const visibleModel = localModels.find(model => {
+			// Include all local models whose surface is 'cli' or 'both' (exclude chat-only).
+			const cliVisible = localModels.filter(model => {
 				const markerIndex = model.family.lastIndexOf(MODEL_SURFACE_MARKER);
 				if (markerIndex === -1) {
 					return true;
@@ -302,7 +303,10 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				return surface !== MODEL_SURFACE_CHAT;
 			});
 
-			return visibleModel?.id;
+			if (cliVisible.length === 0) {
+				return undefined;
+			}
+			return cliVisible.map(m => m.id).join(',');
 		} catch {
 			return undefined;
 		}
@@ -322,7 +326,7 @@ function quoteArgsForShell(shellScript: string, args: string[]): string {
 	return args.length ? `${escapeArg(shellScript)} ${escapedArgs.join(' ')}` : escapeArg(shellScript);
 }
 
-async function getCommonTerminalOptions(name: string, authenticationService: IAuthenticationService, extensionPath: string, localModelId?: string): Promise<TerminalOptions> {
+async function getCommonTerminalOptions(name: string, authenticationService: IAuthenticationService, extensionPath: string, localModelIds?: string): Promise<TerminalOptions> {
 	const options: TerminalOptions = {
 		name,
 		iconPath: new ThemeIcon('terminal'),
@@ -333,10 +337,8 @@ async function getCommonTerminalOptions(name: string, authenticationService: IAu
 	const bundledCliEntry = path.join(extensionPath, 'node_modules', '@github', 'copilot', 'npm-loader.js');
 	const session = await authenticationService.getGitHubSession('any', { silent: true });
 	const env: Record<string, string> = {
-		// Force the shim to run the CLI bundled with this extension build.
-		VSCODE_COPILOT_CLI_BUNDLED_ENTRY: bundledCliEntry,
-		// Allow non-default provider/model IDs in the CLI picker path.
-		COPILOT_ENABLE_ALT_PROVIDERS: 'true'
+		// Force the shim to run the patched index.js bundled with this extension build.
+		VSCODE_COPILOT_CLI_BUNDLED_ENTRY: bundledCliEntry
 	};
 
 	if (session) {
@@ -346,10 +348,11 @@ async function getCommonTerminalOptions(name: string, authenticationService: IAu
 		env.COPILOT_GITHUB_TOKEN = session.accessToken;
 	}
 
-	if (localModelId) {
-		// BYOK mode for local Ollama-backed models when available via VS Code local model providers.
-		env.COPILOT_PROVIDER_BASE_URL = process.env.COPILOT_PROVIDER_BASE_URL || COPILOT_PROVIDER_BASE_URL_DEFAULT;
-		env.COPILOT_MODEL = process.env.COPILOT_MODEL || localModelId;
+	if (localModelIds) {
+		// Tell the patched index.js to inject these model IDs into the picker and route their
+		// completions to Ollama instead of the GitHub Copilot API.
+		env.COPILOT_LOCAL_MODELS = localModelIds;
+		env.COPILOT_LOCAL_BASE_URL = process.env.COPILOT_LOCAL_BASE_URL || COPILOT_PROVIDER_BASE_URL_DEFAULT;
 	}
 
 	options.env = env;
