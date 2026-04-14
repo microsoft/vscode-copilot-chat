@@ -25,7 +25,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ToolCall } from '../../agents/copilotcli/common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../../agents/copilotcli/common/delegationSummaryService';
-import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../agents/copilotcli/node/copilotCli';
+import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK, LOCAL_MODEL_PREFIX } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
@@ -270,12 +270,20 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	}
 
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
-		const [models, agents] = await Promise.all([
+		const [models, agents, localVSCodeModels] = await Promise.all([
 			this.copilotCLIModels.getModels(),
-			this.copilotCLIAgents.getAgents()
+			this.copilotCLIAgents.getAgents(),
+			vscode.lm.selectChatModels({ vendor: 'local' }).then(
+				ms => ms.map(m => ({
+					id: `${LOCAL_MODEL_PREFIX}${m.id}`,
+					name: m.name,
+					description: l10n.t('Local model (basic chat only — no agent tools)')
+				} satisfies vscode.ChatSessionProviderOptionItem)),
+				() => [] as vscode.ChatSessionProviderOptionItem[]
+			)
 		]);
 		const hasAgents = agents.length > 0;
-		const modelItems: vscode.ChatSessionProviderOptionItem[] = models;
+		const modelItems: vscode.ChatSessionProviderOptionItem[] = [...models, ...localVSCodeModels];
 		const agentItems: vscode.ChatSessionProviderOptionItem[] = [
 			{ id: COPILOT_CLI_DEFAULT_AGENT_ID, name: l10n.t('Agent') }
 		];
@@ -452,6 +460,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				this.getModelId(id, request, false, token),
 				this.getAgent(id, request, token),
 			]);
+			// Local VS Code LM models (e.g. Ollama) bypass the Copilot CLI SDK session entirely.
+			// They don't support the full agentic tool loop — only basic conversational responses.
+			if (modelId?.startsWith(LOCAL_MODEL_PREFIX)) {
+				return await this.handleLocalModelRequest(modelId, request, stream, token);
+			}
+
 			if (isUntitled && (modelId || agent)) {
 				const promptFile = request ? await this.getPromptInfoFromRequest(request, token) : undefined;
 				if (promptFile) {
@@ -535,6 +549,77 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// or commit all changes in the working directory when the session is completed
 			await this.copilotCLIWorktreeManagerService.handleRequestCompleted(session.sessionId);
 		}
+	}
+
+	/**
+	/**
+	 * Handle a chat request using a locally-registered VS Code language model provider (e.g. Ollama).
+	 * These models are surfaced via `vscode.lm.registerLanguageModelChatProvider` with vendor `'local'`
+	 * and identified by a model ID prefixed with {@link LOCAL_MODEL_PREFIX}.
+	 * Because local models are not connected to the Copilot CLI SDK's agentic loop, only basic
+	 * conversational responses are supported — no tool calls or file edits.
+	 */
+	private async handleLocalModelRequest(
+		modelId: string,
+		request: vscode.ChatRequest,
+		stream: vscode.ChatResponseStream,
+		token: vscode.CancellationToken
+	): Promise<vscode.ChatResult> {
+		const localModelId = modelId.slice(LOCAL_MODEL_PREFIX.length);
+		let model: vscode.LanguageModelChat | undefined;
+		try {
+			const available = await vscode.lm.selectChatModels({ vendor: 'local' });
+			model = available.find(m => m.id === localModelId);
+		} catch {
+			// selectChatModels may throw if no provider is registered; treat as unavailable
+		}
+
+		if (!model) {
+			stream.markdown(l10n.t(
+				'⚠️ Local model `{0}` is no longer available. ' +
+				'Make sure the local model provider extension is running and try again.',
+				localModelId
+			));
+			return {};
+		}
+
+		// Build conversation history (last 10 turns to keep context reasonable)
+		const messages: vscode.LanguageModelChatMessage[] = [];
+		for (const turn of request.context.history.slice(-10)) {
+			if (turn instanceof vscode.ChatRequestTurn) {
+				messages.push(vscode.LanguageModelChatMessage.User(turn.prompt));
+			} else {
+				const parts = (turn as vscode.ChatResponseTurn).response;
+				const assistantText = parts
+					.filter((p): p is vscode.ChatResponseMarkdownPart => p instanceof vscode.ChatResponseMarkdownPart)
+					.map(p => p.value.value)
+					.join('');
+				if (assistantText) {
+					messages.push(vscode.LanguageModelChatMessage.Assistant(assistantText));
+				}
+			}
+		}
+		messages.push(vscode.LanguageModelChatMessage.User(request.prompt));
+
+		try {
+			const response = await model.sendRequest(messages, {}, token);
+			for await (const chunk of response.text) {
+				if (token.isCancellationRequested) {
+					break;
+				}
+				stream.markdown(chunk);
+			}
+		} catch (ex) {
+			if (!isCancellationError(ex)) {
+				this.logService.error(`[CopilotCLI] Local model request failed: ${ex}`);
+				stream.markdown(l10n.t(
+					'⚠️ Error communicating with local model `{0}`: {1}',
+					localModelId,
+					ex instanceof Error ? ex.message : String(ex)
+				));
+			}
+		}
+		return {};
 	}
 
 	/**

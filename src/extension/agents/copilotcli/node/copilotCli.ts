@@ -32,6 +32,12 @@ const COPILOT_CLI_AGENT_MEMENTO_KEY = 'github.copilot.cli.customAgent';
 const COPILOT_CLI_SESSION_AGENTS_MEMENTO_KEY = 'github.copilot.cli.sessionAgents';
 export const COPILOT_CLI_DEFAULT_AGENT_ID = '___vscode_default___';
 
+/**
+ * Prefix for model IDs that correspond to locally-registered VS Code language model providers
+ * (e.g. Ollama models surfaced via vscode.lm.registerLanguageModelChatProvider).
+ */
+export const LOCAL_MODEL_PREFIX = 'local:';
+
 export class CopilotCLISessionOptions {
 	public readonly isolationEnabled: boolean;
 	public readonly workingDirectory?: Uri;
