@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it } from 'vitest';
-import { isRepoMemoryEntry, normalizeCitations, type MemoryPromptResponse, type UserMemoryEntry } from '../agentMemoryService';
+import type { MemoryPromptResponse } from '@github/copilot-agentic-tools/memory';
+import { isRepoMemoryEntry, normalizeCitations } from '../agentMemoryService';
 
 describe('AgentMemoryService', () => {
 	describe('isRepoMemoryEntry', () => {
@@ -127,58 +128,28 @@ describe('AgentMemoryService', () => {
 		});
 	});
 
-	describe('UserMemoryEntry', () => {
-		it('should accept entry with required fields only', () => {
-			const entry: UserMemoryEntry = {
-				subject: 'preferences',
-				fact: 'Prefer tabs over spaces',
-			};
-			expect(entry.subject).toBe('preferences');
-			expect(entry.fact).toBe('Prefer tabs over spaces');
-			expect(entry.citations).toBeUndefined();
-			expect(entry.reason).toBeUndefined();
-		});
-
-		it('should accept entry with all optional fields', () => {
-			const entry: UserMemoryEntry = {
-				subject: 'preferences',
-				fact: 'Prefer tabs over spaces',
-				citations: ['src/editorconfig:1'],
-				reason: 'User stated this during onboarding',
-			};
-			expect(entry.citations).toEqual(['src/editorconfig:1']);
-			expect(entry.reason).toBe('User stated this during onboarding');
-		});
-
-		it('should accept string citations for backward compatibility', () => {
-			const entry: UserMemoryEntry = {
-				subject: 'preferences',
-				fact: 'Prefer tabs over spaces',
-				citations: 'src/editorconfig:1, src/other.ts:5',
-			};
-			expect(typeof entry.citations).toBe('string');
-		});
-
-		it('should not include category field (user memories have no category)', () => {
-			const entry: UserMemoryEntry = {
-				subject: 'preferences',
-				fact: 'Prefer tabs over spaces',
-			};
-			expect('category' in entry).toBe(false);
-		});
-	});
-
 	describe('MemoryPromptResponse', () => {
-		it('should hold a prompt string', () => {
+		it('should hold memoriesContext and storeInstructions', () => {
 			const response: MemoryPromptResponse = {
-				prompt: 'The following are repository memories for owner/repo...',
+				storeInstructions: { prompt: 'Store instructions here.', promptVersion: '1.0.0' },
+				memoriesContext: { prompt: 'The following are repository memories...', promptVersion: '1.0.0', memoriesCount: 3 },
+				toolDefinition: { name: 'store_memory', description: 'Store a memory.', definitionVersion: '1.0.0' },
 			};
-			expect(response.prompt).toBe('The following are repository memories for owner/repo...');
+			expect(response.memoriesContext.prompt).toBe('The following are repository memories...');
+			expect(response.memoriesContext.memoriesCount).toBe(3);
+			expect(response.storeInstructions.promptVersion).toBe('1.0.0');
 		});
 
-		it('should accept an empty prompt string', () => {
-			const response: MemoryPromptResponse = { prompt: '' };
-			expect(response.prompt).toBe('');
+		it('should optionally include storeToolDefinition and voteToolDefinition', () => {
+			const response: MemoryPromptResponse = {
+				storeInstructions: { prompt: '', promptVersion: '1.1.0' },
+				memoriesContext: { prompt: '', promptVersion: '1.0.0', memoriesCount: 0 },
+				toolDefinition: { name: 'store_memory', description: 'Store a memory.', definitionVersion: '1.1.0' },
+				storeToolDefinition: { name: 'store_memory', description: 'Store a memory.', definitionVersion: '1.1.0' },
+				voteToolDefinition: { name: 'vote_memory', description: 'Vote on a memory.', definitionVersion: '1.0.0' },
+			};
+			expect(response.storeToolDefinition?.definitionVersion).toBe('1.1.0');
+			expect(response.voteToolDefinition?.name).toBe('vote_memory');
 		});
 	});
 });

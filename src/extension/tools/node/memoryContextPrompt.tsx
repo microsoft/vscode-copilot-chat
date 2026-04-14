@@ -14,8 +14,10 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Tag } from '../../prompts/node/base/tag';
-import { IAgentMemoryService, normalizeCitations, RepoMemoryEntry } from '../common/agentMemoryService';
+import type { MemoryResponse } from '@github/copilot-agentic-tools/memory';
+import { IAgentMemoryService } from '../common/agentMemoryService';
 import { ToolName } from '../common/toolNames';
+import { IAgentMemoryToolRegistrar } from './agentMemoryToolRegistrar';
 import { extractSessionId } from './memoryTool';
 
 const MEMORY_BASE_DIR = 'memory-tool/memories';
@@ -29,6 +31,7 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 	constructor(
 		props: any,
 		@IAgentMemoryService private readonly agentMemoryService: IAgentMemoryService,
+		@IAgentMemoryToolRegistrar private readonly agentMemoryToolRegistrar: IAgentMemoryToolRegistrar,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
@@ -76,11 +79,16 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 
 		// When CAPI memory is enabled, fetch from the unified /prompt endpoint
 		let memoryPromptText: string | undefined;
-		let repoMemories: RepoMemoryEntry[] | undefined;
+		let repoMemories: MemoryResponse[] | undefined;
 		if (enableCopilotMemory) {
 			const repoNwo = await this.getRepoNwo();
-			const promptResponse = await this.agentMemoryService.getMemoryPrompt(repoNwo);
-			memoryPromptText = promptResponse?.prompt;
+			// Fetch prompt and register tools in parallel — both depend on the same /prompt call
+			// but registerMemoryTools() makes its own call so they can run concurrently.
+			const [promptResponse] = await Promise.all([
+				this.agentMemoryService.getMemoryPrompt(repoNwo),
+				this.agentMemoryToolRegistrar.registerMemoryTools(),
+			]);
+			memoryPromptText = promptResponse?.memoriesContext.prompt;
 			// Fall back to individual repo memories if /prompt endpoint is unavailable
 			if (!memoryPromptText) {
 				repoMemories = await this.agentMemoryService.getRepoMemories();
@@ -240,16 +248,12 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 		return files.length > 0 ? files : undefined;
 	}
 
-	private formatMemories(memories: RepoMemoryEntry[]): string {
+	private formatMemories(memories: MemoryResponse[]): string {
 		return memories.map(m => {
 			const lines = [`**${m.subject}**`, `- Fact: ${m.fact}`];
 
-			// Format citations (handle both string and string[] formats)
-			if (m.citations) {
-				const citationsArray = normalizeCitations(m.citations) ?? [];
-				if (citationsArray.length > 0) {
-					lines.push(`- Citations: ${citationsArray.join(', ')}`);
-				}
+			if (m.citations.length > 0) {
+				lines.push(`- Citations: ${m.citations.join(', ')}`);
 			}
 
 			// Include reason if present (from CAPI format)
