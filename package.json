@@ -2124,6 +2124,16 @@
 		],
 		"commands": [
 			{
+				"command": "github.copilot.chat.deepseekCritic.manage",
+				"title": "DeepSeek Critic Hook",
+				"category": "Copilot Chat"
+			},
+			{
+				"command": "github.copilot.chat.deepseekCritic.install",
+				"title": "Install DeepSeek Critic Hook",
+				"category": "Copilot Chat"
+			},
+			{
 				"command": "github.copilot.chat.triggerPermissiveSignIn",
 				"title": "%github.copilot.command.triggerPermissiveSignIn%"
 			},
@@ -4732,6 +4742,11 @@
 						"tags": [
 							"advanced"
 						]
+					},
+					"github.copilot.chat.deepseekCritic.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "Enable the workspace DeepSeek critic hook integration for read-only critique context."
 					}
 				}
 			}
@@ -5296,6 +5311,11 @@
 					"command": "github.copilot.debug.showChatLogView",
 					"when": "view == workbench.panel.chat.view.copilot",
 					"group": "3_show"
+				},
+				{
+					"command": "github.copilot.chat.deepseekCritic.manage",
+					"when": "view == copilot-chat || view == workbench.panel.chat.view.copilot",
+					"group": "3_show@2"
 				}
 			],
 			"view/item/context": [

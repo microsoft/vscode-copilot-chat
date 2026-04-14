@@ -1,0 +1,25 @@
+{
+  "enabled": true,
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "preset": "刃",
+  "baseUrl": "https://api.deepseek.com/chat/completions",
+  "keychainService": "deepseek-api",
+  "keychainAccount": "default",
+  "fallbackKeychainServices": [
+    "deepseek-api",
+    "deepseek",
+    "DeepSeek API"
+  ],
+  "maxTokens": 900,
+  "temperature": 0.2,
+  "promptContextChars": 12000,
+  "responseChars": 3200,
+  "styleNote": "Return critique in Japanese. Be dense, concrete, and useful.",
+  "focusAreas": [
+    "implementation gaps",
+    "missing evidence",
+    "next concrete patch",
+    "test and verification blind spots"
+  ]
+}

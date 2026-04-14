@@ -58,6 +58,7 @@ import { IntentInvocationMetadata } from './conversation';
 import { IDocumentContext } from './documentContext';
 import { IBuildPromptResult, IIntent, IIntentInvocation, IResponseProcessor, TelemetryData } from './intents';
 import { ConversationalBaseTelemetryData, createTelemetryWithId, sendModelMessageTelemetry } from './telemetry';
+import { executeWorkspaceDeepSeekCriticHook } from './workspaceDeepSeekCriticHook';
 
 export interface IDefaultIntentRequestHandlerOptions {
 	maxToolCallIterations: number;
@@ -381,6 +382,20 @@ export class DefaultIntentRequestHandler {
 					}
 				},
 			});
+
+			try {
+				const criticResult = await executeWorkspaceDeepSeekCriticHook(this.request.prompt, this._logService, this.documentContext?.document.uri);
+				if (criticResult.additionalContext) {
+					additionalContexts.push(criticResult.additionalContext);
+					this.stream.hookProgress('UserPromptSubmit', l10n.t('DeepSeek critic injected additional context.'));
+					this._logService.info(`[DeepSeekCritic] Injected ${criticResult.additionalContext.length} chars of critique context`);
+				} else if (criticResult.issue) {
+					this.stream.hookProgress('UserPromptSubmit', l10n.t('DeepSeek critic issue: {0}', criticResult.issue.message));
+					this._logService.info(`[DeepSeekCritic] ${criticResult.issue.kind}: ${criticResult.issue.message}`);
+				}
+			} catch (e) {
+				this._logService.debug(`[DeepSeekCritic] Hook execution failed (non-blocking): ${e}`);
+			}
 
 			if (additionalContexts.length > 0) {
 				loop.appendAdditionalHookContext(additionalContexts.join('\n'));
