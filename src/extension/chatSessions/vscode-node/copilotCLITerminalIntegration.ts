@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { promises as fs } from 'fs';
+import * as vscode from 'vscode';
 import { Terminal, TerminalOptions, ThemeIcon, ViewColumn, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IEnvService } from '../../../platform/env/common/envService';
@@ -21,6 +22,11 @@ import powershellScript from './copilotCLIShim.ps1';
 
 const COPILOT_CLI_SHIM_JS = 'copilotCLIShim.js';
 const COPILOT_CLI_COMMAND = 'copilot';
+const LOCAL_MODEL_VENDOR = 'local';
+const LOCAL_MODEL_FAMILY_PREFIX = 'local-ollama';
+const MODEL_SURFACE_MARKER = '::surface=';
+const MODEL_SURFACE_CHAT = 'chat';
+const COPILOT_PROVIDER_BASE_URL_DEFAULT = 'http://127.0.0.1:11434/v1';
 
 export interface ICopilotCLITerminalIntegration extends Disposable {
 	readonly _serviceBrand: undefined;
@@ -99,7 +105,8 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			this.initialization
 		]);
 
-		const options = await getCommonTerminalOptions(name, this._authenticationService);
+		const localModelId = await this.getPreferredLocalCLIModelId();
+		const options = await getCommonTerminalOptions(name, this._authenticationService, this.context.extensionPath, localModelId);
 		if (shellPathAndArgs) {
 			options.iconPath = shellPathAndArgs.iconPath ?? options.iconPath;
 		}
@@ -277,6 +284,29 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			}
 		}
 	}
+
+	private async getPreferredLocalCLIModelId(): Promise<string | undefined> {
+		try {
+			let localModels = await vscode.lm.selectChatModels({ vendor: LOCAL_MODEL_VENDOR });
+			if (localModels.length === 0) {
+				const allModels = await vscode.lm.selectChatModels();
+				localModels = allModels.filter(model => model.vendor === LOCAL_MODEL_VENDOR || model.family.startsWith(LOCAL_MODEL_FAMILY_PREFIX));
+			}
+
+			const visibleModel = localModels.find(model => {
+				const markerIndex = model.family.lastIndexOf(MODEL_SURFACE_MARKER);
+				if (markerIndex === -1) {
+					return true;
+				}
+				const surface = model.family.slice(markerIndex + MODEL_SURFACE_MARKER.length).toLowerCase();
+				return surface !== MODEL_SURFACE_CHAT;
+			});
+
+			return visibleModel?.id;
+		} catch {
+			return undefined;
+		}
+	}
 }
 
 function quoteArgsForShell(shellScript: string, args: string[]): string {
@@ -292,28 +322,37 @@ function quoteArgsForShell(shellScript: string, args: string[]): string {
 	return args.length ? `${escapeArg(shellScript)} ${escapedArgs.join(' ')}` : escapeArg(shellScript);
 }
 
-async function getCommonTerminalOptions(name: string, authenticationService: IAuthenticationService): Promise<TerminalOptions> {
+async function getCommonTerminalOptions(name: string, authenticationService: IAuthenticationService, extensionPath: string, localModelId?: string): Promise<TerminalOptions> {
 	const options: TerminalOptions = {
 		name,
 		iconPath: new ThemeIcon('terminal'),
 		location: { viewColumn: ViewColumn.Active },
 		hideFromUser: false
 	};
+
+	const bundledCliEntry = path.join(extensionPath, 'node_modules', '@github', 'copilot', 'npm-loader.js');
 	const session = await authenticationService.getGitHubSession('any', { silent: true });
+	const env: Record<string, string> = {
+		// Force the shim to run the CLI bundled with this extension build.
+		VSCODE_COPILOT_CLI_BUNDLED_ENTRY: bundledCliEntry,
+		// Allow non-default provider/model IDs in the CLI picker path.
+		COPILOT_ENABLE_ALT_PROVIDERS: 'true'
+	};
+
 	if (session) {
-		options.env = {
-			// Old Token name for GitHub integrations (deprecate once the new variable has been adopted widely)
-			GH_TOKEN: session.accessToken,
-			// New Token name for Copilot
-			COPILOT_GITHUB_TOKEN: session.accessToken,
-			// Allow non-default provider/model IDs in the CLI model picker path.
-			COPILOT_ENABLE_ALT_PROVIDERS: 'true'
-		};
-	} else {
-		options.env = {
-			COPILOT_ENABLE_ALT_PROVIDERS: 'true'
-		};
+		// Old token name for GitHub integrations (deprecate once new variable is widely adopted).
+		env.GH_TOKEN = session.accessToken;
+		// New token name for Copilot.
+		env.COPILOT_GITHUB_TOKEN = session.accessToken;
 	}
+
+	if (localModelId) {
+		// BYOK mode for local Ollama-backed models when available via VS Code local model providers.
+		env.COPILOT_PROVIDER_BASE_URL = process.env.COPILOT_PROVIDER_BASE_URL || COPILOT_PROVIDER_BASE_URL_DEFAULT;
+		env.COPILOT_MODEL = process.env.COPILOT_MODEL || localModelId;
+	}
+
+	options.env = env;
 	return options;
 }
 

@@ -31,6 +31,7 @@ import * as path from '../../../util/vs/base/common/path';
 
 const REQUIRED_VERSION = '0.0.342';
 const PACKAGE_NAME = '@github/copilot';
+const BUNDLED_ENTRY_ENV = 'VSCODE_COPILOT_CLI_BUNDLED_ENTRY';
 const env = { ...process.env, PATH: (process.env.PATH || '').replaceAll(`${__dirname}${path.delimiter}`, '').replaceAll(`${path.delimiter}${__dirname}`, '') };
 
 const rl = readline.createInterface({
@@ -134,14 +135,6 @@ async function pressKeyToExit(message: string = 'Press Enter to exit...'): Promi
 }
 
 (async function main() {
-	const info = await ensureInstalled();
-	if (info?.version) {
-		await validateVersion(info.version);
-	}
-	if (!info) {
-		warn('Error: Could not locate Copilot CLI after update.');
-		await pressKeyToExit(`Try manually reinstalling with: npm install -g ${PACKAGE_NAME} (https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)`);
-	}
 	const args = process.argv.slice(2);
 
 	// In vscode we use `--clear` to indicate that the terminal should be cleared before running the command
@@ -149,6 +142,27 @@ async function pressKeyToExit(message: string = 'Press Enter to exit...'): Promi
 	if (args[0] === '--clear') {
 		console.clear();
 		args.shift();
+	}
+
+	const bundledEntry = process.env[BUNDLED_ENTRY_ENV];
+	if (bundledEntry) {
+		const result = spawnSync(process.execPath, [bundledEntry, ...args], {
+			stdio: 'inherit',
+			env: { ...env, ELECTRON_RUN_AS_NODE: '1' }
+		});
+		if (typeof result.status === 'number') {
+			process.exit(result.status);
+		}
+		warn(`Failed to launch bundled Copilot CLI from ${bundledEntry}. Falling back to system CLI.`);
+	}
+
+	const info = await ensureInstalled();
+	if (info?.version) {
+		await validateVersion(info.version);
+	}
+	if (!info) {
+		warn('Error: Could not locate Copilot CLI after update.');
+		await pressKeyToExit(`Try manually reinstalling with: npm install -g ${PACKAGE_NAME} (https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)`);
 	}
 
 	spawnSync('copilot', args, { stdio: 'inherit', env });
