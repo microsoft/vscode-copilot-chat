@@ -25,7 +25,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ToolCall } from '../../agents/copilotcli/common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../../agents/copilotcli/common/delegationSummaryService';
-import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK, LOCAL_MODEL_PREFIX } from '../../agents/copilotcli/node/copilotCli';
+import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
@@ -275,9 +275,9 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			this.copilotCLIAgents.getAgents(),
 			vscode.lm.selectChatModels({ vendor: 'local' }).then(
 				ms => ms.map(m => ({
-					id: `${LOCAL_MODEL_PREFIX}${m.id}`,
+					id: m.id,
 					name: m.name,
-					description: l10n.t('Local model (basic chat only — no agent tools)')
+					description: l10n.t('Local model')
 				} satisfies vscode.ChatSessionProviderOptionItem)),
 				() => [] as vscode.ChatSessionProviderOptionItem[]
 			)
@@ -460,9 +460,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				this.getModelId(id, request, false, token),
 				this.getAgent(id, request, token),
 			]);
-			// Local VS Code LM models (e.g. Ollama) bypass the Copilot CLI SDK session entirely.
-			// They don't support the full agentic tool loop — only basic conversational responses.
-			if (modelId?.startsWith(LOCAL_MODEL_PREFIX)) {
+			if (modelId && await this.isLocalModelId(modelId)) {
 				return await this.handleLocalModelRequest(modelId, request, stream, token);
 			}
 
@@ -551,13 +549,17 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 	}
 
+	private async isLocalModelId(modelId: string): Promise<boolean> {
+		try {
+			const matches = await vscode.lm.selectChatModels({ vendor: 'local', id: modelId });
+			return matches.some(m => m.id === modelId);
+		} catch {
+			return false;
+		}
+	}
+
 	/**
-	/**
-	 * Handle a chat request using a locally-registered VS Code language model provider (e.g. Ollama).
-	 * These models are surfaced via `vscode.lm.registerLanguageModelChatProvider` with vendor `'local'`
-	 * and identified by a model ID prefixed with {@link LOCAL_MODEL_PREFIX}.
-	 * Because local models are not connected to the Copilot CLI SDK's agentic loop, only basic
-	 * conversational responses are supported — no tool calls or file edits.
+	 * Handle a request with a locally-registered VS Code language model provider.
 	 */
 	private async handleLocalModelRequest(
 		modelId: string,
@@ -565,20 +567,18 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken
 	): Promise<vscode.ChatResult> {
-		const localModelId = modelId.slice(LOCAL_MODEL_PREFIX.length);
 		let model: vscode.LanguageModelChat | undefined;
 		try {
-			const available = await vscode.lm.selectChatModels({ vendor: 'local' });
-			model = available.find(m => m.id === localModelId);
+			const available = await vscode.lm.selectChatModels({ vendor: 'local', id: modelId });
+			model = available.find(m => m.id === modelId);
 		} catch {
-			// selectChatModels may throw if no provider is registered; treat as unavailable
+			// ignore
 		}
 
 		if (!model) {
 			stream.markdown(l10n.t(
-				'⚠️ Local model `{0}` is no longer available. ' +
-				'Make sure the local model provider extension is running and try again.',
-				localModelId
+				'Local model {0} is not available. Make sure the provider extension is running and try again.',
+				modelId
 			));
 			return {};
 		}
@@ -613,8 +613,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (!isCancellationError(ex)) {
 				this.logService.error(`[CopilotCLI] Local model request failed: ${ex}`);
 				stream.markdown(l10n.t(
-					'⚠️ Error communicating with local model `{0}`: {1}',
-					localModelId,
+					'Error communicating with local model {0}: {1}',
+					modelId,
 					ex instanceof Error ? ex.message : String(ex)
 				));
 			}
