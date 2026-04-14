@@ -305,7 +305,13 @@ async function getCommonTerminalOptions(name: string, authenticationService: IAu
 			// Old Token name for GitHub integrations (deprecate once the new variable has been adopted widely)
 			GH_TOKEN: session.accessToken,
 			// New Token name for Copilot
-			COPILOT_GITHUB_TOKEN: session.accessToken
+			COPILOT_GITHUB_TOKEN: session.accessToken,
+			// Allow non-default provider/model IDs in the CLI model picker path.
+			COPILOT_ENABLE_ALT_PROVIDERS: 'true'
+		};
+	} else {
+		options.env = {
+			COPILOT_ENABLE_ALT_PROVIDERS: 'true'
 		};
 	}
 	return options;

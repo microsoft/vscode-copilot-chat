@@ -40,6 +40,9 @@ import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 
 const AGENTS_OPTION_ID = 'agent';
 const MODELS_OPTION_ID = 'model';
+const MODEL_SURFACE_MARKER = '::surface=';
+const MODEL_SURFACE_CHAT = 'chat';
+const LOCAL_MODEL_FAMILY_PREFIX = 'local-ollama';
 
 const UncommittedChangesStep = 'uncommitted-changes';
 type ConfirmationResult = { step: string; accepted: boolean; metadata?: CLIConfirmationMetadata };
@@ -224,6 +227,10 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		this._register(this.copilotCLIAgents.onDidChangeAgents(() => {
 			this._onDidChangeChatSessionProviderOptions.fire();
 		}));
+
+		this._register(vscode.lm.onDidChangeChatModels(() => {
+			this._onDidChangeChatSessionProviderOptions.fire();
+		}));
 	}
 
 	public notifySessionOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<{ optionId: string; value: string | vscode.ChatSessionProviderOptionItem }>): void {
@@ -273,14 +280,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		const [models, agents, localVSCodeModels] = await Promise.all([
 			this.copilotCLIModels.getModels(),
 			this.copilotCLIAgents.getAgents(),
-			vscode.lm.selectChatModels({ vendor: 'local' }).then(
-				ms => ms.map(m => ({
-					id: m.id,
-					name: m.name,
-					description: l10n.t('Local model')
-				} satisfies vscode.ChatSessionProviderOptionItem)),
-				() => [] as vscode.ChatSessionProviderOptionItem[]
-			)
+			this.getLocalVSCodeModelOptions()
 		]);
 		const hasAgents = agents.length > 0;
 		const modelItems: vscode.ChatSessionProviderOptionItem[] = [...models, ...localVSCodeModels];
@@ -310,6 +310,39 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			});
 		}
 		return options;
+	}
+
+	private async getLocalVSCodeModelOptions(): Promise<vscode.ChatSessionProviderOptionItem[]> {
+		try {
+			let localModels = await vscode.lm.selectChatModels({ vendor: 'local' });
+
+			// Some providers are visible in global model enumeration but not in vendor-scoped selection.
+			if (localModels.length === 0) {
+				const allModels = await vscode.lm.selectChatModels();
+				localModels = allModels.filter(model => model.vendor === 'local' || model.family.startsWith(LOCAL_MODEL_FAMILY_PREFIX));
+			}
+
+			return localModels
+				.filter(model => this.isVisibleInCLISession(model))
+				.map(model => ({
+					id: model.id,
+					name: model.name,
+					description: l10n.t('Local model')
+				} satisfies vscode.ChatSessionProviderOptionItem));
+		} catch {
+			return [];
+		}
+	}
+
+	private isVisibleInCLISession(model: vscode.LanguageModelChat): boolean {
+		const markerIndex = model.family.lastIndexOf(MODEL_SURFACE_MARKER);
+		if (markerIndex === -1) {
+			// Unmarked models default to visible in CLI for backward compatibility.
+			return true;
+		}
+
+		const surface = model.family.slice(markerIndex + MODEL_SURFACE_MARKER.length).toLowerCase();
+		return surface !== MODEL_SURFACE_CHAT;
 	}
 
 	// Handle option changes for a session (store current state in a map)
@@ -461,7 +494,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				this.getAgent(id, request, token),
 			]);
 			if (modelId && await this.isLocalModelId(modelId)) {
-				return await this.handleLocalModelRequest(modelId, request, stream, token);
+				return await this.handleLocalModelRequest(modelId, request, context, stream, token);
 			}
 
 			if (isUntitled && (modelId || agent)) {
@@ -564,6 +597,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	private async handleLocalModelRequest(
 		modelId: string,
 		request: vscode.ChatRequest,
+		context: vscode.ChatContext,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken
 	): Promise<vscode.ChatResult> {
@@ -585,7 +619,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 		// Build conversation history (last 10 turns to keep context reasonable)
 		const messages: vscode.LanguageModelChatMessage[] = [];
-		for (const turn of request.context.history.slice(-10)) {
+		for (const turn of context.history.slice(-10)) {
 			if (turn instanceof vscode.ChatRequestTurn) {
 				messages.push(vscode.LanguageModelChatMessage.User(turn.prompt));
 			} else {
