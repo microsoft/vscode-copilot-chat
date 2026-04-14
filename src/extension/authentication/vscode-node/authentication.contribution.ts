@@ -53,8 +53,12 @@ class AuthUpgradeAsk extends Disposable {
 		try {
 			await this._authenticationService.getCopilotToken();
 		} catch (error) {
-			// likely due to the user canceling the auth flow
-			this._logService.error(error, 'Failed to get copilot token');
+			if (error instanceof Error && error.message === 'GitHubLoginFailed') {
+				this._logService.info('Copilot token unavailable until GitHub sign-in completes.');
+			} else {
+				// likely due to the user canceling the auth flow
+				this._logService.error(error instanceof Error ? error : String(error), 'Failed to get copilot token');
+			}
 		}
 
 		await Event.toPromise(

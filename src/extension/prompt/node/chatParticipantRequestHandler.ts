@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import type { ChatRequest, ChatRequestTurn2, ChatResponseStream, ChatResult, Location } from 'vscode';
+import type { ChatRequest, ChatRequestTurn2, ChatResponseStream, ChatResult, ExtendedChatResponsePart, Location } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { getChatParticipantNameFromId } from '../../../platform/chat/common/chatAgents';
@@ -26,10 +26,10 @@ import { isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequestEditorData, ChatRequestNotebookData, ChatRequestTurn, ChatResponseAnchorPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseProgressPart2, ChatResponseReferencePart, ChatResponseTurn, ChatLocation as VSChatLocation } from '../../../vscodeTypes';
+import { ChatQuestionType, ChatRequestEditorData, ChatRequestNotebookData, ChatRequestTurn, ChatResponseAnchorPart, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseExtensionsPart, ChatResponseExternalEditPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseMovePart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponsePullRequestPart, ChatResponseQuestionCarouselPart, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn, ChatResponseWarningPart, ChatResponseWorkspaceEditPart, ChatToolInvocationPart, ChatLocation as VSChatLocation } from '../../../vscodeTypes';
 import { ICommandService } from '../../commands/node/commandService';
 import { getAgentForIntent, Intent } from '../../common/constants';
-import { IConversationStore } from '../../conversationStore/node/conversationStore';
+import { IConversationAssistantExtraItem, IConversationAssistantStatusKind, IConversationQuestionItem, IConversationQuestionType, IConversationStore, IConversationTurnCodeCitationEvent, IConversationTurnCommandButtonEvent, IConversationTurnConfirmationEvent, IConversationTurnExtraEvent, IConversationTurnQuestionCarouselEvent, IConversationTurnReferenceEvent, IConversationTurnStatusEvent, IConversationTurnToolInvocationEvent } from '../../conversationStore/node/conversationStore';
 import { IIntentService } from '../../intents/node/intentService';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ContributedToolName } from '../../tools/common/toolNames';
@@ -48,6 +48,20 @@ export interface IChatAgentArgs {
 	agentId: string;
 	intentId?: string;
 }
+
+type ChatResponseMultiDiffEntryLike = {
+	readonly originalUri?: { toString(): string };
+	readonly modifiedUri?: { toString(): string };
+	readonly goToFileUri?: { toString(): string };
+	readonly added?: number;
+	readonly removed?: number;
+};
+
+type ChatResponseMultiDiffPartLike = {
+	readonly value: readonly ChatResponseMultiDiffEntryLike[];
+	readonly title: string;
+	readonly readOnly?: boolean;
+};
 
 /**
  * Handles a single chat request:
@@ -130,6 +144,63 @@ export class ChatParticipantRequestHandler {
 		this.conversation = new Conversation(actualSessionId, turns.concat(latestTurn));
 
 		this.turn = latestTurn;
+		this._conversationStore.reportUserTurn({
+			conversationId: this.conversation.sessionId,
+			turnId: this.turn.id,
+			content: this.turn.request.message,
+			timestamp: this.turn.startTime,
+		});
+
+		this.stream = ChatResponseStreamImpl.spy(this.stream, part => {
+			const chunk = this.getStreamingChunk(part);
+			if (chunk) {
+				this._conversationStore.reportAssistantTurnChunk({
+					conversationId: this.conversation.sessionId,
+					turnId: this.turn.id,
+					content: chunk,
+				});
+			}
+
+			const statusEvent = this.getStreamingStatus(part);
+			if (statusEvent) {
+				this._conversationStore.reportAssistantTurnStatus(statusEvent);
+			}
+
+			const reference = this.getStreamingReference(part);
+			if (reference) {
+				this._conversationStore.reportAssistantTurnReference(reference);
+			}
+
+			const codeCitation = this.getStreamingCodeCitation(part);
+			if (codeCitation) {
+				this._conversationStore.reportAssistantTurnCodeCitation(codeCitation);
+			}
+
+			const toolInvocation = this.getStreamingToolInvocation(part);
+			if (toolInvocation) {
+				this._conversationStore.reportAssistantTurnToolInvocation(toolInvocation);
+			}
+
+			const confirmation = this.getStreamingConfirmation(part);
+			if (confirmation) {
+				this._conversationStore.reportAssistantTurnConfirmation(confirmation);
+			}
+
+			const questionCarousel = this.getStreamingQuestionCarousel(part);
+			if (questionCarousel) {
+				this._conversationStore.reportAssistantTurnQuestionCarousel(questionCarousel);
+			}
+
+			const commandButton = this.getStreamingCommandButton(part);
+			if (commandButton) {
+				this._conversationStore.reportAssistantTurnCommandButton(commandButton);
+			}
+
+			const extra = this.getStreamingExtra(part);
+			if (extra) {
+				this._conversationStore.reportAssistantTurnExtra(extra);
+			}
+		});
 	}
 
 	private getLocation(request: ChatRequest) {
@@ -148,6 +219,495 @@ export class ChatParticipantRequestHandler {
 			default:
 				return ChatLocation.Other;
 		}
+	}
+
+	private getStreamingChunk(part: ExtendedChatResponsePart): string | undefined {
+		if (part instanceof ChatResponseMarkdownPart || part instanceof ChatResponseMarkdownWithVulnerabilitiesPart) {
+			const value = typeof part.value === 'string' ? part.value : part.value.value;
+			if (value.length > 0) {
+				return value;
+			}
+		}
+
+		return undefined;
+	}
+
+	private getStreamingStatus(part: ExtendedChatResponsePart): IConversationTurnStatusEvent | undefined {
+		if (part instanceof ChatResponseProgressPart || part instanceof ChatResponseProgressPart2) {
+			return this.createStatusEvent('progress', this.extractTextValue(part.value));
+		}
+
+		if (part instanceof ChatResponseWarningPart) {
+			return this.createStatusEvent('warning', this.extractTextValue(part.value));
+		}
+
+		if (part instanceof ChatResponseThinkingProgressPart) {
+			const value = Array.isArray(part.value) ? part.value.join('\n') : part.value;
+			return this.createStatusEvent('thinking', value);
+		}
+
+		return undefined;
+	}
+
+	private createStatusEvent(kind: IConversationAssistantStatusKind, content: string | undefined): IConversationTurnStatusEvent | undefined {
+		if (!content) {
+			return undefined;
+		}
+
+		return {
+			conversationId: this.conversation.sessionId,
+			turnId: this.turn.id,
+			kind,
+			content,
+		};
+	}
+
+	private getStreamingReference(part: ExtendedChatResponsePart): IConversationTurnReferenceEvent | undefined {
+		if (!(part instanceof ChatResponseReferencePart || part instanceof ChatResponseReferencePart2)) {
+			return undefined;
+		}
+
+		const serialized = this.serializeReferenceValue(part.value);
+		if (!serialized) {
+			return undefined;
+		}
+
+		return {
+			conversationId: this.conversation.sessionId,
+			turnId: this.turn.id,
+			label: serialized.label,
+			uri: serialized.uri,
+		};
+	}
+
+	private getStreamingCodeCitation(part: ExtendedChatResponsePart): IConversationTurnCodeCitationEvent | undefined {
+		if (!(part instanceof ChatResponseCodeCitationPart)) {
+			return undefined;
+		}
+
+		return {
+			conversationId: this.conversation.sessionId,
+			turnId: this.turn.id,
+			uri: part.value.toString(),
+			license: part.license,
+			snippet: part.snippet,
+		};
+	}
+
+	private getStreamingToolInvocation(part: ExtendedChatResponsePart): IConversationTurnToolInvocationEvent | undefined {
+		if (!(part instanceof ChatToolInvocationPart)) {
+			return undefined;
+		}
+
+		const toolName = part.toolName.trim();
+		const toolCallId = part.toolCallId.trim();
+		if (!toolName || !toolCallId) {
+			return undefined;
+		}
+
+		const message =
+			this.extractTextValue(part.invocationMessage)
+			?? this.extractTextValue(part.pastTenseMessage)
+			?? this.extractTextValue(part.originMessage);
+
+		return {
+			conversationId: this.conversation.sessionId,
+			turnId: this.turn.id,
+			toolName,
+			toolCallId,
+			message,
+			isError: Boolean(part.isError),
+			isComplete: Boolean(part.isComplete),
+		};
+	}
+
+	private getStreamingConfirmation(part: ExtendedChatResponsePart): IConversationTurnConfirmationEvent | undefined {
+		if (!(part instanceof ChatResponseConfirmationPart)) {
+			return undefined;
+		}
+
+		const title = part.title.trim();
+		const message = this.extractTextValue(part.message) ?? '';
+		if (!title && !message) {
+			return undefined;
+		}
+
+		return {
+			conversationId: this.conversation.sessionId,
+			turnId: this.turn.id,
+			title,
+			message,
+			buttons: Array.isArray(part.buttons) && part.buttons.length > 0 ? [...part.buttons] : undefined,
+		};
+	}
+
+	private getStreamingQuestionCarousel(part: ExtendedChatResponsePart): IConversationTurnQuestionCarouselEvent | undefined {
+		if (!(part instanceof ChatResponseQuestionCarouselPart)) {
+			return undefined;
+		}
+
+		const questions: IConversationQuestionItem[] = [];
+		for (const question of part.questions) {
+			const title = question.title.trim();
+			if (!title) {
+				continue;
+			}
+
+			questions.push({
+				id: question.id,
+				type: this.toConversationQuestionType(question.type),
+				title,
+				message: this.extractTextValue(question.message),
+				options: Array.isArray(question.options) && question.options.length > 0
+					? question.options.map(option => option.label)
+					: undefined,
+				allowFreeformInput: Boolean(question.allowFreeformInput),
+			});
+		}
+
+		if (questions.length === 0) {
+			return undefined;
+		}
+
+		return {
+			conversationId: this.conversation.sessionId,
+			turnId: this.turn.id,
+			allowSkip: Boolean(part.allowSkip),
+			questions,
+		};
+	}
+
+	private toConversationQuestionType(type: ChatQuestionType): IConversationQuestionType {
+		switch (type) {
+			case ChatQuestionType.Text:
+				return 'text';
+			case ChatQuestionType.SingleSelect:
+				return 'singleSelect';
+			case ChatQuestionType.MultiSelect:
+				return 'multiSelect';
+			default:
+				return 'unknown';
+		}
+	}
+
+	private getStreamingCommandButton(part: ExtendedChatResponsePart): IConversationTurnCommandButtonEvent | undefined {
+		if (!(part instanceof ChatResponseCommandButtonPart)) {
+			return undefined;
+		}
+
+		const commandId = typeof part.value.command === 'string' ? part.value.command.trim() : '';
+		if (!commandId) {
+			return undefined;
+		}
+
+		const title = typeof part.value.title === 'string' && part.value.title.trim().length > 0
+			? part.value.title.trim()
+			: commandId;
+
+		return {
+			conversationId: this.conversation.sessionId,
+			turnId: this.turn.id,
+			commandId,
+			title,
+			args: Array.isArray(part.value.arguments) ? [...part.value.arguments] : undefined,
+		};
+	}
+
+	private getStreamingExtra(part: ExtendedChatResponsePart): IConversationTurnExtraEvent | undefined {
+		const extra = this.toStreamingExtra(part);
+		if (!extra) {
+			return undefined;
+		}
+
+		return {
+			conversationId: this.conversation.sessionId,
+			turnId: this.turn.id,
+			extra,
+		};
+	}
+
+	private toStreamingExtra(part: ExtendedChatResponsePart): IConversationAssistantExtraItem | undefined {
+		if (part instanceof ChatResponseFileTreePart) {
+			const tree = fileTreePartToMarkdown(part).trim();
+			if (!tree) {
+				return undefined;
+			}
+
+			return {
+				kind: 'fileTree',
+				baseUri: part.baseUri.toString(),
+				tree,
+			};
+		}
+
+		if (part instanceof ChatResponseAnchorPart) {
+			const serialized = this.serializeAnchorPart(part);
+			if (!serialized) {
+				return undefined;
+			}
+
+			return {
+				kind: 'anchor',
+				label: serialized.label,
+				uri: serialized.uri,
+			};
+		}
+
+		if (part instanceof ChatResponseCodeblockUriPart) {
+			return {
+				kind: 'codeblockUri',
+				uri: part.value.toString(),
+				isEdit: Boolean(part.isEdit),
+				undoStopId: part.undoStopId,
+			};
+		}
+
+		if (part instanceof ChatResponseTextEditPart) {
+			return {
+				kind: 'textEdit',
+				uri: part.uri.toString(),
+				editCount: Array.isArray(part.edits) ? part.edits.length : 0,
+				isDone: Boolean(part.isDone),
+			};
+		}
+
+		if (part instanceof ChatResponseNotebookEditPart) {
+			return {
+				kind: 'notebookEdit',
+				uri: part.uri.toString(),
+				editCount: Array.isArray(part.edits) ? part.edits.length : 0,
+				isDone: Boolean(part.isDone),
+			};
+		}
+
+		if (part instanceof ChatResponseWorkspaceEditPart) {
+			const edits = part.edits
+				.map(edit => ({
+					oldUri: edit.oldResource?.toString(),
+					newUri: edit.newResource?.toString(),
+				}))
+				.filter(edit => edit.oldUri || edit.newUri);
+			if (edits.length === 0) {
+				return undefined;
+			}
+
+			return {
+				kind: 'workspaceEdit',
+				edits,
+			};
+		}
+
+		if (part instanceof ChatResponseMovePart) {
+			return {
+				kind: 'move',
+				uri: part.uri.toString(),
+				startLine: part.range.start.line + 1,
+				endLine: part.range.end.line + 1,
+			};
+		}
+
+		if (part instanceof ChatResponseExtensionsPart) {
+			const extensions = part.extensions
+				.map(extensionId => extensionId.trim())
+				.filter(extensionId => extensionId.length > 0);
+			if (extensions.length === 0) {
+				return undefined;
+			}
+
+			return {
+				kind: 'extensions',
+				extensions,
+			};
+		}
+
+		if (part instanceof ChatResponsePullRequestPart) {
+			const title = part.title.trim();
+			const description = part.description.trim();
+			const author = part.author.trim();
+			const linkTag = part.linkTag.trim();
+			if (!title && !description && !author) {
+				return undefined;
+			}
+
+			const commandId = typeof part.command?.command === 'string' && part.command.command.trim().length > 0
+				? part.command.command.trim()
+				: undefined;
+
+			return {
+				kind: 'pullRequest',
+				title: title || 'Pull request',
+				description,
+				author,
+				linkTag,
+				commandId,
+				commandArgs: Array.isArray(part.command?.arguments) ? [...part.command.arguments] : undefined,
+			};
+		}
+
+		if (part instanceof ChatResponseExternalEditPart) {
+			const uris = part.uris
+				.map(uri => uri.toString())
+				.filter(uri => uri.trim().length > 0);
+			if (uris.length === 0) {
+				return undefined;
+			}
+
+			return {
+				kind: 'externalEdit',
+				uris,
+			};
+		}
+
+		if (this.isChatResponseMultiDiffPart(part)) {
+			const entries = part.value
+				.map(entry => ({
+					originalUri: entry.originalUri?.toString(),
+					modifiedUri: entry.modifiedUri?.toString(),
+					goToFileUri: entry.goToFileUri?.toString(),
+					added: typeof entry.added === 'number' ? entry.added : undefined,
+					removed: typeof entry.removed === 'number' ? entry.removed : undefined,
+				}))
+				.filter(entry => entry.originalUri || entry.modifiedUri || entry.goToFileUri || entry.added !== undefined || entry.removed !== undefined);
+			if (entries.length === 0 && part.title.trim().length === 0) {
+				return undefined;
+			}
+
+			return {
+				kind: 'multiDiff',
+				title: part.title.trim() || 'Changes',
+				readOnly: Boolean(part.readOnly),
+				entries,
+			};
+		}
+
+		return undefined;
+	}
+
+	private isChatResponseMultiDiffPart(part: ExtendedChatResponsePart): part is ExtendedChatResponsePart & ChatResponseMultiDiffPartLike {
+		const candidate = part as Partial<ChatResponseMultiDiffPartLike>;
+		return Array.isArray(candidate.value)
+			&& typeof candidate.title === 'string'
+			&& (candidate.readOnly === undefined || typeof candidate.readOnly === 'boolean');
+	}
+
+	private extractTextValue(value: unknown): string | undefined {
+		if (typeof value === 'string') {
+			const normalized = value.trim();
+			return normalized || undefined;
+		}
+
+		if (typeof value === 'object' && value !== null && 'value' in value && typeof value.value === 'string') {
+			const normalized = value.value.trim();
+			return normalized || undefined;
+		}
+
+		return undefined;
+	}
+
+	private serializeReferenceValue(value: unknown): { label: string; uri: string | undefined } | undefined {
+		if (typeof value === 'string') {
+			const label = value.trim();
+			if (!label) {
+				return undefined;
+			}
+
+			return {
+				label,
+				uri: undefined,
+			};
+		}
+
+		if (URI.isUri(value)) {
+			return {
+				label: this.referenceLabelFromUri(value),
+				uri: value.toString(),
+			};
+		}
+
+		if (isLocation(value)) {
+			return {
+				label: this.referenceLabelFromLocation(value),
+				uri: value.uri.toString(),
+			};
+		}
+
+		if (typeof value === 'object' && value !== null) {
+			const variableReference = value as { variableName?: unknown; value?: unknown };
+			if (typeof variableReference.variableName !== 'string') {
+				return undefined;
+			}
+
+			const label = variableReference.variableName.trim();
+			const nestedValue = variableReference.value;
+			const nestedUri = this.referenceUriFromUnknown(nestedValue);
+			if (!label && !nestedUri) {
+				return undefined;
+			}
+
+			return {
+				label: label || this.referenceLabelFromUri(nestedUri!),
+				uri: nestedUri?.toString(),
+			};
+		}
+
+		return undefined;
+	}
+
+	private serializeAnchorPart(part: ChatResponseAnchorPart): { label: string; uri: string | undefined } | undefined {
+		const anchorWithValue2 = part as ChatResponseAnchorPart & { value2?: unknown };
+		const value = anchorWithValue2.value2 ?? part.value;
+		const title = typeof part.title === 'string' ? part.title.trim() : '';
+
+		if (isSymbolInformation(value)) {
+			const symbolName = value.name.trim();
+			if (!title && !symbolName) {
+				return undefined;
+			}
+
+			return {
+				label: title || symbolName,
+				uri: value.location?.uri?.toString(),
+			};
+		}
+
+		const serialized = this.serializeReferenceValue(value);
+		if (!serialized) {
+			return undefined;
+		}
+
+		return {
+			label: title || serialized.label,
+			uri: serialized.uri,
+		};
+	}
+
+	private referenceUriFromUnknown(value: unknown): URI | undefined {
+		if (!value) {
+			return undefined;
+		}
+
+		if (URI.isUri(value)) {
+			return value;
+		}
+
+		if (isLocation(value)) {
+			return value.uri;
+		}
+
+		return undefined;
+	}
+
+	private referenceLabelFromUri(uri: URI): string {
+		const pathSegments = uri.path.split('/');
+		const basename = pathSegments[pathSegments.length - 1];
+		return basename || uri.toString();
+	}
+
+	private referenceLabelFromLocation(location: Location): string {
+		const startLine = location.range.start.line + 1;
+		const endLine = location.range.end.line + 1;
+		const lineSuffix = startLine === endLine ? `#L${startLine}` : `#L${startLine}-${endLine}`;
+		return `${this.referenceLabelFromUri(location.uri)}${lineSuffix}`;
 	}
 
 	private async sanitizeVariables(): Promise<ChatRequest> {
@@ -215,6 +775,10 @@ export class ChatParticipantRequestHandler {
 			};
 		}
 		this._logService.trace(`[${ChatLocation.toStringShorter(this.location)}] chat request received from extension host`);
+		this._conversationStore.reportAssistantTurnStart({
+			conversationId: this.conversation.sessionId,
+			turnId: this.turn.id,
+		});
 		try {
 
 			// sanitize the variables of all requests
@@ -275,9 +839,19 @@ export class ChatParticipantRequestHandler {
 				}
 			} satisfies ICopilotChatResult, true);
 
+			this._conversationStore.reportAssistantTurnComplete({
+				conversationId: this.conversation.sessionId,
+				turnId: this.turn.id,
+			});
+
 			return <ICopilotChatResult>result;
 
 		} catch (err) {
+			this._conversationStore.reportAssistantTurnComplete({
+				conversationId: this.conversation.sessionId,
+				turnId: this.turn.id,
+			});
+
 			// TODO This method should not throw at all, but return a result with errorDetails, and call the IConversationStore
 			throw err;
 		}

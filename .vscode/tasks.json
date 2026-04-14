@@ -9,9 +9,17 @@
 			"runOptions": { "runOn": "worktreeCreated" }
 		},
 		{
+			"label": "PWA: Dev Server",
+			"type": "shell",
+			"command": "npm run pwa:dev",
+			"isBackground": true,
+			"problemMatcher": [],
+			"inSessions": true
+		},
+		{
 			"label": "Compile & Launch Extension Host",
 			"type": "shell",
-			"command": "npm run compile && COPILOT_LOG_TELEMETRY=true VSCODE_DEV_DEBUG=1 code-insiders --extensionDevelopmentPath=$(pwd)",
+			"command": "npm run compile && if command -v code-insiders >/dev/null 2>&1; then COPILOT_LOG_TELEMETRY=true VSCODE_DEV_DEBUG=1 code-insiders --extensionDevelopmentPath=$(pwd); else COPILOT_LOG_TELEMETRY=true VSCODE_DEV_DEBUG=1 code --enable-proposed-api github.copilot-chat --extensionDevelopmentPath=$(pwd); fi",
 			"inSessions": true
 		},
 		{
@@ -137,6 +145,19 @@
 				"group": "watch",
 				"reveal": "never"
 			}
+		},
+		{
+			"label": "Package & Install VSIX",
+			"type": "shell",
+			"command": "npm run compile && npx vsce package --out copilot-chat-sidecar.vsix --allow-package-secrets sendgrid && if command -v code-insiders >/dev/null 2>&1; then code-insiders --install-extension copilot-chat-sidecar.vsix --force; else code --install-extension copilot-chat-sidecar.vsix --force; fi",
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true,
+				"focus": true
+			},
+			"problemMatcher": []
 		},
 		{
 			"label": "simulate",

@@ -1,0 +1,38 @@
+name: Deploy PWA
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - pwa/**
+      - .github/workflows/deploy-pwa.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload PWA Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: pwa
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

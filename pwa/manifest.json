@@ -1,0 +1,18 @@
+{
+	"name": "Copilot Sidecar",
+	"short_name": "Sidecar",
+	"description": "Sync live VS Code Copilot Chat sessions on mobile.",
+	"start_url": "./",
+	"scope": "./",
+	"display": "standalone",
+	"background_color": "#020617",
+	"theme_color": "#0f172a",
+	"icons": [
+		{
+			"src": "./icons/copilot.png",
+			"sizes": "256x256",
+			"type": "image/png",
+			"purpose": "any maskable"
+		}
+	]
+}

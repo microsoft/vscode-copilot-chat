@@ -56,6 +56,15 @@ export interface IClaudeCodeModels {
 
 export const IClaudeCodeModels = createServiceIdentifier<IClaudeCodeModels>('IClaudeCodeModels');
 
+function isExpectedUnauthenticatedModelFetchError(error: unknown): boolean {
+	if (!(error instanceof Error)) {
+		return false;
+	}
+
+	const message = error.message.toLowerCase();
+	return message.includes('githubloginfailed') || message.includes('failed to get token for auth info');
+}
+
 export class ClaudeCodeModels extends Disposable implements IClaudeCodeModels {
 	declare _serviceBrand: undefined;
 	private _cachedEndpoints: Promise<IChatEndpoint[]> | undefined;
@@ -179,7 +188,11 @@ export class ClaudeCodeModels extends Disposable implements IClaudeCodeModels {
 
 			return claudeEndpoints.sort((a, b) => b.name.localeCompare(a.name));
 		} catch (ex) {
-			this.logService.error(`[ClaudeCodeModels] Failed to fetch models`, ex);
+			if (isExpectedUnauthenticatedModelFetchError(ex)) {
+				this.logService.debug('[ClaudeCodeModels] Skipping model fetch until GitHub sign-in is available');
+			} else {
+				this.logService.error(ex instanceof Error ? ex : String(ex), '[ClaudeCodeModels] Failed to fetch models');
+			}
 			return [];
 		}
 	}

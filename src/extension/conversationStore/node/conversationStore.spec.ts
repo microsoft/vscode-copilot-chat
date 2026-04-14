@@ -5,6 +5,9 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { IChatSessionService } from '../../../platform/chat/common/chatSessionService';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { ConversationStore } from './conversationStore';
@@ -24,7 +27,10 @@ describe('ConversationStore', () => {
 			_serviceBrand: undefined,
 			onDidDisposeChatSession: disposeChatSession.event,
 		};
-		store = new ConversationStore(chatSessionService);
+		const extensionContext = { globalStorageUri: undefined } as unknown as IVSCodeExtensionContext;
+		const fileSystemService = {} as unknown as IFileSystemService;
+		const logService = { error: vi.fn() } as unknown as ILogService;
+		store = new ConversationStore(chatSessionService, extensionContext, fileSystemService, logService);
 	});
 
 	afterEach(() => {
