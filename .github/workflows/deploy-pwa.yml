@@ -3,7 +3,7 @@ name: Deploy PWA
 on:
   push:
     branches:
-      - main
+      - sidecar
     paths:
       - pwa/**
       - .github/workflows/deploy-pwa.yml
