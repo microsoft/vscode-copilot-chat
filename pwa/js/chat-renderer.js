@@ -196,7 +196,8 @@
 				extraKeys: new Set(),
 				editExtraItems: new Map(),
 				referenceKeys: new Set(),
-				citationKeys: new Set()
+				citationKeys: new Set(),
+				thinkingItem: null,
 			};
 			this.streamingTurns.set(turnId, entry);
 			this.scrollToBottom();
@@ -377,12 +378,31 @@
 			}
 
 			const entry = this.startAssistantTurn(turnId);
+			const kind = typeof status.kind === 'string' ? status.kind : 'progress';
+
+			if (kind === 'thinking') {
+				if (!entry.thinkingItem) {
+					const details = document.createElement('details');
+					details.className = 'assistant-thinking-block';
+					const summary = document.createElement('summary');
+					summary.className = 'assistant-thinking-summary';
+					summary.textContent = 'Thinking\u2026';
+					details.appendChild(summary);
+					const pre = document.createElement('pre');
+					pre.className = 'assistant-thinking-content';
+					details.appendChild(pre);
+					entry.statusHost.appendChild(details);
+					entry.thinkingItem = pre;
+				}
+				entry.thinkingItem.textContent += status.content;
+				this.scrollToBottom();
+				return;
+			}
+
 			const content = status.content.trim();
 			if (!content) {
 				return;
 			}
-
-			const kind = typeof status.kind === 'string' ? status.kind : 'progress';
 			const key = `${kind}::${content}`;
 			if (entry.statusKeys.has(key)) {
 				return;

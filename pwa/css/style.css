@@ -466,6 +466,54 @@ html, body {
 	border-color: #5b84c4;
 }
 
+.assistant-thinking-block {
+	border: 1px solid #5b84c4;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--vscode-input-background) 60%, transparent);
+	font-size: 12px;
+	overflow: hidden;
+}
+
+.assistant-thinking-summary {
+	cursor: pointer;
+	padding: 5px 10px;
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	font-weight: 700;
+	color: var(--vscode-descriptionForeground);
+	user-select: none;
+	list-style: none;
+}
+
+.assistant-thinking-summary::-webkit-details-marker {
+	display: none;
+}
+
+.assistant-thinking-summary::before {
+	content: '\25B6\00A0';
+	font-size: 8px;
+	opacity: 0.7;
+}
+
+details[open] > .assistant-thinking-summary::before {
+	content: '\25BC\00A0';
+}
+
+.assistant-thinking-content {
+	margin: 0;
+	padding: 6px 10px 8px;
+	font-family: var(--code-font-family);
+	font-size: 11px;
+	line-height: 1.5;
+	color: var(--vscode-descriptionForeground);
+	white-space: pre-wrap;
+	word-break: break-word;
+	border-top: 1px solid color-mix(in srgb, #5b84c4 30%, transparent);
+	max-height: 260px;
+	overflow-y: auto;
+}
+
 .assistant-tool-item {
 	font-family: var(--code-font-family);
 	word-break: break-word;

@@ -20,7 +20,7 @@ import { IConversationStore } from '../../conversationStore/node/conversationSto
 
 const showSidecarPanelCommandId = 'github.copilot.sidecar.showPanel';
 const pwaUrlStorageKey = 'sidecar.pwaUrl';
-const defaultPwaUrl = 'https://davidobot.github.io/vscode-copilot-chat-sidecar/';
+const defaultPwaUrl = 'https://davidobot.net/vscode-copilot-chat-sidecar/';
 const pwaDevUrlEnvVar = 'COPILOT_PWA_DEV_URL';
 const devTunnelDomainSuffix = '.devtunnels.ms';
 const devTunnelInstallUrl = 'https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/get-started';

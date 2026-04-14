@@ -17,7 +17,7 @@ import { IConversationStore } from '../../conversationStore/node/conversationSto
 const showSidecarPanelCommandId = 'github.copilot.sidecar.showPanel';
 const pwaUrlStorageKey = 'sidecar.pwaUrl';
 const legacyPwaUrlStorageKey = 'mobileMirror.pwaUrl';
-const defaultPwaUrl = 'https://davidobot.github.io/vscode-copilot-chat-sidecar/';
+const defaultPwaUrl = 'https://davidobot.net/vscode-copilot-chat-sidecar/';
 const pwaDevUrlEnvVar = 'COPILOT_PWA_DEV_URL';
 
 type SidecarState = 'disconnected' | 'starting' | 'ready';

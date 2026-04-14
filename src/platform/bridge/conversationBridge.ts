@@ -1235,6 +1235,15 @@ export class ConversationBridge extends Disposable {
 					continue;
 				}
 
+				if (parsed.kind === 1 && Array.isArray(parsed.k) && parsed.k.length === 3
+					&& parsed.k[0] === 'requests' && typeof parsed.k[1] === 'number' && parsed.k[2] === 'response'
+					&& Array.isArray(parsed.v)) {
+					// kind=1 sets the full response array for a specific request index.
+					const reqIdx = parsed.k[1] as number;
+					responseAccumulator.set(reqIdx, parsed.v as unknown[]);
+					continue;
+				}
+
 				if (parsed.kind === 2 && Array.isArray(parsed.k) && Array.isArray(parsed.v)) {
 					if (this.keyPathEquals(parsed.k, 'requests')) {
 						// Each such patch appends one (or more) new request objects.

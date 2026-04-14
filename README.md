@@ -47,7 +47,7 @@ If you just want to run Sidecar without setting up the full dev environment, you
 
 3. Reload VS Code and re-enable the `Github Copilot Chat` - this over-rides it. The Sidecar extension is now installed - **click the "Sidecar" panel at the bottom-right-hand-corner of your VS Code window** to launch.
 
-4. Accept the default URL (`https://davidobot.github.io/vscode-copilot-chat-sidecar/`) unless you're self-hosting; this is just the visual layer
+4. Accept the default URL (`https://davidobot.net/vscode-copilot-chat-sidecar/`) unless you're self-hosting; this is just the visual layer
 
 ## Development
 
@@ -67,7 +67,7 @@ If you just want to run Sidecar without setting up the full dev environment, you
 
 The `pwa/` directory is a static web app designed for GitHub Pages deployment. This repository includes `.github/workflows/deploy-pwa.yml`, which deploys `pwa/` to Pages on pushes to `main`.
 
-Use my deployed Github pages URL (`https://davidobot.github.io/vscode-copilot-chat-sidecar/`) in the Sidecar panel when generating pairing QR codes, or deploy your own.
+Use my deployed Github pages URL (`https://davidobot.net/vscode-copilot-chat-sidecar/`) in the Sidecar panel when generating pairing QR codes, or deploy your own.
 
 ### Local PWA dev server
 
@@ -119,7 +119,7 @@ You can test without deploying GitHub Pages.
 5. Click `Sidecar` to start the bridge and open the pairing panel.
 
 6. Set a PWA URL:
-   - Default hosted URL: https://davidobot.github.io/vscode-copilot-chat-sidecar/
+   - Default hosted URL: https://davidobot.net/vscode-copilot-chat-sidecar/
    - Local dev URL: `http://0.0.0.0:4173/`
 
 7. Scan the QR code from your phone and open the PWA.
