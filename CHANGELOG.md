@@ -1,3 +1,13 @@
+## Unreleased
+
+### Chat
+
+#### Session-scoped language model selection for chat providers
+
+Extensions contributing language models can now scope models to a specific chat session type by setting `targetChatSessionType` on `LanguageModelChatInformation`, and consumers can request those models via `vscode.lm.selectChatModels({ chatSessionType: 'copilotcli' })`.
+
+Generic model selection continues to work unchanged, while session-targeted models can stay out of generic pickers until a matching `chatSessionType` is requested. This enables flows like Copilot CLI to discover third-party models through the official selector API instead of relying on provider-specific filtering.
+
 ## 0.32 (2025-10-08)
 
 GitHub Copilot updates from [September 2025](https://code.visualstudio.com/updates/v1_105):

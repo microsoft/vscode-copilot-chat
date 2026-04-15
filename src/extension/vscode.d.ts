@@ -20489,6 +20489,14 @@ declare module 'vscode' {
 		 * @see {@link LanguageModelChat.id}
 		 */
 		id?: string;
+
+		/**
+		 * Restricts selection to models that are valid for a specific chat session type, such as `copilotcli`.
+		 *
+		 * Generic models without a {@linkcode LanguageModelChatInformation.targetChatSessionType} continue to match
+		 * unless the host or provider explicitly scopes the result further.
+		 */
+		chatSessionType?: string;
 	}
 
 	/**
@@ -20774,6 +20782,15 @@ declare module 'vscode' {
 		readonly maxOutputTokens: number;
 
 		/**
+		 * Restricts this model to a specific chat session type, such as `copilotcli`.
+		 *
+		 * When omitted, the model is considered generic and can be returned for any chat session type.
+		 * When set, the model is only returned from {@linkcode lm.selectChatModels} when the selector's
+		 * {@linkcode LanguageModelChatSelector.chatSessionType chatSessionType} matches this value.
+		 */
+		readonly targetChatSessionType?: string;
+
+		/**
 		 * Various features that the model supports such as tool calling or image input.
 		 */
 		readonly capabilities: LanguageModelChatCapabilities;
@@ -20877,6 +20894,14 @@ declare module 'vscode' {
 		 * If silent is true, all models may not be resolved due to lack of info such as API keys.
 		 */
 		readonly silent: boolean;
+
+		/**
+		 * The chat session type for which models are being resolved, such as `copilotcli`.
+		 *
+		 * Providers can use this to return only models whose
+		 * {@linkcode LanguageModelChatInformation.targetChatSessionType} matches the request.
+		 */
+		readonly chatSessionType?: string;
 	}
 
 	/**
@@ -20905,6 +20930,8 @@ declare module 'vscode' {
 		 * ```
 		 *
 		 * A selector can be written to broadly match all models of a given vendor or family, or it can narrowly select one model by ID.
+		 * Callers can also scope selection to a specific chat session type via
+		 * {@linkcode LanguageModelChatSelector.chatSessionType}.
 		 * Keep in mind that the available set of models will change over time, but also that prompts may perform differently in
 		 * different models.
 		 *

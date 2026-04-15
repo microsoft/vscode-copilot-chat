@@ -86,19 +86,21 @@ async function copyCopilotCLIFolders(sourceDir: string, targetDir: string) {
 }
 
 /**
- * Patches the bundled @github/copilot CLI so local Ollama models appear alongside
- * GitHub Copilot models in the /select-model picker, and their completions route
- * to Ollama instead of the GitHub API.
+ * Patches the bundled @github/copilot CLI so session-scoped external models appear
+ * alongside GitHub Copilot models in the /select-model picker, and their completions
+ * can route to configured OpenAI-compatible endpoints instead of the GitHub API.
  *
  * Two targeted string replacements — easily reversible via .bak files created here:
  *
  *  1. npm-loader.js: skip the sealed native binary so our patched index.js runs.
- *  2. index.js: inject a globalThis.fetch interceptor for local model completions
- *     routing, and extend wqn() to append local models from COPILOT_LOCAL_MODELS env.
+ *  2. index.js: inject a globalThis.fetch interceptor for external model completions
+ *     routing, and extend wqn() to append external models from env.
  *
  * The env vars that drive this at runtime (set by copilotCLITerminalIntegration.ts):
- *   COPILOT_LOCAL_MODELS     — comma-separated list of Ollama model IDs
- *   COPILOT_LOCAL_BASE_URL   — Ollama OpenAI-compat base URL (default http://127.0.0.1:11434/v1)
+ *   COPILOT_EXTERNAL_MODELS        — comma-separated list of external model IDs
+ *   COPILOT_EXTERNAL_MODEL_ROUTES  — JSON map of model ID -> { baseUrl, authorization? }
+ *   COPILOT_LOCAL_MODELS           — backward-compatible local model list
+ *   COPILOT_LOCAL_BASE_URL         — backward-compatible default local provider base URL
  */
 async function patchCopilotCLIForLocalModels() {
 	const CLI_DIR = path.join(REPO_ROOT, 'node_modules', '@github', 'copilot');
@@ -116,21 +118,21 @@ async function patchCopilotCLIForLocalModels() {
 		console.warn('[postinstall] WARNING: npm-loader.js patch anchor not found — skipping (CLI may have updated)');
 	}
 
-	// --- index.js patch 1: fetch interceptor for local model completions routing ---
+	// --- index.js patch 1: fetch interceptor for external model completions routing ---
 	const indexPath = path.join(CLI_DIR, 'index.js');
 	const indexOrig = await fs.promises.readFile(indexPath, 'utf8');
 	const INDEX_ANCHOR_OLD = '*/\nimport __module from "module";\nimport __path from "path";\nconst __rootRequire = __module.createRequire(import.meta.url);';
 	const INDEX_ANCHOR_NEW = `*/
-// PATCH START: local Ollama model injection
-{const __localIds=(process.env.COPILOT_LOCAL_MODELS||'').split(',').map(s=>s.trim()).filter(Boolean);const __localBase=(process.env.COPILOT_LOCAL_BASE_URL||'http://127.0.0.1:11434/v1');if(__localIds.length>0){const __origFetch=globalThis.fetch;globalThis.fetch=async(url,opts)=>{if(opts?.body){try{const body=typeof opts.body==='string'?JSON.parse(opts.body):opts.body;if(body?.model&&__localIds.includes(body.model)&&String(url).includes('/chat/completions')){return __origFetch(__localBase+'/chat/completions',{...opts,headers:{'Content-Type':'application/json','Authorization':'Bearer local'}});}}catch{}}return __origFetch(url,opts);};}}
-// PATCH END: local Ollama model injection
+// PATCH START: external model injection
+{const __extIds=(process.env.COPILOT_EXTERNAL_MODELS||process.env.COPILOT_LOCAL_MODELS||'').split(',').map(s=>s.trim()).filter(Boolean);const __routes={};try{const raw=process.env.COPILOT_EXTERNAL_MODEL_ROUTES;if(raw){const parsed=JSON.parse(raw);if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed)){for(const [id,route] of Object.entries(parsed)){if(!id||!route)continue;if(typeof route==='string'){__routes[id]={baseUrl:route};continue;}if(typeof route!=='object'||Array.isArray(route))continue;const baseUrl=typeof route.baseUrl==='string'?route.baseUrl:undefined;const authorization=typeof route.authorization==='string'?route.authorization:undefined;if(baseUrl){__routes[id]={baseUrl,authorization};}}}}}catch{}const __localBase=(process.env.COPILOT_LOCAL_BASE_URL||process.env.COPILOT_EXTERNAL_BASE_URL||'http://127.0.0.1:11434/v1');for(const id of (process.env.COPILOT_LOCAL_MODELS||'').split(',').map(s=>s.trim()).filter(Boolean)){if(!__routes[id]){__routes[id]={baseUrl:__localBase,authorization:'Bearer local'};}}if(__extIds.length>0){const __origFetch=globalThis.fetch;globalThis.fetch=async(url,opts)=>{if(opts?.body){try{const body=typeof opts.body==='string'?JSON.parse(opts.body):opts.body;const route=body?.model?__routes[body.model]:undefined;if(route&&String(url).includes('/chat/completions')){const headers={...(opts.headers||{}),'Content-Type':'application/json'};if(route.authorization&&!headers.Authorization&&!headers.authorization){headers.Authorization=route.authorization;}const base=String(route.baseUrl||'').replace(/\/$/,'');return __origFetch(base+'/chat/completions',{...opts,headers});}}catch{}}return __origFetch(url,opts);};}}
+// PATCH END: external model injection
 import __module from "module";
 import __path from "path";
 const __rootRequire = __module.createRequire(import.meta.url);`;
 
-	// --- index.js patch 2: wqn() append local models to picker list ---
+	// --- index.js patch 2: wqn() append external models to picker list ---
 	const WQN_OLD = `function wqn(t){return t.filter(e=>zO(e.id)&&NC(e.id,t)).sort((e,n)=>GW.indexOf(e.id)-GW.indexOf(n.id))}`;
-	const WQN_NEW = `function wqn(t){const __base=t.filter(e=>zO(e.id)&&NC(e.id,t)).sort((e,n)=>GW.indexOf(e.id)-GW.indexOf(n.id));const __lids=(process.env.COPILOT_LOCAL_MODELS||'').split(',').map(s=>s.trim()).filter(id=>id&&!__base.find(m=>m.id===id));return[...__base,...__lids.map(id=>({id,name:id,billing:{multiplier:0},policy:{state:'enabled'}}))]}`;
+	const WQN_NEW = `function wqn(t){const __base=t.filter(e=>zO(e.id)&&NC(e.id,t)).sort((e,n)=>GW.indexOf(e.id)-GW.indexOf(n.id));const __externalIds=(process.env.COPILOT_EXTERNAL_MODELS||process.env.COPILOT_LOCAL_MODELS||'').split(',').map(s=>s.trim()).filter(id=>id&&!__base.find(m=>m.id===id));return[...__base,...__externalIds.map(id=>({id,name:id,billing:{multiplier:0},policy:{state:'enabled'}}))]}`;
 
 	let indexPatched = indexOrig;
 	let changed = false;
@@ -139,7 +141,7 @@ const __rootRequire = __module.createRequire(import.meta.url);`;
 		indexPatched = indexPatched.replace(INDEX_ANCHOR_OLD, INDEX_ANCHOR_NEW);
 		changed = true;
 		console.log('[postinstall] patched index.js: fetch interceptor');
-	} else if (!indexOrig.includes('PATCH START: local Ollama model injection')) {
+	} else if (!indexOrig.includes('PATCH START: external model injection')) {
 		console.warn('[postinstall] WARNING: index.js fetch-interceptor anchor not found — skipping (CLI may have updated)');
 	}
 

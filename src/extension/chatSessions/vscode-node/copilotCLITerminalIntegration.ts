@@ -15,6 +15,7 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
+import { discoverCopilotCLIExternalModels } from './copilotCLIModelDiscovery';
 import { PythonTerminalService } from './copilotCLIPythonTerminalService';
 
 //@ts-ignore
@@ -23,10 +24,14 @@ import powershellScript from './copilotCLIShim.ps1';
 const COPILOT_CLI_SHIM_JS = 'copilotCLIShim.js';
 const COPILOT_CLI_COMMAND = 'copilot';
 const LOCAL_MODEL_VENDOR = 'local';
-const LOCAL_MODEL_FAMILY_PREFIX = 'local-ollama';
-const MODEL_SURFACE_MARKER = '::surface=';
-const MODEL_SURFACE_CHAT = 'chat';
 const COPILOT_PROVIDER_BASE_URL_DEFAULT = 'http://127.0.0.1:11434/v1';
+const COPILOT_PROVIDER_AUTHORIZATION_DEFAULT = 'Bearer local';
+
+interface ICopilotCLIExternalModelEnvironment {
+	externalModelIds?: string;
+	localModelIds?: string;
+	externalModelRoutes?: string;
+}
 
 export interface ICopilotCLITerminalIntegration extends Disposable {
 	readonly _serviceBrand: undefined;
@@ -55,7 +60,7 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@ITerminalService private readonly terminalService: ITerminalService,
 		@IEnvService private readonly envService: IEnvService,
-		@ILogService logService: ILogService
+		@ILogService private readonly logService: ILogService
 	) {
 		super();
 		this.pythonTerminalService = new PythonTerminalService(logService);
@@ -105,8 +110,8 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			this.initialization
 		]);
 
-		const localModelIds = await this.getLocalCLIModelIds();
-		const options = await getCommonTerminalOptions(name, this._authenticationService, this.context.extensionPath, localModelIds);
+		const externalModelEnvironment = await this.getExternalCLIModelEnvironment();
+		const options = await getCommonTerminalOptions(name, this._authenticationService, this.context.extensionPath, externalModelEnvironment);
 		if (shellPathAndArgs) {
 			options.iconPath = shellPathAndArgs.iconPath ?? options.iconPath;
 		}
@@ -285,28 +290,32 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		}
 	}
 
-	private async getLocalCLIModelIds(): Promise<string | undefined> {
+	private async getExternalCLIModelEnvironment(): Promise<ICopilotCLIExternalModelEnvironment | undefined> {
 		try {
-			let localModels = await vscode.lm.selectChatModels({ vendor: LOCAL_MODEL_VENDOR });
-			if (localModels.length === 0) {
-				const allModels = await vscode.lm.selectChatModels();
-				localModels = allModels.filter(model => model.vendor === LOCAL_MODEL_VENDOR || model.family.startsWith(LOCAL_MODEL_FAMILY_PREFIX));
-			}
-
-			// Include all local models whose surface is 'cli' or 'both' (exclude chat-only).
-			const cliVisible = localModels.filter(model => {
-				const markerIndex = model.family.lastIndexOf(MODEL_SURFACE_MARKER);
-				if (markerIndex === -1) {
-					return true;
-				}
-				const surface = model.family.slice(markerIndex + MODEL_SURFACE_MARKER.length).toLowerCase();
-				return surface !== MODEL_SURFACE_CHAT;
-			});
-
-			if (cliVisible.length === 0) {
+			const discovery = await discoverCopilotCLIExternalModels(this.logService);
+			if (discovery.models.length === 0) {
 				return undefined;
 			}
-			return cliVisible.map(m => m.id).join(',');
+
+			const externalModelIds = discovery.models.map(model => model.id);
+			const localModelIds = discovery.models.filter(model => model.vendor === LOCAL_MODEL_VENDOR).map(model => model.id);
+
+			const configuredRoutes = parseExternalModelRoutesFromEnvironment(this.logService);
+			const defaultProviderBaseUrl = process.env.COPILOT_EXTERNAL_BASE_URL || process.env.COPILOT_LOCAL_BASE_URL || COPILOT_PROVIDER_BASE_URL_DEFAULT;
+			for (const modelId of localModelIds) {
+				if (!configuredRoutes[modelId]) {
+					configuredRoutes[modelId] = {
+						baseUrl: defaultProviderBaseUrl,
+						authorization: COPILOT_PROVIDER_AUTHORIZATION_DEFAULT,
+					};
+				}
+			}
+
+			return {
+				externalModelIds: externalModelIds.join(','),
+				localModelIds: localModelIds.length > 0 ? localModelIds.join(',') : undefined,
+				externalModelRoutes: Object.keys(configuredRoutes).length > 0 ? JSON.stringify(configuredRoutes) : undefined,
+			};
 		} catch {
 			return undefined;
 		}
@@ -326,7 +335,7 @@ function quoteArgsForShell(shellScript: string, args: string[]): string {
 	return args.length ? `${escapeArg(shellScript)} ${escapedArgs.join(' ')}` : escapeArg(shellScript);
 }
 
-async function getCommonTerminalOptions(name: string, authenticationService: IAuthenticationService, extensionPath: string, localModelIds?: string): Promise<TerminalOptions> {
+async function getCommonTerminalOptions(name: string, authenticationService: IAuthenticationService, extensionPath: string, externalModelEnvironment?: ICopilotCLIExternalModelEnvironment): Promise<TerminalOptions> {
 	const options: TerminalOptions = {
 		name,
 		iconPath: new ThemeIcon('terminal'),
@@ -348,11 +357,20 @@ async function getCommonTerminalOptions(name: string, authenticationService: IAu
 		env.COPILOT_GITHUB_TOKEN = session.accessToken;
 	}
 
-	if (localModelIds) {
-		// Tell the patched index.js to inject these model IDs into the picker and route their
-		// completions to Ollama instead of the GitHub Copilot API.
-		env.COPILOT_LOCAL_MODELS = localModelIds;
-		env.COPILOT_LOCAL_BASE_URL = process.env.COPILOT_LOCAL_BASE_URL || COPILOT_PROVIDER_BASE_URL_DEFAULT;
+	if (externalModelEnvironment?.externalModelIds) {
+		// Tell the patched index.js to inject these session-scoped external model IDs into
+		// the picker and route their completions based on COPILOT_EXTERNAL_MODEL_ROUTES.
+		env.COPILOT_EXTERNAL_MODELS = externalModelEnvironment.externalModelIds;
+	}
+
+	if (externalModelEnvironment?.localModelIds) {
+		// Backward compatibility for older patch logic that still checks local model IDs.
+		env.COPILOT_LOCAL_MODELS = externalModelEnvironment.localModelIds;
+		env.COPILOT_LOCAL_BASE_URL = process.env.COPILOT_LOCAL_BASE_URL || process.env.COPILOT_EXTERNAL_BASE_URL || COPILOT_PROVIDER_BASE_URL_DEFAULT;
+	}
+
+	if (externalModelEnvironment?.externalModelRoutes) {
+		env.COPILOT_EXTERNAL_MODEL_ROUTES = externalModelEnvironment.externalModelRoutes;
 	}
 
 	options.env = env;
@@ -394,4 +412,49 @@ function resolveEnvVariables(value: string): string {
 		const envValue = process.env[envVarName];
 		return envValue !== undefined ? envValue : match;
 	});
+}
+
+function parseExternalModelRoutesFromEnvironment(logService: ILogService): Record<string, { baseUrl: string; authorization?: string }> {
+	const raw = process.env.COPILOT_EXTERNAL_MODEL_ROUTES;
+	if (!raw) {
+		return {};
+	}
+
+	try {
+		const parsed = JSON.parse(raw) as unknown;
+		if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+			return {};
+		}
+
+		const routes: Record<string, { baseUrl: string; authorization?: string }> = {};
+		for (const [modelId, route] of Object.entries(parsed as Record<string, unknown>)) {
+			if (!modelId || !route) {
+				continue;
+			}
+
+			if (typeof route === 'string') {
+				routes[modelId] = { baseUrl: route };
+				continue;
+			}
+
+			if (typeof route !== 'object' || Array.isArray(route)) {
+				continue;
+			}
+
+			const candidate = route as { baseUrl?: unknown; authorization?: unknown };
+			if (typeof candidate.baseUrl !== 'string' || candidate.baseUrl.length === 0) {
+				continue;
+			}
+
+			routes[modelId] = {
+				baseUrl: candidate.baseUrl,
+				authorization: typeof candidate.authorization === 'string' ? candidate.authorization : undefined,
+			};
+		}
+
+		return routes;
+	} catch (error) {
+		logService.warn(`[CopilotCLI] Failed to parse COPILOT_EXTERNAL_MODEL_ROUTES: ${error instanceof Error ? error.message : String(error)}`);
+		return {};
+	}
 }

@@ -50,14 +50,25 @@ export abstract class AbstractLanguageModelChatProvider<C extends LanguageModelC
 		await commands.executeCommand('lm.migrateLanguageModelsProviderGroup', { vendor: this._id, name, ...configuration });
 	}
 
-	async provideLanguageModelChatInformation({ silent, configuration }: PrepareLanguageModelChatModelOptions, token: CancellationToken): Promise<T[]> {
+	async provideLanguageModelChatInformation({ silent, configuration, chatSessionType }: PrepareLanguageModelChatModelOptions, token: CancellationToken): Promise<T[]> {
 		let apiKey: string | undefined = (configuration as C)?.apiKey;
 		if (!apiKey) {
 			apiKey = await this.configureDefaultGroupWithApiKeyOnly();
 		}
 
 		const models = await this.getAllModels(silent, apiKey, configuration as C);
-		return models.map(model => ({
+		const filteredModels = models.filter(model => {
+			if (!model.targetChatSessionType) {
+				return true;
+			}
+
+			return chatSessionType ? model.targetChatSessionType === chatSessionType : false;
+		});
+		if (filteredModels.length !== models.length) {
+			this._logService.debug(`[${this._name}] Filtered out ${models.length - filteredModels.length} model(s) for chatSessionType=${chatSessionType ?? 'generic'}.`);
+		}
+
+		return filteredModels.map(model => ({
 			...model,
 			apiKey,
 			configuration

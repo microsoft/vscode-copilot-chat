@@ -45,6 +45,14 @@ declare module 'vscode' {
 		readonly isUserSelectable?: boolean;
 
 		/**
+		 * Restricts this model to a specific chat session type, such as `copilotcli`.
+		 *
+		 * When omitted, the model is treated as generic. When set, hosts may choose to return the model only when
+		 * the request's {@linkcode PrepareLanguageModelChatModelOptions.chatSessionType chatSessionType} matches.
+		 */
+		readonly targetChatSessionType?: string;
+
+		/**
 		 * Optional category to group models by in the model picker.
 		 * The lower the order, the higher the category appears in the list.
 		 * Has no effect if `isUserSelectable` is `false`.
@@ -92,6 +100,11 @@ declare module 'vscode' {
 		 * The object adheres to the schema that the extension provided during declaration.
 		 */
 		readonly configuration?: unknown;
+
+		/**
+		 * The chat session type for which models are being resolved, such as `copilotcli`.
+		 */
+		readonly chatSessionType?: string;
 	}
 
 	/**
@@ -105,5 +118,10 @@ declare module 'vscode' {
 		readonly configuration?: {
 			readonly [key: string]: any;
 		};
+
+		/**
+		 * The chat session type for which models are being resolved, such as `copilotcli`.
+		 */
+		readonly chatSessionType?: string;
 	}
 }

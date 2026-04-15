@@ -34,15 +34,13 @@ import { createTimeout } from '../../inlineEdits/common/common';
 import { ChatVariablesCollection, isPromptFile } from '../../prompt/common/chatVariablesCollection';
 import { IToolsService } from '../../tools/common/toolsService';
 import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
+import { discoverCopilotCLIExternalModels, resolveCopilotCLIExternalModel, toCopilotCLIModelOptionItem } from './copilotCLIModelDiscovery';
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 
 const AGENTS_OPTION_ID = 'agent';
 const MODELS_OPTION_ID = 'model';
-const MODEL_SURFACE_MARKER = '::surface=';
-const MODEL_SURFACE_CHAT = 'chat';
-const LOCAL_MODEL_FAMILY_PREFIX = 'local-ollama';
 
 const UncommittedChangesStep = 'uncommitted-changes';
 type ConfirmationResult = { step: string; accepted: boolean; metadata?: CLIConfirmationMetadata };
@@ -69,6 +67,23 @@ const _untitledSessionIdMap = new Map<string, string>();
 
 function isUntitledSessionId(sessionId: string): boolean {
 	return sessionId.startsWith('untitled:') || sessionId.startsWith('untitled-');
+}
+
+function dedupeModelOptionItems(items: readonly vscode.ChatSessionProviderOptionItem[], logService: ILogService): vscode.ChatSessionProviderOptionItem[] {
+	const seen = new Set<string>();
+	const deduped: vscode.ChatSessionProviderOptionItem[] = [];
+
+	for (const item of items) {
+		if (seen.has(item.id)) {
+			logService.debug(`[CopilotCLI] Filtered out duplicate picker option ${item.id}.`);
+			continue;
+		}
+
+		seen.add(item.id);
+		deduped.push(item);
+	}
+
+	return deduped;
 }
 
 export class CopilotCLISessionIsolationManager {
@@ -213,6 +228,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		@IPromptsService private readonly promptsService: IPromptsService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
+		@ILogService private readonly logService: ILogService,
 	) {
 		super();
 
@@ -277,13 +293,17 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	}
 
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
-		const [models, agents, localVSCodeModels] = await Promise.all([
+		const [models, agents, externalModelDiscovery] = await Promise.all([
 			this.copilotCLIModels.getModels(),
 			this.copilotCLIAgents.getAgents(),
-			this.getLocalVSCodeModelOptions()
+			discoverCopilotCLIExternalModels(this.logService)
 		]);
 		const hasAgents = agents.length > 0;
-		const modelItems: vscode.ChatSessionProviderOptionItem[] = [...models, ...localVSCodeModels];
+		this.logService.debug(`[CopilotCLI] Model provider counts: internal=${models.length}, external=${externalModelDiscovery.models.length}, sessionScoped=${externalModelDiscovery.sessionScopedCount}, legacyLocal=${externalModelDiscovery.legacyLocalCount}.`);
+		const modelItems = dedupeModelOptionItems([
+			...models,
+			...externalModelDiscovery.models.map(model => toCopilotCLIModelOptionItem(model))
+		], this.logService);
 		const agentItems: vscode.ChatSessionProviderOptionItem[] = [
 			{ id: COPILOT_CLI_DEFAULT_AGENT_ID, name: l10n.t('Agent') }
 		];
@@ -310,39 +330,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			});
 		}
 		return options;
-	}
-
-	private async getLocalVSCodeModelOptions(): Promise<vscode.ChatSessionProviderOptionItem[]> {
-		try {
-			let localModels = await vscode.lm.selectChatModels({ vendor: 'local' });
-
-			// Some providers are visible in global model enumeration but not in vendor-scoped selection.
-			if (localModels.length === 0) {
-				const allModels = await vscode.lm.selectChatModels();
-				localModels = allModels.filter(model => model.vendor === 'local' || model.family.startsWith(LOCAL_MODEL_FAMILY_PREFIX));
-			}
-
-			return localModels
-				.filter(model => this.isVisibleInCLISession(model))
-				.map(model => ({
-					id: model.id,
-					name: model.name,
-					description: l10n.t('Local model')
-				} satisfies vscode.ChatSessionProviderOptionItem));
-		} catch {
-			return [];
-		}
-	}
-
-	private isVisibleInCLISession(model: vscode.LanguageModelChat): boolean {
-		const markerIndex = model.family.lastIndexOf(MODEL_SURFACE_MARKER);
-		if (markerIndex === -1) {
-			// Unmarked models default to visible in CLI for backward compatibility.
-			return true;
-		}
-
-		const surface = model.family.slice(markerIndex + MODEL_SURFACE_MARKER.length).toLowerCase();
-		return surface !== MODEL_SURFACE_CHAT;
 	}
 
 	// Handle option changes for a session (store current state in a map)
@@ -378,7 +365,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				if (!parsedFile.header?.model) {
 					continue;
 				}
-				let modelId = await this.copilotCLIModels.resolveModel(parsedFile.header.model);
+				let modelId = await this.resolveModelId(parsedFile.header.model);
 				if (modelId) {
 					return modelId;
 				}
@@ -386,7 +373,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				if (!parsedFile.header.model.includes('(')) {
 					continue;
 				}
-				modelId = await this.copilotCLIModels.resolveModel(parsedFile.header.model.substring(0, parsedFile.header.model.indexOf('(')).trim());
+				modelId = await this.resolveModelId(parsedFile.header.model.substring(0, parsedFile.header.model.indexOf('(')).trim());
 				if (modelId) {
 					return modelId;
 				}
@@ -403,6 +390,10 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			_sessionModel.set(sessionId, agentModel);
 			this.notifySessionOptionsChange(resource, [{ optionId: MODELS_OPTION_ID, value: agentModel }]);
 		}
+	}
+
+	private async resolveModelId(modelId: string): Promise<string | undefined> {
+		return await this.copilotCLIModels.resolveModel(modelId) ?? (await resolveCopilotCLIExternalModel(this.logService, modelId))?.id;
 	}
 }
 
@@ -493,8 +484,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				this.getModelId(id, request, false, token),
 				this.getAgent(id, request, token),
 			]);
-			if (modelId && await this.isLocalModelId(modelId)) {
-				return await this.handleLocalModelRequest(modelId, request, context, stream, token);
+			const externalModel = modelId ? await resolveCopilotCLIExternalModel(this.logService, modelId) : undefined;
+			if (modelId && externalModel) {
+				return await this.handleExternalModelRequest(externalModel, modelId, request, context, stream, token);
 			}
 
 			if (isUntitled && (modelId || agent)) {
@@ -582,41 +574,17 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 	}
 
-	private async isLocalModelId(modelId: string): Promise<boolean> {
-		try {
-			const matches = await vscode.lm.selectChatModels({ vendor: 'local', id: modelId });
-			return matches.some(m => m.id === modelId);
-		} catch {
-			return false;
-		}
-	}
-
 	/**
-	 * Handle a request with a locally-registered VS Code language model provider.
+	 * Handle a request with a VS Code language model provider selected for Copilot CLI.
 	 */
-	private async handleLocalModelRequest(
+	private async handleExternalModelRequest(
+		model: vscode.LanguageModelChat,
 		modelId: string,
 		request: vscode.ChatRequest,
 		context: vscode.ChatContext,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken
 	): Promise<vscode.ChatResult> {
-		let model: vscode.LanguageModelChat | undefined;
-		try {
-			const available = await vscode.lm.selectChatModels({ vendor: 'local', id: modelId });
-			model = available.find(m => m.id === modelId);
-		} catch {
-			// ignore
-		}
-
-		if (!model) {
-			stream.markdown(l10n.t(
-				'Local model {0} is not available. Make sure the provider extension is running and try again.',
-				modelId
-			));
-			return {};
-		}
-
 		// Build conversation history (last 10 turns to keep context reasonable)
 		const messages: vscode.LanguageModelChatMessage[] = [];
 		for (const turn of context.history.slice(-10)) {
@@ -645,9 +613,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			}
 		} catch (ex) {
 			if (!isCancellationError(ex)) {
-				this.logService.error(`[CopilotCLI] Local model request failed: ${ex}`);
+				this.logService.error(`[CopilotCLI] VS Code model request failed: ${ex}`);
 				stream.markdown(l10n.t(
-					'Error communicating with local model {0}: {1}',
+					'Error communicating with VS Code model {0}: {1}',
 					modelId,
 					ex instanceof Error ? ex.message : String(ex)
 				));
@@ -739,7 +707,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	private async getModelId(sessionId: string | undefined, request: vscode.ChatRequest | undefined, preferModelInRequest: boolean, token: vscode.CancellationToken): Promise<string | undefined> {
 		const promptFile = request ? await this.getPromptInfoFromRequest(request, token) : undefined;
 		if (promptFile?.header?.model) {
-			const model = await this.copilotCLIModels.resolveModel(promptFile.header.model);
+			const model = await this.resolveModelId(promptFile.header.model);
 			if (model) {
 				return model;
 			}
@@ -754,12 +722,16 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		// Get model from request.
-		const preferredModelInRequest = preferModelInRequest && request?.model?.id ? await this.copilotCLIModels.resolveModel(request.model.id) : undefined;
+		const preferredModelInRequest = preferModelInRequest && request?.model?.id ? await this.resolveModelId(request.model.id) : undefined;
 		if (preferredModelInRequest) {
 			return preferredModelInRequest;
 		}
 
 		return await this.copilotCLIModels.getDefaultModel();
+	}
+
+	private async resolveModelId(modelId: string): Promise<string | undefined> {
+		return await this.copilotCLIModels.resolveModel(modelId) ?? (await resolveCopilotCLIExternalModel(this.logService, modelId))?.id;
 	}
 
 	private async handleDelegationToCloud(session: ICopilotCLISession, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
