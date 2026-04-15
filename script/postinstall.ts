@@ -148,8 +148,8 @@ const __rootRequire = __module.createRequire(import.meta.url);`;
 	if (indexOrig.includes(WQN_OLD)) {
 		indexPatched = indexPatched.replace(WQN_OLD, WQN_NEW);
 		changed = true;
-		console.log('[postinstall] patched index.js: wqn() local models');
-	} else if (!indexOrig.includes('__lids=(process.env.COPILOT_LOCAL_MODELS')) {
+		console.log('[postinstall] patched index.js: wqn() external models');
+	} else if (!indexOrig.includes('__externalIds=(process.env.COPILOT_EXTERNAL_MODELS')) {
 		console.warn('[postinstall] WARNING: index.js wqn() anchor not found — skipping (CLI may have updated)');
 	}
 
