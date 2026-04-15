@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+	<meta name="theme-color" content="#1e1e1e" />
+	<title>Copilot Chat</title>
+	<link rel="manifest" href="./manifest.json" />
+	<link rel="icon" href="./icons/copilot.png" type="image/png" />
+	<link rel="stylesheet" href="./css/style.css" />
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/styles/vs2015.min.css" />
+</head>
+<body>
+	<div id="app">
+		<aside id="conversation-panel" class="conversation-panel" aria-label="Chat history">
+			<div class="panel-header">
+				<span class="panel-title">Chat</span>
+				<div class="panel-actions">
+					<button id="refresh-conversations" class="icon-button" type="button" title="Refresh">
+						<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.451 5.609l-.579-.939-1.068.812-.076.094c.335.601.527 1.29.527 2.024a4.268 4.268 0 0 1-4.262 4.262A4.268 4.268 0 0 1 3.731 7.6a4.268 4.268 0 0 1 4.262-4.262c.648 0 1.26.146 1.81.406l-.478.478h2.87V1.352l-.675.675A5.4 5.4 0 0 0 7.993 1.2 6.407 6.407 0 0 0 1.6 7.6a6.407 6.407 0 0 0 6.393 6.4 6.407 6.407 0 0 0 6.393-6.4c0-1.062-.26-2.063-.72-2.943l-.215-.448z"/></svg>
+					</button>
+					<button id="new-chat" class="icon-button" type="button" title="New chat">
+						<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M14 7v1H8v6H7V8H1V7h6V1h1v6h6z"/></svg>
+					</button>
+				</div>
+			</div>
+			<div class="conversation-filters" aria-label="Conversation filters">
+				<input id="conversation-search" class="filter-search" type="search" placeholder="Search conversations" aria-label="Search conversations" />
+				<div class="filter-row">
+					<select id="provider-filter" class="filter-select" aria-label="Filter by provider">
+						<option value="">All providers</option>
+						<option value="local">Local</option>
+						<option value="claude">Claude</option>
+						<option value="copilot-cli">Copilot CLI</option>
+						<option value="cloud">Cloud</option>
+						<option value="codex">Codex</option>
+						<option value="unknown">Unknown</option>
+					</select>
+					<select id="status-filter" class="filter-select" aria-label="Filter by status">
+						<option value="">All statuses</option>
+						<option value="completed">Completed</option>
+						<option value="in-progress">In Progress</option>
+						<option value="input-needed">Input Needed</option>
+						<option value="failed">Failed</option>
+						<option value="read">Read</option>
+						<option value="archived">Archived</option>
+						<option value="unknown">Unknown</option>
+					</select>
+					<button id="clear-filters" class="filter-clear" type="button" aria-label="Clear conversation filters">Clear</button>
+				</div>
+			</div>
+			<ul id="conversation-list" class="conversation-list"></ul>
+		</aside>
+
+		<div class="chat-container">
+			<header class="chat-header">
+				<button id="toggle-conversations" class="icon-button sidebar-toggle" type="button" aria-label="Toggle chat history">
+					<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M14 7.5H2v-1h12v1zm0-3H2v-1h12v1zm0 6H2v-1h12v1z"/></svg>
+				</button>
+				<span id="chat-title" class="chat-title">Copilot</span>
+				<div id="connection-status" class="status status-connecting">Connecting</div>
+			</header>
+
+			<div id="connection-banner" class="connection-banner hidden"></div>
+
+			<main id="messages" class="messages" aria-live="polite"></main>
+
+			<form id="composer" class="composer" autocomplete="off">
+				<div class="composer-toolbar">
+					<button id="attach-file" class="toolbar-button" type="button" title="Attach file" aria-label="Attach file">
+						<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M3.5 1h6.793L14 4.707V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-13a.5.5 0 0 1 .5-.5zm6 1H4v12h8V5H9.5V2zm1 0v2h2l-2-2z"/></svg>
+					</button>
+					<button id="attach-selection" class="toolbar-button" type="button" title="Attach selection" aria-label="Attach selection">
+						<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h3v1H3v2H2V2zm9 0h3v3h-1V3h-2V2zM2 11h1v2h2v1H2v-3zm11 0h1v3h-3v-1h2v-2zM5 5h6v6H5V5z"/></svg>
+					</button>
+					<select id="mode-selector" class="toolbar-select" aria-label="Chat mode"></select>
+					<select id="model-selector" class="toolbar-select model-select" aria-label="Chat model"></select>
+					<button id="open-model-picker" class="toolbar-button" type="button" title="Open model picker" aria-label="Open model picker">
+						<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v1H2V3zm0 4h12v1H2V7zm0 4h12v1H2v-1zm3-9h2v3H5V2zm4 4h2v3H9V6zm-4 4h2v3H5v-3z"/></svg>
+					</button>
+				</div>
+				<div class="composer-inner">
+					<textarea id="prompt-input" rows="1" maxlength="12000" placeholder="Ask Copilot or type / for commands"></textarea>
+					<button id="send-button" class="send-button" type="submit" title="Send" aria-label="Send">
+						<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M1 1.91L1.78 1 15 8l-13.22 7L1 14.09 6.03 8 1 1.91z"/></svg>
+					</button>
+				</div>
+			</form>
+		</div>
+	</div>
+
+	<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/lib/common.min.js"></script>
+	<script src="./js/ws-client.js"></script>
+	<script src="./js/chat-renderer.js"></script>
+	<script src="./js/qr-scanner.js"></script>
+	<script src="./js/app.js"></script>
+</body>
+</html>

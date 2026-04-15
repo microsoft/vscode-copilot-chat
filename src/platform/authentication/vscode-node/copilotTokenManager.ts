@@ -31,6 +31,7 @@ export class GitHubLoginFailedError extends Error { }
 
 export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 	private _taskSingler = new TaskSingler<TokenInfoOrError>();
+	private hasLoggedGitHubLoginFailed = false;
 
 	constructor(
 		@ILogService logService: ILogService,
@@ -73,11 +74,11 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 		const allowNoAuthAccess = this.configurationService.getNonExtensionConfig<boolean>('chat.allowAnonymousAccess');
 		const session = await getAnyAuthSession(this.configurationService, { silent: true });
 		if (!session && !allowNoAuthAccess) {
-			this._logService.warn('GitHub login failed');
-			this._telemetryService.sendGHTelemetryErrorEvent('auth.github_login_failed');
+			this.logGitHubLoginFailedOnce();
 			return { kind: 'failure', reason: 'GitHubLoginFailed' };
 		}
 		if (session) {
+			this.hasLoggedGitHubLoginFailed = false;
 			// Log the steps by default, but only log actual token values when the log level is set to debug.
 			this._logService.info(`Logged in as ${session.account.label}`);
 			const tokenResult = await this.authFromGitHubToken(session.accessToken, session.account.label);
@@ -90,14 +91,26 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 			this._logService.info(`Allowing anonymous access with devDeviceId`);
 			const tokenResult = await this.authFromDevDeviceId(env.devDeviceId);
 			if (tokenResult.kind === 'success') {
+				this.hasLoggedGitHubLoginFailed = false;
 				this._logService.info(`Got Copilot token for devDeviceId`);
 				this._logService.info(`Copilot Chat: ${this._envService.getVersion()}, VS Code: ${this._envService.vscodeVersion}`);
 			} else {
-				this._logService.warn('GitHub login failed');
+				this.logGitHubLoginFailedOnce();
 				return { kind: 'failure', reason: 'GitHubLoginFailed' };
 			}
 			return tokenResult;
 		}
+	}
+
+	private logGitHubLoginFailedOnce(): void {
+		if (!this.hasLoggedGitHubLoginFailed) {
+			this._logService.warn('GitHub login failed');
+			this._telemetryService.sendGHTelemetryErrorEvent('auth.github_login_failed');
+			this.hasLoggedGitHubLoginFailed = true;
+			return;
+		}
+
+		this._logService.debug('GitHub login still unavailable');
 	}
 
 	private async _authShowWarnings(): Promise<ExtendedTokenInfo> {

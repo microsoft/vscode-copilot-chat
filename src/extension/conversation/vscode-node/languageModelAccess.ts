@@ -170,6 +170,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 	private _chatEndpoints: IChatEndpoint[] = [];
 	private _lmWrapper: CopilotLanguageModelWrapper;
 	private _promptBaseCountCache: LanguageModelAccessPromptBaseCountCache;
+	private hasLoggedMissingAuth = false;
 
 	constructor(
 		@ILogService private readonly _logService: ILogService,
@@ -438,10 +439,21 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 	private async _getToken(): Promise<CopilotToken | undefined> {
 		try {
 			const copilotToken = await this._authenticationService.getCopilotToken();
+			this.hasLoggedMissingAuth = false;
 			return copilotToken;
 		} catch (e) {
+			if (e instanceof Error && e.message === 'GitHubLoginFailed') {
+				if (!this.hasLoggedMissingAuth) {
+					this._logService.warn('[LanguageModelAccess] LanguageModel/Embeddings are not available without auth token');
+					this.hasLoggedMissingAuth = true;
+				} else {
+					this._logService.debug('[LanguageModelAccess] Auth token is still unavailable');
+				}
+				return undefined;
+			}
+
 			this._logService.warn('[LanguageModelAccess] LanguageModel/Embeddings are not available without auth token');
-			this._logService.error(e);
+			this._logService.error(e instanceof Error ? e : String(e));
 			return undefined;
 		}
 	}

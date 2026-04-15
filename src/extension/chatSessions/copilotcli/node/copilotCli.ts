@@ -59,6 +59,15 @@ export const ICopilotCLISDK = createServiceIdentifier<ICopilotCLISDK>('ICopilotC
 
 export const ICopilotCLIModels = createServiceIdentifier<ICopilotCLIModels>('ICopilotCLIModels');
 
+function isExpectedUnauthenticatedModelFetchError(error: unknown): boolean {
+	if (!(error instanceof Error)) {
+		return false;
+	}
+
+	const message = error.message.toLowerCase();
+	return message.includes('githubloginfailed') || message.includes('failed to get token for auth info');
+}
+
 export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 	declare _serviceBrand: undefined;
 	private readonly _availableModels: Lazy<Promise<CopilotCLIModelInfo[]>>;
@@ -126,7 +135,11 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 				supportsVision: model.capabilities.supports.vision,
 			} satisfies CopilotCLIModelInfo));
 		} catch (ex) {
-			this.logService.error(`[CopilotCLISession] Failed to fetch models`, ex);
+			if (isExpectedUnauthenticatedModelFetchError(ex)) {
+				this.logService.debug('[CopilotCLISession] Skipping model fetch until GitHub sign-in is available');
+			} else {
+				this.logService.error(ex instanceof Error ? ex : String(ex), '[CopilotCLISession] Failed to fetch models');
+			}
 			return [];
 		}
 	}
