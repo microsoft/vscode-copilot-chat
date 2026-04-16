@@ -58,17 +58,18 @@ describe('FileSpanExporter', () => {
 		class FakeReadableSpan {
 			readonly #ctx = { traceId: 'trace-id', spanId: 'span-id', traceFlags: 1, traceState: undefined };
 			readonly #resource = { attributes: { 'service.name': 'copilot-chat' } };
-			readonly #instrumentationLibrary = { name: 'copilot-chat', version: '0.44.0' };
+			readonly #instrumentationScope = { name: 'copilot-chat', version: '0.44.0' };
 			readonly #status = { code: 1 };
 			readonly #attributes = { a: 1 };
 			readonly #links: unknown[] = [];
 			readonly #events: unknown[] = [];
 			readonly #time: [number, number] = [1, 2];
+			readonly #parentSpanContext = { traceId: 'trace-id', spanId: 'parent-span-id', traceFlags: 1, traceState: undefined };
 
 			spanContext() { return this.#ctx; }
 			get resource() { return this.#resource; }
-			get instrumentationLibrary() { return this.#instrumentationLibrary; }
-			get parentSpanId() { return undefined; }
+			get instrumentationScope() { return this.#instrumentationScope; }
+			get parentSpanContext() { return this.#parentSpanContext; }
 			get name() { return 'hidden-span'; }
 			get kind() { return 0; }
 			get startTime() { return this.#time; }
@@ -96,6 +97,8 @@ describe('FileSpanExporter', () => {
 		const parsed = JSON.parse(content.trim());
 		expect(parsed.name).toBe('hidden-span');
 		expect(parsed.traceId).toBe('trace-id');
+		expect(parsed.parentSpanId).toBe('parent-span-id');
+		expect(parsed.instrumentationScope).toEqual({ name: 'copilot-chat', version: '0.44.0' });
 		expect(parsed.resource.attributes).toEqual({ 'service.name': 'copilot-chat' });
 		expect(parsed.attributes).toEqual({ a: 1 });
 	});
