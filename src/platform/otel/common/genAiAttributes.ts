@@ -27,6 +27,8 @@ export const GenAiProviderName = {
 export const GenAiTokenType = {
 	INPUT: 'input',
 	OUTPUT: 'output',
+	CACHE_READ_INPUT: 'cache_read_input',
+	CACHE_CREATION_INPUT: 'cache_creation_input',
 } as const;
 
 // gen_ai.tool.type values

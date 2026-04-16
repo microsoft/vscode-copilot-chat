@@ -194,8 +194,11 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 					otelSpan.setAttributes({
 						[GenAiAttr.USAGE_INPUT_TOKENS]: result.usage.prompt_tokens ?? 0,
 						[GenAiAttr.USAGE_OUTPUT_TOKENS]: result.usage.completion_tokens ?? 0,
-						...(result.usage.prompt_tokens_details?.cached_tokens
+						...(result.usage.prompt_tokens_details?.cached_tokens !== undefined
 							? { [GenAiAttr.USAGE_CACHE_READ_INPUT_TOKENS]: result.usage.prompt_tokens_details.cached_tokens }
+							: {}),
+						...(result.usage.prompt_tokens_details?.cache_creation_input_tokens !== undefined
+							? { [GenAiAttr.USAGE_CACHE_CREATION_INPUT_TOKENS]: result.usage.prompt_tokens_details.cache_creation_input_tokens }
 							: {}),
 						[GenAiAttr.RESPONSE_MODEL]: model.id,
 						[GenAiAttr.RESPONSE_ID]: requestId,
@@ -226,8 +229,10 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 					const durationSec = (Date.now() - issuedTime) / 1000;
 					const metricAttrs = { operationName: GenAiOperationName.CHAT, providerName: 'gemini', requestModel: model.id, responseModel: model.id };
 					GenAiMetrics.recordOperationDuration(this._otelService, durationSec, metricAttrs);
-					if (result.usage.prompt_tokens) { GenAiMetrics.recordTokenUsage(this._otelService, result.usage.prompt_tokens, 'input', metricAttrs); }
-					if (result.usage.completion_tokens) { GenAiMetrics.recordTokenUsage(this._otelService, result.usage.completion_tokens, 'output', metricAttrs); }
+					if (result.usage.prompt_tokens !== undefined) { GenAiMetrics.recordTokenUsage(this._otelService, result.usage.prompt_tokens, 'input', metricAttrs); }
+					if (result.usage.completion_tokens !== undefined) { GenAiMetrics.recordTokenUsage(this._otelService, result.usage.completion_tokens, 'output', metricAttrs); }
+					if (result.usage.prompt_tokens_details?.cached_tokens !== undefined) { GenAiMetrics.recordTokenUsage(this._otelService, result.usage.prompt_tokens_details.cached_tokens, 'cache_read_input', metricAttrs); }
+					if (result.usage.prompt_tokens_details?.cache_creation_input_tokens !== undefined) { GenAiMetrics.recordTokenUsage(this._otelService, result.usage.prompt_tokens_details.cache_creation_input_tokens, 'cache_creation_input', metricAttrs); }
 					if (result.ttft) { GenAiMetrics.recordTimeToFirstToken(this._otelService, model.id, result.ttft / 1000); }
 				}
 

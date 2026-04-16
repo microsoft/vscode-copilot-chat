@@ -214,14 +214,30 @@ describe('Agent Trace Hierarchy', () => {
 			providerName: GenAiProviderName.GITHUB,
 			requestModel: 'gpt-4o',
 		});
+		GenAiMetrics.recordTokenUsage(otel, 300, 'cache_read_input', {
+			operationName: GenAiOperationName.CHAT,
+			providerName: GenAiProviderName.GITHUB,
+			requestModel: 'gpt-4o',
+		});
+		GenAiMetrics.recordTokenUsage(otel, 125, 'cache_creation_input', {
+			operationName: GenAiOperationName.CHAT,
+			providerName: GenAiProviderName.GITHUB,
+			requestModel: 'gpt-4o',
+		});
 
-		expect(otel.metrics).toHaveLength(3);
+		expect(otel.metrics).toHaveLength(5);
 		expect(otel.metrics[0].name).toBe('gen_ai.client.operation.duration');
 		expect(otel.metrics[0].value).toBe(3.5);
 		expect(otel.metrics[1].name).toBe('gen_ai.client.token.usage');
 		expect(otel.metrics[1].value).toBe(1500);
 		expect(otel.metrics[2].name).toBe('gen_ai.client.token.usage');
 		expect(otel.metrics[2].value).toBe(250);
+		expect(otel.metrics[3].name).toBe('gen_ai.client.token.usage');
+		expect(otel.metrics[3].value).toBe(300);
+		expect(otel.metrics[3].attributes?.[GenAiAttr.TOKEN_TYPE]).toBe('cache_read_input');
+		expect(otel.metrics[4].name).toBe('gen_ai.client.token.usage');
+		expect(otel.metrics[4].value).toBe(125);
+		expect(otel.metrics[4].attributes?.[GenAiAttr.TOKEN_TYPE]).toBe('cache_creation_input');
 	});
 
 	it('records edit acceptance and survival metrics', () => {
