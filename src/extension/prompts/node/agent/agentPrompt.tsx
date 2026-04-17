@@ -9,7 +9,6 @@ import { sessionResourceToId } from '../../../../platform/chat/common/chatDebugF
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
-import { USE_SKILL_ADHERENCE_PROMPT_SETTING } from '../../../../platform/customInstructions/common/promptTypes';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
@@ -361,8 +360,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 	constructor(
 		props: AgentUserMessageProps,
 		@IPromptVariablesService private readonly promptVariablesService: IPromptVariablesService,
-		@ILogService private readonly logService: ILogService,
-		@IConfigurationService private readonly configurationService: IConfigurationService
+		@ILogService private readonly logService: ILogService
 	) {
 		super(props);
 	}
@@ -429,7 +427,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						{/* Critical reminders that are effective when repeated right next to the user message */}
 						<ReminderInstructionsClass {...reminderProps} />
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
-						{this.configurationService.getNonExtensionConfig<boolean>(USE_SKILL_ADHERENCE_PROMPT_SETTING) && <SkillAdherenceReminder chatVariables={this.props.chatVariables} />}
+						<SkillAdherenceReminder chatVariables={this.props.chatVariables} />
 					</Tag>
 					{query && <Tag name={userQueryTagName} priority={900} flexGrow={7}>
 						<UserQuery chatVariables={this.props.chatVariables} query={query} />
