@@ -15,6 +15,8 @@ import { Conversation, Turn } from '../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../../../prompt/common/intents';
 import { IBuildPromptResult, nullRenderPromptResult } from '../../../prompt/node/intents';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
+import { IToolsService } from '../../../tools/common/toolsService';
+import { TestToolsService } from '../../../tools/node/test/testToolsService';
 import { IToolCallingLoopOptions, IToolCallSingleResult, ToolCallingLoop } from '../../node/toolCallingLoop';
 import { MockChatHookService } from './toolCallingLoopHooks.spec';
 
@@ -59,6 +61,13 @@ class AutopilotTestToolCallingLoop extends ToolCallingLoop<IToolCallingLoopOptio
 	 */
 	public addToolCallRound(round: IToolCallRound): void {
 		(this as any).toolCallRounds.push(round);
+	}
+
+	/**
+	 * Expose ensureAutopilotTools for testing.
+	 */
+	public testEnsureAutopilotTools(tools: LanguageModelToolInformation[]): LanguageModelToolInformation[] {
+		return this.ensureAutopilotTools(tools);
 	}
 }
 
@@ -322,6 +331,57 @@ describe('ToolCallingLoop autopilot', () => {
 			disposables.add(loop);
 
 			expect((loop as any).options.toolCallLimit).toBe(150);
+		});
+	});
+
+	describe('ensureAutopilotTools', () => {
+		const mockTaskCompleteTool: LanguageModelToolInformation = {
+			name: 'task_complete',
+			description: 'Signal that the task is done',
+			inputSchema: { type: 'object', properties: {} },
+			tags: [],
+			source: undefined,
+		};
+
+		function registerTaskCompleteTool(): void {
+			const toolsService = instantiationService.invokeFunction(acc => acc.get(IToolsService)) as TestToolsService;
+			toolsService.addTestToolOverride(mockTaskCompleteTool, { invoke: () => ({ content: [] }) });
+		}
+
+		it('should add task_complete when missing in autopilot mode', () => {
+			registerTaskCompleteTool();
+			const loop = createLoop('autopilot');
+			const tools: LanguageModelToolInformation[] = [
+				{ name: 'read_file', description: '', inputSchema: undefined, tags: [], source: undefined },
+			];
+			const result = loop.testEnsureAutopilotTools(tools);
+			expect(result).toHaveLength(2);
+			expect(result.some(t => t.name === 'task_complete')).toBe(true);
+		});
+
+		it('should not duplicate task_complete when already present', () => {
+			registerTaskCompleteTool();
+			const loop = createLoop('autopilot');
+			const tools: LanguageModelToolInformation[] = [mockTaskCompleteTool];
+			const result = loop.testEnsureAutopilotTools(tools);
+			expect(result).toHaveLength(1);
+		});
+
+		it('should not add task_complete in non-autopilot mode', () => {
+			registerTaskCompleteTool();
+			const loop = createLoop('autoApprove');
+			const tools: LanguageModelToolInformation[] = [];
+			const result = loop.testEnsureAutopilotTools(tools);
+			expect(result).toHaveLength(0);
+		});
+
+		it('should return tools unchanged when not in autopilot mode', () => {
+			const loop = createLoop(undefined);
+			const tools: LanguageModelToolInformation[] = [
+				{ name: 'read_file', description: '', inputSchema: undefined, tags: [], source: undefined },
+			];
+			const result = loop.testEnsureAutopilotTools(tools);
+			expect(result).toBe(tools);
 		});
 	});
 });

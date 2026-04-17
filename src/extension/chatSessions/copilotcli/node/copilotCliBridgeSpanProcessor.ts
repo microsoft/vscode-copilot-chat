@@ -3,8 +3,19 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CopilotChatAttr } from '../../../../platform/otel/common/genAiAttributes';
+import { CopilotChatAttr, GenAiAttr, GenAiOperationName } from '../../../../platform/otel/common/genAiAttributes';
 import type { ICompletedSpanData, IOTelService, ISpanEventRecord, SpanStatusCode } from '../../../../platform/otel/common/otelService';
+
+/**
+ * Hook event data stashed by copilotcliSession for bridge enrichment.
+ */
+export interface HookEventData {
+	readonly hookType: string;
+	readonly input?: string;
+	readonly output?: string;
+	readonly resultKind?: 'success' | 'error';
+	readonly errorMessage?: string;
+}
 
 /**
  * Minimal type for the OTel SDK's ReadableSpan — avoids importing the full
@@ -72,6 +83,18 @@ export class CopilotCliBridgeSpanProcessor implements SpanProcessor {
 	private readonly _traceIdToSessionId = new Map<string, string>();
 	private _disposed = false;
 
+	/**
+	 * Hook event data stashed by copilotcliSession for enriching SDK hook spans.
+	 * Keyed by hookInvocationId. Input is stashed on hook.start, output on hook.end.
+	 */
+	private readonly _hookData = new Map<string, HookEventData>();
+
+	/**
+	 * SDK hook spans that arrived before hook.end data was stashed.
+	 * Held until enrichment data arrives, then injected.
+	 */
+	private readonly _pendingHookSpans = new Map<string, ICompletedSpanData>();
+
 	constructor(private readonly _otelService: IOTelService) { }
 
 	/** Register a traceId → sessionId mapping for CHAT_SESSION_ID injection. */
@@ -82,6 +105,34 @@ export class CopilotCliBridgeSpanProcessor implements SpanProcessor {
 	/** Remove a traceId mapping (called when the session request completes). */
 	unregisterTrace(traceId: string): void {
 		this._traceIdToSessionId.delete(traceId);
+	}
+
+	/**
+	 * Stash hook input data from a hook.start session event.
+	 * Called by copilotcliSession before the SDK span ends.
+	 */
+	stashHookInput(hookInvocationId: string, hookType: string, input: string | undefined): void {
+		this._hookData.set(hookInvocationId, { hookType, input });
+	}
+
+	/**
+	 * Stash hook completion data from a hook.end session event.
+	 * If the SDK span already arrived (held in _pendingHookSpans), enriches and injects it now.
+	 */
+	stashHookEnd(hookInvocationId: string, hookType: string, output: string | undefined, resultKind: 'success' | 'error', errorMessage: string | undefined): void {
+		const existing = this._hookData.get(hookInvocationId);
+		if (existing) {
+			this._hookData.set(hookInvocationId, { ...existing, output, resultKind, errorMessage });
+		} else {
+			this._hookData.set(hookInvocationId, { hookType, output, resultKind, errorMessage });
+		}
+
+		// If the SDK span arrived before this data, inject it now
+		const pendingSpan = this._pendingHookSpans.get(hookInvocationId);
+		if (pendingSpan) {
+			this._pendingHookSpans.delete(hookInvocationId);
+			this._injectEnrichedHookSpan(pendingSpan, hookInvocationId);
+		}
 	}
 
 	// SpanProcessor interface
@@ -105,6 +156,60 @@ export class CopilotCliBridgeSpanProcessor implements SpanProcessor {
 			return;
 		}
 
+		const completedSpan = this._toCompletedSpan(span, sessionId);
+
+		// SDK native hook spans: enrich with data from session events and
+		// remap to execute_hook so the debug panel shows full details.
+		const invocationId = span.attributes['github.copilot.hook.invocation_id'];
+		if (span.name.startsWith('hook ') && span.attributes['github.copilot.hook.type'] && typeof invocationId === 'string') {
+			const hookEndData = this._hookData.get(invocationId);
+			if (hookEndData?.resultKind) {
+				// hook.end data already arrived — enrich and inject immediately
+				this._injectEnrichedHookSpan(completedSpan, invocationId);
+			} else {
+				// hook.end data not yet available — hold the span until it arrives
+				this._pendingHookSpans.set(invocationId, completedSpan);
+			}
+			return;
+		}
+
+		this._otelService.injectCompletedSpan(completedSpan);
+	}
+
+	private _injectEnrichedHookSpan(span: ICompletedSpanData, hookInvocationId: string): void {
+		const data = this._hookData.get(hookInvocationId);
+		this._hookData.delete(hookInvocationId);
+		if (!data) {
+			this._otelService.injectCompletedSpan(span);
+			return;
+		}
+
+		const attrs = { ...span.attributes };
+		attrs[GenAiAttr.OPERATION_NAME] = GenAiOperationName.EXECUTE_HOOK;
+		attrs['copilot_chat.hook_type'] = data.hookType;
+		if (data.input) {
+			attrs['copilot_chat.hook_input'] = data.input;
+		}
+		if (data.output) {
+			attrs['copilot_chat.hook_output'] = data.output;
+		}
+		if (data.resultKind) {
+			attrs['copilot_chat.hook_result_kind'] = data.resultKind;
+		}
+
+		const enrichedSpan: ICompletedSpanData = {
+			...span,
+			name: `execute_hook ${data.hookType}`,
+			attributes: attrs,
+			status: data.resultKind === 'error'
+				? { code: 2 as SpanStatusCode, message: data.errorMessage }
+				: { code: 1 as SpanStatusCode },
+		};
+		this._otelService.injectCompletedSpan(enrichedSpan);
+	}
+
+	private _toCompletedSpan(span: ReadableSpan, sessionId: string): ICompletedSpanData {
+		const ctx = span.spanContext();
 		const events: ISpanEventRecord[] = span.events.map(event => ({
 			name: event.name,
 			timestamp: hrTimeToMs(event.time),
@@ -118,7 +223,7 @@ export class CopilotCliBridgeSpanProcessor implements SpanProcessor {
 			baseAttributes[CopilotChatAttr.CHAT_SESSION_ID] = sessionId;
 		}
 
-		const completedSpan: ICompletedSpanData = {
+		return {
 			name: span.name,
 			spanId: ctx.spanId,
 			traceId: ctx.traceId,
@@ -132,13 +237,13 @@ export class CopilotCliBridgeSpanProcessor implements SpanProcessor {
 			attributes: baseAttributes,
 			events,
 		};
-
-		this._otelService.injectCompletedSpan(completedSpan);
 	}
 
 	async shutdown(): Promise<void> {
 		this._disposed = true;
 		this._traceIdToSessionId.clear();
+		this._hookData.clear();
+		this._pendingHookSpans.clear();
 	}
 
 	async forceFlush(): Promise<void> {

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { GenAiAttr, StdAttr } from './genAiAttributes';
+import { CopilotChatAttr, type EditOutcome, type EditSource, GenAiAttr, StdAttr } from './genAiAttributes';
 import type { IOTelService } from './otelService';
 
 /**
@@ -95,5 +95,94 @@ export class GenAiMetrics {
 
 	static incrementSessionCount(otel: IOTelService): void {
 		otel.incrementCounter('copilot_chat.session.count');
+	}
+
+	// ── Agent Activity & Outcome Metrics ──
+
+	/** Accept/reject counter for inline chat and chat editing edits */
+	static recordEditAcceptance(otel: IOTelService, source: EditSource, outcome: EditOutcome, languageId?: string): void {
+		otel.incrementCounter('copilot_chat.edit.acceptance.count', 1, {
+			[CopilotChatAttr.EDIT_SOURCE]: source,
+			[CopilotChatAttr.EDIT_OUTCOME]: outcome,
+			...(languageId ? { [CopilotChatAttr.LANGUAGE_ID]: languageId } : {}),
+		});
+	}
+
+	/** File-level chat editing session outcome (accepted/rejected/saved) */
+	static recordChatEditOutcome(otel: IOTelService, source: EditSource, outcome: EditOutcome, languageId?: string, hasRemainingEdits?: boolean): void {
+		otel.incrementCounter('copilot_chat.chat_edit.outcome.count', 1, {
+			[CopilotChatAttr.EDIT_SOURCE]: source,
+			[CopilotChatAttr.EDIT_OUTCOME]: outcome,
+			...(languageId ? { [CopilotChatAttr.LANGUAGE_ID]: languageId } : {}),
+			...(hasRemainingEdits !== undefined ? { [CopilotChatAttr.HAS_REMAINING_EDITS]: hasRemainingEdits } : {}),
+		});
+	}
+
+	/** 4-gram text similarity survival score */
+	static recordEditSurvivalFourGram(otel: IOTelService, source: EditSource, score: number, timeDelayMs: number): void {
+		otel.recordMetric('copilot_chat.edit.survival.four_gram', score, {
+			[CopilotChatAttr.EDIT_SOURCE]: source,
+			[CopilotChatAttr.TIME_DELAY_MS]: timeDelayMs,
+		});
+	}
+
+	/** No-revert survival score */
+	static recordEditSurvivalNoRevert(otel: IOTelService, source: EditSource, score: number, timeDelayMs: number): void {
+		otel.recordMetric('copilot_chat.edit.survival.no_revert', score, {
+			[CopilotChatAttr.EDIT_SOURCE]: source,
+			[CopilotChatAttr.TIME_DELAY_MS]: timeDelayMs,
+		});
+	}
+
+	/** Lines of code added/removed by accepted agent edits */
+	static incrementLinesOfCode(otel: IOTelService, type: 'added' | 'removed', languageId: string | undefined, count: number): void {
+		otel.incrementCounter('copilot_chat.lines_of_code.count', count, {
+			'type': type,
+			...(languageId ? { [CopilotChatAttr.LANGUAGE_ID]: languageId } : {}),
+		});
+	}
+
+	// ── User Engagement Metrics ──
+
+	static incrementUserActionCount(otel: IOTelService, action: string): void {
+		otel.incrementCounter('copilot_chat.user.action.count', 1, {
+			'action': action,
+		});
+	}
+
+	static incrementUserFeedbackCount(otel: IOTelService, rating: string): void {
+		otel.incrementCounter('copilot_chat.user.feedback.count', 1, {
+			'rating': rating,
+		});
+	}
+
+	// ── Agent Internals Metrics ──
+
+	static incrementAgentEditResponseCount(otel: IOTelService, outcome: string): void {
+		otel.incrementCounter('copilot_chat.agent.edit_response.count', 1, {
+			'outcome': outcome,
+		});
+	}
+
+	static incrementAgentSummarizationCount(otel: IOTelService, outcome: string): void {
+		otel.incrementCounter('copilot_chat.agent.summarization.count', 1, {
+			'outcome': outcome,
+		});
+	}
+
+	// ── Background/Cloud Metrics ──
+
+	static incrementPullRequestCount(otel: IOTelService): void {
+		otel.incrementCounter('copilot_chat.pull_request.count');
+	}
+
+	static incrementCloudSessionCount(otel: IOTelService, partnerAgent: string): void {
+		otel.incrementCounter('copilot_chat.cloud.session.count', 1, {
+			'partner_agent': partnerAgent,
+		});
+	}
+
+	static incrementCloudPrReadyCount(otel: IOTelService): void {
+		otel.incrementCounter('copilot_chat.cloud.pr_ready.count');
 	}
 }

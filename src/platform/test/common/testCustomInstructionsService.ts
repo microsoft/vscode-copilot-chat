@@ -7,7 +7,7 @@ import { ResourceSet } from '../../../util/vs/base/common/map';
 import { URI } from '../../../util/vs/base/common/uri';
 import type { Uri } from '../../../vscodeTypes';
 import { Config } from '../../configuration/common/configurationService';
-import { CodeGenerationInstruction, ICustomInstructions, ICustomInstructionsService, IInstructionIndexFile } from '../../customInstructions/common/customInstructionsService';
+import { CodeGenerationInstruction, ICustomInstructions, ICustomInstructionsService, IInstructionIndexFile, ISkillInfo, SkillStorage } from '../../customInstructions/common/customInstructionsService';
 
 /**
  * A configurable mock implementation of ICustomInstructionsService for testing.
@@ -16,10 +16,10 @@ import { CodeGenerationInstruction, ICustomInstructions, ICustomInstructionsServ
 export class MockCustomInstructionsService implements ICustomInstructionsService {
 	declare readonly _serviceBrand: undefined;
 
-	private skillFiles = new Set<string>();
+	private skillFiles = new Map<string, SkillStorage>();
 	private externalFiles = new Set<string>();
 	private externalFolders = new Set<string>();
-	private extensionSkillInfos = new Map<string, { skillName: string; skillFolderUri: URI }>();
+	private extensionSkillInfos = new Map<string, ISkillInfo & { extensionId: string }>();
 
 	parseInstructionIndexFile(promptFileIndexText: string): IInstructionIndexFile {
 		return {
@@ -33,9 +33,9 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 	/**
 	 * Set the URIs that should be recognized as skill files.
 	 */
-	setSkillFiles(uris: URI[]): void {
+	setSkillFiles(uris: URI[], storage: SkillStorage = SkillStorage.Workspace): void {
 		this.skillFiles.clear();
-		uris.forEach(uri => this.skillFiles.add(uri.toString()));
+		uris.forEach(uri => this.skillFiles.set(uri.toString(), storage));
 	}
 
 	/**
@@ -57,9 +57,9 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 	/**
 	 * Set the URIs that should be recognized as extension skill files with their info.
 	 */
-	setExtensionSkillInfos(infos: { uri: URI; skillName: string; skillFolderUri: URI }[]): void {
+	setExtensionSkillInfos(infos: { uri: URI; skillName: string; skillFolderUri: URI; extensionId: string }[]): void {
 		this.extensionSkillInfos.clear();
-		infos.forEach(info => this.extensionSkillInfos.set(info.uri.toString(), { skillName: info.skillName, skillFolderUri: info.skillFolderUri }));
+		infos.forEach(info => this.extensionSkillInfos.set(info.uri.toString(), { skillName: info.skillName, skillFolderUri: info.skillFolderUri, storage: SkillStorage.Extension, extensionId: info.extensionId }));
 	}
 
 	isSkillFile(uri: URI): boolean {
@@ -89,13 +89,14 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 		return URI.joinPath(skillDir, 'SKILL.md');
 	}
 
-	getSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {
+	getSkillInfo(uri: URI): ISkillInfo | undefined {
 		if (!this.isSkillFile(uri)) {
 			return undefined;
 		}
 		const skillFolderUri = this.getSkillDirectory(uri);
 		const skillName = this.getSkillName(uri);
-		return { skillName, skillFolderUri };
+		const storage = this.skillFiles.get(uri.toString()) ?? SkillStorage.Workspace;
+		return { skillName, skillFolderUri, storage };
 	}
 
 	isExternalInstructionsFile(uri: URI): Promise<boolean> {
@@ -122,7 +123,7 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 		return Promise.resolve();
 	}
 
-	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {
+	getExtensionSkillInfo(uri: URI): (ISkillInfo & { extensionId: string }) | undefined {
 		return this.extensionSkillInfos.get(uri.toString());
 	}
 }

@@ -251,7 +251,7 @@ function extractUserRequest(contents: readonly (string | ContentBlock[])[], mess
 		return;
 	}
 
-	return new ChatRequestTurn2(combinedText, undefined, imageReferences, '', [], undefined, messageId, modelId);
+	return new ChatRequestTurn2(combinedText, undefined, imageReferences, '', [], undefined, messageId, modelId, undefined);
 }
 
 /**
@@ -475,7 +475,7 @@ export function buildChatHistory(session: IClaudeCodeSession, modelIdMap?: Reado
 					pendingResponseParts = [];
 				}
 				// Emit the command as a request turn
-				result.push(new ChatRequestTurn2(commandInfo.commandName, undefined, [], '', [], undefined, currentMessageId, modelId));
+				result.push(new ChatRequestTurn2(commandInfo.commandName, undefined, [], '', [], undefined, currentMessageId, modelId, undefined));
 				// Emit stdout as a response turn if present
 				if (commandInfo.stdout) {
 					result.push(new vscode.ChatResponseTurn2(

@@ -30,6 +30,7 @@ export interface IExecutionSubagentParams {
 
 class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
 	public static readonly toolName = ToolName.ExecutionSubagent;
+	public static readonly nonDeferred = true;
 	private _inputContext: IBuildPromptContext | undefined;
 
 	constructor(
@@ -66,6 +67,7 @@ class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
 			location: request.location,
 			promptText: options.input.query,
 			subAgentInvocationId: subAgentInvocationId,
+			parentToolCallId: options.chatStreamToolCallId,
 		});
 
 		const stream = this._inputContext?.stream && ChatResponseStreamImpl.filter(
@@ -79,8 +81,6 @@ class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
 		const executionSubagentToken = new CapturingToken(
 			`Execution: ${options.input.query.substring(0, 50)}${options.input.query.length > 50 ? '...' : ''}`,
 			'execution',
-			false,
-			false,
 			subAgentInvocationId,
 			'execution'  // subAgentName for trajectory tracking
 		);

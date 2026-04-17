@@ -31,6 +31,7 @@ export interface IFindFilesToolParams {
 
 export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 	public static readonly toolName = ToolName.FindFiles;
+	public static readonly nonDeferred = true;
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,

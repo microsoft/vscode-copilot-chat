@@ -5,8 +5,8 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { Event } from '../../../../util/vs/base/common/event';
-import { GenAiAttr, GenAiOperationName, StdAttr } from '../genAiAttributes';
-import { emitAgentTurnEvent, emitInferenceDetailsEvent, emitSessionStartEvent, emitToolCallEvent } from '../genAiEvents';
+import { CopilotChatAttr, GenAiAttr, GenAiOperationName, StdAttr } from '../genAiAttributes';
+import { emitAgentTurnEvent, emitEditFeedbackEvent, emitEditSurvivalEvent, emitInferenceDetailsEvent, emitSessionStartEvent, emitToolCallEvent } from '../genAiEvents';
 import { resolveOTelConfig } from '../otelConfig';
 import type { IOTelService } from '../otelService';
 
@@ -160,5 +160,39 @@ describe('emitAgentTurnEvent', () => {
 		expect(attrs[GenAiAttr.USAGE_INPUT_TOKENS]).toBe(500);
 		expect(attrs[GenAiAttr.USAGE_OUTPUT_TOKENS]).toBe(200);
 		expect(attrs['tool_call_count']).toBe(2);
+	});
+});
+
+describe('emitEditFeedbackEvent', () => {
+	it('includes workspace metadata when provided', () => {
+		const otel = createMockOTel();
+		emitEditFeedbackEvent(otel, 'accepted', 'typescript', 'copilot', 'req-1', 'agent', false, false, {
+			headBranchName: 'main',
+			headCommitHash: 'abc123',
+			remoteUrl: 'github.com/org/repo',
+			fileRelativePath: 'src/app.ts',
+		});
+
+		const attrs = otel.emitLogRecord.mock.calls[0][1];
+		expect(attrs[CopilotChatAttr.REPO_HEAD_BRANCH_NAME]).toBe('main');
+		expect(attrs[CopilotChatAttr.REPO_HEAD_COMMIT_HASH]).toBe('abc123');
+		expect(attrs[CopilotChatAttr.REPO_REMOTE_URL]).toBe('github.com/org/repo');
+		expect(attrs[CopilotChatAttr.FILE_RELATIVE_PATH]).toBe('src/app.ts');
+	});
+});
+
+describe('emitEditSurvivalEvent', () => {
+	it('includes workspace metadata alongside survival data', () => {
+		const otel = createMockOTel();
+		emitEditSurvivalEvent(otel, 'apply_patch', 0.95, 0.88, 30000, false, 'req-1', {
+			headBranchName: 'feature/x',
+			headCommitHash: 'deadbeef',
+		});
+
+		const attrs = otel.emitLogRecord.mock.calls[0][1];
+		expect(attrs['event.name']).toBe('copilot_chat.edit.survival');
+		expect(attrs['survival_rate_four_gram']).toBe(0.95);
+		expect(attrs[CopilotChatAttr.REPO_HEAD_BRANCH_NAME]).toBe('feature/x');
+		expect(attrs[CopilotChatAttr.REPO_HEAD_COMMIT_HASH]).toBe('deadbeef');
 	});
 });

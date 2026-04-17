@@ -72,15 +72,13 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 		this._mruEntries = entries;
 	}
 
-	setUntitledSessionFolder(): void { }
-	getUntitledSessionFolder(): undefined { return undefined; }
-	deleteUntitledSessionFolder(): void { }
+	setNewSessionFolder(): void { }
+	deleteNewSessionFolder(): void { }
 	async getFolderRepository(): Promise<{ folder: undefined; repository: undefined; worktree: undefined; worktreeProperties: undefined; trusted: undefined }> { return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined }; }
 	async initializeFolderRepository(): Promise<{ folder: undefined; repository: undefined; worktree: undefined; worktreeProperties: undefined; trusted: undefined }> { return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined }; }
+	async initializeMultiRootFolderRepositories(): Promise<{ primary: { folder: undefined; repository: undefined; worktree: undefined; worktreeProperties: undefined; trusted: undefined }; additional: never[] }> { return { primary: { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined }, additional: [] }; }
 	async getRepositoryInfo(): Promise<{ repository: undefined; headBranchName: undefined }> { return { repository: undefined, headBranchName: undefined }; }
 	async getFolderMRU(): Promise<FolderRepositoryMRUEntry[]> { return this._mruEntries; }
-	async deleteMRUEntry(): Promise<void> { }
-	getLastUsedFolderIdInUntitledWorkspace(): undefined { return undefined; }
 }
 
 // #endregion
@@ -478,7 +476,7 @@ describe('ClaudeCodeSessionService', () => {
 			noWorkspaceTestingServiceCollection.define(IFolderRepositoryManager, noWorkspaceFolderManager);
 
 			noWorkspaceFolderManager.setMRUEntries([
-				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: false },
+				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now() },
 			]);
 
 			const accessor = noWorkspaceTestingServiceCollection.createTestingAccessor();
@@ -517,8 +515,8 @@ describe('ClaudeCodeSessionService', () => {
 			const mruFolder2 = URI.file('/another/project');
 
 			noWorkspaceFolderManager.setMRUEntries([
-				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: false },
-				{ folder: mruFolder2, repository: undefined, lastAccessed: Date.now() - 1000, isUntitledSessionSelection: false },
+				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now() },
+				{ folder: mruFolder2, repository: undefined, lastAccessed: Date.now() - 1000 },
 			]);
 
 			const multiMruServiceCollection = store.add(createExtensionUnitTestingServices(store));

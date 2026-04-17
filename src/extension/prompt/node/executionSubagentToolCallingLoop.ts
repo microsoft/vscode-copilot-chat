@@ -12,6 +12,7 @@ import { ISessionTranscriptService } from '../../../platform/chat/common/session
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ChatEndpointFamily, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -33,6 +34,8 @@ export interface IExecutionSubagentToolCallingLoopOptions extends IToolCallingLo
 	promptText: string;
 	/** Optional pre-generated subagent invocation ID. If not provided, a new UUID will be generated. */
 	subAgentInvocationId?: string;
+	/** The tool_call_id from the parent agent's LLM response that triggered this subagent invocation. */
+	parentToolCallId?: string;
 }
 
 export class ExecutionSubagentToolCallingLoop extends ToolCallingLoop<IExecutionSubagentToolCallingLoopOptions> {
@@ -54,8 +57,9 @@ export class ExecutionSubagentToolCallingLoop extends ToolCallingLoop<IExecution
 		@ISessionTranscriptService sessionTranscriptService: ISessionTranscriptService,
 		@IFileSystemService fileSystemService: IFileSystemService,
 		@IOTelService otelService: IOTelService,
+		@IGitService gitService: IGitService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService, fileSystemService, otelService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService, fileSystemService, otelService, gitService);
 	}
 
 	protected override createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined): IBuildPromptContext {
@@ -137,10 +141,12 @@ export class ExecutionSubagentToolCallingLoop extends ToolCallingLoop<IExecution
 			// This loop is inside a tool called from another request, so never user initiated
 			userInitiatedRequest: false,
 			telemetryProperties: {
+				requestId: this.options.subAgentInvocationId,
 				messageId: randomUUID(),
 				messageSource: 'chat.editAgent',
 				subType: 'subagent/execution',
-				conversationId: this.options.conversation.sessionId
+				conversationId: this.options.conversation.sessionId,
+				parentToolCallId: this.options.parentToolCallId,
 			},
 		}, token);
 	}

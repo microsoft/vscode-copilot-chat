@@ -19,7 +19,7 @@ import { FileType } from '../../../filesystem/common/fileTypes';
 import { ISearchService } from '../../../search/common/searchService';
 import { createPlatformServices, TestingServiceCollection } from '../../../test/node/services';
 import { IWorkspaceService, NullWorkspaceService } from '../../../workspace/common/workspaceService';
-import { ExternalIngestClient, ExternalIngestFile, IExternalIngestClient } from '../../node/codeSearch/externalIngestClient';
+import { ExternalIngestClient, ExternalIngestFile, ExternalIngestUpdateIndexResult, IExternalIngestClient } from '../../node/codeSearch/externalIngestClient';
 import { ExternalIngestIndex } from '../../node/codeSearch/externalIngestIndex';
 
 const emptyProgressCb: (message: string) => void = () => { };
@@ -40,11 +40,11 @@ function createMockExternalIngestClient(options?: {
 			return Array.from(ingestedFiles.values());
 		},
 		searchCalls,
-		async updateIndex(_filesetName: string, _currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, _callTracker: CallTracker, _token: CancellationToken, _onProgress?: (message: string) => void): Promise<Result<{ checkpoint: string }, Error>> {
+		async updateIndex(_filesetName: string, _currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, _callTracker: CallTracker, _token: CancellationToken, _onProgress?: (message: string) => void): Promise<Result<ExternalIngestUpdateIndexResult, Error>> {
 			for await (const file of allFiles) {
 				ingestedFiles.set(file.uri, file);
 			}
-			return Result.ok({ checkpoint: 'mock-checkpoint' });
+			return Result.ok({ checkpoint: 'mock-checkpoint', totalFileCount: ingestedFiles.size, updatedFileCount: ingestedFiles.size });
 		},
 		async listFilesets(_callTracker: CallTracker, _token: CancellationToken): Promise<string[]> {
 			return [];
@@ -175,7 +175,7 @@ function createExternalIngestIndex(
 	client?: IExternalIngestClient,
 ): ExternalIngestIndex {
 	const resolvedClient = client ?? instantiationService.createInstance(ExternalIngestClient);
-	return instantiationService.createInstance(ExternalIngestIndex, resolvedClient);
+	return instantiationService.createInstance(ExternalIngestIndex, resolvedClient, []);
 }
 
 type MockExternalIngestClient = ReturnType<typeof createMockExternalIngestClient>;
@@ -217,7 +217,7 @@ suite('ExternalIngestIndex', () => {
 
 		const accessor = disposables.add(testingServiceCollection.createTestingAccessor());
 		const instantiationService = accessor.get(IInstantiationService);
-		const index = disposables.add(instantiationService.createInstance(ExternalIngestIndex, mockClient));
+		const index = disposables.add(instantiationService.createInstance(ExternalIngestIndex, mockClient, []));
 
 		return { files, mockFs, mockClient, index };
 	}
@@ -241,7 +241,7 @@ suite('ExternalIngestIndex', () => {
 		const instantiationService = accessor.get(IInstantiationService);
 
 		const mockClient = createMockExternalIngestClient();
-		const index = disposables.add(instantiationService.createInstance(ExternalIngestIndex, mockClient));
+		const index = disposables.add(instantiationService.createInstance(ExternalIngestIndex, mockClient, []));
 
 		index.updateCodeSearchRoots([codeSearchRoot]);
 
@@ -260,7 +260,7 @@ suite('ExternalIngestIndex', () => {
 		const instantiationService = accessor.get(IInstantiationService);
 
 		const mockClient = createMockExternalIngestClient();
-		const index = disposables.add(instantiationService.createInstance(ExternalIngestIndex, mockClient));
+		const index = disposables.add(instantiationService.createInstance(ExternalIngestIndex, mockClient, []));
 
 		index.updateCodeSearchRoots([codeSearchRoot]);
 
@@ -279,7 +279,7 @@ suite('ExternalIngestIndex', () => {
 		const instantiationService = accessor.get(IInstantiationService);
 
 		const mockClient = createMockExternalIngestClient();
-		const index = disposables.add(instantiationService.createInstance(ExternalIngestIndex, mockClient));
+		const index = disposables.add(instantiationService.createInstance(ExternalIngestIndex, mockClient, []));
 
 		const file1 = URI.joinPath(root1, 'file.ts');
 		const file2 = URI.joinPath(root2, 'file.ts');
@@ -299,7 +299,7 @@ suite('ExternalIngestIndex', () => {
 		const instantiationService = accessor.get(IInstantiationService);
 
 		const mockClient = createMockExternalIngestClient();
-		disposables.add(instantiationService.createInstance(ExternalIngestIndex, mockClient));
+		disposables.add(instantiationService.createInstance(ExternalIngestIndex, mockClient, []));
 
 		// The mock client is now injected - tests can verify what files would be ingested
 		assert.strictEqual(mockClient.ingestedFiles.length, 0, 'No files ingested yet');
@@ -318,7 +318,7 @@ suite('ExternalIngestIndex', () => {
 		testingServiceCollection.set(IWorkspaceService, new MockWorkspaceService([URI.file('/workspace')]));
 		const customAccessor = disposables.add(testingServiceCollection.createTestingAccessor());
 		const customInstantiationService = customAccessor.get(IInstantiationService);
-		disposables.add(customInstantiationService.createInstance(ExternalIngestIndex, mockClient));
+		disposables.add(customInstantiationService.createInstance(ExternalIngestIndex, mockClient, []));
 
 		// The mock file system and client are now injected
 		// Tests can verify file operations and ingestion behavior

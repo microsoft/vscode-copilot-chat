@@ -73,7 +73,7 @@ export class CustomSessionTitleService implements ICustomSessionTitleService {
 		try {
 			const titleProvider = this.instantiationService.createInstance(ChatTitleProvider);
 			// Construct a minimal ChatContext with the current request as a history entry so provideChatTitle can find it
-			const requestTurn = new ChatRequestTurn2(request.prompt ?? '', request.command, [], '', [], [], undefined, undefined);
+			const requestTurn = new ChatRequestTurn2(request.prompt ?? '', request.command, [], '', [], [], undefined, undefined, undefined);
 			const fakeContext: ChatContext = {
 				history: [requestTurn],
 				yieldRequested: false,

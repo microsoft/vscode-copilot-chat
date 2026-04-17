@@ -74,19 +74,14 @@ export namespace TriggerRemoteIndexingError {
 		userMessage: l10n.t("No workspace found")
 	};
 
-	export const noGitRepos: TriggerIndexingError = {
-		id: 'no-git-repos',
-		userMessage: l10n.t("No git repos found")
-	};
-
 	export const stillResolving: TriggerIndexingError = {
 		id: 'still-resolving',
 		userMessage: l10n.t("Still resolving repos. Please try again shortly.")
 	};
 
-	export const noRemoteIndexableRepos: TriggerIndexingError = {
-		id: 'no-remote-indexable-repos',
-		userMessage: l10n.t("No remotely indexable repos found")
+	export const notIndexable: TriggerIndexingError = {
+		id: 'not-indexable',
+		userMessage: l10n.t("No indexable repos found and support for indexing non-GitHub repos is not available")
 	};
 
 	export const noValidAuthToken: TriggerIndexingError = {
@@ -502,7 +497,7 @@ export class AdoCodeSearchRepo extends BaseRemoteCodeSearchRepo {
 	}
 
 	public override async triggerRemoteIndexingOfRepo(triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
-		return Result.error(TriggerRemoteIndexingError.noRemoteIndexableRepos);
+		return Result.error(TriggerRemoteIndexingError.notIndexable);
 	}
 
 	protected override doFetchRemoteIndexState(_telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {

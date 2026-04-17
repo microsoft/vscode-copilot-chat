@@ -11,7 +11,6 @@ import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelatio
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 
-export const buildLocalIndexCommandId = 'github.copilot.buildLocalWorkspaceIndex';
 export const buildRemoteIndexCommandId = 'github.copilot.buildRemoteWorkspaceIndex';
 export const deleteExternalIngestWorkspaceIndexCommandId = 'github.copilot.deleteExternalIngestWorkspaceIndex';
 
@@ -21,30 +20,12 @@ export function register(accessor: ServicesAccessor): IDisposable {
 
 	const disposableStore = new DisposableStore();
 
-	disposableStore.add(vscode.commands.registerCommand(buildLocalIndexCommandId, onlyRunOneAtATime(async () => {
-		await vscode.window.withProgress({
-			location: vscode.ProgressLocation.Window,
-			title: t`Updating local workspace index...`,
-		}, async () => {
-			const result = await workspaceChunkSearch.triggerLocalIndexing('manual', new TelemetryCorrelationId('BuildLocalIndexCommand'));
-
-			if (result.isError()) {
-				if (result.err.id !== TriggerRemoteIndexingError.alreadyIndexed.id) {
-					vscode.window.showWarningMessage(t`Could not build local workspace index. ` + '\n\n' + result.err.userMessage);
-					return;
-				}
-			}
-
-			vscode.window.showInformationMessage(t`Local workspace index ready to use.`);
-		});
-	})));
-
 	disposableStore.add(vscode.commands.registerCommand(buildRemoteIndexCommandId, onlyRunOneAtATime(async () => {
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Window,
-			title: t`Building remote workspace index`,
+			title: t`Building codebase semantic index`,
 		}, async (progress, token) => {
-			const triggerResult = await workspaceChunkSearch.triggerRemoteIndexing(
+			const triggerResult = await workspaceChunkSearch.triggerIndexing(
 				'manual',
 				(message) => progress.report({ message }),
 				new TelemetryCorrelationId('BuildRemoteIndexCommand'),
@@ -53,12 +34,12 @@ export function register(accessor: ServicesAccessor): IDisposable {
 
 			if (triggerResult.isError()) {
 				if (triggerResult.err.id !== TriggerRemoteIndexingError.alreadyIndexed.id) {
-					vscode.window.showWarningMessage(t`Could not build remote workspace index. ` + '\n\n' + triggerResult.err.userMessage);
+					vscode.window.showWarningMessage(t`Could not build codebase semantic index. ` + '\n\n' + triggerResult.err.userMessage);
 					return;
 				}
 			}
 
-			vscode.window.showInformationMessage(t`Remote workspace index ready to use.`);
+			vscode.window.showInformationMessage(t`Codebase semantic index ready to use.`);
 		});
 	})));
 
@@ -75,12 +56,12 @@ export function register(accessor: ServicesAccessor): IDisposable {
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.debug.collectWorkspaceIndexDiagnostics', async () => {
 		vscode.window.withProgress({
 			location: vscode.ProgressLocation.Window,
-			title: t`Collecting workspace index diagnostics...`,
+			title: t`Collecting codebase index diagnostics...`,
 		}, async () => {
 			const document = await vscode.workspace.openTextDocument({ language: 'markdown' });
 			const editor = await vscode.window.showTextDocument(document);
 
-			await appendText(editor, '# Workspace Index Diagnostics\n');
+			await appendText(editor, '# Codebase Index Diagnostics\n');
 			await appendText(editor, 'Tracked file count: ' + workspaceFileIndex.fileCount + '\n\n');
 
 			await appendText(editor, '## All tracked files\n');

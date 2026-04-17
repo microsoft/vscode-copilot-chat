@@ -19,6 +19,9 @@ import { IAlternativeNotebookContentService } from '../../../platform/notebook/c
 import { IAlternativeNotebookContentEditGenerator, NotebookEditGenerationTelemtryOptions, NotebookEditGenrationSource } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { getDefaultLanguage } from '../../../platform/notebook/common/helpers';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { emitEditSurvivalEvent } from '../../../platform/otel/common/genAiEvents';
+import { GenAiMetrics } from '../../../platform/otel/common/genAiMetrics';
+import { IOTelService } from '../../../platform/otel/common/otelService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITelemetryService, multiplexProperties } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -63,6 +66,7 @@ export const applyPatch5Description = 'Use the `apply_patch` tool to edit files.
 
 export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 	public static toolName = ToolName.ApplyPatch;
+	public static readonly nonDeferred = true;
 
 	private _promptContext: IBuildPromptContext | undefined;
 
@@ -84,6 +88,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IEditToolLearningService private readonly editToolLearningService: IEditToolLearningService,
 		@ILogService private readonly logService: ILogService,
+		@IOTelService private readonly _otelService: IOTelService,
 	) { }
 
 	private getTrailingDocumentEmptyLineCount(document: TextDocumentSnapshot): number {
@@ -458,13 +463,21 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 						res.telemetryService.sendGHTelemetryEvent('applyPatch/trackEditSurvival', {
 							headerRequestId: this._promptContext?.requestId,
 							requestSource: 'agent',
-							mapper: 'applyPatchTool'
+							mapper: 'applyPatchTool',
+							headBranchName: res.workspace?.headBranchName,
+							headCommitHash: res.workspace?.headCommitHash,
+							remoteUrl: res.workspace?.remoteUrl,
+							fileRelativePath: res.workspace?.fileRelativePath,
 						}, {
 							survivalRateFourGram: res.fourGram,
 							survivalRateNoRevert: res.noRevert,
 							timeDelayMs: res.timeDelayMs,
 							didBranchChange: res.didBranchChange ? 1 : 0,
 						});
+
+						emitEditSurvivalEvent(this._otelService, 'apply_patch', res.fourGram, res.noRevert, res.timeDelayMs, res.didBranchChange, this._promptContext?.requestId ?? '', res.workspace);
+						GenAiMetrics.recordEditSurvivalFourGram(this._otelService, 'apply_patch', res.fourGram, res.timeDelayMs);
+						GenAiMetrics.recordEditSurvivalNoRevert(this._otelService, 'apply_patch', res.noRevert, res.timeDelayMs);
 					});
 				}
 			});

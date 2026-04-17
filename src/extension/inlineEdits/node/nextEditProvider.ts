@@ -12,7 +12,7 @@ import { RootedLineEdit } from '../../../platform/inlineEdits/common/dataTypes/r
 import { SpeculativeRequestsAutoExpandEditWindowLines, SpeculativeRequestsCursorPlacement, SpeculativeRequestsEnablement } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext, type MarkdownLoggable } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
-import { IStatelessNextEditProvider, IStatelessNextEditTelemetry, NoNextEditReason, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { IStatelessNextEditProvider, IStatelessNextEditTelemetry, NoNextEditReason, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/observable';
 import { DocumentHistory, HistoryContext, IHistoryContextProvider } from '../../../platform/inlineEdits/common/workspaceEditTracker/historyContextProvider';
 import { IXtabHistoryEditEntry, IXtabHistoryEntry, NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
@@ -346,6 +346,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			}
 			isRebasedCachedEdit = !!cachedEdit.rebasedEdit;
 			isSubsequentCachedEdit = cachedEdit.subsequentN !== undefined && cachedEdit.subsequentN > 0;
+			isFromSpeculativeRequest = cachedEdit.source.isSpeculative;
 			req = cachedEdit.source;
 			logContext.setIsCachedResult(cachedEdit.source.log);
 			currentDocument = documentAtInvocationTime;
@@ -461,6 +462,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		const nesConfigs: INesConfigs = {
 			isAsyncCompletions: this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAsyncCompletions, this._expService),
 			isEagerBackupRequest: this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsEagerBackupRequest, this._expService),
+			isCheckEditWindowOnReuse: this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsCheckEditWindowOnReuse, this._expService),
 		};
 
 		telemetryBuilder.setNESConfigs({ ...nesConfigs });
@@ -516,15 +518,22 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		logContext.setRecentEdit(historyContext);
 
+		const cursorAtInvocationTime = selectionAtInvocationTime.at(0);
+		const cursorInRequestEditWindow = (request: StatelessNextEditRequest) =>
+			!nesConfigs.isCheckEditWindowOnReuse || !request.requestEditWindow || !cursorAtInvocationTime || request.requestEditWindow.containsCursor(cursorAtInvocationTime);
+
 		// Check if we can reuse the regular pending request
 		const pendingRequestStillCurrent = documentAtInvocationTime.value === this._pendingStatelessNextEditRequest?.documentBeforeEdits.value;
-		const existingNextEditRequest = (pendingRequestStillCurrent || nesConfigs.isAsyncCompletions) && !this._pendingStatelessNextEditRequest?.cancellationTokenSource.token.isCancellationRequested
+		const cursorWithinPendingEditWindow = !this._pendingStatelessNextEditRequest || cursorInRequestEditWindow(this._pendingStatelessNextEditRequest);
+		const existingNextEditRequest = (pendingRequestStillCurrent || nesConfigs.isAsyncCompletions) && cursorWithinPendingEditWindow
+			&& !this._pendingStatelessNextEditRequest?.cancellationTokenSource.token.isCancellationRequested
 			&& this._pendingStatelessNextEditRequest || undefined;
 
 		// Check if we can reuse the speculative pending request (from when a suggestion was shown)
 		const speculativeRequestMatches = this._speculativePendingRequest?.docId === curDocId
 			&& this._speculativePendingRequest?.postEditContent === documentAtInvocationTime.value
-			&& !this._speculativePendingRequest.request.cancellationTokenSource.token.isCancellationRequested;
+			&& !this._speculativePendingRequest.request.cancellationTokenSource.token.isCancellationRequested
+			&& cursorInRequestEditWindow(this._speculativePendingRequest.request);
 		const speculativeRequest = speculativeRequestMatches ? this._speculativePendingRequest?.request : undefined;
 
 		// Prefer speculative request if it matches (it was specifically created for this post-edit state)
@@ -912,8 +921,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					}
 				})();
 
-				// Return early with streaming result
-				nextEditResult = StatelessNextEditResult.streaming(new StatelessNextEditTelemetryBuilder(nextEditRequest.headerRequestId));
+				nextEditResult = new StatelessNextEditResult(Result.ok(undefined), firstTelemetry);
 			}
 
 		} catch (err) {
@@ -1259,7 +1267,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		// Start the provider call - this runs in the background and populates the cache
 		const label = `NES | spec | ${basename(doc.id.toUri().fsPath)} (v${doc.version.get()})`;
 
-		const capturingToken = new CapturingToken(label, undefined, false, true);
+		const capturingToken = new CapturingToken(label, undefined);
 
 		void this._requestLogger.captureInvocation(capturingToken, async () => {
 			try {
