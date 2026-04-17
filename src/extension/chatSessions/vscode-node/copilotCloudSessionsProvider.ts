@@ -1489,6 +1489,37 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		head_ref?: string
 	): Promise<vscode.ChatResponsePullRequestPart> {
 
+		// Ensure we have the permissive GitHub session before doing any work; this
+		// covers both the cloud-sessions provider entry point and the Copilot CLI
+		// `/delegate` path which calls into delegate() directly.
+		if (!this._authenticationService.permissiveGitHubSession) {
+			stream.progress(vscode.l10n.t('Authorizing'));
+			try {
+				await this._authenticationService.getGitHubSession('permissive', { createIfNone: { detail: l10n.t('Sign in to GitHub with additional permissions to use Copilot cloud sessions.') } });
+			} catch (error) {
+				if (isCancellationError(error) || token.isCancellationRequested) {
+					throw new CancellationError();
+				}
+				this.logService.error(error, 'Authorization failed');
+				throw new Error(vscode.l10n.t('Authorization failed. Please sign into GitHub and try again.'));
+			}
+			if (!this._authenticationService.permissiveGitHubSession) {
+				throw new Error(vscode.l10n.t('Authorization failed. Please sign into GitHub and try again.'));
+			}
+		}
+
+		// Surface uncommitted local changes (staged + unstaged) so the user is aware
+		// the cloud agent runs against the remote commit, not their working tree.
+		// This aligns with Mission Control / Codex / Claude behavior.
+		const activeRepo = this._gitService.activeRepository.get();
+		const hasUncommittedChanges = !!activeRepo?.changes && (
+			activeRepo.changes.workingTree.length > 0
+			|| activeRepo.changes.indexChanges.length > 0
+		);
+		if (hasUncommittedChanges) {
+			stream.warning(vscode.l10n.t('You have uncommitted changes in your workspace. The cloud agent will start from the last pushed commit; commit and push first if you want those changes included.'));
+		}
+
 		// Get the chat resource from context or metadata
 		const chatResource = context.chatSessionContext?.chatSessionItem?.resource
 			?? metadata.chatContext.chatSessionContext?.chatSessionItem?.resource;
@@ -1526,8 +1557,24 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				repoOwner = repoId.org;
 				repoName = repoId.repo;
 			}
-			const { default_branch } = await this._githubRepositoryService.getRepositoryInfo(repoOwner, repoName);
-			base_ref = default_branch;
+
+			// Prefer the user's currently checked-out branch when it tracks a remote
+			// (upstreamBranchName is set only when the branch exists on remote).
+			// Only applies when the active repository matches the selected repo
+			// (or no specific repo was selected).
+			const selectedMatchesActive = !selectedRepoOwner
+				|| (repoId?.org === selectedRepoOwner && repoId?.repo === selectedRepoName);
+			const currentBranch = activeRepo?.headBranchName;
+			const hasUpstream = !!activeRepo?.upstreamBranchName;
+			if (selectedMatchesActive && currentBranch && hasUpstream) {
+				base_ref = currentBranch;
+			} else {
+				const { default_branch } = await this._githubRepositoryService.getRepositoryInfo(repoOwner, repoName);
+				base_ref = default_branch;
+				if (currentBranch && !hasUpstream) {
+					stream.progress(vscode.l10n.t('Current branch `{0}` is not on the remote; cloud agent will start from `{1}`.', currentBranch, default_branch));
+				}
+			}
 		}
 
 		const { number, sessionId } = await this.invokeRemoteAgent(
@@ -1692,24 +1739,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 
 		// New request — align with Mission Control / CCA PR-decoupling flow: no modal,
-		// go straight to delegation. Ensure we have the permissive GitHub session first;
-		// if missing, trigger the standard non-modal auth prompt.
-		if (!this._authenticationService.permissiveGitHubSession) {
-			stream.progress(vscode.l10n.t('Authorizing'));
-			try {
-				await this._authenticationService.getGitHubSession('permissive', { createIfNone: { detail: l10n.t('Sign in to GitHub with additional permissions to use Copilot cloud sessions.') } });
-			} catch (error) {
-				if (isCancellationError(error) || token.isCancellationRequested) {
-					throw new CancellationError();
-				}
-				this.logService.error(error, 'Authorization failed');
-				throw new Error(vscode.l10n.t('Authorization failed. Please sign into GitHub and try again.'));
-			}
-			if (!this._authenticationService.permissiveGitHubSession) {
-				throw new Error(vscode.l10n.t('Authorization failed. Please sign into GitHub and try again.'));
-			}
-		}
-
+		// no preflight, go straight to delegation. delegate() performs its own
+		// permissive-auth check (shared with CLI /delegate callers), surfaces
+		// uncommitted-changes warnings, and handles base_ref selection.
 		await this.delegate(
 			request,
 			stream,
