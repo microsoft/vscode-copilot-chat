@@ -24,6 +24,7 @@ import { DeferredPromise, retry, RunOnceScheduler } from '../../../util/vs/base/
 import { Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
+import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { SingleSlotTtlCache, TtlCache } from '../common/ttlCache';
 import { isUntitledSessionId } from '../common/utils';
@@ -1698,7 +1699,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			try {
 				await this._authenticationService.getGitHubSession('permissive', { createIfNone: { detail: l10n.t('Sign in to GitHub with additional permissions to use Copilot cloud sessions.') } });
 			} catch (error) {
-				this.logService.error(`Authorization failed: ${error}`);
+				if (isCancellationError(error) || token.isCancellationRequested) {
+					throw new CancellationError();
+				}
+				this.logService.error(error, 'Authorization failed');
 				throw new Error(vscode.l10n.t('Authorization failed. Please sign into GitHub and try again.'));
 			}
 			if (!this._authenticationService.permissiveGitHubSession) {
