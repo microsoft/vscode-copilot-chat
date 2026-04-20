@@ -61,6 +61,7 @@ interface _CustomOAIModelConfig {
 	editTools?: EndpointEditToolName[];
 	requestHeaders?: Record<string, string>;
 	zeroDataRetentionEnabled?: boolean;
+	extraBody?: Record<string, unknown>;
 }
 
 export interface CustomOAIModelConfig extends _CustomOAIModelConfig {
@@ -142,7 +143,8 @@ export abstract class AbstractCustomOAIBYOKModelProvider extends AbstractOpenAIC
 			thinking: modelConfiguration?.thinking ?? false,
 			streaming: modelConfiguration?.streaming,
 			requestHeaders: modelConfiguration?.requestHeaders,
-			zeroDataRetentionEnabled: modelConfiguration?.zeroDataRetentionEnabled
+			zeroDataRetentionEnabled: modelConfiguration?.zeroDataRetentionEnabled,
+			extraBody: modelConfiguration?.extraBody
 		};
 		const modelInfo = resolveModelInfo(model.id, this._name, undefined, modelCapabilities);
 		if (modelCapabilities?.url?.includes('/responses')) {
