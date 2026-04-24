@@ -10,6 +10,10 @@ export class NullBaseOctoKitService extends BaseOctoKitService {
 		return GitHubOutageStatus.None;
 	}
 
+	async getCurrentAuthedUser(): Promise<IOctoKitUser | undefined> {
+		return { avatar_url: '', login: 'NullUser', name: 'Null User' };
+	}
+
 	override async getCurrentAuthedUserWithToken(token: string): Promise<IOctoKitUser | undefined> {
 		return { avatar_url: '', login: 'NullUser', name: 'Null User' };
 	}
