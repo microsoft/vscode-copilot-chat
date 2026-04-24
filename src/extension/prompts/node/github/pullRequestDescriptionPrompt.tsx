@@ -12,7 +12,6 @@ interface GitHubPullRequestPromptProps extends BasePromptElementProps {
 	patches: string[];
 	issues: { reference: string; content: string }[] | undefined;
 	template: string | undefined;
-	baseBranch: string | undefined;
 	compareBranch: string | undefined;
 }
 
@@ -91,7 +90,6 @@ interface GitHubPullRequestUserMessageProps extends BasePromptElementProps {
 	commitMessages: string[];
 	patches: string[];
 	template: string | undefined;
-	baseBranch: string | undefined;
 	compareBranch: string | undefined;
 }
 
@@ -101,9 +99,9 @@ class GitHubPullRequestUserMessage extends PromptElement<GitHubPullRequestUserMe
 		const formattedPatches = this.props.patches.map(patch => <>```diff<br />{patch}<br />```<br /></>);
 		return (
 			<>
-				{(this.props.baseBranch || this.props.compareBranch) && (
+				{this.props.compareBranch && (
 					<>
-						This pull request will merge {this.props.compareBranch ? `branch "${this.props.compareBranch}"` : 'the current branch'} into {this.props.baseBranch ? `branch "${this.props.baseBranch}"` : 'the base branch'}.<br />
+						The merged/compare/source branch is "{this.props.compareBranch}".<br />
 					</>
 				)}
 				These are the commits that will be included in the pull request you are about to make:<br />
@@ -133,7 +131,7 @@ export class GitHubPullRequestPrompt extends PromptElement<GitHubPullRequestProm
 					<SafetyRules />
 				</SystemMessage>
 				<UserMessage>
-					<GitHubPullRequestUserMessage commitMessages={this.props.commitMessages} patches={this.props.patches} template={this.props.template} baseBranch={this.props.baseBranch} compareBranch={this.props.compareBranch} />
+					<GitHubPullRequestUserMessage commitMessages={this.props.commitMessages} patches={this.props.patches} template={this.props.template} compareBranch={this.props.compareBranch} />
 					<Tag priority={750} name='custom-instructions'>
 						<CustomInstructions
 							chatVariables={undefined}
