@@ -48,6 +48,8 @@ class MockSdkSession {
 	private _permissionCounter = 0;
 	private _pendingExitPlanMode = new Map<string, { resolve: (result: unknown) => void }>();
 	private _exitPlanModeCounter = 0;
+	private _pendingUserInput = new Map<string, { resolve: (result: unknown) => void }>();
+	private _userInputCounter = 0;
 
 	on(event: string, handler: MockSdkEventHandler) {
 		if (!this.onHandlers.has(event)) {
@@ -101,8 +103,20 @@ class MockSdkSession {
 		}
 	}
 
-	respondToUserInput(_requestId: string, _response: unknown) {
-		// placeholder for user input responses
+	async emitUserInputRequest(data: { question: string; choices?: string[]; allowFreeform: boolean }): Promise<unknown> {
+		const requestId = `user-input-${++this._userInputCounter}`;
+		return new Promise(resolve => {
+			this._pendingUserInput.set(requestId, { resolve });
+			this.emit('user_input.requested', { requestId, ...data });
+		});
+	}
+
+	respondToUserInput(requestId: string, response: unknown) {
+		const pending = this._pendingUserInput.get(requestId);
+		if (pending) {
+			pending.resolve(response);
+			this._pendingUserInput.delete(requestId);
+		}
 	}
 
 	public lastSendOptions: { prompt: string; mode?: string } | undefined;
@@ -172,6 +186,7 @@ describe('CopilotCLISession', () => {
 	let chatSessionMetadataStore: MockChatSessionMetadataStore;
 	let authInfo: NonNullable<SessionOptions['authInfo']>;
 	let userQuestionAnswer: IQuestionAnswer | undefined;
+	let userQuestionRequests: IQuestion[];
 	beforeEach(async () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
@@ -192,6 +207,7 @@ describe('CopilotCLISession', () => {
 		instaService = services.seal();
 		toolsService = new FakeToolsService();
 		userQuestionAnswer = undefined;
+		userQuestionRequests = [];
 	});
 
 	afterEach(() => {
@@ -204,6 +220,7 @@ describe('CopilotCLISession', () => {
 		class FakeUserQuestionHandler implements IUserQuestionHandler {
 			_serviceBrand: undefined;
 			async askUserQuestion(question: IQuestion, toolInvocationToken: ChatParticipantToolToken, token: CancellationToken): Promise<IQuestionAnswer | undefined> {
+				userQuestionRequests.push(question);
 				return userQuestionAnswer;
 			}
 		}
@@ -1045,6 +1062,64 @@ describe('CopilotCLISession', () => {
 			// Both should be done now
 			expect(steeringDone).toBe(true);
 			expect(firstRequestDone).toBe(true);
+		});
+	});
+
+	describe('user_input.requested', () => {
+		it('routes autopilot requests through askUserQuestion and returns selected choice', async () => {
+			const result = { value: undefined as unknown };
+			userQuestionAnswer = { selected: ['Option B'], freeText: null, skipped: false };
+			sdkSession.send = async (options: any) => {
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				result.value = await sdkSession.emitUserInputRequest({
+					question: 'Which approach do you want?',
+					choices: ['Option A', 'Option B'],
+					allowFreeform: false,
+				});
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			session.setPermissionLevel('autopilot');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const mockToken = {} as ChatParticipantToolToken;
+
+			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(userQuestionRequests).toEqual([{
+				header: 'Which approach do you want?',
+				question: 'Which approach do you want?',
+				options: [{ label: 'Option A' }, { label: 'Option B' }],
+				allowFreeformInput: false,
+			}]);
+			expect(result.value).toEqual({ answer: 'Option B', wasFreeform: false });
+		});
+
+		it('returns freeform answer for autopilot user input requests', async () => {
+			const result = { value: undefined as unknown };
+			userQuestionAnswer = { selected: [], freeText: 'Use inline editing in each card.', skipped: false };
+			sdkSession.send = async (options: any) => {
+				sdkSession.emit('assistant.turn_start', {});
+				sdkSession.emit('assistant.message', { content: `Echo: ${options.prompt}` });
+				result.value = await sdkSession.emitUserInputRequest({
+					question: 'How should groups be edited?',
+					choices: ['Dialog', 'Inline'],
+					allowFreeform: true,
+				});
+				sdkSession.emit('assistant.turn_end', {});
+			};
+
+			const session = await createSession();
+			session.setPermissionLevel('autopilot');
+			const stream = new MockChatResponseStream();
+			session.attachStream(stream);
+			const mockToken = {} as ChatParticipantToolToken;
+
+			await session.handleRequest({ id: '', toolInvocationToken: mockToken }, { prompt: 'Plan' }, [], undefined, authInfo, CancellationToken.None);
+
+			expect(result.value).toEqual({ answer: 'Use inline editing in each card.', wasFreeform: true });
 		});
 	});
 

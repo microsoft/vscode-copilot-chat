@@ -514,12 +514,6 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				})));
 			}
 			disposables.add(toDisposable(this._sdkSession.on('user_input.requested', async (event) => {
-				// auto approve user input
-				if (this._permissionLevel === 'autopilot') {
-					this.logService.trace('[CopilotCLISession] Auto-responding to user input in autopilot');
-					this._sdkSession.respondToUserInput(event.data.requestId, { answer: 'The user is not available to respond and will review your work later. Work autonomously and make good decisions.', wasFreeform: true });
-					return;
-				}
 				if (!(this._toolInvocationToken as unknown)) {
 					this.logService.warn('[AskQuestionsTool] No stream available, cannot show question carousel');
 					this._sdkSession.respondToUserInput(event.data.requestId, { answer: '', wasFreeform: false });
