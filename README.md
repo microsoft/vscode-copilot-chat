@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/microsoft-vscode-copilot-chat-badge.png)](https://mseep.ai/app/microsoft-vscode-copilot-chat)
+
 # GitHub Copilot - Your autonomous AI peer programmer
 
 **[GitHub Copilot](https://code.visualstudio.com/docs/copilot/overview)** is an AI peer programming tool that transforms how you write code in Visual Studio Code.
