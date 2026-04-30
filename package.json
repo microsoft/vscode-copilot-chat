@@ -1798,6 +1798,23 @@
 				}
 			},
 			{
+				"vendor": "perplexity",
+				"displayName": "Perplexity",
+				"configuration": {
+					"properties": {
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "API key for Perplexity",
+							"title": "API Key"
+						}
+					},
+					"required": [
+						"apiKey"
+					]
+				}
+			},
+			{
 				"vendor": "openai",
 				"displayName": "OpenAI",
 				"configuration": {
