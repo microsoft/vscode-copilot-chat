@@ -44,6 +44,7 @@ function usageFromDataPart(part: vscode.LanguageModelDataPart): APIUsage | undef
 			completion_tokens?: unknown;
 			total_tokens?: unknown;
 			prompt_tokens_details?: unknown;
+			completion_tokens_details?: unknown;
 		};
 
 		if (
@@ -51,7 +52,7 @@ function usageFromDataPart(part: vscode.LanguageModelDataPart): APIUsage | undef
 			typeof parsed.completion_tokens === 'number' &&
 			typeof parsed.total_tokens === 'number'
 		) {
-			return {
+			const usage: APIUsage = {
 				prompt_tokens: parsed.prompt_tokens,
 				completion_tokens: parsed.completion_tokens,
 				total_tokens: parsed.total_tokens,
@@ -60,6 +61,12 @@ function usageFromDataPart(part: vscode.LanguageModelDataPart): APIUsage | undef
 						? (parsed.prompt_tokens_details as APIUsage['prompt_tokens_details'])
 						: { cached_tokens: 0 },
 			};
+
+			if (parsed.completion_tokens_details && typeof parsed.completion_tokens_details === 'object') {
+				usage.completion_tokens_details = parsed.completion_tokens_details as APIUsage['completion_tokens_details'];
+			}
+
+			return usage;
 		}
 	} catch {
 		// Ignore non-JSON or non-usage DataParts.
