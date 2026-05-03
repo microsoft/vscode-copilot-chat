@@ -4271,6 +4271,43 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.advanced.context.timeFormat": {
+						"type": "string",
+						"default": "off",
+						"enum": [
+							"off",
+							"24h",
+							"12h"
+						],
+						"enumDescriptions": [
+							"Do not include current time",
+							"24-hour format (e.g., 23:06:32)",
+							"12-hour format (e.g., 11:06:32 PM)"
+						],
+						"markdownDescription": "%github.copilot.config.advanced.context.timeFormat%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.advanced.context.showWeekday": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.advanced.context.showWeekday%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.advanced.context.showTimezone": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.advanced.context.showTimezone%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.agent.omitFileAttachmentContents": {
 						"type": "boolean",
 						"default": false,

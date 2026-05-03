@@ -8,6 +8,7 @@ import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, Notebook
 import { sessionResourceToId } from '../../../../platform/chat/common/chatDebugFileLoggerService';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { formatCurrentDateContext } from '../../common/currentDateContext';
 import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { USE_SKILL_ADHERENCE_PROMPT_SETTING } from '../../../../platform/customInstructions/common/promptTypes';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
@@ -492,15 +493,15 @@ class UserOSPrompt extends PromptElement<BasePromptElementProps> {
 class CurrentDatePrompt extends PromptElement<BasePromptElementProps> {
 	constructor(
 		props: BasePromptElementProps,
-		@IEnvService private readonly envService: IEnvService) {
+		@IEnvService private readonly envService: IEnvService,
+		@IConfigurationService private readonly configurationService: IConfigurationService) {
 		super(props);
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const dateStr = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
 		// Only include current date when not running simulations, since if we generate cache entries with the current date, the cache will be invalidated every day
 		return (
-			!this.envService.isSimulation() && <>The current date is {dateStr}.</>
+			!this.envService.isSimulation() && <>{formatCurrentDateContext(this.configurationService)}</>
 		);
 	}
 }
