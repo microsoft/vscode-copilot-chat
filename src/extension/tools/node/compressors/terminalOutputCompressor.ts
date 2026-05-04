@@ -56,21 +56,23 @@ export const gitDiffFilter: IToolResultFilter = {
 	apply(text): IToolResultFilterOutput {
 		const lines = text.split('\n');
 		const out: string[] = [];
-		let suppressed = 0;
+		// Number of context lines to keep at the start of each unchanged run before
+		// collapsing the rest into a single "... N omitted ..." marker.
+		const KEEP_CONTEXT = 1;
+		let contextRun = 0;
 		let inBinaryOrLock = false;
-		let currentFileHeader: string | null = null;
 
-		const flushSuppression = () => {
-			if (suppressed > 0) {
-				out.push(`... ${suppressed} unchanged context line${suppressed === 1 ? '' : 's'} omitted ...`);
-				suppressed = 0;
+		const flushContextRun = () => {
+			const omitted = contextRun - KEEP_CONTEXT;
+			if (omitted > 0) {
+				out.push(`... ${omitted} unchanged context line${omitted === 1 ? '' : 's'} omitted ...`);
 			}
+			contextRun = 0;
 		};
 
 		for (const line of lines) {
 			if (line.startsWith('diff --git')) {
-				flushSuppression();
-				currentFileHeader = line;
+				flushContextRun();
 				inBinaryOrLock = /package-lock\.json|yarn\.lock|pnpm-lock\.yaml|\.lockb?$|\.snap$/.test(line);
 				if (inBinaryOrLock) {
 					out.push(line);
@@ -92,20 +94,19 @@ export const gitDiffFilter: IToolResultFilter = {
 			// Keep file-mode markers, hunk markers, +/- lines verbatim.
 			if (line.startsWith('+++ ') || line.startsWith('--- ') || line.startsWith('@@') ||
 				line.startsWith('+') || line.startsWith('-') || line.startsWith('Binary files ')) {
-				flushSuppression();
+				flushContextRun();
 				out.push(line);
 				continue;
 			}
-			// Unchanged context line — suppress past 1 line per side.
-			// Cheap heuristic: just count consecutive context runs and collapse runs >2.
-			suppressed++;
-			if (suppressed <= 1) {
+			// Unchanged context line: keep the first KEEP_CONTEXT lines of each run,
+			// then count the rest so the next non-context line can flush a single
+			// summary marker.
+			contextRun++;
+			if (contextRun <= KEEP_CONTEXT) {
 				out.push(line);
-				suppressed = 0; // reset since we kept it
 			}
 		}
-		flushSuppression();
-		void currentFileHeader;
+		flushContextRun();
 
 		const result = out.join('\n');
 		return {

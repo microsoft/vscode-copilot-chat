@@ -8,7 +8,7 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { LanguageModelTextPart } from '../../../vscodeTypes';
+import { LanguageModelTextPart, LanguageModelTextPart2 } from '../../../vscodeTypes';
 
 export const IToolResultCompressor = createServiceIdentifier<IToolResultCompressor>('IToolResultCompressor');
 
@@ -54,8 +54,9 @@ export interface IToolResultCompressor {
 }
 
 /**
- * Outputs at or below this size are not worth compressing.
- * Mirrors ztk's 80-byte minimum.
+ * Outputs at or below this many characters (UTF-16 code units, i.e.
+ * `string.length`) are not worth compressing. Mirrors ztk's 80-character
+ * minimum.
  */
 const MIN_COMPRESSIBLE_LENGTH = 80;
 
@@ -96,6 +97,11 @@ export class ToolResultCompressorService implements IToolResultCompressor {
 			return undefined;
 		}
 
+		// Mutable copy: filters that throw get spliced out so we don't repeatedly
+		// invoke a broken filter on every subsequent text part in this pass.
+		const activeFilters = matchingFilters.slice();
+		const disabledFilterIds = new Set<string>();
+
 		let totalBefore = 0;
 		let totalAfter = 0;
 		let anyCompressed = false;
@@ -111,16 +117,24 @@ export class ToolResultCompressorService implements IToolResultCompressor {
 			}
 
 			let current = original;
-			for (const filter of matchingFilters) {
+			for (let i = 0; i < activeFilters.length; /* manual increment */) {
+				const filter = activeFilters[i];
 				try {
 					const out = filter.apply(current, input);
 					if (out.compressed && out.text.length < current.length) {
 						current = out.text;
 						usedFilterIds.add(filter.id);
 					}
+					i++;
 				} catch (err) {
-					// "Never make it worse." Drop the filter on error and keep going.
-					this._logService.warn(`[ToolResultCompressor] filter ${filter.id} threw on tool ${toolName}: ${err}`);
+					// "Never make it worse." Disable the filter for the rest of this
+					// compression pass so it can't repeatedly throw on later text parts,
+					// and warn at most once per filter.
+					activeFilters.splice(i, 1);
+					if (!disabledFilterIds.has(filter.id)) {
+						disabledFilterIds.add(filter.id);
+						this._logService.warn(`[ToolResultCompressor] filter ${filter.id} threw on tool ${toolName}; disabled for this pass: ${err}`);
+					}
 				}
 			}
 
@@ -128,6 +142,10 @@ export class ToolResultCompressorService implements IToolResultCompressor {
 			totalAfter += current.length;
 			if (current !== original) {
 				anyCompressed = true;
+				// Preserve LanguageModelTextPart2 audience metadata if present.
+				if (part instanceof LanguageModelTextPart2) {
+					return new LanguageModelTextPart2(current, part.audience);
+				}
 				return new LanguageModelTextPart(current);
 			}
 			return part;
@@ -145,21 +163,21 @@ export class ToolResultCompressorService implements IToolResultCompressor {
 		return compressed as vscode.LanguageModelToolResult;
 	}
 
-	private _sendTelemetry(toolName: string, filterIds: string[], beforeBytes: number, afterBytes: number) {
+	private _sendTelemetry(toolName: string, filterIds: string[], beforeChars: number, afterChars: number) {
 		/* __GDPR__
 			"toolResultCompressed" : {
 				"owner": "meganrogge",
 				"comment": "Reports tool output compression savings.",
 				"toolName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The tool whose output was compressed." },
 				"filters": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Comma-separated filter ids that fired." },
-				"beforeBytes": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Total text part bytes before compression." },
-				"afterBytes": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Total text part bytes after compression." }
+				"beforeChars": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Total text part length in UTF-16 code units before compression." },
+				"afterChars": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Total text part length in UTF-16 code units after compression." }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent(
 			'toolResultCompressed',
 			{ toolName, filters: filterIds.join(',') },
-			{ beforeBytes, afterBytes },
+			{ beforeChars, afterChars },
 		);
 	}
 }

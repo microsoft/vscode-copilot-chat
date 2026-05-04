@@ -51,6 +51,27 @@ describe('gitDiffFilter', () => {
 		expect(out.text).toContain('@@ -1,3 +1,3 @@');
 		expect(out.text).not.toContain('index abc..def');
 	});
+	it('collapses long unchanged-context runs into a single marker', () => {
+		const ctxLines = Array.from({ length: 20 }, (_, i) => ` this is context line number ${i}`);
+		const text = [
+			'diff --git a/foo.ts b/foo.ts',
+			'--- a/foo.ts',
+			'+++ b/foo.ts',
+			'@@ -1,22 +1,22 @@',
+			...ctxLines,
+			'-old',
+			'+new',
+		].join('\n');
+		const out = gitDiffFilter.apply(text, input);
+		// First context line is kept verbatim, the next 19 are collapsed.
+		expect(out.text).toContain(' this is context line number 0');
+		expect(out.text).not.toContain(' this is context line number 5');
+		expect(out.text).not.toContain(' this is context line number 19');
+		expect(out.text).toContain('19 unchanged context lines omitted');
+		expect(out.text).toContain('-old');
+		expect(out.text).toContain('+new');
+		expect(out.compressed).toBe(true);
+	});
 	it('omits lockfile diffs', () => {
 		const text = [
 			'diff --git a/package-lock.json b/package-lock.json',
