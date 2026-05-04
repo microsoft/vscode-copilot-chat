@@ -142,3 +142,40 @@ describe('formatCurrentDateContext (US Pacific winter — PST)', () => {
 		expect(result).toBe('The current date is January 15, 2026. The current time is 12:30:45 GMT-8.');
 	});
 });
+
+describe('formatCurrentDateContext (India — non-whole-hour offset)', () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+		vi.stubEnv('TZ', 'Asia/Kolkata');
+		vi.setSystemTime(new Date('2026-06-15T14:30:45.000Z'));
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.unstubAllEnvs();
+	});
+
+	it('shows GMT+5:30 offset', () => {
+		const result = formatCurrentDateContext(createMockConfigService({ timeFormat: '24h', showTimezone: true }));
+		expect(result).toBe('The current date is June 15, 2026. The current time is 20:00:45 GMT+5:30.');
+	});
+});
+
+describe('formatCurrentDateContext (date rollover — UTC night → Tokyo next day)', () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+		vi.stubEnv('TZ', 'Asia/Tokyo');
+		// UTC Sunday 23:30 → Tokyo Monday 08:30, date rolls to June 16
+		vi.setSystemTime(new Date('2026-06-15T23:30:45.000Z'));
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.unstubAllEnvs();
+	});
+
+	it('shows correct local date and weekday after rollover', () => {
+		const result = formatCurrentDateContext(createMockConfigService({ timeFormat: '24h', showWeekday: true, showTimezone: true }));
+		expect(result).toBe('The current date is Tuesday, June 16, 2026. The current time is 08:30:45 GMT+9.');
+	});
+});
