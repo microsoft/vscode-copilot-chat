@@ -297,6 +297,7 @@
 	"copilot.tools.viewImage.name": "View Image",
 	"copilot.tools.viewImage.userDescription": "View the contents of an image file",
 	"github.copilot.config.tools.viewImage.enabled": "Enable the view image tool, which allows the agent to view image files such as png, jpg, jpeg, gif, and webp.",
+	"github.copilot.config.tools.compressOutput.enabled": "(Experimental) Post-process tool output (e.g. `git diff`, `ls -l`, `npm install`) to reduce token usage before it is sent to the model.",
 	"copilot.tools.listDirectory.name": "List Dir",
 	"copilot.tools.listDirectory.userDescription": "List the contents of a directory",
 	"copilot.tools.getTaskOutput.name": "Get Task Output",

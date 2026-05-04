@@ -16,8 +16,10 @@ import { isDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorunIterableDelta } from '../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { getContributedToolName, getToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../common/toolNames';
+import { IToolResultCompressor } from '../common/toolResultCompressor';
 import { ICopilotTool, ICopilotToolExtension, modelSpecificToolApplies, ToolRegistry } from '../common/toolsRegistry';
 import { BaseToolsService } from '../common/toolsService';
+import { registerTerminalCompressors } from '../node/compressors/terminalOutputCompressor';
 
 export class ToolsService extends BaseToolsService {
 	declare _serviceBrand: undefined;
@@ -86,10 +88,12 @@ export class ToolsService extends BaseToolsService {
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILogService logService: ILogService,
 		@IOTelService private readonly _otelService: IOTelService,
+		@IToolResultCompressor private readonly _toolResultCompressor: IToolResultCompressor,
 	) {
 		super(logService);
 		this._copilotTools = new Lazy(() => new Map(ToolRegistry.getTools().map(t => [t.toolName, _instantiationService.createInstance(t)] as const)));
 		this._toolExtensions = new Lazy(() => new Map(ToolRegistry.getToolExtensions().map(t => [t.toolName, _instantiationService.createInstance(t)] as const)));
+		registerTerminalCompressors(this._toolResultCompressor);
 	}
 
 	private getModelSpecificTools() {
@@ -174,6 +178,12 @@ export class ToolsService extends BaseToolsService {
 		return vscode.lm.invokeTool(getContributedToolName(name), options, token).then(
 			result => {
 				span.setStatus(SpanStatusCode.OK);
+				// Apply post-processing compression (e.g. for run_in_terminal output) before
+				// the result reaches the model. Returns undefined when no compression applied.
+				const compressed = this._toolResultCompressor.maybeCompress(String(name), options.input, result);
+				if (compressed) {
+					result = compressed;
+				}
 				// Always capture tool result for the debug panel
 				try {
 					const parts: string[] = [];
