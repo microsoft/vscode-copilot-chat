@@ -16,8 +16,10 @@ interface ITerminalInput {
 
 /**
  * Returns the "head" of a shell command — the first executable word, after
- * skipping common env-var assignments like `FOO=bar baz`. Returns `undefined`
- * when the command can't be parsed.
+ * skipping common env-var assignments like `FOO=bar baz`. `sub` is the first
+ * non-long-flag token after the head, so `git --no-pager diff` yields
+ * `{ head: 'git', sub: 'diff' }`. Returns `undefined` when the command can't
+ * be parsed.
  */
 export function parseCommandHead(command: string | undefined): { head: string; sub: string | undefined } | undefined {
 	if (!command) {
@@ -30,8 +32,21 @@ export function parseCommandHead(command: string | undefined): { head: string; s
 	}
 	const tokens = firstSegment.split(/\s+/).filter(t => !/^[A-Z_][A-Z0-9_]*=/.test(t));
 	const head = tokens[0];
-	const sub = tokens[1];
-	return head ? { head, sub } : undefined;
+	if (!head) {
+		return undefined;
+	}
+	// Skip leading long flags like `--no-pager` so `git --no-pager diff` parses
+	// as `{ head: 'git', sub: 'diff' }`. Short flags (`-la`) stay as the sub
+	// because for tools like `ls` they're the entire intent.
+	let sub: string | undefined;
+	for (let i = 1; i < tokens.length; i++) {
+		if (tokens[i].startsWith('--')) {
+			continue;
+		}
+		sub = tokens[i];
+		break;
+	}
+	return { head, sub };
 }
 
 function isTerminalInput(input: unknown): input is ITerminalInput {

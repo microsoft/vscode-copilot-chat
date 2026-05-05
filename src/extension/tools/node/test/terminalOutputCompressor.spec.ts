@@ -22,6 +22,12 @@ describe('parseCommandHead', () => {
 	it('uses only first pipeline segment', () => {
 		expect(parseCommandHead('git diff | cat')).toEqual({ head: 'git', sub: 'diff' });
 	});
+	it('skips leading long flags before the subcommand', () => {
+		expect(parseCommandHead('git --no-pager diff src/foo.ts')).toEqual({ head: 'git', sub: 'diff' });
+	});
+	it('skips short flag plus value before the subcommand', () => {
+		expect(parseCommandHead('git -C /tmp/repo diff')).toEqual({ head: 'git', sub: '-C' });
+	});
 });
 
 describe('gitDiffFilter', () => {
@@ -29,6 +35,9 @@ describe('gitDiffFilter', () => {
 
 	it('matches git diff', () => {
 		expect(gitDiffFilter.matches('run_in_terminal', input)).toBe(true);
+	});
+	it('matches git --no-pager diff', () => {
+		expect(gitDiffFilter.matches('run_in_terminal', { command: 'git --no-pager diff src/foo.ts' })).toBe(true);
 	});
 	it('does not match git status', () => {
 		expect(gitDiffFilter.matches('run_in_terminal', { command: 'git status' })).toBe(false);
