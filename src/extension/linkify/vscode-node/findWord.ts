@@ -49,7 +49,12 @@ export interface FileSymbol {
 	readonly location: vscode.Location;
 }
 
-export type SymbolFileCache = Map<string, Promise<readonly FileSymbol[]>>;
+export interface FileSymbols {
+	readonly declarations: readonly FileSymbol[];
+	readonly getGenericSymbols: () => Promise<readonly FileSymbol[]>;
+}
+
+export type SymbolFileCache = Map<string, Promise<FileSymbols>>;
 
 export async function findSymbolLocationInFile(
 	parserService: IParserService,
@@ -63,20 +68,37 @@ export async function findSymbolLocationInFile(
 	}
 
 	const symbols = await getCachedFileSymbols(parserService, uri, token, cache);
-	if (token.isCancellationRequested || !symbols.length) {
+	if (token.isCancellationRequested) {
 		return;
 	}
 
-	const exactMatch = symbols.find(symbol => symbol.identifier === symbolText);
+	const exactMatch = findExactSymbol(symbols.declarations, symbolText);
 	if (exactMatch) {
 		return exactMatch.location;
 	}
 
 	const symbolParts = extractSymbolNamesInCode(symbolText);
-	if (!symbolParts.length) {
+	if (symbolParts.length) {
+		const declarationMatch = findBestSymbolPart(symbols.declarations, symbolParts);
+		if (declarationMatch) {
+			return declarationMatch.location;
+		}
+	}
+
+	const genericSymbols = await symbols.getGenericSymbols();
+	if (token.isCancellationRequested) {
 		return;
 	}
 
+	return findExactSymbol(genericSymbols, symbolText)?.location
+		?? (symbolParts.length ? findBestSymbolPart(genericSymbols, symbolParts)?.location : undefined);
+}
+
+function findExactSymbol(symbols: readonly FileSymbol[], symbolText: string): FileSymbol | undefined {
+	return symbols.find(symbol => symbol.identifier === symbolText);
+}
+
+function findBestSymbolPart(symbols: readonly FileSymbol[], symbolParts: readonly string[]): FileSymbol | undefined {
 	let bestMatch: { symbol: FileSymbol; matchIndex: number } | undefined;
 	for (const symbol of symbols) {
 		const matchIndex = symbolParts.indexOf(symbol.identifier);
@@ -85,7 +107,7 @@ export async function findSymbolLocationInFile(
 		}
 	}
 
-	return bestMatch?.symbol.location;
+	return bestMatch?.symbol;
 }
 
 async function getCachedFileSymbols(
@@ -93,7 +115,7 @@ async function getCachedFileSymbols(
 	uri: vscode.Uri,
 	token: CancellationToken,
 	cache: SymbolFileCache | undefined
-): Promise<readonly FileSymbol[]> {
+): Promise<FileSymbols> {
 	const key = uri.toString();
 	const existing = cache?.get(key);
 	if (existing) {
@@ -105,48 +127,64 @@ async function getCachedFileSymbols(
 	return pending;
 }
 
-async function doGetFileSymbols(parserService: IParserService, uri: vscode.Uri, token: CancellationToken): Promise<readonly FileSymbol[]> {
+async function doGetFileSymbols(parserService: IParserService, uri: vscode.Uri, token: CancellationToken): Promise<FileSymbols> {
 	const languageId = getLanguageForResource(uri).languageId;
 	const wasmLanguage = getWasmLanguage(languageId);
 	if (!wasmLanguage) {
-		return [];
+		return emptyFileSymbols();
 	}
 
 	const doc = await openDocument(uri);
 	if (!doc || token.isCancellationRequested) {
-		return [];
+		return emptyFileSymbols();
 	}
 
-	let symbols: TreeSitterExpressionInfo[];
 	try {
 		const ast = parserService.getTreeSitterASTForWASMLanguage(wasmLanguage, doc.getText());
-		const fullFileRange = new vscode.Range(0, 0, Number.MAX_SAFE_INTEGER, 0);
-		const [classDeclarations, functionDefinitions, typeDeclarations, genericSymbols] = await Promise.all([
+		const [classDeclarations, functionDefinitions, typeDeclarations] = await Promise.all([
 			ast.getClassDeclarations(),
 			ast.getFunctionDefinitions(),
 			ast.getTypeDeclarations(),
-			ast.getSymbols({
-				startIndex: doc.offsetAt(fullFileRange.start),
-				endIndex: doc.offsetAt(fullFileRange.end),
-			}),
 		]);
-		symbols = [
-			...classDeclarations,
-			...functionDefinitions,
-			...typeDeclarations,
-			...genericSymbols,
-		];
+		let genericSymbols: Promise<readonly FileSymbol[]> | undefined;
+		return {
+			declarations: toFileSymbols(uri, doc, [
+				...classDeclarations,
+				...functionDefinitions,
+				...typeDeclarations,
+			]),
+			getGenericSymbols: () => {
+				if (token.isCancellationRequested) {
+					return Promise.resolve([]);
+				}
+				genericSymbols ??= (async () => {
+					const fullFileRange = new vscode.Range(0, 0, Number.MAX_SAFE_INTEGER, 0);
+					const symbols = await ast.getSymbols({
+						startIndex: doc.offsetAt(fullFileRange.start),
+						endIndex: doc.offsetAt(fullFileRange.end),
+					});
+					return toFileSymbols(uri, doc, symbols);
+				})().catch(() => []);
+				return genericSymbols;
+			},
+		};
 	} catch {
-		return [];
+		return emptyFileSymbols();
 	}
-	if (token.isCancellationRequested) {
-		return [];
-	}
+}
 
+function toFileSymbols(uri: vscode.Uri, doc: SimpleTextDocument, symbols: readonly TreeSitterExpressionInfo[]): readonly FileSymbol[] {
 	return symbols.map(symbol => ({
 		identifier: symbol.identifier,
 		location: new vscode.Location(uri, doc.positionAt(symbol.startIndex))
 	}));
+}
+
+function emptyFileSymbols(): FileSymbols {
+	return {
+		declarations: [],
+		getGenericSymbols: async () => []
+	};
 }
 
 export async function findWordInReferences(

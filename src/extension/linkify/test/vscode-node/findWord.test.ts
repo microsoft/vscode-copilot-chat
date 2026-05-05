@@ -15,6 +15,7 @@ import { findSymbolLocationInFile, SymbolFileCache } from '../../vscode-node/fin
 
 class TestParserService implements Partial<IParserService> {
 	public parseCount = 0;
+	public genericSymbolQueryCount = 0;
 
 	constructor(
 		private readonly symbols: readonly TreeSitterExpressionInfo[] = [],
@@ -33,7 +34,10 @@ class TestParserService implements Partial<IParserService> {
 			getClassDeclarations: async () => classDeclarations,
 			getFunctionDefinitions: async () => functionDefinitions,
 			getTypeDeclarations: async () => typeDeclarations,
-			getSymbols: async () => symbols,
+			getSymbols: async () => {
+				this.genericSymbolQueryCount++;
+				return symbols;
+			},
 		} as unknown as TreeSitterAST;
 	}
 }
@@ -139,11 +143,12 @@ suite('Find symbol location in file', () => {
 		const uri = URI.file('/workspace/src/file.py');
 		setWorkspaceFileContents(new Map([[uri.toString(), contents]]));
 
+		const parserService = new TestParserService(
+			[symbol(contents, 'Foo')],
+			[declaration(contents, 'Foo', declarationText)],
+		);
 		const location = await findSymbolLocationInFile(
-			asParserService(new TestParserService(
-				[symbol(contents, 'Foo')],
-				[declaration(contents, 'Foo', declarationText)],
-			)),
+			asParserService(parserService),
 			uri,
 			'Foo',
 			CancellationToken.None,
@@ -152,6 +157,36 @@ suite('Find symbol location in file', () => {
 		assert(location);
 		assert.strictEqual(location.range.start.line, 2);
 		assert.strictEqual(location.range.start.character, 0);
+		assert.strictEqual(parserService.genericSymbolQueryCount, 0);
+	});
+
+	test('Should prefer declaration fallback over generic symbol references for qualified names', async () => {
+		const declarationText = 'class Foo:';
+		const contents = [
+			'if value.bar:',
+			'\tpass',
+			'',
+			declarationText,
+			'\tpass',
+		].join('\n');
+		const uri = URI.file('/workspace/src/file.py');
+		setWorkspaceFileContents(new Map([[uri.toString(), contents]]));
+
+		const parserService = new TestParserService(
+			[symbol(contents, 'bar')],
+			[declaration(contents, 'Foo', declarationText)],
+		);
+		const location = await findSymbolLocationInFile(
+			asParserService(parserService),
+			uri,
+			'Foo.bar',
+			CancellationToken.None,
+		);
+
+		assert(location);
+		assert.strictEqual(location.range.start.line, 3);
+		assert.strictEqual(location.range.start.character, 0);
+		assert.strictEqual(parserService.genericSymbolQueryCount, 0);
 	});
 
 	test('Should use the highest-index qualified name part when there is no exact match', async () => {
@@ -214,5 +249,6 @@ suite('Find symbol location in file', () => {
 		assert(classLocation);
 		assert(methodLocation);
 		assert.strictEqual(parserService.parseCount, 1);
+		assert.strictEqual(parserService.genericSymbolQueryCount, 1);
 	});
 });
