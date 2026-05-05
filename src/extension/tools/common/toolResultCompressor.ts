@@ -60,6 +60,15 @@ export interface IToolResultCompressor {
  */
 const MIN_COMPRESSIBLE_LENGTH = 80;
 
+/**
+ * Format the banner that gets prepended to compressed text parts so the
+ * model knows compression happened, which filters fired, and how to opt out.
+ */
+function formatCompressionBanner(filterIds: readonly string[], beforeChars: number, afterChars: number): string {
+	const ids = filterIds.length > 0 ? filterIds.join(', ') : 'unknown';
+	return `[Output compressed by ${ids} (${beforeChars} → ${afterChars} chars). To disable, set chat.tools.compressOutput.enabled to false.]`;
+}
+
 export class ToolResultCompressorService implements IToolResultCompressor {
 	declare readonly _serviceBrand: undefined;
 
@@ -117,6 +126,7 @@ export class ToolResultCompressorService implements IToolResultCompressor {
 			}
 
 			let current = original;
+			const partFilterIds: string[] = [];
 			for (let i = 0; i < activeFilters.length; /* manual increment */) {
 				const filter = activeFilters[i];
 				try {
@@ -124,6 +134,7 @@ export class ToolResultCompressorService implements IToolResultCompressor {
 					if (out.compressed && out.text.length < current.length) {
 						current = out.text;
 						usedFilterIds.add(filter.id);
+						partFilterIds.push(filter.id);
 					}
 					i++;
 				} catch (err) {
@@ -142,11 +153,17 @@ export class ToolResultCompressorService implements IToolResultCompressor {
 			totalAfter += current.length;
 			if (current !== original) {
 				anyCompressed = true;
+				// Prepend a banner so the model knows the output was filtered, by
+				// which filters, and how to disable compression. We only annotate
+				// the parts we actually changed — non-compressed parts pass through
+				// untouched.
+				const banner = formatCompressionBanner(partFilterIds, original.length, current.length);
+				const annotated = `${banner}\n${current}`;
 				// Preserve LanguageModelTextPart2 audience metadata if present.
 				if (part instanceof LanguageModelTextPart2) {
-					return new LanguageModelTextPart2(current, part.audience);
+					return new LanguageModelTextPart2(annotated, part.audience);
 				}
-				return new LanguageModelTextPart(current);
+				return new LanguageModelTextPart(annotated);
 			}
 			return part;
 		});

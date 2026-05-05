@@ -94,10 +94,13 @@ describe('ToolResultCompressorService', () => {
 		expect(calls).toBe(1);
 		expect(warnings.length).toBe(1);
 		expect(warnings[0]).toContain('thrower');
-		// The other filter still rewrites every text part.
+		// The other filter still rewrites every text part. Each emitted part starts
+		// with the compression banner and ends with the filter's replacement text.
 		for (const part of out.content) {
 			expect(part).toBeInstanceOf(LanguageModelTextPart);
-			expect((part as LanguageModelTextPart).value).toBe('foo');
+			const value = (part as LanguageModelTextPart).value;
+			expect(value).toMatch(/^\[Output compressed by test\.replaceWithFoo /);
+			expect(value.endsWith('\nfoo')).toBe(true);
 		}
 	});
 
@@ -110,7 +113,9 @@ describe('ToolResultCompressorService', () => {
 		const out = svc.maybeCompress(TOOL, {}, result)!;
 		expect(out.content[0]).toBe(dataPart);
 		expect(out.content[1]).toBeInstanceOf(LanguageModelTextPart);
-		expect((out.content[1] as LanguageModelTextPart).value).toBe('foo');
+		const value = (out.content[1] as LanguageModelTextPart).value;
+		expect(value).toMatch(/^\[Output compressed by test\.replaceWithFoo /);
+		expect(value.endsWith('\nfoo')).toBe(true);
 	});
 
 	it('preserves LanguageModelTextPart2 audience metadata when rewriting', () => {
@@ -122,7 +127,8 @@ describe('ToolResultCompressorService', () => {
 		const out = svc.maybeCompress(TOOL, {}, result)!;
 		expect(out.content[0]).toBeInstanceOf(LanguageModelTextPart2);
 		const rewritten = out.content[0] as LanguageModelTextPart2;
-		expect(rewritten.value).toBe('foo');
+		expect(rewritten.value).toMatch(/^\[Output compressed by test\.replaceWithFoo /);
+		expect(rewritten.value.endsWith('\nfoo')).toBe(true);
 		expect(rewritten.audience).toEqual(audience);
 	});
 

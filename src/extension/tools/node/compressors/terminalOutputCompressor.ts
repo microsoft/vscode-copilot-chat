@@ -77,9 +77,33 @@ export const gitDiffFilter: IToolResultFilter = {
 		let contextRun = 0;
 		let inBinaryOrLock = false;
 
+		// Pending hunk: we buffer the body so we can rewrite the `@@` header to
+		// reflect the line counts we actually emit (otherwise the diff is no
+		// longer valid unified-diff syntax and tools/agents that count lines
+		// inside a hunk get confused).
+		let pendingHunkHeaderIndex = -1;
+		let pendingHunkOldStart = 0;
+		let pendingHunkNewStart = 0;
+		let pendingOldLines = 0;
+		let pendingNewLines = 0;
+
+		const HUNK_RE = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+
+		const flushHunk = () => {
+			if (pendingHunkHeaderIndex < 0) {
+				return;
+			}
+			out[pendingHunkHeaderIndex] = `@@ -${pendingHunkOldStart},${pendingOldLines} +${pendingHunkNewStart},${pendingNewLines} @@`;
+			pendingHunkHeaderIndex = -1;
+		};
+
 		const flushContextRun = () => {
 			const omitted = contextRun - KEEP_CONTEXT;
 			if (omitted > 0) {
+				// Note: this marker is intentionally not valid unified-diff syntax,
+				// but the surrounding hunk header counts are kept consistent with
+				// the prefixed (' ', '+', '-') lines we actually emit, so a parser
+				// that ignores unknown lines still reads correct counts.
 				out.push(`... ${omitted} unchanged context line${omitted === 1 ? '' : 's'} omitted ...`);
 			}
 			contextRun = 0;
@@ -88,6 +112,7 @@ export const gitDiffFilter: IToolResultFilter = {
 		for (const line of lines) {
 			if (line.startsWith('diff --git')) {
 				flushContextRun();
+				flushHunk();
 				inBinaryOrLock = /package-lock\.json|yarn\.lock|pnpm-lock\.yaml|\.lockb?$|\.snap$/.test(line);
 				if (inBinaryOrLock) {
 					out.push(line);
@@ -106,22 +131,51 @@ export const gitDiffFilter: IToolResultFilter = {
 				line.startsWith('rename to ')) {
 				continue;
 			}
-			// Keep file-mode markers, hunk markers, +/- lines verbatim.
-			if (line.startsWith('+++ ') || line.startsWith('--- ') || line.startsWith('@@') ||
-				line.startsWith('+') || line.startsWith('-') || line.startsWith('Binary files ')) {
+			// Hunk header: start buffering a new hunk so we can rewrite counts on flush.
+			const hunkMatch = HUNK_RE.exec(line);
+			if (hunkMatch) {
+				flushContextRun();
+				flushHunk();
+				pendingHunkOldStart = parseInt(hunkMatch[1], 10);
+				pendingHunkNewStart = parseInt(hunkMatch[3], 10);
+				pendingOldLines = 0;
+				pendingNewLines = 0;
+				pendingHunkHeaderIndex = out.length;
+				out.push(line); // placeholder — overwritten by flushHunk()
+				continue;
+			}
+			// File-mode markers and binary notices pass through.
+			if (line.startsWith('+++ ') || line.startsWith('--- ') || line.startsWith('Binary files ')) {
+				flushContextRun();
+				flushHunk();
+				out.push(line);
+				continue;
+			}
+			// +/- lines: emit verbatim and account for them in the pending hunk.
+			if (line.startsWith('+')) {
 				flushContextRun();
 				out.push(line);
+				pendingNewLines++;
+				continue;
+			}
+			if (line.startsWith('-')) {
+				flushContextRun();
+				out.push(line);
+				pendingOldLines++;
 				continue;
 			}
 			// Unchanged context line: keep the first KEEP_CONTEXT lines of each run,
 			// then count the rest so the next non-context line can flush a single
-			// summary marker.
+			// summary marker. Only the lines we actually emit count toward the hunk.
 			contextRun++;
 			if (contextRun <= KEEP_CONTEXT) {
 				out.push(line);
+				pendingOldLines++;
+				pendingNewLines++;
 			}
 		}
 		flushContextRun();
+		flushHunk();
 
 		const result = out.join('\n');
 		return {

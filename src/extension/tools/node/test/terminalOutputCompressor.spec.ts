@@ -96,6 +96,24 @@ describe('gitDiffFilter', () => {
 		expect(out.text).not.toContain('-old');
 		expect(out.compressed).toBe(true);
 	});
+	it('rewrites hunk header counts to match emitted body', () => {
+		// 20 context lines + 1 minus + 1 plus. Filter keeps 1 context + the
+		// change lines, so the body has 2 old-side and 2 new-side lines, and
+		// the rewritten header should reflect that.
+		const ctxLines = Array.from({ length: 20 }, (_, i) => ` ctx line ${i}`);
+		const text = [
+			'diff --git a/foo.ts b/foo.ts',
+			'--- a/foo.ts',
+			'+++ b/foo.ts',
+			'@@ -10,22 +10,22 @@',
+			...ctxLines,
+			'-old',
+			'+new',
+		].join('\n');
+		const out = gitDiffFilter.apply(text, input);
+		expect(out.text).toContain('@@ -10,2 +10,2 @@');
+		expect(out.text).not.toContain('@@ -10,22 +10,22 @@');
+	});
 });
 
 describe('lsFilter', () => {
