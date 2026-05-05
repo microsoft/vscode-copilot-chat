@@ -1005,7 +1005,7 @@ export namespace ConfigKey {
 	export const MemoryToolEnabled = defineSetting<boolean>('chat.tools.memory.enabled', ConfigType.ExperimentBased, true);
 	export const ViewImageToolEnabled = defineSetting<boolean>('chat.tools.viewImage.enabled', ConfigType.ExperimentBased, true);
 	/** Enable post-processing compression of tool results (e.g. terminal output). */
-	export const ToolResultCompressionEnabled = defineSetting<boolean>('chat.tools.compressOutput.enabled', ConfigType.Simple, false);
+	export const ToolResultCompressionEnabled = defineSetting<boolean>('chat.tools.compressOutput.enabled', ConfigType.ExperimentBased, false);
 }
 
 export function getAllConfigKeys(): string[] {

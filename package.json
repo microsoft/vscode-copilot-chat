@@ -3236,7 +3236,8 @@
 						"default": false,
 						"markdownDescription": "%github.copilot.config.tools.compressOutput.enabled%",
 						"tags": [
-							"preview"
+							"preview",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.backgroundCompaction": {
