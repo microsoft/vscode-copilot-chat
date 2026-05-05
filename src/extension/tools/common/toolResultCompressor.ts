@@ -5,6 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { createServiceIdentifier } from '../../../util/common/services';
@@ -76,6 +77,7 @@ export class ToolResultCompressorService implements IToolResultCompressor {
 
 	constructor(
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@ILogService private readonly _logService: ILogService,
 	) { }
@@ -92,7 +94,7 @@ export class ToolResultCompressorService implements IToolResultCompressor {
 	}
 
 	maybeCompress(toolName: string, input: unknown, result: vscode.LanguageModelToolResult | vscode.LanguageModelToolResult2): vscode.LanguageModelToolResult | undefined {
-		if (!this._configurationService.getConfig(ConfigKey.ToolResultCompressionEnabled)) {
+		if (!this._configurationService.getExperimentBasedConfig(ConfigKey.ToolResultCompressionEnabled, this._experimentationService)) {
 			return undefined;
 		}
 
