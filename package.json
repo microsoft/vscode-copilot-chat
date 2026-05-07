@@ -1805,7 +1805,7 @@
 						"apiKey": {
 							"type": "string",
 							"secret": true,
-							"description": "API key for Perplexity",
+							"description": "API key for the Perplexity Agent API (OpenAI-Responses-compatible)",
 							"title": "API Key"
 						}
 					},

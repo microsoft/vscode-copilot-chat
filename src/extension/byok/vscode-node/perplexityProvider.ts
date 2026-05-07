@@ -8,45 +8,53 @@ import { IFetcherService } from '../../../platform/networking/common/fetcherServ
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { packageJson } from '../../../platform/env/common/packagejson';
-import { BYOKKnownModels, BYOKModelCapabilities } from '../common/byokProvider';
-import { AbstractOpenAICompatibleLMProvider } from './abstractLanguageModelChatProvider';
+import { BYOKKnownModels, BYOKModelCapabilities, byokKnownModelsToAPIInfo } from '../common/byokProvider';
+import { AbstractOpenAICompatibleLMProvider, LanguageModelChatConfiguration, OpenAICompatibleLanguageModelChatInformation } from './abstractLanguageModelChatProvider';
 import { IBYOKStorageService } from './byokStorageService';
 
-// https://docs.perplexity.ai/models/model-cards
-// Perplexity exposes an OpenAI-compatible chat completions API at https://api.perplexity.ai
-// but does not provide a stable `/models` discovery endpoint. We ship a curated list.
+// Perplexity Agent API: https://docs.perplexity.ai/docs/agent-api
+// OpenAI-Responses-compatible base URL: https://api.perplexity.ai/v1
+// Exposes third-party models (OpenAI, Anthropic, Google, etc.) plus presets
+// (e.g. pro-search) under one API key. Does not provide a stable `/models`
+// discovery endpoint, so we ship a curated list and override `getAllModels`.
 const PERPLEXITY_INTEGRATION_HEADER = 'X-Pplx-Integration';
 
 const PERPLEXITY_KNOWN_MODELS: BYOKKnownModels = {
-	'sonar-pro': {
-		name: 'Sonar Pro',
+	'openai/gpt-5.4': {
+		name: 'GPT-5.4 (via Perplexity Agent API)',
 		toolCalling: true,
-		vision: false,
+		vision: true,
 		maxInputTokens: 200000,
-		maxOutputTokens: 8000,
+		maxOutputTokens: 16000,
 	},
-	'sonar': {
-		name: 'Sonar',
+	'openai/gpt-5.2': {
+		name: 'GPT-5.2 (via Perplexity Agent API)',
 		toolCalling: true,
-		vision: false,
-		maxInputTokens: 128000,
-		maxOutputTokens: 8000,
+		vision: true,
+		maxInputTokens: 200000,
+		maxOutputTokens: 16000,
 	},
-	'sonar-reasoning-pro': {
-		name: 'Sonar Reasoning Pro',
+	'anthropic/claude-sonnet-4-6': {
+		name: 'Claude Sonnet 4.6 (via Perplexity Agent API)',
 		toolCalling: true,
-		vision: false,
-		maxInputTokens: 128000,
-		maxOutputTokens: 8000,
+		vision: true,
+		maxInputTokens: 200000,
+		maxOutputTokens: 16000,
+	},
+	'anthropic/claude-opus-4-7': {
+		name: 'Claude Opus 4.7 (via Perplexity Agent API)',
+		toolCalling: true,
+		vision: true,
+		maxInputTokens: 200000,
+		maxOutputTokens: 32000,
 		thinking: true,
 	},
-	'sonar-reasoning': {
-		name: 'Sonar Reasoning',
+	'google/gemini-3-1-pro': {
+		name: 'Gemini 3.1 Pro (via Perplexity Agent API)',
 		toolCalling: true,
-		vision: false,
-		maxInputTokens: 128000,
-		maxOutputTokens: 8000,
-		thinking: true,
+		vision: true,
+		maxInputTokens: 1000000,
+		maxOutputTokens: 16000,
 	},
 };
 
@@ -82,18 +90,30 @@ export class PerplexityLMProvider extends AbstractOpenAICompatibleLMProvider {
 		};
 		const merged: BYOKKnownModels = {};
 		for (const [id, caps] of Object.entries(PERPLEXITY_KNOWN_MODELS)) {
-			merged[id] = { ...caps, requestHeaders: { ...integrationHeader, ...(caps.requestHeaders ?? {}) } };
+			merged[id] = { ...caps, requestHeaders: { ...(caps.requestHeaders ?? {}), ...integrationHeader } };
 		}
 		if (remote) {
 			for (const [id, caps] of Object.entries(remote)) {
-				merged[id] = { ...caps, requestHeaders: { ...integrationHeader, ...(caps.requestHeaders ?? {}) } };
+				merged[id] = { ...caps, requestHeaders: { ...(caps.requestHeaders ?? {}), ...integrationHeader } };
 			}
 		}
 		return merged;
 	}
 
 	protected getModelsBaseUrl(): string | undefined {
-		return 'https://api.perplexity.ai';
+		// Agent API base URL. The Agent API is OpenAI-Responses-compatible at
+		// /v1/responses (alias) and /v1/agent (primary). It exposes third-party
+		// models from OpenAI, Anthropic, Google, etc., plus presets like pro-search.
+		return 'https://api.perplexity.ai/v1';
+	}
+
+	protected override async getAllModels(silent: boolean, apiKey: string | undefined, configuration: LanguageModelChatConfiguration | undefined): Promise<OpenAICompatibleLanguageModelChatInformation<LanguageModelChatConfiguration>[]> {
+		const baseUrl = this.getModelsBaseUrl();
+		const merged = this._knownModels ?? {};
+		return byokKnownModelsToAPIInfo(this._name, merged).map(model => ({
+			...model,
+			url: baseUrl ?? 'https://api.perplexity.ai/v1',
+		}));
 	}
 
 	protected override resolveModelCapabilities(modelData: unknown): BYOKModelCapabilities | undefined {
