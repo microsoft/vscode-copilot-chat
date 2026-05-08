@@ -7,10 +7,10 @@
 		"ghcr.io/devcontainers/features/docker-in-docker:2.16.1": {
 			"moby": false
 		},
-		"ghcr.io/devcontainers/features/azure-cli:1": {},
-		"ghcr.io/devcontainers/features/python:1": {},
-		"ghcr.io/devcontainers/features/dotnet:2": {},
-		"ghcr.io/devcontainers/features/desktop-lite:1": {},
+		"ghcr.io/devcontainers/features/azure-cli:": {},
+		"ghcr.io/devcontainers/features/python:": {},
+		"ghcr.io/devcontainers/features/dotnet:": {},
+		"ghcr.io/devcontainers/features/desktop-lite:": {},
 		"ghcr.io/devcontainers/features/git-lfs:1": {}
 	},
 	"containerEnv": {
