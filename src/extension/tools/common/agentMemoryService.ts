@@ -13,6 +13,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { isMemoryDisabledByKillSwitch } from './memoryKillSwitch';
 
 /**
  * Repository memory entry format aligned with CAPI service contract.
@@ -160,6 +161,11 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 
 	async checkMemoryEnabled(): Promise<boolean> {
 		try {
+			// Kill switch: disable all memory operations when feature flag is active
+			if (isMemoryDisabledByKillSwitch(this.experimentationService)) {
+				return false;
+			}
+
 			// Check if CAPI sync is enabled via config
 			if (!this.isCAPIMemorySyncConfigEnabled()) {
 				return false;

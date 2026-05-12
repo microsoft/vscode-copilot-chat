@@ -5,8 +5,10 @@
 
 import type * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { URI } from '../../../util/vs/base/common/uri';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
+import { isMemoryDisabledByKillSwitch } from '../common/memoryKillSwitch';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { extractSessionId } from './memoryTool';
@@ -22,9 +24,14 @@ export class ResolveMemoryFileUriTool implements ICopilotTool<IResolveMemoryFile
 
 	constructor(
 		@IVSCodeExtensionContext private readonly _extensionContext: vscode.ExtensionContext,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IResolveMemoryFileUriParams>, _token: vscode.CancellationToken): Promise<vscode.LanguageModelToolResult> {
+		if (isMemoryDisabledByKillSwitch(this._experimentationService)) {
+			throw new Error('Memory operations are currently disabled.');
+		}
+
 		const memoryPath = options.input.path;
 		if (!memoryPath || !memoryPath.startsWith('/memories/')) {
 			throw new Error('Path must start with /memories/');

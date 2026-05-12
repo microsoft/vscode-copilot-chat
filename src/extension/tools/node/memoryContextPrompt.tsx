@@ -13,6 +13,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { URI } from '../../../util/vs/base/common/uri';
 import { Tag } from '../../prompts/node/base/tag';
 import { IAgentMemoryService, normalizeCitations, RepoMemoryEntry } from '../common/agentMemoryService';
+import { isMemoryDisabledByKillSwitch } from '../common/memoryKillSwitch';
 import { ToolName } from '../common/toolNames';
 import { extractSessionId } from './memoryTool';
 
@@ -37,6 +38,10 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 	}
 
 	async render() {
+		if (isMemoryDisabledByKillSwitch(this.experimentationService)) {
+			return null;
+		}
+
 		const enableCopilotMemory = this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
 		const enableMemoryTool = this.configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, this.experimentationService);
 
@@ -257,6 +262,10 @@ export class MemoryInstructionsPrompt extends PromptElement<BasePromptElementPro
 	}
 
 	async render(state: void, sizing: PromptSizing) {
+		if (isMemoryDisabledByKillSwitch(this.experimentationService)) {
+			return null;
+		}
+
 		const enableCopilotMemory = this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
 		const enableMemoryTool = this.configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, this.experimentationService);
 		if (!enableCopilotMemory && !enableMemoryTool) {

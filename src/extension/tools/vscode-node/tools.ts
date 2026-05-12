@@ -13,6 +13,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { Disposable, DisposableMap } from '../../../util/vs/base/common/lifecycle';
 import { autorun, autorunIterableDelta } from '../../../util/vs/base/common/observableInternal';
 import { URI } from '../../../util/vs/base/common/uri';
+import { isMemoryDisabledByKillSwitch } from '../common/memoryKillSwitch';
 import { getContributedToolName } from '../common/toolNames';
 import { isVscodeLanguageModelTool } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
@@ -32,6 +33,14 @@ export class ToolsContribution extends Disposable {
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 	) {
 		super();
+
+		// Set context key for memory kill switch so `when` clauses can gate memory tools/commands
+		const memoryDisabled = isMemoryDisabledByKillSwitch(this.experimentationService);
+		vscode.commands.executeCommand('setContext', 'github.copilot.chat.memoryDisabled', memoryDisabled);
+		this._register(this.experimentationService.onDidTreatmentsChange(() => {
+			const disabled = isMemoryDisabledByKillSwitch(this.experimentationService);
+			vscode.commands.executeCommand('setContext', 'github.copilot.chat.memoryDisabled', disabled);
+		}));
 
 		for (const [name, tool] of toolsService.copilotTools) {
 			if (isVscodeLanguageModelTool(tool)) {

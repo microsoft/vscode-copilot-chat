@@ -17,6 +17,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { IAgentMemoryService, RepoMemoryEntry } from '../common/agentMemoryService';
 import { IMemoryCleanupService } from '../common/memoryCleanupService';
+import { isMemoryDisabledByKillSwitch } from '../common/memoryKillSwitch';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { formatUriForFileWidget } from '../common/toolUtils';
@@ -251,6 +252,9 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 	}
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<MemoryToolParams>, _token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
+		if (isMemoryDisabledByKillSwitch(this.experimentationService)) {
+			return new LanguageModelToolResult([new LanguageModelTextPart('Error: Memory operations are currently disabled.')]);
+		}
 		const params = options.input;
 		const sessionResource = options.chatSessionResource?.toString();
 		const resultText = await this._dispatch(params, sessionResource, options.chatRequestId, options.model);
