@@ -7,7 +7,9 @@ import { Raw } from '@vscode/prompt-tsx';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IChatModelInformation, ModelSupportedEndpoint } from '../../../../platform/endpoint/common/endpointProvider';
+import { CustomDataPartMimeTypes } from '../../../../platform/endpoint/common/endpointTypes';
 import { ICreateEndpointBodyOptions } from '../../../../platform/networking/common/networking';
+import { openAIContextManagementCompactionType } from '../../../../platform/networking/common/openai';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -140,6 +142,67 @@ describe('OpenAIEndpoint - Reasoning Properties', () => {
 	});
 
 	describe('Responses API mode (useResponsesApi = true)', () => {
+		it('should keep explicit assistant content while dropping server-state replay fields', () => {
+			const endpoint = instaService.createInstance(OpenAIEndpoint,
+				modelMetadata,
+				'test-api-key',
+				'https://api.openai.com/v1/chat/completions');
+
+			const assistantMessage: Raw.ChatMessage = {
+				role: Raw.ChatRole.Assistant,
+				content: [
+					{ type: Raw.ChatCompletionContentPartKind.Text, text: 'explicit assistant text' },
+					{
+						type: Raw.ChatCompletionContentPartKind.Opaque,
+						value: {
+							type: CustomDataPartMimeTypes.ThinkingData,
+							thinking: {
+								id: 'rs_test_123',
+								text: 'hidden reasoning'
+							}
+						}
+					},
+					{
+						type: Raw.ChatCompletionContentPartKind.Opaque,
+						value: {
+							type: CustomDataPartMimeTypes.StatefulMarker,
+							value: {
+								modelId: modelMetadata.id,
+								marker: 'resp_test_123'
+							}
+						}
+					},
+					{
+						type: Raw.ChatCompletionContentPartKind.Opaque,
+						value: {
+							type: CustomDataPartMimeTypes.ContextManagement,
+							compaction: {
+								type: openAIContextManagementCompactionType,
+								id: 'cmp_test_123',
+								encrypted_content: 'encrypted-compaction'
+							}
+						}
+					}
+				]
+			};
+			const options = createTestOptions([assistantMessage]);
+
+			const body = endpoint.createRequestBody(options);
+
+			expect(body.previous_response_id).toBeUndefined();
+			expect(body.include).toEqual(['reasoning.encrypted_content']);
+			expect(body.input).toBeDefined();
+
+			const input = body.input ?? [];
+			expect(input.some(item => item && typeof item === 'object' && 'type' in item && item.type === 'reasoning')).toBe(false);
+			expect(input.some(item => item && typeof item === 'object' && 'type' in item && item.type === openAIContextManagementCompactionType)).toBe(false);
+			expect(input).toContainEqual(expect.objectContaining({
+				role: 'assistant',
+				type: 'message',
+				content: [expect.objectContaining({ type: 'output_text', text: 'explicit assistant text' })]
+			}));
+		});
+
 		it('should preserve reasoning object when thinking is supported', () => {
 			accessor.get(IConfigurationService).setConfig(ConfigKey.ResponsesApiReasoningSummary, 'detailed');
 			const endpoint = instaService.createInstance(OpenAIEndpoint,
@@ -152,8 +215,11 @@ describe('OpenAIEndpoint - Reasoning Properties', () => {
 
 			const body = endpoint.createRequestBody(options);
 
-			expect(body.store).toBe(true);
+			expect(body.store).toBe(false);
 			expect(body.n).toBeUndefined();
+			expect(body.context_management).toBeUndefined();
+			expect(body.include).toEqual(['reasoning.encrypted_content']);
+			expect(body.prompt_cache_key).toBeUndefined();
 			expect(body.stream_options).toBeUndefined();
 			expect(body.reasoning).toBeDefined(); // Should preserve reasoning object
 		});

@@ -138,6 +138,11 @@ export function isVSCModelC(model: LanguageModelChat | IChatEndpoint) {
 	return VSC_MODEL_HASHES_SUBSET_C.includes(ID_hash) || VSC_MODEL_HASHES_SUBSET_C.includes(family_hash);
 }
 
+export function isVSCModelD(model: LanguageModelChat | IChatEndpoint) {
+	const modelId = getModelId(model);
+	return modelId.startsWith('vscModelD') || model.family.startsWith('vscModelD');
+}
+
 export function isGpt52CodexFamily(model: LanguageModelChat | IChatEndpoint | string): boolean {
 	const family = typeof model === 'string' ? model : model.family;
 	return family === 'gpt-5.2-codex';

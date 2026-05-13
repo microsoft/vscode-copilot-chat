@@ -431,7 +431,7 @@ function applyPackageJsonPatch(isPreRelease: boolean) {
 	delete patchedPackageJson['devDependencies'];
 	delete patchedPackageJson['dependencies'];
 
-	fs.writeFileSync(packagejsonPath, JSON.stringify(patchedPackageJson));
+	fs.writeFileSync(packagejsonPath, JSON.stringify(patchedPackageJson, null, '\t') + '\n');
 }
 
 main();
