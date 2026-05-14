@@ -42,9 +42,10 @@ export class LanguageModelAccessPrompt extends PromptElement<Props> {
 				const content = filteredContent.find(part => part instanceof LanguageModelTextPart);
 				const toolCalls = filteredContent.filter(part => part instanceof vscode.LanguageModelToolCallPart);
 				const thinking = filteredContent.find(part => part instanceof vscode.LanguageModelThinkingPart);
+				const thinkingEncrypted = typeof thinking?.metadata?.encrypted === 'string' ? thinking.metadata.encrypted : undefined;
 
 				const statefulMarkerElement = statefulMarker && <StatefulMarkerContainer statefulMarker={statefulMarker} />;
-				const thinkingElement = thinking && thinking.id && <ThinkingDataContainer thinking={{ id: thinking.id, text: thinking.value, metadata: thinking.metadata }} />;
+				const thinkingElement = thinking && thinking.id && <ThinkingDataContainer thinking={{ id: thinking.id, text: thinking.value, metadata: thinking.metadata, encrypted: thinkingEncrypted }} />;
 				chatMessages.push(<AssistantMessage name={message.name} toolCalls={toolCalls.map(tc => ({ id: tc.callId, type: 'function', function: { name: tc.name, arguments: JSON.stringify(tc.input) } }))}>{statefulMarkerElement}{content?.value}{thinkingElement}</AssistantMessage>);
 			} else if (message.role === vscode.LanguageModelChatMessageRole.User) {
 				for (const part of message.content) {

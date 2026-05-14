@@ -558,7 +558,7 @@ export class OpenAIResponsesProcessor {
 							// CAPI models don't stream the reasoning summary for some reason, byok do, so don't duplicate it
 							text: this.hasReceivedReasoningSummary ?
 								undefined :
-								chunk.item.summary.map(s => s.text),
+								(chunk.item.summary?.map(s => s.text) ?? []),
 							encrypted: chunk.item.encrypted_content,
 						} : undefined
 					});
@@ -587,6 +587,18 @@ export class OpenAIResponsesProcessor {
 					}
 				});
 			case 'response.completed':
+				for (const item of chunk.response.output) {
+					if (item.type === 'reasoning' && item.encrypted_content) {
+						onProgress({
+							text: '',
+							thinking: {
+								id: item.id,
+								text: item.summary?.map(s => s.text) ?? [],
+								encrypted: item.encrypted_content,
+							}
+						});
+					}
+				}
 				onProgress({ text: '', statefulMarker: chunk.response.id });
 				return {
 					blockFinished: true,

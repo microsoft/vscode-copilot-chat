@@ -236,23 +236,22 @@ export class OpenAIEndpoint extends ChatEndpoint {
 
 	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
 		if (this.useResponsesApi) {
-			// Handle Responses API: same as CAPI Responses stateless — only strip
-			// server-state replay items that a third-party backend cannot decode.
+			// Handle Responses API: BYOK backends are stateless, so don't rely on
+			// server-side response IDs for context replay. Encrypted reasoning is
+			// still safe to replay as request input.
 			options.ignoreStatefulMarker = true;
 			const body = super.createRequestBody(options);
 			body.store = false;
 			body.n = undefined;
 			body.stream_options = undefined;
 			body.previous_response_id = undefined;
-			// When store=false, the server never persists rs_* reasoning and compaction items,
-			// so replaying them on the next turn causes a 400 "Item not found" error.
 			if (body.input) {
 				body.input = body.input.filter(item => {
 					if (!item || typeof item !== 'object' || !('type' in item)) {
 						return true;
 					}
 
-					return item.type !== 'reasoning' && item.type.toString() !== openAIContextManagementCompactionType;
+					return item.type?.toString() !== openAIContextManagementCompactionType;
 				});
 			}
 			if (!this.modelMetadata.capabilities.supports.thinking) {

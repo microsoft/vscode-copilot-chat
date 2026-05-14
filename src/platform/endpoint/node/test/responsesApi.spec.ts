@@ -8,6 +8,7 @@ import type { OpenAI } from 'openai';
 import { describe, expect, it } from 'vitest';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ILogService } from '../../../log/common/logService';
+import { IResponseDelta } from '../../../networking/common/fetch';
 import { TelemetryData } from '../../../telemetry/common/telemetryData';
 import { SpyingTelemetryService } from '../../../telemetry/node/spyingTelemetryService';
 import { createFakeStreamResponse } from '../../../test/node/fetcher';
@@ -269,6 +270,92 @@ describe('processResponseFromChatEndpoint telemetry', () => {
 		expect(messagesJson).toHaveLength(1);
 		expect(messagesJson[0].role).toBe('assistant');
 		expect(messagesJson[0].content).toBe('final assistant reply');
+
+		accessor.dispose();
+		services.dispose();
+	});
+
+	it('converts Responses API reasoning encrypted content from streaming output into thinking delta', async () => {
+		const services = createPlatformServices();
+		const accessor = services.createTestingAccessor();
+		const instantiationService = accessor.get(IInstantiationService);
+		const logService = accessor.get(ILogService);
+		const telemetryService = new SpyingTelemetryService();
+
+		const reasoningDoneEvent = {
+			type: 'response.output_item.done',
+			output_index: 0,
+			item: {
+				id: 'rs_test_123',
+				type: 'reasoning',
+				encrypted_content: 'encrypted-reasoning'
+			}
+		};
+		const completedEvent = {
+			type: 'response.completed',
+			response: {
+				id: 'resp_123',
+				model: 'gpt-5-mini',
+				created_at: 123,
+				usage: {
+					input_tokens: 11,
+					output_tokens: 7,
+					total_tokens: 18,
+					input_tokens_details: { cached_tokens: 0 },
+					output_tokens_details: { reasoning_tokens: 3 },
+				},
+				output: [
+					{
+						type: 'reasoning',
+						id: 'rs_test_123',
+						encrypted_content: 'encrypted-reasoning'
+					},
+					{
+						type: 'message',
+						content: [{ type: 'output_text', text: 'final assistant reply' }],
+					}
+				],
+			}
+		};
+
+		const response = createFakeStreamResponse([
+			`data: ${JSON.stringify(reasoningDoneEvent)}`,
+			`data: ${JSON.stringify(completedEvent)}`,
+		].join('\n\n') + '\n\n');
+		const telemetryData = TelemetryData.createAndMarkAsIssued({ modelCallId: 'model-call-1' }, {});
+		const deltas: IResponseDelta[] = [];
+
+		const stream = await processResponseFromChatEndpoint(
+			instantiationService,
+			telemetryService,
+			logService,
+			response,
+			1,
+			async (_text, _index, delta) => {
+				deltas.push(delta);
+				return undefined;
+			},
+			telemetryData
+		);
+
+		const completions = [];
+		for await (const completion of stream) {
+			completions.push(completion);
+		}
+
+		expect(deltas).toContainEqual(expect.objectContaining({
+			thinking: {
+				id: 'rs_test_123',
+				text: [],
+				encrypted: 'encrypted-reasoning'
+			}
+		}));
+		expect(completions).toHaveLength(1);
+		expect(completions[0].message.role).toBe(Raw.ChatRole.Assistant);
+		expect(completions[0].message.content).toContainEqual({
+			type: Raw.ChatCompletionContentPartKind.Text,
+			text: 'final assistant reply'
+		});
 
 		accessor.dispose();
 		services.dispose();

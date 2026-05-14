@@ -17,7 +17,7 @@ import { createExtensionUnitTestingServices } from '../../../test/node/services'
 import { OpenAIEndpoint } from '../openAIEndpoint';
 
 // Test fixtures for thinking content
-const createThinkingMessage = (thinkingId: string, thinkingText: string): Raw.ChatMessage => ({
+const createThinkingMessage = (thinkingId: string, thinkingText: string | string[], encrypted?: string): Raw.ChatMessage => ({
 	role: Raw.ChatRole.Assistant,
 	content: [
 		{
@@ -26,7 +26,8 @@ const createThinkingMessage = (thinkingId: string, thinkingText: string): Raw.Ch
 				type: 'thinking',
 				thinking: {
 					id: thinkingId,
-					text: thinkingText
+					text: thinkingText,
+					...(encrypted ? { encrypted } : {})
 				}
 			}
 		}
@@ -142,7 +143,7 @@ describe('OpenAIEndpoint - Reasoning Properties', () => {
 	});
 
 	describe('Responses API mode (useResponsesApi = true)', () => {
-		it('should keep explicit assistant content while dropping server-state replay fields', () => {
+		it('should keep explicit assistant content and encrypted reasoning while dropping server-state replay fields', () => {
 			const endpoint = instaService.createInstance(OpenAIEndpoint,
 				modelMetadata,
 				'test-api-key',
@@ -158,7 +159,8 @@ describe('OpenAIEndpoint - Reasoning Properties', () => {
 							type: CustomDataPartMimeTypes.ThinkingData,
 							thinking: {
 								id: 'rs_test_123',
-								text: 'hidden reasoning'
+								text: 'hidden reasoning',
+								encrypted: 'encrypted-reasoning'
 							}
 						}
 					},
@@ -194,8 +196,12 @@ describe('OpenAIEndpoint - Reasoning Properties', () => {
 			expect(body.input).toBeDefined();
 
 			const input = body.input ?? [];
-			expect(input.some(item => item && typeof item === 'object' && 'type' in item && item.type === 'reasoning')).toBe(false);
-			expect(input.some(item => item && typeof item === 'object' && 'type' in item && item.type === openAIContextManagementCompactionType)).toBe(false);
+			expect(input).toContainEqual(expect.objectContaining({
+				type: 'reasoning',
+				id: 'rs_test_123',
+				encrypted_content: 'encrypted-reasoning'
+			}));
+			expect(input.some(item => item && typeof item === 'object' && 'type' in item && item.type?.toString() === openAIContextManagementCompactionType)).toBe(false);
 			expect(input).toContainEqual(expect.objectContaining({
 				role: 'assistant',
 				type: 'message',
@@ -222,6 +228,28 @@ describe('OpenAIEndpoint - Reasoning Properties', () => {
 			expect(body.prompt_cache_key).toBeUndefined();
 			expect(body.stream_options).toBeUndefined();
 			expect(body.reasoning).toBeDefined(); // Should preserve reasoning object
+		});
+
+		it('should omit reasoning summary when disabled while preserving encrypted reasoning input', () => {
+			accessor.get(IConfigurationService).setConfig(ConfigKey.ResponsesApiReasoningSummary, 'off');
+			const endpoint = instaService.createInstance(OpenAIEndpoint,
+				modelMetadata,
+				'test-api-key',
+				'https://api.openai.com/v1/chat/completions');
+
+			const thinkingMessage = createThinkingMessage('resp-api-summary-off', [], 'encrypted-reasoning');
+			const options = createTestOptions([thinkingMessage]);
+
+			const body = endpoint.createRequestBody(options);
+
+			expect(body.reasoning).toEqual({ effort: 'medium' });
+			expect(body.include).toEqual(['reasoning.encrypted_content']);
+			expect(body.input).toContainEqual(expect.objectContaining({
+				type: 'reasoning',
+				id: 'resp-api-summary-off',
+				summary: [],
+				encrypted_content: 'encrypted-reasoning'
+			}));
 		});
 
 		it('should remove reasoning object when thinking is not supported', () => {
