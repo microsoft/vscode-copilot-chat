@@ -183,6 +183,20 @@ testFamilies.forEach(family => {
 			}, undefined)).toMatchFileSnapshot(getSnapshotFile('one_attachment'));
 		});
 
+		test('includes skill adherence reminder when instruction index has skills', async () => {
+			const prompt = await agentPromptToString(accessor, {
+				chatVariables: new ChatVariablesCollection([{
+					id: 'vscode.customizations.index',
+					name: 'customizations index',
+					value: '<skills><skill><file>/workspace/.github/skills/example/SKILL.md</file></skill></skills>',
+				}]),
+				history: [],
+				query: 'hello',
+			}, undefined);
+
+			expect(prompt).toContain("Always check if any skills apply to the user's request.");
+		});
+
 		const tools: IBuildPromptContext['tools'] = {
 			availableTools: [],
 			toolInvocationToken: null as never,
