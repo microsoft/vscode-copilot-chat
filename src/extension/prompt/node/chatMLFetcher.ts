@@ -1103,7 +1103,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		const handle = connection.sendRequest(request, { userInitiated: !!userInitiatedRequest, turnId }, cancellationToken);
 
 		const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId });
-		const processor = this._instantiationService.createInstance(OpenAIResponsesProcessor, extendedBaseTelemetryData, modelRequestId.headerRequestId, modelRequestId.gitHubRequestId);
+		const processor = this._instantiationService.createInstance(OpenAIResponsesProcessor, extendedBaseTelemetryData, modelRequestId.headerRequestId, modelRequestId.gitHubRequestId, modelRequestId.serverExperiments);
 
 		// Set up streaming first so event listeners are registered before we
 		// await the first event — AsyncIterableObject runs its executor eagerly.
@@ -1386,6 +1386,11 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			location,
 			requestKindOptions,
 		}).then(response => {
+			// TEMP: Log all response headers to inspect CAPI headers
+			const allHeaders: Record<string, string> = {};
+			for (const [key, value] of response.headers) { allHeaders[key] = value; }
+			console.log('[TEMP] CAPI response headers:', JSON.stringify(allHeaders, null, 2));
+
 			const apim = response.headers.get('apim-request-id');
 			if (apim) {
 				this._logService.debug(`APIM request id: ${apim}`);
