@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from 'vitest';
 import type { IChatEndpoint } from '../../../networking/common/networking';
-import { modelSupportsPDFDocuments } from '../../common/chatModelCapabilities';
+import { isVSCModelA, isVSCModelB, isVSCModelC, isVSCModelD, modelSupportsPDFDocuments } from '../../common/chatModelCapabilities';
 
 function fakeModel(family: string) {
 	return { family } as unknown as IChatEndpoint;
@@ -28,5 +28,25 @@ describe('modelSupportsPDFDocuments', () => {
 		expect(modelSupportsPDFDocuments(fakeModel('gpt-5.1'))).toBe(false);
 		expect(modelSupportsPDFDocuments(fakeModel('gemini-2.0-flash'))).toBe(false);
 		expect(modelSupportsPDFDocuments(fakeModel('o4-mini'))).toBe(false);
+	});
+});
+
+describe('VSC model override', () => {
+	test('makes the selected family exclusively true', () => {
+		const model = { id: 'test-model', model: 'test-model', family: 'test-family' } as unknown as IChatEndpoint;
+
+		expect(isVSCModelA(model, 'C')).toBe(false);
+		expect(isVSCModelB(model, 'C')).toBe(false);
+		expect(isVSCModelC(model, 'C')).toBe(true);
+		expect(isVSCModelD(model, 'C')).toBe(false);
+	});
+
+	test('does not force a family when the override is unset', () => {
+		const model = { id: 'test-model', model: 'test-model', family: 'test-family' } as unknown as IChatEndpoint;
+
+		expect(isVSCModelA(model, null)).toBe(false);
+		expect(isVSCModelB(model, null)).toBe(false);
+		expect(isVSCModelC(model, null)).toBe(false);
+		expect(isVSCModelD(model, null)).toBe(false);
 	});
 });

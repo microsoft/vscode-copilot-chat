@@ -180,6 +180,14 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			uiKind: ChatLocation.toString(location)
 		});
 
+		const modelOverride = this._configurationService.getConfig(ConfigKey.Advanced.CustomizationVSCModelOverride);
+		const customMetadata = modelOverride
+			? {
+				...opts.customMetadata,
+				vscModelOverrideFamily: `vscModel${modelOverride}`,
+			}
+			: opts.customMetadata;
+
 		const pendingLoggedChatRequest = this._requestLogger.logChatRequest(debugName, chatEndpoint, {
 			messages: opts.messages,
 			model: chatEndpoint.model,
@@ -188,7 +196,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			body: requestBody,
 			ignoreStatefulMarker,
 			isConversationRequest: opts.isConversationRequest,
-			customMetadata: opts.customMetadata
+			customMetadata
 		});
 		let tokenCount = -1;
 		const streamRecorder = new FetchStreamRecorder(finishedCb);

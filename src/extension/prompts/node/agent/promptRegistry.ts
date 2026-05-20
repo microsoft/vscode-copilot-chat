@@ -4,6 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { BasePromptElementProps, PromptElement } from '@vscode/prompt-tsx';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { VSCModelVariant } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { ILogService } from '../../../../platform/log/common/logService';
 import type { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotIdentityRules } from '../base/copilotIdentity';
@@ -65,8 +68,17 @@ export const PromptRegistry = new class {
 	}
 
 	private async getPromptResolver(
-		endpoint: IChatEndpoint
+		endpoint: IChatEndpoint,
+		modelOverride?: VSCModelVariant | null
 	): Promise<IAgentPromptCtor | undefined> {
+
+		if (modelOverride) {
+			const overridePrefix = `vscModel${modelOverride}`;
+			const match = this.familyPrefixList.find(({ prefix }) => prefix === overridePrefix);
+			if (match) {
+				return match.prompt;
+			}
+		}
 
 		for (const prompt of this.promptsWithMatcher) {
 			const matches = await prompt.matchesModel(endpoint);
@@ -95,8 +107,13 @@ export const PromptRegistry = new class {
 		instantiationService: IInstantiationService,
 		endpoint: IChatEndpoint,
 	): Promise<AgentPromptCustomizations> {
-		const promptResolverCtor = await this.getPromptResolver(endpoint);
+		const modelOverride = instantiationService.invokeFunction(accessor => accessor.get(IConfigurationService).getConfig(ConfigKey.Advanced.CustomizationVSCModelOverride));
+		const promptResolverCtor = await this.getPromptResolver(endpoint, modelOverride);
 		const agentPrompt = promptResolverCtor ? instantiationService.createInstance(promptResolverCtor) : undefined;
+
+		if (modelOverride) {
+			instantiationService.invokeFunction(accessor => accessor.get(ILogService).info(`[PromptRegistry] Using VSC model override '${modelOverride}' with resolver '${promptResolverCtor?.name ?? 'default'}' for endpoint family '${endpoint.family}'`));
+		}
 
 		return {
 			SystemPrompt: agentPrompt?.resolveSystemPrompt(endpoint) ?? DefaultAgentPrompt,

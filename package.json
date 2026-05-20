@@ -4023,6 +4023,25 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.customization.vscModelOverride": {
+						"type": [
+							"string",
+							"null"
+						],
+						"enum": [
+							null,
+							"A",
+							"B",
+							"C",
+							"D"
+						],
+						"default": null,
+						"markdownDescription": "%github.copilot.config.customization.vscModelOverride%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.edits.gemini3MultiReplaceString": {
 						"type": "boolean",
 						"default": false,
