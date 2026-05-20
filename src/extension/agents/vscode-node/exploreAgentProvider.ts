@@ -9,6 +9,7 @@ import { AGENT_FILE_EXTENSION } from '../../../platform/customInstructions/commo
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { AgentConfig, buildAgentMarkdown, DEFAULT_READ_TOOLS } from './agentTypes';
 
@@ -58,6 +59,7 @@ export class ExploreAgentProvider extends Disposable implements vscode.ChatCusto
 
 	constructor(
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
 		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 		@ILogService private readonly _logService: ILogService,
@@ -66,7 +68,8 @@ export class ExploreAgentProvider extends Disposable implements vscode.ChatCusto
 
 		this._register(this._configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration('chat.exploreAgent.defaultModel') ||
-				e.affectsConfiguration(ConfigKey.ExploreAgentModel.fullyQualifiedId)) {
+				e.affectsConfiguration(ConfigKey.ExploreAgentModel.fullyQualifiedId) ||
+				e.affectsConfiguration(ConfigKey.ExploreAgentEnabled.fullyQualifiedId)) {
 				this._onDidChangeCustomAgents.fire();
 			}
 		}));
@@ -76,6 +79,9 @@ export class ExploreAgentProvider extends Disposable implements vscode.ChatCusto
 		_context: unknown,
 		_token: vscode.CancellationToken
 	): Promise<vscode.ChatResource[]> {
+		if (!this._configurationService.getExperimentBasedConfig(ConfigKey.ExploreAgentEnabled, this._experimentationService)) {
+			return [];
+		}
 		const config = this._buildCustomizedConfig();
 		const content = buildAgentMarkdown(config);
 		const fileUri = await this._writeCacheFile(content);
