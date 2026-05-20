@@ -1,3 +1,13 @@
+> [!IMPORTANT]
+> This project has been moved into the main VS Code repository and this repository is now archived.
+>
+> Active development continues at:
+> https://github.com/microsoft/vscode
+>
+> Please open issues and pull requests in the VS Code repository instead.
+
+---
+
 # GitHub Copilot - Your autonomous AI peer programmer
 
 **[GitHub Copilot](https://code.visualstudio.com/docs/copilot/overview)** is an AI peer programming tool that transforms how you write code in Visual Studio Code.
