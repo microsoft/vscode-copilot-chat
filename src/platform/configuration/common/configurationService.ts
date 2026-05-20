@@ -595,6 +595,7 @@ export namespace ConfigKey {
 		export const WorkspacePrototypeAdoCodeSearchEndpointOverride = defineAndMigrateSetting<string>('chat.advanced.workspace.prototypeAdoCodeSearchEndpointOverride', 'chat.workspace.prototypeAdoCodeSearchEndpointOverride', '');
 		export const FeedbackOnChange = defineAndMigrateSetting('chat.advanced.feedback.onChange', 'chat.feedback.onChange', false);
 		export const ReviewIntent = defineAndMigrateSetting('chat.advanced.review.intent', 'chat.review.intent', false);
+		export const AutopilotCodeReviewEnabled = defineSetting<boolean>('chat.advanced.autopilotCodeReview.enabled', ConfigType.Simple, false);
 		/** Enable the new notebook priorities experiment */
 		export const NotebookSummaryExperimentEnabled = defineAndMigrateSetting('chat.advanced.notebook.summaryExperimentEnabled', 'chat.notebook.summaryExperimentEnabled', false);
 		/** Enable filtering variables by cell document symbols */

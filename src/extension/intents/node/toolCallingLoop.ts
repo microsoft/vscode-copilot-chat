@@ -50,9 +50,13 @@ import { PseudoStopStartResponseProcessor } from '../../prompt/node/pseudoStartS
 import { ResponseProcessorContext } from '../../prompt/node/responseProcessorContext';
 import { extractInlineSummary, InlineSummarizationRequestedMetadata, SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
 import { ToolFailureEncountered, ToolResultMetadata } from '../../prompts/node/panel/toolCalling';
+import { CodeReviewComment, CodeReviewFileInput, CodeReviewInput } from '../../../platform/review/common/reviewCommand';
+import { reviewFileChanges } from '../../review/node/doReview';
+import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ToolName } from '../../tools/common/toolNames';
 import { IToolsService, ToolCallCancelledError } from '../../tools/common/toolsService';
 import { ReadFileParams } from '../../tools/node/readFileTool';
+import { resolveToolInputPath } from '../../tools/node/toolUtils';
 import { isHookAbortError, processHookResults } from './hookResultProcessor';
 import { applyPromptOverrides } from './promptOverride';
 
@@ -176,6 +180,13 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private chatSessionIdForTools: string | undefined;
 	private toolsAvailableEmitted = false;
 
+	/**
+	 * Stores file content snapshots captured *before* autopilot's first edit to each file.
+	 * Used by {@link performAutopilotCodeReview} so that the review only covers what
+	 * autopilot changed, not pre-existing uncommitted changes.
+	 */
+	protected readonly preEditSnapshots = new Map<string, string>();
+
 	public appendAdditionalHookContext(context: string): void {
 		if (!context) {
 			return;
@@ -210,6 +221,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 		@IOTelService protected readonly _otelService: IOTelService,
 		@IGitService private readonly _gitService: IGitService,
+		@IPromptPathRepresentationService private readonly _promptPathRepresentationService: IPromptPathRepresentationService,
 	) {
 		super();
 	}
@@ -349,10 +361,20 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 	private static readonly MAX_AUTOPILOT_RETRIES = 3;
 	private static readonly MAX_AUTOPILOT_ITERATIONS = 5;
+
+	private static readonly EDIT_TOOL_NAMES: ReadonlySet<string> = new Set([
+		ToolName.EditFile,
+		ToolName.CreateFile,
+		ToolName.ReplaceString,
+		ToolName.MultiReplaceString,
+		ToolName.ApplyPatch,
+	]);
+
 	private autopilotRetryCount = 0;
 	private autopilotIterationCount = 0;
 
-	private taskCompleted = false;
+	protected taskCompleted = false;
+	private autopilotCodeReviewCompleted = false;
 	private autopilotStopHookActive = false;
 	private autopilotProgressDeferred: DeferredPromise<void> | undefined;
 	private inlineSummarizationProgressDeferred: DeferredPromise<void> | undefined;
@@ -446,6 +468,222 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}
 		this._logService.warn('[ToolCallingLoop] task_complete tool not found — autopilot completion may not work');
 		return availableTools;
+	}
+
+	/**
+	 * Returns `true` if any tool call round contains a code-editing tool invocation.
+	 */
+	protected hadCodeEdits(): boolean {
+		return this.toolCallRounds.some(
+			round => round.toolCalls.some(tc => ToolCallingLoop.EDIT_TOOL_NAMES.has(tc.name))
+		);
+	}
+
+	/**
+	 * Extracts deduplicated file paths from a single round's edit tool calls.
+	 */
+	private static extractEditedFilePathsFromRound(round: IToolCallRound): string[] {
+		const paths = new Set<string>();
+		for (const tc of round.toolCalls) {
+			if (!ToolCallingLoop.EDIT_TOOL_NAMES.has(tc.name)) {
+				continue;
+			}
+			try {
+				const args = JSON.parse(tc.arguments);
+				if (tc.name === ToolName.MultiReplaceString) {
+					const replacements: { filePath?: string }[] = args.replacements ?? [];
+					for (const r of replacements) {
+						if (r.filePath) {
+							paths.add(r.filePath);
+						}
+					}
+				} else if (tc.name === ToolName.ApplyPatch) {
+					const patchText: string = args.input ?? '';
+					const headerRe = /\*\*\*\s+(?:Add|Update|Delete)\s+File:\s+(.+)/g;
+					let m: RegExpExecArray | null;
+					while ((m = headerRe.exec(patchText)) !== null) {
+						paths.add(m[1].trim());
+					}
+				} else if (args.filePath) {
+					paths.add(args.filePath);
+				}
+			} catch {
+				// malformed arguments — skip
+			}
+		}
+		return [...paths];
+	}
+
+	/**
+	 * Scans tool call rounds for code-editing tools and extracts the deduplicated
+	 * set of file paths that were edited.
+	 */
+	protected getEditedFilePaths(): URI[] {
+		const paths = new Set<string>();
+		for (const round of this.toolCallRounds) {
+			for (const p of ToolCallingLoop.extractEditedFilePathsFromRound(round)) {
+				paths.add(p);
+			}
+		}
+		return [...paths].flatMap(p => {
+			try {
+				return [resolveToolInputPath(p, this._promptPathRepresentationService)];
+			} catch {
+				return [];
+			}
+		});
+	}
+
+	/**
+	 * After a round's tool calls are known but before they execute (next iteration),
+	 * capture the current file content so we have a pre-edit snapshot for code review.
+	 * Only captures each file once — the first snapshot represents the state before
+	 * autopilot's first edit to that file.
+	 */
+	private async capturePreEditSnapshots(round: IToolCallRound): Promise<void> {
+		if (this.options.request.permissionLevel !== 'autopilot') {
+			return;
+		}
+		const filePaths = ToolCallingLoop.extractEditedFilePathsFromRound(round);
+		const newEntries: { key: string; uri: URI }[] = [];
+		for (const p of filePaths) {
+			try {
+				const uri = resolveToolInputPath(p, this._promptPathRepresentationService);
+				const key = uri.fsPath;
+				if (!this.preEditSnapshots.has(key)) {
+					newEntries.push({ key, uri });
+				}
+			} catch {
+				// invalid path — skip
+			}
+		}
+		if (!newEntries.length) {
+			return;
+		}
+		await Promise.all(newEntries.map(async ({ key, uri }) => {
+			try {
+				const bytes = await this._fileSystemService.readFile(uri);
+				if (!this.preEditSnapshots.has(key)) {
+					this.preEditSnapshots.set(key, new TextDecoder().decode(bytes));
+				}
+			} catch {
+				// File doesn't exist yet (e.g. create_file) — record empty string
+				if (!this.preEditSnapshots.has(key)) {
+					this.preEditSnapshots.set(key, '');
+				}
+			}
+		}));
+	}
+
+	/**
+	 * Formats code review comments into a continuation message for the model.
+	 */
+	private formatReviewCommentsForModel(comments: readonly CodeReviewComment[]): string {
+		const lines: string[] = [
+			'Code review found the following issues with your changes. Please address each one:\n',
+		];
+		for (const comment of comments) {
+			const file = comment.uri.fsPath;
+			const startLine = comment.range.start.line + 1;
+			const endLine = comment.range.end.line + 1;
+			const loc = startLine === endLine ? `line ${startLine}` : `lines ${startLine}-${endLine}`;
+			lines.push(`- **${file}** (${loc}) [${comment.severity}]: ${comment.body}`);
+		}
+		lines.push(
+			'',
+			'After addressing all review comments, call task_complete with a brief summary of what was fixed.',
+		);
+		return lines.join('\n');
+	}
+
+	/**
+	 * Runs code review on files edited during autopilot, if applicable.
+	 * Returns `true` if review comments were found and the loop should continue
+	 * so the model can address them.
+	 */
+	protected async performAutopilotCodeReview(
+		outputStream: ChatResponseStream | undefined,
+		token: CancellationToken,
+	): Promise<boolean> {
+		if (this.options.request.permissionLevel !== 'autopilot') {
+			return false;
+		}
+		if (!this._configurationService.getConfig(ConfigKey.Advanced.AutopilotCodeReviewEnabled)) {
+			return false;
+		}
+		if (!this.taskCompleted || this.autopilotCodeReviewCompleted || token.isCancellationRequested) {
+			return false;
+		}
+		if (!this.hadCodeEdits()) {
+			this._logService.info('[ToolCallingLoop] Autopilot code review: no code edits detected, skipping');
+			return false;
+		}
+
+		this._logService.info('[ToolCallingLoop] Autopilot code review: starting review of edited files');
+
+		// Mark review as completed so we don't re-run after the fix cycle.
+		this.autopilotCodeReviewCompleted = true;
+
+		const editedFiles = this.getEditedFilePaths();
+		if (!editedFiles.length) {
+			this._logService.info('[ToolCallingLoop] Autopilot code review: could not extract file paths, skipping');
+			return false;
+		}
+
+		// Show which files are being reviewed.
+		const fileNames = editedFiles.map(uri => uri.path.split('/').pop() ?? uri.path);
+		const fileList = fileNames.length <= 3
+			? fileNames.join(', ')
+			: `${fileNames.slice(0, 3).join(', ')} (+${fileNames.length - 3} more)`;
+		this.showAutopilotProgress(
+			outputStream,
+			l10n.t('Reviewing {0} edited files: {1}', editedFiles.length, fileList),
+			l10n.t('Reviewed {0} edited files', editedFiles.length),
+		);
+
+		try {
+			// Use pre-edit snapshots captured before each file's first edit so
+			// the review only covers what autopilot changed in this turn, not
+			// pre-existing uncommitted changes.
+			const files: CodeReviewFileInput[] = editedFiles.map(uri => {
+				const snapshot = this.preEditSnapshots.get(uri.fsPath);
+				return { currentUri: uri, baseContent: snapshot };
+			});
+
+			const input: CodeReviewInput = { files };
+
+			const result = await this._instantiationService.invokeFunction(
+				accessor => reviewFileChanges(accessor, input)
+			);
+
+			this.resolveAutopilotProgress();
+
+			if (result.type === 'success' && result.comments.length > 0) {
+				const affectedFiles = new Set(result.comments.map(c => c.uri.path.split('/').pop() ?? c.uri.path));
+				this._logService.info(`[ToolCallingLoop] Autopilot code review: found ${result.comments.length} comments, continuing to address them`);
+				outputStream?.progress(l10n.t(
+					'Found {0} review comments in {1} files — addressing them now',
+					result.comments.length,
+					affectedFiles.size,
+				));
+				const continuationMessage = this.formatReviewCommentsForModel(result.comments);
+				this.stopHookReason = continuationMessage;
+				this.taskCompleted = false;
+				this.autopilotStopHookActive = false;
+				this.autopilotIterationCount = 0;
+				return true;
+			}
+
+			this._logService.info(`[ToolCallingLoop] Autopilot code review: ${result.type === 'success' ? 'no comments found' : `skipped (${result.type})`}`);
+			if (result.type === 'success') {
+				outputStream?.progress(l10n.t('Code review passed — no issues found'));
+			}
+			return false;
+		} catch (err) {
+			this._logService.error('[ToolCallingLoop] Autopilot code review failed', err);
+			this.resolveAutopilotProgress();
+			return false;
+		}
 	}
 
 	/**
@@ -906,6 +1144,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				this._sessionTranscriptService.logAssistantTurnEnd(sessionId, turnId);
 				agentSpan?.addEvent('turn_end', { turnId, ...(chatSessionId ? { [CopilotChatAttr.CHAT_SESSION_ID]: chatSessionId } : {}) });
 
+				// Capture file contents before edit tools run so code review can diff against them.
+				await this.capturePreEditSnapshots(result.round);
+
 				// Inline summarization: the model responded with summary text only (no tool calls).
 				// Extract the summary, store it on the appropriate round, and continue the loop.
 				if (result.inlineSummarizationRequested && !result.round.toolCalls.length) {
@@ -1121,6 +1362,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 							this.autopilotStopHookActive = true;
 							continue;
 						}
+					}
+
+					// In Autopilot mode, run code review on edited files before stopping.
+					if (await this.performAutopilotCodeReview(outputStream, token)) {
+						continue;
 					}
 
 					break;

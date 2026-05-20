@@ -12,6 +12,7 @@ import { ReviewComment, ReviewSuggestion } from './reviewService';
 export interface CodeReviewFileInput {
 	readonly currentUri: vscode.Uri;
 	readonly baseUri?: vscode.Uri;
+	readonly baseContent?: string;
 }
 
 /**

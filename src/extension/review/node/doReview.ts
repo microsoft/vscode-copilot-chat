@@ -405,12 +405,12 @@ export async function reviewFileChanges(
 	const tokenSource = new CancellationTokenSource();
 	try {
 		const fileInputs = await Promise.all(input.files.map(async file => {
-			let baseContent = '';
-			if (file.baseUri) {
+			let baseContent = file.baseContent;
+			if (baseContent === undefined && file.baseUri) {
 				const bytes = await fileSystemService.readFile(file.baseUri);
 				baseContent = new TextDecoder().decode(bytes);
 			}
-			return { currentUri: file.currentUri, baseContent };
+			return { currentUri: file.currentUri, baseContent: baseContent ?? '' };
 		}));
 
 		const result = await githubReviewFileUris(
