@@ -53,6 +53,55 @@ describe('FileSpanExporter', () => {
 		expect(JSON.parse(lines[0]).name).toBe('span-0');
 		expect(JSON.parse(lines[2]).name).toBe('span-2');
 	});
+
+	it('serializes class-based spans without writing empty objects', async () => {
+		class FakeReadableSpan {
+			readonly #ctx = { traceId: 'trace-id', spanId: 'span-id', traceFlags: 1, traceState: undefined };
+			readonly #resource = { attributes: { 'service.name': 'copilot-chat' } };
+			readonly #instrumentationScope = { name: 'copilot-chat', version: '0.44.0' };
+			readonly #status = { code: 1 };
+			readonly #attributes = { a: 1 };
+			readonly #links: unknown[] = [];
+			readonly #events: unknown[] = [];
+			readonly #time: [number, number] = [1, 2];
+			readonly #parentSpanContext = { traceId: 'trace-id', spanId: 'parent-span-id', traceFlags: 1, traceState: undefined };
+
+			spanContext() { return this.#ctx; }
+			get resource() { return this.#resource; }
+			get instrumentationScope() { return this.#instrumentationScope; }
+			get parentSpanContext() { return this.#parentSpanContext; }
+			get name() { return 'hidden-span'; }
+			get kind() { return 0; }
+			get startTime() { return this.#time; }
+			get endTime() { return this.#time; }
+			get duration() { return this.#time; }
+			get status() { return this.#status; }
+			get attributes() { return this.#attributes; }
+			get links() { return this.#links; }
+			get events() { return this.#events; }
+			get ended() { return true; }
+			get droppedAttributesCount() { return 0; }
+			get droppedEventsCount() { return 0; }
+			get droppedLinksCount() { return 0; }
+		}
+
+		expect(JSON.stringify(new FakeReadableSpan())).toBe('{}');
+
+		await new Promise<void>((resolve, reject) => {
+			exporter.export([new FakeReadableSpan() as any], result => {
+				result.code === ExportResultCode.SUCCESS ? resolve() : reject(result.error);
+			});
+		});
+		await exporter.shutdown();
+		const content = fs.readFileSync(tmpFile, 'utf-8');
+		const parsed = JSON.parse(content.trim());
+		expect(parsed.name).toBe('hidden-span');
+		expect(parsed.traceId).toBe('trace-id');
+		expect(parsed.parentSpanId).toBe('parent-span-id');
+		expect(parsed.instrumentationScope).toEqual({ name: 'copilot-chat', version: '0.44.0' });
+		expect(parsed.resource.attributes).toEqual({ 'service.name': 'copilot-chat' });
+		expect(parsed.attributes).toEqual({ a: 1 });
+	});
 });
 
 describe('FileLogExporter', () => {

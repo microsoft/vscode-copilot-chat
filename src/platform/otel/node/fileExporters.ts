@@ -17,6 +17,37 @@ function safeStringify(data: unknown): string {
 	}
 }
 
+function serializeSpan(span: ReadableSpan): Record<string, unknown> {
+	if (typeof span.spanContext !== 'function') {
+		return span as unknown as Record<string, unknown>;
+	}
+	const spanContext = span.spanContext();
+	return {
+		resource: {
+			attributes: span.resource.attributes,
+		},
+		instrumentationScope: span.instrumentationScope,
+		traceId: spanContext.traceId,
+		spanId: spanContext.spanId,
+		traceFlags: spanContext.traceFlags,
+		traceState: spanContext.traceState?.serialize(),
+		parentSpanId: span.parentSpanContext?.spanId,
+		name: span.name,
+		kind: span.kind,
+		startTime: span.startTime,
+		endTime: span.endTime,
+		duration: span.duration,
+		status: span.status,
+		attributes: span.attributes,
+		links: span.links,
+		events: span.events,
+		ended: span.ended,
+		droppedAttributesCount: span.droppedAttributesCount,
+		droppedEventsCount: span.droppedEventsCount,
+		droppedLinksCount: span.droppedLinksCount,
+	};
+}
+
 abstract class BaseFileExporter {
 	protected readonly writeStream: fs.WriteStream;
 
@@ -35,7 +66,7 @@ abstract class BaseFileExporter {
 
 export class FileSpanExporter extends BaseFileExporter implements SpanExporter {
 	export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
-		const data = spans.map(s => safeStringify(s) + '\n').join('');
+		const data = spans.map(s => safeStringify(serializeSpan(s)) + '\n').join('');
 		this.writeStream.write(data, err => {
 			resultCallback({ code: err ? ExportResultCode.FAILED : ExportResultCode.SUCCESS, error: err ?? undefined });
 		});

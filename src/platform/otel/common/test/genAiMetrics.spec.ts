@@ -72,6 +72,40 @@ describe('GenAiMetrics', () => {
 		});
 	});
 
+	it('recordTokenUsage supports cached input tokens', () => {
+		const otel = createMockOTelService();
+
+		GenAiMetrics.recordTokenUsage(otel, 250, 'cache_read_input', {
+			operationName: GenAiOperationName.CHAT,
+			providerName: GenAiProviderName.OPENAI,
+			requestModel: 'gpt-4o',
+		});
+
+		expect(otel.recordMetric).toHaveBeenCalledWith('gen_ai.client.token.usage', 250, {
+			[GenAiAttr.OPERATION_NAME]: 'chat',
+			[GenAiAttr.PROVIDER_NAME]: 'openai',
+			[GenAiAttr.TOKEN_TYPE]: GenAiTokenType.CACHE_READ_INPUT,
+			[GenAiAttr.REQUEST_MODEL]: 'gpt-4o',
+		});
+	});
+
+	it('recordTokenUsage supports cache creation input tokens', () => {
+		const otel = createMockOTelService();
+
+		GenAiMetrics.recordTokenUsage(otel, 125, 'cache_creation_input', {
+			operationName: GenAiOperationName.CHAT,
+			providerName: GenAiProviderName.OPENAI,
+			requestModel: 'gpt-4o',
+		});
+
+		expect(otel.recordMetric).toHaveBeenCalledWith('gen_ai.client.token.usage', 125, {
+			[GenAiAttr.OPERATION_NAME]: 'chat',
+			[GenAiAttr.PROVIDER_NAME]: 'openai',
+			[GenAiAttr.TOKEN_TYPE]: GenAiTokenType.CACHE_CREATION_INPUT,
+			[GenAiAttr.REQUEST_MODEL]: 'gpt-4o',
+		});
+	});
+
 	it('recordToolCallCount increments counter', () => {
 		const otel = createMockOTelService();
 

@@ -41,7 +41,7 @@ export class GenAiMetrics {
 	static recordTokenUsage(
 		otel: IOTelService,
 		tokenCount: number,
-		tokenType: 'input' | 'output',
+		tokenType: 'input' | 'output' | 'cache_read_input' | 'cache_creation_input',
 		attrs: {
 			operationName: string;
 			providerName: string;

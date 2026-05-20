@@ -27,7 +27,11 @@ export class OTelContrib extends Disposable implements IExtensionContribution {
 	) {
 		super();
 		if (this._otelService.config.enabled) {
-			this._logService.info(`[OTel] Instrumentation enabled — exporter=${this._otelService.config.exporterType} endpoint=${this._otelService.config.otlpEndpoint} captureContent=${this._otelService.config.captureContent}`);
+			const config = this._otelService.config;
+			const destination = config.exporterType === 'file'
+				? `outfile=${config.fileExporterPath ?? '<unset>'}`
+				: `endpoint=${config.otlpEndpoint}`;
+			this._logService.info(`[OTel] Instrumentation enabled — enabledVia=${config.enabledVia} exporter=${config.exporterType} ${destination} captureContent=${config.captureContent} dbSpanExporter=${config.dbSpanExporter}`);
 		} else {
 			this._logService.trace('[OTel] Instrumentation disabled');
 		}

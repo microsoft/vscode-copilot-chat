@@ -368,11 +368,17 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							requestModel: chatEndpoint.model,
 							responseModel: result.resolvedModel,
 						};
-						if (result.usage.prompt_tokens) {
+						if (result.usage.prompt_tokens !== undefined) {
 							GenAiMetrics.recordTokenUsage(this._otelService, result.usage.prompt_tokens, 'input', metricAttrs);
 						}
-						if (result.usage.completion_tokens) {
+						if (result.usage.completion_tokens !== undefined) {
 							GenAiMetrics.recordTokenUsage(this._otelService, result.usage.completion_tokens, 'output', metricAttrs);
+						}
+						if (result.usage.prompt_tokens_details?.cached_tokens !== undefined) {
+							GenAiMetrics.recordTokenUsage(this._otelService, result.usage.prompt_tokens_details.cached_tokens, 'cache_read_input', metricAttrs);
+						}
+						if (result.usage.prompt_tokens_details?.cache_creation_input_tokens !== undefined) {
+							GenAiMetrics.recordTokenUsage(this._otelService, result.usage.prompt_tokens_details.cache_creation_input_tokens, 'cache_creation_input', metricAttrs);
 						}
 
 						// Set token usage and response details on the chat span before ending it
@@ -382,12 +388,15 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							[GenAiAttr.RESPONSE_MODEL]: result.resolvedModel ?? chatEndpoint.model,
 							[GenAiAttr.RESPONSE_ID]: result.requestId,
 							[GenAiAttr.RESPONSE_FINISH_REASONS]: ['stop'],
-							...(result.usage.prompt_tokens_details?.cached_tokens
+							...(result.usage.prompt_tokens_details?.cached_tokens !== undefined
 								? { [GenAiAttr.USAGE_CACHE_READ_INPUT_TOKENS]: result.usage.prompt_tokens_details.cached_tokens }
+								: {}),
+							...(result.usage.prompt_tokens_details?.cache_creation_input_tokens !== undefined
+								? { [GenAiAttr.USAGE_CACHE_CREATION_INPUT_TOKENS]: result.usage.prompt_tokens_details.cache_creation_input_tokens }
 								: {}),
 							[CopilotChatAttr.TIME_TO_FIRST_TOKEN]: timeToFirstToken,
 							...(result.serverRequestId ? { [CopilotChatAttr.SERVER_REQUEST_ID]: result.serverRequestId } : {}),
-							...(result.usage.completion_tokens_details?.reasoning_tokens
+							...(result.usage.completion_tokens_details?.reasoning_tokens !== undefined
 								? { [GenAiAttr.USAGE_REASONING_TOKENS]: result.usage.completion_tokens_details.reasoning_tokens }
 								: {}),
 						});
