@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it } from 'vitest';
+import type { MemoryPromptResponse } from '@github/copilot-agentic-tools/memory';
 import { isRepoMemoryEntry, normalizeCitations } from '../agentMemoryService';
 
 describe('AgentMemoryService', () => {
@@ -124,6 +125,31 @@ describe('AgentMemoryService', () => {
 		it('should handle empty string', () => {
 			const result = normalizeCitations('');
 			expect(result).toEqual([]);
+		});
+	});
+
+	describe('MemoryPromptResponse', () => {
+		it('should hold memoriesContext and storeInstructions', () => {
+			const response: MemoryPromptResponse = {
+				storeInstructions: { prompt: 'Store instructions here.', promptVersion: '1.0.0' },
+				memoriesContext: { prompt: 'The following are repository memories...', promptVersion: '1.0.0', memoriesCount: 3 },
+				toolDefinition: { name: 'store_memory', description: 'Store a memory.', definitionVersion: '1.0.0' },
+			};
+			expect(response.memoriesContext.prompt).toBe('The following are repository memories...');
+			expect(response.memoriesContext.memoriesCount).toBe(3);
+			expect(response.storeInstructions.promptVersion).toBe('1.0.0');
+		});
+
+		it('should optionally include storeToolDefinition and voteToolDefinition', () => {
+			const response: MemoryPromptResponse = {
+				storeInstructions: { prompt: '', promptVersion: '1.1.0' },
+				memoriesContext: { prompt: '', promptVersion: '1.0.0', memoriesCount: 0 },
+				toolDefinition: { name: 'store_memory', description: 'Store a memory.', definitionVersion: '1.1.0' },
+				storeToolDefinition: { name: 'store_memory', description: 'Store a memory.', definitionVersion: '1.1.0' },
+				voteToolDefinition: { name: 'vote_memory', description: 'Vote on a memory.', definitionVersion: '1.0.0' },
+			};
+			expect(response.storeToolDefinition?.definitionVersion).toBe('1.1.0');
+			expect(response.voteToolDefinition?.name).toBe('vote_memory');
 		});
 	});
 });
