@@ -6,5 +6,13 @@
 import { URI } from '../../../util/vs/base/common/uri';
 
 export function isGitHubRemoteRepository(uri: URI): boolean {
-	return uri.scheme === 'vscode-vfs' && uri.authority.startsWith('github');
+	if (uri.scheme !== 'vscode-vfs') {
+		return false;
+	}
+
+	const authority = uri.authority.toLowerCase();
+	const host = authority.includes('@') ? authority.split('@').pop() ?? '' : authority;
+	const hostname = host.split(':')[0];
+
+	return hostname === 'github' || hostname === 'github.com' || hostname === 'github.dev' || hostname.endsWith('.github.dev');
 }
