@@ -18,7 +18,7 @@ import { ContextManagementResponse } from '../../networking/common/anthropic';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
-import { ChatCompletion } from '../../networking/common/openai';
+import { APIUsage, ChatCompletion } from '../../networking/common/openai';
 import { IOTelService } from '../../otel/common/otelService';
 import { retrieveCapturingTokenByCorrelation, storeCapturingTokenForCorrelation } from '../../requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -35,6 +35,44 @@ enum ChatImageMimeType {
 	GIF = 'image/gif',
 	WEBP = 'image/webp',
 	BMP = 'image/bmp',
+}
+
+function usageFromDataPart(part: vscode.LanguageModelDataPart): APIUsage | undefined {
+	try {
+		const parsed = JSON.parse(new TextDecoder().decode(part.data)) as {
+			prompt_tokens?: unknown;
+			completion_tokens?: unknown;
+			total_tokens?: unknown;
+			prompt_tokens_details?: unknown;
+			completion_tokens_details?: unknown;
+		};
+
+		if (
+			typeof parsed.prompt_tokens === 'number' &&
+			typeof parsed.completion_tokens === 'number' &&
+			typeof parsed.total_tokens === 'number'
+		) {
+			const usage: APIUsage = {
+				prompt_tokens: parsed.prompt_tokens,
+				completion_tokens: parsed.completion_tokens,
+				total_tokens: parsed.total_tokens,
+				prompt_tokens_details:
+					parsed.prompt_tokens_details && typeof parsed.prompt_tokens_details === 'object'
+						? (parsed.prompt_tokens_details as APIUsage['prompt_tokens_details'])
+						: { cached_tokens: 0 },
+			};
+
+			if (parsed.completion_tokens_details && typeof parsed.completion_tokens_details === 'object') {
+				usage.completion_tokens_details = parsed.completion_tokens_details as APIUsage['completion_tokens_details'];
+			}
+
+			return usage;
+		}
+	} catch {
+		// Ignore non-JSON or non-usage DataParts.
+	}
+
+	return undefined;
 }
 
 export class ExtensionContributedChatEndpoint implements IChatEndpoint {
@@ -204,6 +242,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			const response = await this.languageModel.sendRequest(vscodeMessages, vscodeOptions, token);
 			let text = '';
 			let numToolsCalled = 0;
+			let usage: APIUsage | undefined;
 			const requestId = ourRequestId;
 
 			// consume stream
@@ -231,6 +270,11 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 						const contextManagement = JSON.parse(new TextDecoder().decode(chunk.data)) as ContextManagementResponse;
 						await streamRecorder.callback?.(text, 0, { text: '', contextManagement });
 					}
+					// Mirror native usage-only chunk handling by shape, not MIME.
+					const maybeUsage = usageFromDataPart(chunk);
+					if (maybeUsage) {
+						usage = maybeUsage;
+					}
 				} else if (chunk instanceof vscode.LanguageModelThinkingPart) {
 					if (streamRecorder.callback) {
 						await streamRecorder.callback(text, 0, {
@@ -250,7 +294,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 					type: ChatFetchResponseType.Success,
 					requestId,
 					serverRequestId: requestId,
-					usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } },
+					usage: usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } },
 					value: text,
 					resolvedModel: this.languageModel.id
 				};
