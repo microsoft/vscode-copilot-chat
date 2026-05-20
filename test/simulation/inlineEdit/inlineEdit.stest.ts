@@ -31,6 +31,17 @@ const commonXtabTestConfigurations: Configuration<unknown>[] = [
 	// 	key: ConfigKey.Internal.InlineEditsXtabIncludeViewedFiles,
 	// 	value: true,
 	// },
+	{
+		key: ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfiguration, value: {
+			modelName: 'MODELXXX',
+			promptingStrategy: 'xtab275',
+			includeTagsInCurrentFile: false
+		}
+	},
+	{
+		key: ConfigKey.TeamInternal.InlineEditsXtabProviderNLinesBelow,
+		value: 10,
+	}
 ];
 
 const testConfigs: TestConfiguration[] = [
@@ -83,8 +94,6 @@ for (const testConfig of testConfigs) {
 			loadFile({ filePath: inlineEditsFixture('6-vscode-remote-try-java-part-2/recording.w.json') })
 		));
 
-		// 7 covered in "From codium"
-
 		stest({ description: '[MustHave] 8-cppIndividual-1-point.cpp', language: 'cpp', attributes: { [CompScore1]: 1, [CompScore2]: 0, [CompScore3]: 1 } }, collection => tester.runAndScoreTestFromRecording(collection,
 			loadFile({ filePath: inlineEditsFixture('8-cppIndividual-1-point.cpp/recording.w.json') }),
 		));
@@ -110,6 +119,18 @@ for (const testConfig of testConfigs) {
 		stest({ description: 'Notebook 11-update-name-in-next-cell-of-notebook', language: 'python' }, collection => tester.runAndScoreTestFromRecording(collection,
 			loadFile({
 				filePath: inlineEditsFixture('11-update-name-in-next-cell-of-notebook/recording.w.json'),
+			})
+		));
+
+	});
+
+	ssuiteByProvider({ title: 'InlineEdit Mechanical', subtitle: `[${testConfig.providerName}]`, location: 'external', configurations: testConfig.extensionConfiguration }, () => {
+
+		const tester = getTester();
+
+		stest({ description: 'RespectEditWindowBoundaries00', language: 'typescript' }, collection => tester.runAndScoreTestFromRecording(collection,
+			loadFile({
+				filePath: inlineEditsFixture('RespectEditWindowBoundaries00/recording.w.json'),
 			})
 		));
 
