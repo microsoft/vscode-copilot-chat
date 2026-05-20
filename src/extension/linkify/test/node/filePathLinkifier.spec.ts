@@ -304,4 +304,43 @@ suite('File Path Linkifier', () => {
 			'config.${TerminalSettingId'  // Should remain as plain text
 		]);
 	});
+
+	test(`Should NOT linkify inline code that has no dot or path separator`, async () => {
+		// Command names, directory names, and other non-path text in backticks
+		// should not be linkified even if a workspace file/dir matches
+		const linkifier = createTestLinkifierService(
+			'code-insiders',
+			'test-byok-ext',
+		);
+
+		assertPartsEqual(
+			(await linkify(linkifier,
+				'`code-insiders` `test-byok-ext` `npm`',
+			)).parts,
+			[
+				'`code-insiders` `test-byok-ext` `npm`'
+			]
+		);
+	});
+
+	test(`Should still linkify inline code with dots or path separators`, async () => {
+		const linkifier = createTestLinkifierService(
+			'file.ts',
+			'src/file.ts',
+			'.env',
+		);
+
+		assertPartsEqual(
+			(await linkify(linkifier,
+				'`file.ts` `src/file.ts` `.env`',
+			)).parts,
+			[
+				new LinkifyLocationAnchor(workspaceFile('file.ts')),
+				` `,
+				new LinkifyLocationAnchor(workspaceFile('src/file.ts')),
+				` `,
+				new LinkifyLocationAnchor(workspaceFile('.env')),
+			]
+		);
+	});
 });

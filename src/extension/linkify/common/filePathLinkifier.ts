@@ -21,7 +21,8 @@ import { IStatCache } from './statCache';
 const pathMatchRe = new RegExp(
 	[
 		// Inline code paths (exclude code-like characters $, {, }, that are common in code but rare in filenames)
-		/(?<!\[)`(?<inlineCodePath>[^`\s${}]+)`(?!\])/.source,
+		// Require at least one dot or path separator to avoid matching command names / other non-path text
+		/(?<!\[)`(?<inlineCodePath>(?=[^`\s${}]*[./\\])[^`\s${}]+)`(?!\])/.source,
 
 		// File paths rendered as plain text (exclude code-like characters)
 		/(?<![\[`()<])(?<plainTextPath>[^\s`*${}()]+\.[^\s`*${}()]+)(?![\]`])/.source
