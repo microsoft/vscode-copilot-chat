@@ -32,6 +32,12 @@ export interface RoutingContextSignals {
 	prompt_char_count?: number;
 }
 
+export class RouterDecisionError extends Error {
+	constructor(message: string, public readonly errorCode?: string) {
+		super(message);
+	}
+}
+
 /**
  * Fetches routing decisions from a classification API to determine which model should handle a query.
  *
@@ -48,11 +54,14 @@ export class RouterDecisionFetcher {
 	) {
 	}
 
-	async getRouterDecision(query: string, autoModeToken: string, availableModels: string[], stickyThreshold?: number, contextSignals?: RoutingContextSignals, conversationId?: string, vscodeRequestId?: string): Promise<RouterDecisionResponse> {
+	async getRouterDecision(query: string, autoModeToken: string, availableModels: string[], stickyThreshold?: number, contextSignals?: RoutingContextSignals, conversationId?: string, vscodeRequestId?: string, hasImage?: boolean): Promise<RouterDecisionResponse> {
 		const startTime = Date.now();
 		const requestBody: Record<string, unknown> = { prompt: query, available_models: availableModels, ...contextSignals };
 		if (stickyThreshold !== undefined) {
 			requestBody.sticky_threshold = stickyThreshold;
+		}
+		if (hasImage) {
+			requestBody.has_image = true;
 		}
 		const copilotToken = (await this._authService.getCopilotToken()).token;
 		const abortController = new AbortController();
@@ -73,7 +82,12 @@ export class RouterDecisionFetcher {
 		}
 
 		if (!response.ok) {
-			throw new Error(`Router decision request failed with status ${response.status}: ${response.statusText}`);
+			const errorText = await response.text().catch(() => '');
+			let errorCode: string | undefined;
+			try {
+				errorCode = JSON.parse(errorText).error;
+			} catch { /* not JSON */ }
+			throw new RouterDecisionError(`Router decision request failed with status ${response.status}: ${response.statusText}`, errorCode);
 		}
 
 		const text = await response.text();
