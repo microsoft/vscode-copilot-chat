@@ -9,12 +9,13 @@ import { IConfigurationService } from '../../../platform/configuration/common/co
 import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { AutoChatEndpoint } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
-import { CopilotChatEndpoint } from '../../../platform/endpoint/node/copilotChatEndpoint';
+import { CopilotChatEndpoint, CopilotFastChatEndpoint } from '../../../platform/endpoint/node/copilotChatEndpoint';
 import { EmbeddingEndpoint } from '../../../platform/endpoint/node/embeddingsEndpoint';
 import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
 import { ExtensionContributedChatEndpoint } from '../../../platform/endpoint/vscode-node/extChatEndpoint';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint, IEmbeddingsEndpoint } from '../../../platform/networking/common/networking';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -37,6 +38,7 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 		@IConfigurationService protected readonly _configService: IConfigurationService,
 		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
 		@IAuthenticationService protected readonly _authService: IAuthenticationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 	) {
 		super();
 
@@ -50,6 +52,15 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 			this._embeddingEndpoints.clear();
 			this._onDidModelsRefresh.fire();
 		}));
+	}
+
+	private async getOrCreateCopilotFastEndpoint(): Promise<IChatEndpoint> {
+		let endpoint = this._chatEndpoints.get('copilot-fast');
+		if (!endpoint) {
+			endpoint = await CopilotFastChatEndpoint.create(this._modelFetcher, this._instantiationService, this._configService, this._experimentationService);
+			this._chatEndpoints.set('copilot-fast', endpoint);
+		}
+		return endpoint;
 	}
 
 	private getOrCreateChatEndpointInstance(modelMetadata: IChatModelInformation): IChatEndpoint {
@@ -66,6 +77,9 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 		this._logService.trace(`Resolving chat model`);
 
 		if (typeof requestOrFamilyOrModel === 'string') {
+			if (requestOrFamilyOrModel === 'copilot-fast') {
+				return this.getOrCreateCopilotFastEndpoint();
+			}
 			const modelMetadata = await this._modelFetcher.getChatModelFromFamily(requestOrFamilyOrModel);
 			return this.getOrCreateChatEndpointInstance(modelMetadata!);
 		}

@@ -3,13 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { CancellationToken } from 'vscode';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
-import { IConfigurationService } from '../../configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
+import { IChatEndpoint, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { RawMessageConversionCallback } from '../../networking/common/openai';
 import { IChatWebSocketManager } from '../../networking/node/chatWebSocketManager';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
@@ -17,8 +19,9 @@ import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
-import { IChatModelInformation } from '../common/endpointProvider';
+import { ChatEndpointFamily, IChatModelInformation } from '../common/endpointProvider';
 import { ChatEndpoint } from './chatEndpoint';
+import { IModelMetadataFetcher } from './modelMetadataFetcher';
 
 export class CopilotChatEndpoint extends ChatEndpoint {
 	constructor(
@@ -57,5 +60,37 @@ export class CopilotChatEndpoint extends ChatEndpoint {
 				out.reasoning_text = Array.isArray(data.text) ? data.text.join('') : data.text;
 			}
 		};
+	}
+}
+
+/**
+ * Endpoint for the `copilot-fast` internal family. The primary model family is controlled by the
+ * {@link ConfigKey.TeamInternal.CopilotFastModelName} ExP-backed advanced setting and always
+ * falls back to {@link fallbackFamily} (`gpt-4o-mini`) when the primary model is not available.
+ *
+ * When the selected model (primary or fallback) uses the Responses API, reasoning effort is forced
+ * to `'none'` so that background tasks (title generation, rename suggestions, etc.) are fast and
+ * cheap. When the same model is selected explicitly in the model picker it uses a regular
+ * {@link CopilotChatEndpoint} and respects the user's chosen reasoning effort.
+ */
+export class CopilotFastChatEndpoint extends CopilotChatEndpoint {
+	static readonly fallbackFamily = 'gpt-4o-mini';
+
+	static async create(modelFetcher: IModelMetadataFetcher, instantiationService: IInstantiationService, configService: IConfigurationService, experimentationService: IExperimentationService): Promise<IChatEndpoint> {
+		const primaryFamily = configService.getExperimentBasedConfig(ConfigKey.TeamInternal.CopilotFastModelName, experimentationService);
+		let modelMetadata: IChatModelInformation;
+		try {
+			modelMetadata = await modelFetcher.getChatModelFromFamily(primaryFamily as ChatEndpointFamily);
+		} catch {
+			modelMetadata = await modelFetcher.getChatModelFromFamily(CopilotFastChatEndpoint.fallbackFamily as ChatEndpointFamily);
+		}
+		return instantiationService.createInstance(CopilotFastChatEndpoint, modelMetadata);
+	}
+
+	protected override async _makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken) {
+		return super._makeChatRequest2(
+			this.useResponsesApi ? { ...options, reasoningEffort: 'none' } : options,
+			token
+		);
 	}
 }

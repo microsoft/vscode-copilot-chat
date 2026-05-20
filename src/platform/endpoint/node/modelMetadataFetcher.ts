@@ -20,7 +20,6 @@ import { getRequest } from '../../networking/common/networking';
 import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IModelAPIResponse, isChatModelInformation, isCompletionModelInformation, isEmbeddingModelInformation } from '../common/endpointProvider';
-import { ModelAliasRegistry } from '../common/modelAliasRegistry';
 
 export interface IModelMetadataFetcher {
 
@@ -159,7 +158,6 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 	public async getChatModelFromFamily(family: ChatEndpointFamily): Promise<IChatModelInformation> {
 		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, this._fetchModels.bind(this));
 		let resolvedModel: IModelAPIResponse | undefined;
-		family = ModelAliasRegistry.resolveAlias(family) as ChatEndpointFamily;
 
 		if (family === 'copilot-base') {
 			resolvedModel = this._copilotBaseModel;
