@@ -26,6 +26,7 @@ export class TestChatRequest implements ChatRequest {
 	public sessionId = generateUuid();
 	public sessionResource = vscodeTypes.Uri.parse(`test://session/${this.sessionId}`);
 	public hasHooksEnabled = false;
+	public hooks: import('vscode').ChatRequestHooks | undefined = undefined;
 
 	constructor(
 		public prompt: string,

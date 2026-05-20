@@ -410,6 +410,8 @@ export interface SummarizedAgentHistoryProps extends BasePromptElementProps, Age
 	readonly summarizationInstructions?: string;
 	/** Whether this summarization was triggered as a background or foreground operation. Defaults to 'foreground'. */
 	readonly summarizationSource?: 'background' | 'foreground';
+	/** How the compaction was triggered. Defaults to 'auto'. */
+	readonly compactionTrigger?: 'auto' | 'manual';
 }
 
 /**
@@ -649,7 +651,7 @@ class ConversationHistorySummarizer {
 
 		try {
 			const results = await this.chatHookService.executeHook('PreCompact', hooks, {
-				trigger: 'auto',
+				trigger: this.props.compactionTrigger ?? 'auto',
 			} satisfies PreCompactHookInput, this.props.promptContext.conversation?.sessionId, this.token ?? CancellationToken.None);
 
 			for (const result of results) {
