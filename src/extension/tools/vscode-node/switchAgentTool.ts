@@ -12,6 +12,7 @@ import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 
 interface ISwitchAgentParams {
 	agentName: string;
+	explainer: string;
 }
 
 export class SwitchAgentTool implements ICopilotTool<ISwitchAgentParams> {
@@ -46,9 +47,17 @@ export class SwitchAgentTool implements ICopilotTool<ISwitchAgentParams> {
 			throw new Error(vscode.l10n.t('Only "Plan" agent is supported. Received: "{0}"', agentName));
 		}
 
+		const confirmationEnabled = vscode.workspace.getConfiguration('github.copilot.chat').get<boolean>('switchAgent.confirm', true);
+		const explainer = options.input.explainer?.trim();
 		return {
 			invocationMessage: new MarkdownString(vscode.l10n.t('Switching to {0} agent', agentName)),
-			pastTenseMessage: new MarkdownString(vscode.l10n.t('Switched to {0} agent', agentName))
+			pastTenseMessage: new MarkdownString(vscode.l10n.t('Switched to {0} agent', agentName)),
+			...confirmationEnabled && explainer ? {
+				confirmationMessages: {
+					title: vscode.l10n.t('Switch to {0} Agent', agentName),
+					message: new MarkdownString().appendText(explainer),
+				},
+			} : {},
 		};
 	}
 }
