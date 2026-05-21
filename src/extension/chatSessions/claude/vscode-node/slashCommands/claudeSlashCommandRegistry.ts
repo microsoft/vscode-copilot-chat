@@ -38,13 +38,17 @@ export interface IClaudeSlashCommandHandler {
 	 * @param args - Arguments passed after the command name
 	 * @param stream - Response stream for sending messages to the chat (undefined when invoked from Command Palette)
 	 * @param token - Cancellation token
-	 * @returns Chat result or void
+	 * @param context - Optional context with session information
+	 * @returns Chat result, void, or an object with `rewrittenPrompt` to pass a
+	 *          modified prompt through to the Claude SDK instead of handling the
+	 *          command directly.
 	 */
 	handle(
 		args: string,
 		stream: vscode.ChatResponseStream | undefined,
-		token: CancellationToken
-	): Promise<vscode.ChatResult | void>;
+		token: CancellationToken,
+		context?: { readonly sessionId?: string },
+	): Promise<vscode.ChatResult | { rewrittenPrompt: string } | void>;
 }
 
 /**

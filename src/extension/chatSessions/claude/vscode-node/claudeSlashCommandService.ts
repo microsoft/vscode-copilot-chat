@@ -13,6 +13,8 @@ import { getClaudeSlashCommandRegistry, IClaudeSlashCommandHandler } from './sla
 export interface IClaudeSlashCommandRequest {
 	readonly prompt: string;
 	readonly command: string | undefined;
+	/** The Claude session ID for session-aware commands like /troubleshoot */
+	readonly sessionId?: string;
 }
 
 // Import all slash command handlers to trigger self-registration
@@ -21,6 +23,11 @@ import './slashCommands/index';
 export interface IClaudeSlashCommandResult {
 	handled: boolean;
 	result?: vscode.ChatResult;
+	/**
+	 * When set, the original prompt is replaced with this text before
+	 * being sent to the Claude SDK.  Only meaningful when `handled` is false.
+	 */
+	rewrittenPrompt?: string;
 }
 
 export interface IClaudeSlashCommandService {
@@ -71,12 +78,14 @@ export class ClaudeSlashCommandService extends Disposable implements IClaudeSlas
 		stream: vscode.ChatResponseStream,
 		token: CancellationToken
 	): Promise<IClaudeSlashCommandResult> {
+		const handlerContext = { sessionId: request.sessionId };
+
 		// 1. Check request.command (VS Code slash command selected via UI)
 		if (request.command) {
 			const handler = this._getHandler(request.command.toLowerCase());
 			if (handler) {
-				const result = await handler.handle(request.prompt, stream, token);
-				return { handled: true, result: result ?? {} };
+				const result = await handler.handle(request.prompt, stream, token, handlerContext);
+				return this._toResult(result);
 			}
 		}
 
@@ -92,7 +101,14 @@ export class ClaudeSlashCommandService extends Disposable implements IClaudeSlas
 			return { handled: false };
 		}
 
-		const result = await handler.handle(args ?? '', stream, token);
+		const result = await handler.handle(args ?? '', stream, token, handlerContext);
+		return this._toResult(result);
+	}
+
+	private _toResult(result: vscode.ChatResult | { rewrittenPrompt: string } | void): IClaudeSlashCommandResult {
+		if (result && 'rewrittenPrompt' in result) {
+			return { handled: false, rewrittenPrompt: result.rewrittenPrompt };
+		}
 		return { handled: true, result: result ?? {} };
 	}
 
