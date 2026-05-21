@@ -5,9 +5,8 @@
 
 import * as stream from 'stream';
 import * as undici from 'undici';
-import { Lazy } from '../../../util/vs/base/common/lazy';
 import { IEnvService } from '../../env/common/envService';
-import { HeadersImpl, IHeaders, ReportFetchEvent, WebSocketConnection, WebSocketConnectOptions } from '../common/fetcherService';
+import { FetchOptions, HeadersImpl, IHeaders, ReportFetchEvent, Response, WebSocketConnection, WebSocketConnectOptions } from '../common/fetcherService';
 import { BaseFetchFetcher } from './baseFetchFetcher';
 
 export class NodeFetchFetcher extends BaseFetchFetcher {
@@ -26,6 +25,26 @@ export class NodeFetchFetcher extends BaseFetchFetcher {
 		return NodeFetchFetcher.ID;
 	}
 
+	override async fetch(url: string, options: FetchOptions): Promise<Response> {
+		try {
+			return await super.fetch(url, options);
+		} catch (e) {
+			if (isGracefulGoawayError(e)) {
+				await this.disconnectAll();
+				return await super.fetch(url, options);
+			}
+			throw e;
+		}
+	}
+
+	override async disconnectAll(): Promise<void> {
+		const currentAgent = agent;
+		if (currentAgent) {
+			agent = undefined;
+			await currentAgent.close();
+		}
+	}
+
 	isInternetDisconnectedError(_e: any): boolean {
 		return false;
 	}
@@ -35,15 +54,37 @@ export class NodeFetchFetcher extends BaseFetchFetcher {
 	}
 }
 
+/**
+ * Detects a graceful HTTP/2 GOAWAY error (error code 0 = NO_ERROR).
+ * These occur during server-side connection draining
+ * and are safe to retry on a new connection.
+ */
+export function isGracefulGoawayError(e: any): boolean {
+	const message = String(e?.message || '');
+	const causeMessage = String(e?.cause?.message || '');
+	const combined = message + ' ' + causeMessage;
+	if (combined.includes('GOAWAY') && combined.includes('code 0')) {
+		return true;
+	}
+	return false;
+}
+
 function getFetch(): typeof globalThis.fetch {
 	const fetch = (globalThis as any).__vscodePatchedFetch || globalThis.fetch;
 	return function (input: string | URL | globalThis.Request, init?: RequestInit) {
-		return fetch(input, { dispatcher: agent.value, ...init });
+		return fetch(input, { dispatcher: getOrCreateAgent(), ...init });
 	};
 }
 
-// Cache agent to reuse connections.
-const agent = new Lazy(() => new undici.Agent({ allowH2: true }));
+function getOrCreateAgent(): undici.Agent {
+	if (!agent) {
+		agent = new undici.Agent({ allowH2: true });
+	}
+	return agent;
+}
+
+// Mutable agent reference — recreated on disconnectAll() to ensure fresh connections.
+let agent: undici.Agent | undefined;
 
 export function createWebSocket(url: string, options?: WebSocketConnectOptions): WebSocketConnection {
 	const wsAgent = new undici.Agent();
