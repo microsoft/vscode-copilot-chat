@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { ChatHookCommand } from 'vscode';
@@ -34,6 +35,11 @@ function createMockChild(): MockChildProcess {
 		kill: vi.fn(),
 	});
 	return child;
+}
+
+function getSpawnCommand(): string {
+	const calls = vi.mocked(spawn).mock.calls;
+	return String(calls.at(-1)?.[0]);
 }
 
 /**
@@ -167,6 +173,54 @@ describe('NodeHookExecutor', () => {
 
 		// Verify the command ran successfully (cwd is passed to spawn options)
 		expect(result.kind).toBe(HookCommandResultKind.Success);
+	});
+
+	test('sanitizes file URIs in hook commands before spawn', async () => {
+		const promise = executor.executeCommand(
+			cmd('cat file:///tmp/example.txt'),
+			undefined,
+			CancellationToken.None
+		);
+		completeChild(child, { stdout: 'ok', exitCode: 0 });
+		await promise;
+
+		expect(getSpawnCommand()).toBe('cat /tmp/example.txt');
+	});
+
+	test('quotes sanitized file URIs with spaces in hook commands', async () => {
+		const promise = executor.executeCommand(
+			cmd('cat file:///tmp/my%20file.txt'),
+			undefined,
+			CancellationToken.None
+		);
+		completeChild(child, { stdout: 'ok', exitCode: 0 });
+		await promise;
+
+		expect(getSpawnCommand()).toBe('cat "/tmp/my file.txt"');
+	});
+
+	test('preserves existing quotes around sanitized file URIs', async () => {
+		const promise = executor.executeCommand(
+			cmd('cat "file:///tmp/my%20file.txt"'),
+			undefined,
+			CancellationToken.None
+		);
+		completeChild(child, { stdout: 'ok', exitCode: 0 });
+		await promise;
+
+		expect(getSpawnCommand()).toBe('cat "/tmp/my file.txt"');
+	});
+
+	test('does not sanitize non-file URIs in hook commands', async () => {
+		const promise = executor.executeCommand(
+			cmd('cat vscode-remote://ssh-remote+test/workspace/file.txt'),
+			undefined,
+			CancellationToken.None
+		);
+		completeChild(child, { stdout: 'ok', exitCode: 0 });
+		await promise;
+
+		expect(getSpawnCommand()).toBe('cat vscode-remote://ssh-remote+test/workspace/file.txt');
 	});
 
 	test('handles spawn error as non-blocking error', async () => {

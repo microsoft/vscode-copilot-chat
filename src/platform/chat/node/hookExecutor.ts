@@ -9,6 +9,7 @@ import type { CancellationToken, ChatHookCommand, Uri } from 'vscode';
 import { basename, join } from '../../../util/vs/base/common/path';
 import { isWindows } from '../../../util/vs/base/common/platform';
 import { removeAnsiEscapeCodes } from '../../../util/vs/base/common/strings';
+import { URI } from '../../../util/vs/base/common/uri';
 import { ILogService } from '../../log/common/logService';
 import { HookCommandResultKind, IHookCommandResult, IHookExecutor } from '../common/hookExecutor';
 import { IHooksOutputChannel } from '../common/hooksOutputChannel';
@@ -48,8 +49,9 @@ export class NodeHookExecutor implements IHookExecutor {
 
 	private _spawn(hook: ChatHookCommand, input: unknown, token: CancellationToken): Promise<IHookCommandResult> {
 		const cwd = hook.cwd ? uriToFsPath(hook.cwd) : homedir();
+		const command = sanitizeHookCommand(hook.command);
 
-		const child = spawn(hook.command, [], {
+		const child = spawn(command, [], {
 			stdio: 'pipe',
 			cwd,
 			env: { ...process.env, ...hook.env },
@@ -175,6 +177,41 @@ function uriToFsPath(uri: Uri): string {
 	}
 	// Fallback for URI-like objects
 	return (uri as { path: string }).path;
+}
+
+const fileUriTokenRegex = /(^|[\s=:(\[{,;])(["']?)(file:\/\/[^\s"'`|&;()<>\]}]+)\2(?=$|[\s)\]};,|&<>])/g;
+
+function sanitizeHookCommand(command: string): string {
+	return command.replace(fileUriTokenRegex, (match, prefix: string, quote: string, uriText: string) => {
+		const fsPath = getFileUriFsPath(uriText);
+		if (!fsPath) {
+			return match;
+		}
+
+		const sanitizedPath = quote ? fsPath : quoteArgForShell(fsPath);
+		return `${prefix}${quote}${sanitizedPath}${quote}`;
+	});
+}
+
+function getFileUriFsPath(uriText: string): string | undefined {
+	try {
+		const parsed = URI.parse(uriText);
+		if (parsed.scheme !== 'file') {
+			return undefined;
+		}
+
+		return parsed.fsPath;
+	} catch {
+		return undefined;
+	}
+}
+
+function quoteArgForShell(arg: string): string {
+	if (!(/[\s"'$`\\|&;()<>]/.test(arg))) {
+		return arg;
+	}
+
+	return `"${arg.replace(/["\\]/g, '\\$&')}"`;
 }
 
 
