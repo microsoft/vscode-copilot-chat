@@ -18,13 +18,13 @@ export type EngineRequestInfo = {
 	tokenizer: TokenizerName;
 };
 
-export function getEngineRequestInfo(
+export async function getEngineRequestInfo(
 	accessor: ServicesAccessor,
 	telemetryData: TelemetryWithExp | undefined = undefined
-): EngineRequestInfo {
+): Promise<EngineRequestInfo> {
 	const modelsManager = accessor.get(ICompletionsModelManagerService);
-	const modelRequestInfo = modelsManager.getCurrentModelRequestInfo(telemetryData);
-	const tokenizer = modelsManager.getTokenizerForModel(modelRequestInfo.modelId);
+	const modelRequestInfo = await modelsManager.getCurrentModelRequestInfo(telemetryData);
+	const tokenizer = await modelsManager.getTokenizerForModel(modelRequestInfo.modelId);
 
 	return {
 		headers: modelRequestInfo.headers,

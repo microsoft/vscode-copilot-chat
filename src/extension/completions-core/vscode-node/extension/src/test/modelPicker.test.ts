@@ -47,7 +47,7 @@ suite('ModelPickerManager unit tests', function () {
 		accessor = serviceCollection.createTestingAccessor();
 
 		availableModelsManager = accessor.get(ICompletionsModelManagerService);
-		getGenericCompletionModelsStub = sandbox.stub(availableModelsManager, 'getGenericCompletionModels').returns(fakeModels);
+		getGenericCompletionModelsStub = sandbox.stub(availableModelsManager, 'getGenericCompletionModels').resolves(fakeModels);
 		modelPicker = accessor.get(IInstantiationService).createInstance(ModelPickerManager);
 	});
 
@@ -57,12 +57,12 @@ suite('ModelPickerManager unit tests', function () {
 		sandbox.restore();
 	});
 
-	test('showModelPicker returns correct items', function () {
+	test('showModelPicker returns correct items', async function () {
 		const instantiationService = accessor.get(IInstantiationService);
 
 		modelPicker = instantiationService.createInstance(ModelPickerManager);
 
-		const quickPick = modelPicker.showModelPicker();
+		const quickPick = await modelPicker.showModelPicker();
 
 		// Check that we have the correct number of items
 		// The items should include the two fake models, a separator, and a learn more item.
@@ -73,20 +73,20 @@ suite('ModelPickerManager unit tests', function () {
 		assert.strictEqual(quickPick.items[3].type, 'learn-more');
 	});
 
-	test('hasMultipleModels is true when multiple models are available', function () {
-		assert.strictEqual(modelPicker.hasMultipleModels(), true);
+	test('hasMultipleModels is true when multiple models are available', async function () {
+		assert.strictEqual(await modelPicker.hasMultipleModels(), true);
 	});
 
-	test('hasMultipleModels is false when one model is available', function () {
+	test('hasMultipleModels is false when one model is available', async function () {
 		getGenericCompletionModelsStub.returns([fakeModels[0]]);
-		assert.strictEqual(modelPicker.hasMultipleModels(), false);
+		assert.strictEqual(await modelPicker.hasMultipleModels(), false);
 	});
 
 	test('selecting a model updates user selection', async function () {
 		// Stub out setting model
 		const setModelStub = sandbox.stub(modelPicker, 'setUserSelectedCompletionModel').resolves();
 
-		const quickPick = modelPicker.showModelPicker();
+		const quickPick = await modelPicker.showModelPicker();
 
 		const secondItem = quickPick.items[1];
 		assert(secondItem !== undefined, 'model picker should have a model-b second item.');
@@ -104,7 +104,7 @@ suite('ModelPickerManager unit tests', function () {
 		// Stub openExternal
 		const openUrlStub = sandbox.stub(env, 'openExternal').resolves();
 
-		const quickPick = modelPicker.showModelPicker();
+		const quickPick = await modelPicker.showModelPicker();
 
 		const learnMoreItem = quickPick.items[3];
 		assert(learnMoreItem !== undefined, 'model picker should have a learn more item.');

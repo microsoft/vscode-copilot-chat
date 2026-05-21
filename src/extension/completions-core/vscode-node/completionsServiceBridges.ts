@@ -232,7 +232,7 @@ function registerStatusBar(accessor: ServicesAccessor): IDisposable {
 					new Promise(resolve => setTimeout(resolve, 100)),
 				]);
 			}
-			instantiationService.createInstance(CopilotStatusBarPickMenu).showStatusMenu();
+			await instantiationService.createInstance(CopilotStatusBarPickMenu).showStatusMenu();
 		});
 	}
 	disposables.add(registerStatusMenu(CMDToggleStatusMenuClient));

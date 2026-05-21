@@ -47,7 +47,7 @@ export async function launchSolutions(accessor: ServicesAccessor, solutionManage
 	const { prompt, trailingWs, telemetryData, repoInfo, ourRequestId } = promptSetup;
 
 	// Setup completion parameters using shared function
-	const { extra, postOptions, finishedCb, engineInfo } = instantiationService.invokeFunction(setupCompletionParams,
+	const { extra, postOptions, finishedCb, engineInfo } = await instantiationService.invokeFunction(setupCompletionParams,
 		document,
 		position,
 		prompt,

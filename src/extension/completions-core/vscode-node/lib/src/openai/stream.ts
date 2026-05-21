@@ -445,12 +445,13 @@ export class SSEProcessor {
 					// filter out indices that correspond to excluded tokens. It will not affect the
 					// text though.
 					const loggedReason = choice.finish_reason ?? 'client-trimmed';
+					const engineRequestInfo = await this.instantiationService.invokeFunction(getEngineRequestInfo, this.telemetryData);
 					streamChoicesLogger.debug(this.logTarget,
 						'completion.finishReason',
 						this.telemetryData.extendedBy({
 							completionChoiceFinishReason: loggedReason,
 							engineName: model ?? '',
-							engineChoiceSource: this.instantiationService.invokeFunction(getEngineRequestInfo, this.telemetryData).engineChoiceSource,
+							engineChoiceSource: engineRequestInfo.engineChoiceSource,
 						})
 					);
 					if (this.dropCompletionReasons.includes(choice.finish_reason!)) {

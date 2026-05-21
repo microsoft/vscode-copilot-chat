@@ -252,7 +252,7 @@ export class GhostTextComputer {
 			};
 		}
 
-		const engineInfo = this.instantiationService.invokeFunction(getEngineRequestInfo, preIssuedTelemetryDataWithExp);
+		const engineInfo = await this.instantiationService.invokeFunction(getEngineRequestInfo, preIssuedTelemetryDataWithExp);
 		const ghostTextOptions = { ...defaultOptions, ...options, tokenizer: engineInfo.tokenizer };
 		const prompt = await this.instantiationService.invokeFunction(extractPrompt,
 			ourRequestId,

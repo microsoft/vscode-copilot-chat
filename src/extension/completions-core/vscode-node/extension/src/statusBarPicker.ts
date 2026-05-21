@@ -19,11 +19,11 @@ export class CopilotStatusBarPickMenu {
 		@ICompletionsModelManagerService private readonly modelManagerService: ICompletionsModelManagerService,
 	) { }
 
-	showStatusMenu() {
+	async showStatusMenu() {
 		const quickpickList = window.createQuickPick();
 		quickpickList.placeholder = l10n.t('Select an option');
 		quickpickList.title = l10n.t('Configure Inline Suggestions');
-		quickpickList.items = this.collectQuickPickItems();
+		quickpickList.items = await this.collectQuickPickItems();
 		const listeners = Disposable.from(
 			quickpickList.onDidAccept(() => this.handleItemSelection(quickpickList)),
 			quickpickList.onDidHide(() => {
@@ -48,11 +48,11 @@ export class CopilotStatusBarPickMenu {
 		}
 	}
 
-	private collectQuickPickItems() {
+	private async collectQuickPickItems() {
 		return [
 			this.newStatusItem(),
 			this.newSeparator(),
-			...this.collectLanguageSpecificItems(),
+			...(await this.collectLanguageSpecificItems()),
 			this.newKeyboardItem(),
 			this.newSettingsItem(),
 			...this.collectDiagnosticsItems(),
@@ -63,13 +63,13 @@ export class CopilotStatusBarPickMenu {
 		];
 	}
 
-	private collectLanguageSpecificItems() {
+	private async collectLanguageSpecificItems() {
 		const items: QuickPickItem[] = [];
 		if (!this.hasActiveStatus()) { return items; }
 
 		const editor = window.activeTextEditor;
 		if (!isWeb && editor) { items.push(this.newPanelItem()); }
-		if (!isWeb && this.hasMultipleModels()) { items.push(this.newChangeModelItem()); }
+		if (!isWeb && (await this.hasMultipleModels())) { items.push(this.newChangeModelItem()); }
 		if (editor) { items.push(...this.newEnableLanguageItem()); }
 		if (items.length) { items.push(this.newSeparator()); }
 
@@ -80,8 +80,8 @@ export class CopilotStatusBarPickMenu {
 		return ['Normal'].includes(this.extensionStatusService.kind);
 	}
 
-	private hasMultipleModels() {
-		return this.modelManagerService.getGenericCompletionModels().length > 1;
+	private async hasMultipleModels() {
+		return (await this.modelManagerService.getGenericCompletionModels()).length > 1;
 	}
 
 	private isCompletionEnabled() {

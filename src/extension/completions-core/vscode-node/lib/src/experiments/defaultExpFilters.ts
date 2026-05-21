@@ -41,15 +41,15 @@ function getPluginRelease(accessor: ServicesAccessor): Release {
 	return Release.Stable;
 }
 
-function updateCompletionsFilters(accessor: ServicesAccessor, token: Omit<CopilotToken, 'token'> | undefined) {
+async function updateCompletionsFilters(accessor: ServicesAccessor, token: Omit<CopilotToken, 'token'> | undefined) {
 	const exp = accessor.get(IExperimentationService);
 
-	const filters = createCompletionsFilters(accessor, token);
+	const filters = await createCompletionsFilters(accessor, token);
 
 	exp.setCompletionsFilters(filters);
 }
 
-export function createCompletionsFilters(accessor: ServicesAccessor, token: Omit<CopilotToken, 'token'> | undefined) {
+export async function createCompletionsFilters(accessor: ServicesAccessor, token: Omit<CopilotToken, 'token'> | undefined) {
 	const filters = new Map<Filter, string>();
 
 	filters.set(Filter.ExtensionRelease, getPluginRelease(accessor));
@@ -71,7 +71,7 @@ export function createCompletionsFilters(accessor: ServicesAccessor, token: Omit
 		filters.set(Filter.CopilotUserKind, getUserKind(token));
 	}
 
-	const model = getEngineRequestInfo(accessor).modelId;
+	const model = (await getEngineRequestInfo(accessor)).modelId;
 	filters.set(Filter.CopilotEngine, model);
 	return filters;
 }
