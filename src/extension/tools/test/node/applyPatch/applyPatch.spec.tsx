@@ -87,4 +87,54 @@ suite('ApplyPatch Tool', () => {
 		await expect(workingCopyDocument.text).toMatchFileSnapshot('fixtures/4302.ts.txt.expected');
 
 	});
+
+	it('does not leak original content when trailing newlines differ', async () => {
+		const trailingPath = join(__dirname, 'fixtures/trailing_newline.txt');
+		const trailingUri = URI.file(trailingPath);
+		const trailingContent = String(readFileSync(trailingPath)).replace(/\r\n/g, '\n');
+
+		const services = createExtensionUnitTestingServices();
+		const testDoc = createTextDocumentData(trailingUri, trailingContent, 'plaintext').document;
+		services.define(IWorkspaceService, new SyncDescriptor(
+			TestWorkspaceService, [[trailingUri], [testDoc]]
+		));
+		const trailingAccessor = services.createTestingAccessor();
+
+		// Patch removes BETA, GAMMA, and the trailing empty line.
+		// The parser produces newContent="ALPHA" (no trailing newline),
+		// while the original has trailing=1. This must not leak "BETA".
+		const patchInput = `*** Begin Patch\n*** Update File: ${trailingPath.replaceAll('\\', '\\\\')}\n@@ ALPHA\n ALPHA\n-BETA\n-GAMMA\n-\n*** End Patch\n`;
+		const input: IApplyPatchToolParams = {
+			explanation: 'Remove BETA and GAMMA lines',
+			input: patchInput,
+		};
+
+		const tool = trailingAccessor.get(IInstantiationService).createInstance(ApplyPatchTool);
+
+		const doc = trailingAccessor.get(IWorkspaceService).textDocuments.find(d => d.uri.toString() === trailingUri.toString());
+		assertType(doc);
+		const workingCopy = new WorkingCopyOriginalDocument(doc.getText());
+
+		const stream = new ChatResponseStreamImpl((part) => {
+			if (part instanceof ChatResponseTextEditPart) {
+				const offsetEdits = workingCopy.transformer.toOffsetEdit(part.edits);
+				if (!workingCopy.isNoop(offsetEdits)) {
+					workingCopy.applyOffsetEdits(offsetEdits);
+				}
+			}
+		}, () => { }, () => { }, undefined, undefined, () => Promise.resolve(undefined));
+
+		const resolvedInput = await tool.resolveInput(input, {
+			history: [],
+			stream,
+			query: 'remove BETA and GAMMA',
+			chatVariables: new ChatVariablesCollection([]),
+		});
+
+		await tool.invoke({ input: resolvedInput, toolInvocationToken: undefined }, CancellationToken.None);
+
+		// The result must be "ALPHA\n" (preserving the original trailing newline),
+		// not "ALPHA\nBETA\n" (which would indicate original line "BETA" leaked through).
+		expect(workingCopy.text).toBe('ALPHA\n');
+	});
 });
