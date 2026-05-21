@@ -23,7 +23,32 @@ export interface RepoMemoryEntry {
 	fact: string;
 	citations?: string | string[];
 	reason?: string;
-	category?: string;
+	category?: string; // Note: category is client-side only, not sent to sweagentd
+}
+
+/**
+ * Store instructions prompt from sweagentd /prompt endpoint.
+ */
+export interface StoreInstructionsPrompt {
+	prompt: string;
+	promptVersion: string;
+}
+
+/**
+ * Memories context prompt from sweagentd /prompt endpoint.
+ */
+export interface MemoriesContextPrompt {
+	prompt: string;
+	promptVersion: string;
+	memoriesCount: number;
+}
+
+/**
+ * Response from GET /prompt endpoint bundling store instructions and memories context.
+ */
+export interface MemoryPromptResponse {
+	storeInstructions: StoreInstructionsPrompt;
+	memoriesContext: MemoriesContextPrompt;
 }
 
 /**
@@ -100,6 +125,13 @@ export interface IAgentMemoryService {
 	 * Returns true if stored successfully, false if Copilot Memory is not enabled or if storing fails.
 	 */
 	storeRepoMemory(memory: RepoMemoryEntry): Promise<boolean>;
+
+	/**
+	 * Get memory prompts from Copilot Memory service.
+	 * Returns server-side prompts for store instructions and memories context.
+	 * Returns undefined if Copilot Memory is not enabled or if fetching fails.
+	 */
+	getMemoryPrompts(): Promise<MemoryPromptResponse | undefined>;
 }
 
 export const IAgentMemoryService = createServiceIdentifier<IAgentMemoryService>('IAgentMemoryService');
@@ -309,9 +341,10 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 					subject: memory.subject,
 					fact: memory.fact,
 					citations,
-					reason: memory.reason,
-					category: memory.category,
-					source: { agent: 'vscode' }
+					reason: memory.reason ?? '',
+					source: {
+						agent: 'vscode'
+					}
 				}
 			}, {
 				type: RequestType.CopilotAgentMemory,
@@ -328,6 +361,50 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 		} catch (error) {
 			this.logService.warn(`[AgentMemoryService] Failed to store repo memory: ${error}`);
 			return false;
+		}
+	}
+
+	async getMemoryPrompts(): Promise<MemoryPromptResponse | undefined> {
+		try {
+			const enabled = await this.checkMemoryEnabled();
+			if (!enabled) {
+				this.logService.debug('[AgentMemoryService] Copilot Memory not enabled, skipping prompt fetch');
+				return undefined;
+			}
+
+			const repoNwo = await this.getRepoNwo();
+			if (!repoNwo) {
+				return undefined;
+			}
+
+			const session = await this.authenticationService.getGitHubSession('any', { silent: true });
+			if (!session) {
+				this.logService.warn('[AgentMemoryService] No GitHub session available for fetching prompts');
+				return undefined;
+			}
+
+			const response = await this.capiClientService.makeRequest<Response>({
+				method: 'GET',
+				headers: {
+					'Authorization': `Bearer ${session.accessToken}`
+				}
+			}, {
+				type: RequestType.CopilotAgentMemory,
+				repo: repoNwo,
+				action: 'prompt'
+			});
+
+			if (!response.ok) {
+				this.logService.warn(`[AgentMemoryService] Failed to fetch prompts: ${response.statusText}`);
+				return undefined;
+			}
+
+			const data = await response.json() as MemoryPromptResponse;
+			this.logService.info(`[AgentMemoryService] Fetched memory prompts (${data.memoriesContext.memoriesCount} memories)`);
+			return data;
+		} catch (error) {
+			this.logService.warn(`[AgentMemoryService] Failed to fetch memory prompts: ${error}`);
+			return undefined;
 		}
 	}
 }
