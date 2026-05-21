@@ -419,7 +419,7 @@ describe('CopilotCLITools', () => {
 			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('pdf');
 		});
 		it('formats task invocation with description', () => {
-			const part = createCopilotCLIToolInvocation({ toolName: 'task', toolCallId: 't1', arguments: { description: 'Run tests', prompt: 'Run all unit tests', agent_type: 'task' } });
+			const part = createCopilotCLIToolInvocation({ toolName: 'task', toolCallId: 't1', arguments: { description: 'Run tests', prompt: 'Run all unit tests', agent_type: 'task', name: 'test-runner' } });
 			expect(part).toBeInstanceOf(ChatToolInvocationPart);
 			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('Run tests');
 		});
@@ -462,7 +462,7 @@ describe('CopilotCLITools', () => {
 			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('find auth middleware');
 		});
 		it('formats store_memory invocation', () => {
-			const part = createCopilotCLIToolInvocation({ toolName: 'store_memory', toolCallId: 'sm1', arguments: { subject: 'naming', fact: 'Use camelCase', citations: 'src/foo.ts:1', reason: 'consistency', category: 'general' } });
+			const part = createCopilotCLIToolInvocation({ toolName: 'store_memory', toolCallId: 'sm1', arguments: { subject: 'naming', fact: 'Use camelCase', citations: 'src/foo.ts:1', reason: 'consistency' } });
 			expect(part).toBeInstanceOf(ChatToolInvocationPart);
 			expect(getInvocationMessageText(part as ChatToolInvocationPart)).toContain('naming');
 		});
@@ -487,7 +487,11 @@ describe('CopilotCLITools', () => {
 			expect(part).toBeInstanceOf(ChatToolInvocationPart);
 		});
 		it('creates invocation for parallel_validation', () => {
-			const part = createCopilotCLIToolInvocation({ toolName: 'parallel_validation', toolCallId: 'pv1', arguments: {} });
+			const part = createCopilotCLIToolInvocation({ toolName: 'parallel_validation', toolCallId: 'pv1', arguments: { prTitle: 'Fix auth', prDescription: 'Updated auth flow' } });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+		});
+		it('creates invocation for parallel_validation with trivialChangeDeclaration', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'parallel_validation', toolCallId: 'pv2', arguments: { prTitle: 'Fix typo', prDescription: 'Fixed typo in README', trivialChangeDeclaration: { isTrivial: true, reason: 'Typo fix only' } } });
 			expect(part).toBeInstanceOf(ChatToolInvocationPart);
 		});
 		it('formats apply_patch invocation', () => {
@@ -516,6 +520,10 @@ describe('CopilotCLITools', () => {
 		});
 		it('creates invocation for codeql_checker', () => {
 			const part = createCopilotCLIToolInvocation({ toolName: 'codeql_checker', toolCallId: 'cq1', arguments: {} });
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+		});
+		it('creates invocation for codeql_checker with trivialChangeDeclaration', () => {
+			const part = createCopilotCLIToolInvocation({ toolName: 'codeql_checker', toolCallId: 'cq2', arguments: { trivialChangeDeclaration: { isTrivial: false, reason: 'Logic changes present' } } });
 			expect(part).toBeInstanceOf(ChatToolInvocationPart);
 		});
 	});
