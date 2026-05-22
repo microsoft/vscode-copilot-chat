@@ -138,6 +138,36 @@ export function parseSessionLogChunksSafely(rawText: string, logService: ILogSer
 	}
 }
 
+export function shouldResolveDelegationBaseRef(
+	baseRef: string | undefined,
+	currentRepository: { owner?: string; name?: string },
+	selectedRepository?: string,
+): boolean {
+	if (!baseRef) {
+		return true;
+	}
+
+	if (!selectedRepository || selectedRepository === DEFAULT_REPOSITORY_ID) {
+		return false;
+	}
+
+	const selectedRepositoryParts = selectedRepository.split('/');
+	if (selectedRepositoryParts.length !== 2) {
+		return false;
+	}
+
+	const [selectedOwner, selectedName] = selectedRepositoryParts;
+	if (!selectedOwner || !selectedName) {
+		return false;
+	}
+
+	if (!currentRepository.owner || !currentRepository.name) {
+		return true;
+	}
+
+	return currentRepository.owner !== selectedOwner || currentRepository.name !== selectedName;
+}
+
 const CUSTOM_AGENTS_OPTION_GROUP_ID = 'customAgents';
 const MODELS_OPTION_GROUP_ID = 'models';
 const PARTNER_AGENTS_OPTION_GROUP_ID = 'partnerAgents';
@@ -1568,8 +1598,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		const repoId = repoIds?.[0];
 		let repoOwner = repoId?.org;
 		let repoName = repoId?.repo;
+		let baseRefToUse = base_ref;
 		const [selectedRepoOwner, selectedRepoName] = (selectedRepository && selectedRepository !== DEFAULT_REPOSITORY_ID) ? selectedRepository.split('/') : [];
-		if (!base_ref || repoOwner !== selectedRepoOwner || repoName !== selectedRepoName) {
+		if (!baseRefToUse || shouldResolveDelegationBaseRef(baseRefToUse, { owner: repoOwner, name: repoName }, selectedRepository)) {
 			if (selectedRepoOwner && selectedRepoName) {
 				repoOwner = selectedRepoOwner;
 				repoName = selectedRepoName;
@@ -1581,7 +1612,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				repoName = repoId.repo;
 			}
 			const { default_branch } = await this._githubRepositoryService.getRepositoryInfo(repoOwner, repoName);
-			base_ref = default_branch;
+			baseRefToUse = default_branch;
 		}
 
 		const { number, sessionId } = await this.invokeRemoteAgent(
@@ -1589,7 +1620,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			[result, history].filter(Boolean).join('\n\n').trim(),
 			token,
 			stream,
-			base_ref,
+			baseRefToUse,
 			head_ref,
 			customAgentName,
 			modelName,
