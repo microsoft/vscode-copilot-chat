@@ -8,6 +8,7 @@ import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/do
 import { NoNextEditReason, StreamedEdit } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { TestLogService } from '../../../../platform/testing/common/testLogService';
 import { AsyncIterUtils } from '../../../../util/common/asyncIterableUtils';
+import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { Position } from '../../../../util/vs/editor/common/core/position';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
 import { ensureDependenciesAreSet } from '../../../../util/vs/editor/common/core/text/positionToOffset';
@@ -204,5 +205,80 @@ another_file.js:
 
 		expect(edits).toHaveLength(0);
 		expect(returnValue).toBe(cancellationReason);
+	});
+
+	it('returns GotCancelled when the cancellation token is already cancelled', async () => {
+		const patchText = `/file.ts:0
+-old
++new
+/file.ts:5
+-another old
++another new`;
+		const linesStream = AsyncIterUtils.fromArray(patchText.split('\n'));
+		const docId = DocumentId.create('file:///file.ts');
+		const documentBeforeEdits = new CurrentDocument(new StringText('old\n'), new Position(1, 1));
+
+		const cts = new CancellationTokenSource();
+		cts.cancel();
+
+		const { edits, returnValue } = await consumeHandleResponse(
+			linesStream,
+			documentBeforeEdits,
+			docId,
+			undefined,
+			undefined,
+			new TestLogService(),
+			undefined,
+			cts.token,
+		);
+
+		expect(edits).toHaveLength(0);
+		expect(returnValue).toBeInstanceOf(NoNextEditReason.GotCancelled);
+		expect((returnValue as NoNextEditReason.GotCancelled).message).toBe('duringStreaming');
+	});
+
+	it('stops yielding edits when the cancellation token is cancelled mid-stream', async () => {
+		const patchText = `/file.ts:0
+-old
++new
+/file.ts:5
+-another old
++another new`;
+		const linesStream = AsyncIterUtils.fromArray(patchText.split('\n'));
+		const docId = DocumentId.create('file:///file.ts');
+		const documentBeforeEdits = new CurrentDocument(new StringText('old\n'), new Position(1, 1));
+
+		const cts = new CancellationTokenSource();
+		let yieldCount = 0;
+
+		const gen = XtabCustomDiffPatchResponseHandler.handleResponse(
+			linesStream,
+			documentBeforeEdits,
+			docId,
+			undefined,
+			undefined,
+			new TestLogService(),
+			undefined,
+			cts.token,
+		);
+
+		const edits: StreamedEdit[] = [];
+		for (; ;) {
+			const result = await gen.next();
+			if (result.done) {
+				// Verify cancellation is returned
+				expect(result.value).toBeInstanceOf(NoNextEditReason.GotCancelled);
+				expect((result.value as NoNextEditReason.GotCancelled).message).toBe('duringStreaming');
+				break;
+			}
+			edits.push(result.value);
+			yieldCount++;
+			if (yieldCount === 1) {
+				// Cancel after first edit is yielded
+				cts.cancel();
+			}
+		}
+
+		expect(edits).toHaveLength(1);
 	});
 });
