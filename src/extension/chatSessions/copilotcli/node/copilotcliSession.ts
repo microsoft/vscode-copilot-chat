@@ -6,8 +6,9 @@
 import type { Attachment, SendOptions, Session, SessionOptions } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
-import type { ChatParticipantToolToken } from 'vscode';
+import type { ChatParticipantToolToken, ChatResultPromptTokenDetail } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { PromptTokenCategory, PromptTokenLabel } from '../../../../platform/tokenizer/node/promptTokenDetails';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { GenAiMetrics } from '../../../../platform/otel/common/genAiMetrics';
 import { CopilotChatAttr, GenAiAttr, GenAiOperationName, IOTelService, ISpanHandle, SpanKind, SpanStatusCode, truncateForOTel } from '../../../../platform/otel/common/index';
@@ -552,9 +553,24 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('assistant.usage', (event) => {
 				if (this._stream && typeof event.data.outputTokens === 'number' && typeof event.data.inputTokens === 'number') {
+					let promptTokenDetails: ChatResultPromptTokenDetail[] | undefined;
+					const breakdown = event.data.tokenBreakdown;
+					if (breakdown && event.data.inputTokens > 0) {
+						const total = event.data.inputTokens;
+						const entries: { category: string; label: string; tokens: number }[] = [
+							{ category: PromptTokenCategory.System, label: PromptTokenLabel.SystemInstructions, tokens: breakdown.systemTokens },
+							{ category: PromptTokenCategory.System, label: PromptTokenLabel.Tools, tokens: breakdown.toolDefinitionsTokens },
+							{ category: PromptTokenCategory.UserContext, label: PromptTokenLabel.Messages, tokens: breakdown.userMessageTokens + breakdown.assistantMessageTokens },
+							{ category: PromptTokenCategory.UserContext, label: PromptTokenLabel.ToolResults, tokens: breakdown.toolResultTokens },
+						];
+						promptTokenDetails = entries
+							.map(e => ({ category: e.category, label: e.label, percentageOfPrompt: Math.round((e.tokens / total) * 100) }))
+							.filter(e => e.percentageOfPrompt > 0);
+					}
 					this._stream.usage({
 						completionTokens: event.data.outputTokens,
 						promptTokens: event.data.inputTokens,
+						...(promptTokenDetails?.length ? { promptTokenDetails } : {}),
 					});
 				}
 			})));
