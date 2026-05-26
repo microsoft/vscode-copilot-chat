@@ -18,7 +18,7 @@ import { ContextManagementResponse } from '../../networking/common/anthropic';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
-import { ChatCompletion } from '../../networking/common/openai';
+import { type APIUsage, ChatCompletion, isApiUsage } from '../../networking/common/openai';
 import { IOTelService } from '../../otel/common/otelService';
 import { retrieveCapturingTokenByCorrelation, storeCapturingTokenForCorrelation } from '../../requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -205,6 +205,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			let text = '';
 			let numToolsCalled = 0;
 			const requestId = ourRequestId;
+			let reportedUsage: APIUsage | undefined;
 
 			// consume stream
 			for await (const chunk of response.stream) {
@@ -230,6 +231,16 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 					} else if (chunk.mimeType === CustomDataPartMimeTypes.ContextManagement) {
 						const contextManagement = JSON.parse(new TextDecoder().decode(chunk.data)) as ContextManagementResponse;
 						await streamRecorder.callback?.(text, 0, { text: '', contextManagement });
+					} else if (chunk.mimeType === CustomDataPartMimeTypes.Usage) {
+						try {
+							const parsed = JSON.parse(new TextDecoder().decode(chunk.data));
+							if (isApiUsage(parsed)) {
+								// Last-write-wins: if multiple Usage DataParts arrive, keep the last one
+								reportedUsage = parsed;
+							}
+						} catch {
+							// ignore malformed usage data
+						}
 					}
 				} else if (chunk instanceof vscode.LanguageModelThinkingPart) {
 					if (streamRecorder.callback) {
@@ -250,7 +261,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 					type: ChatFetchResponseType.Success,
 					requestId,
 					serverRequestId: requestId,
-					usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } },
+					usage: reportedUsage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } },
 					value: text,
 					resolvedModel: this.languageModel.id
 				};
