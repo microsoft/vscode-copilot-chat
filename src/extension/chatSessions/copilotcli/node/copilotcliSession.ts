@@ -558,6 +558,14 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					});
 				}
 			})));
+			disposables.add(toDisposable(this._sdkSession.on('session.compaction_complete', (event) => {
+				if (this._stream && event.data.success && event.data.compactionTokensUsed) {
+					this._stream.usage({
+						completionTokens: event.data.compactionTokensUsed.output,
+						promptTokens: event.data.compactionTokensUsed.input,
+					});
+				}
+			})));
 			disposables.add(toDisposable(this._sdkSession.on('assistant.message_delta', (event) => {
 				// Support for streaming delta messages.
 				if (typeof event.data.deltaContent === 'string' && event.data.deltaContent.length) {
