@@ -50,8 +50,19 @@ import { getAgentFileNameFromFilePath, ICopilotCLIAgents, ICopilotCLISDK } from 
 import { CopilotCliBridgeSpanProcessor } from './copilotCliBridgeSpanProcessor';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
 import { ICopilotCLISkills } from './copilotCLISkills';
-import { ICopilotCLIMCPHandler, McpServerMappings, remapCustomAgentTools } from './mcpHandler';
+import { ICopilotCLIMCPHandler, MCPServerConfig, McpServerMappings, remapCustomAgentTools } from './mcpHandler';
 
+function buildGatewayDisplayNameMap(mcpServers: Record<string, MCPServerConfig> | undefined): Map<string, string> {
+	const map = new Map<string, string>();
+	if (mcpServers) {
+		for (const [gatewayName, config] of Object.entries(mcpServers)) {
+			if (config.displayName && config.displayName !== gatewayName) {
+				map.set(gatewayName, config.displayName);
+			}
+		}
+	}
+	return map;
+}
 
 const COPILOT_CLI_WORKSPACE_JSON_FILE_KEY = 'github.copilot.cli.workspaceSessionFile';
 
@@ -553,7 +564,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			}
 			this.logService.trace(`[CopilotCLISession] Created new CopilotCLI session ${sdkSession.sessionId}.`);
 
-			const session = this.createCopilotSession(sdkSession, workspace, agentName, sessionManager);
+			const session = this.createCopilotSession(sdkSession, workspace, agentName, sessionManager, mcpServers);
 			session.object.add(mcpGateway);
 			return session;
 		}
@@ -729,7 +740,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					return undefined;
 				}
 
-				const session = this.createCopilotSession(sdkSession, workspace, agentName, sessionManager);
+				const session = this.createCopilotSession(sdkSession, workspace, agentName, sessionManager, mcpServers);
 				session.object.add(mcpGateway);
 				return session;
 			}
@@ -749,11 +760,13 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	private async getChatHistoryImpl({ sessionId, workspace }: { sessionId: string; workspace: IWorkspaceInfo }, token: CancellationToken): Promise<{ history: (ChatRequestTurn2 | ChatResponseTurn2)[]; events: readonly SessionEvent[] }> {
 		const requestDetailsPromise = this._chatSessionMetadataStore.getRequestDetails(sessionId);
 		const agentIdPromise = this._chatSessionMetadataStore.getSessionAgent(sessionId);
+		const mcpNamesPromise = this._chatSessionMetadataStore.getMcpGatewayDisplayNames(sessionId);
 		const sessionManager = await raceCancellation(this.getSessionManager(), token);
 
 		if (!sessionManager || token.isCancellationRequested) {
 			requestDetailsPromise.catch(error => {/** */ });
 			agentIdPromise.catch(error => {/** */ });
+			mcpNamesPromise.catch(error => {/** */ });
 			return { history: [], events: [] };
 		}
 
@@ -782,7 +795,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			}
 		}
 
-		const [agentId, storedDetails] = await Promise.all([agentIdPromise, requestDetailsPromise]);
+		const [agentId, storedDetails, mcpGatewayNames] = await Promise.all([agentIdPromise, requestDetailsPromise, mcpNamesPromise]);
 
 		// Build lookup from copilotRequestId → RequestDetails for the callback
 		const customAgentLookup = this.createCustomAgentLookup();
@@ -814,7 +827,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			return mapping;
 		};
 
-		const history = buildChatHistoryFromEvents(sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, getWorkingDirectory(workspace), defaultModeInstructions);
+		const mcpNamesMap = mcpGatewayNames ? new Map(Object.entries(mcpGatewayNames)) : undefined;
+		const history = buildChatHistoryFromEvents(sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, getWorkingDirectory(workspace), defaultModeInstructions, mcpNamesMap);
 
 		if (legacyMappings.length > 0) {
 			void this._chatSessionMetadataStore.updateRequestDetails(sessionId, legacyMappings).catch(error => {
@@ -943,7 +957,10 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 
 		try {
-			const events = await readSessionEventsFile(sessionId);
+			const [events, mcpGatewayNames] = await Promise.all([
+				readSessionEventsFile(sessionId),
+				this._chatSessionMetadataStore.getMcpGatewayDisplayNames(sessionId),
+			]);
 
 			const sessionStartEvent = events.find((event): event is Extract<SessionEvent, { type: 'session.start' }> => event.type === 'session.start');
 			const workingDirectory = sessionStartEvent?.data.context?.cwd;
@@ -951,7 +968,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				this._sessionWorkingDirectories.set(sessionId, URI.file(workingDirectory));
 			}
 
-			const history = buildChatHistoryFromEvents(sessionId, undefined, events, () => undefined, this._delegationSummaryService, this.logService, workingDirectory ? URI.file(workingDirectory) : undefined);
+			const mcpNamesMap = mcpGatewayNames ? new Map(Object.entries(mcpGatewayNames)) : undefined;
+			const history = buildChatHistoryFromEvents(sessionId, undefined, events, () => undefined, this._delegationSummaryService, this.logService, workingDirectory ? URI.file(workingDirectory) : undefined, undefined, mcpNamesMap);
 			this._partialSessionHistories.set(sessionId, history);
 			return history;
 		} catch (error) {
@@ -993,8 +1011,16 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		return firstUserMessage;
 	}
 
-	private createCopilotSession(sdkSession: Session, workspaceInfo: IWorkspaceInfo, agentName: string | undefined, sessionManager: internal.LocalSessionManager): RefCountedSession {
-		const session = this.instantiationService.createInstance(CopilotCLISession, workspaceInfo, agentName, sdkSession, []);
+	private createCopilotSession(sdkSession: Session, workspaceInfo: IWorkspaceInfo, agentName: string | undefined, sessionManager: internal.LocalSessionManager, mcpServers?: Record<string, MCPServerConfig>): RefCountedSession {
+		const gatewayDisplayNames = buildGatewayDisplayNameMap(mcpServers);
+		const session = this.instantiationService.createInstance(CopilotCLISession, workspaceInfo, agentName, sdkSession, [], gatewayDisplayNames.size > 0 ? gatewayDisplayNames : undefined);
+
+		if (gatewayDisplayNames.size > 0) {
+			this._chatSessionMetadataStore.setMcpGatewayDisplayNames(
+				sdkSession.sessionId,
+				Object.fromEntries(gatewayDisplayNames)
+			).catch(err => this.logService.error(`[CopilotCLISession] Failed to store MCP gateway display names for session ${sdkSession.sessionId}`, err));
+		}
 		this._debugFileLogger.startSession(session.sessionId).catch(err => {
 			this.logService.error('[CopilotCLISession] Failed to start debug log session', err);
 		});
@@ -1285,6 +1311,10 @@ async function copySessionFilesForForking(sessionId: string, targetSessionId: st
 					if (workspaceInfo.repositoryProperties) {
 						await _chatSessionMetadataStore.storeRepositoryProperties(targetSessionId, workspaceInfo.repositoryProperties);
 					}
+				}
+				const mcpGatewayDisplayNames = await _chatSessionMetadataStore.getMcpGatewayDisplayNames(sessionId);
+				if (mcpGatewayDisplayNames) {
+					await _chatSessionMetadataStore.setMcpGatewayDisplayNames(targetSessionId, mcpGatewayDisplayNames);
 				}
 			})(),
 		]), token);

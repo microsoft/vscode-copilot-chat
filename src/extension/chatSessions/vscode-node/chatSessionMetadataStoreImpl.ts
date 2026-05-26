@@ -293,6 +293,18 @@ export class ChatSessionMetadataStore extends Disposable implements IChatSession
 		await this.updateMetadataFields(sessionId, { firstUserMessage: message });
 	}
 
+	async getMcpGatewayDisplayNames(sessionId: string): Promise<Record<string, string> | undefined> {
+		const metadata = await this.getSessionMetadata(sessionId);
+		return metadata?.mcpGatewayDisplayNames;
+	}
+
+	async setMcpGatewayDisplayNames(sessionId: string, mappings: Record<string, string>): Promise<void> {
+		const existing = await this.getMcpGatewayDisplayNames(sessionId) ?? {};
+		// New mappings win on conflicts, ensuring the latest display names are used.
+		const merged = { ...existing, ...mappings };
+		await this.updateMetadataFields(sessionId, { mcpGatewayDisplayNames: merged });
+	}
+
 	async getRequestDetails(sessionId: string): Promise<RequestDetails[]> {
 		await this._intialize.value;
 		const fileUri = this.getRequestMappingFileUri(sessionId);

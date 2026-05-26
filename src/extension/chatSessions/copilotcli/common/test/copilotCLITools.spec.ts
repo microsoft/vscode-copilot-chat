@@ -520,6 +520,38 @@ describe('CopilotCLITools', () => {
 		});
 	});
 
+	describe('createCopilotCLIToolInvocation with mcpGatewayDisplayNames', () => {
+		it('translates gateway name to display name when mapping is provided', () => {
+			const mapping = new Map([['my_server', 'My Server']]);
+			const part = createCopilotCLIToolInvocation(
+				{ toolName: 'unknown_mcp_tool', toolCallId: 'mcp-1', mcpServerName: 'my_server', mcpToolName: 'my-tool' },
+				undefined, undefined, undefined, mapping
+			) as ChatToolInvocationPart;
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part)).toContain('My Server');
+			expect(getInvocationMessageText(part)).toContain('my-tool');
+			expect(getInvocationMessageText(part)).not.toContain('my_server');
+		});
+
+		it('falls back to gateway name when mapping does not contain the server', () => {
+			const mapping = new Map([['other_server', 'Other Server']]);
+			const part = createCopilotCLIToolInvocation(
+				{ toolName: 'unknown_mcp_tool', toolCallId: 'mcp-2', mcpServerName: 'my_server', mcpToolName: 'my-tool' },
+				undefined, undefined, undefined, mapping
+			) as ChatToolInvocationPart;
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part)).toContain('my_server');
+		});
+
+		it('uses gateway name when no mapping is provided', () => {
+			const part = createCopilotCLIToolInvocation(
+				{ toolName: 'unknown_mcp_tool', toolCallId: 'mcp-3', mcpServerName: 'my_server', mcpToolName: 'my-tool' },
+			) as ChatToolInvocationPart;
+			expect(part).toBeInstanceOf(ChatToolInvocationPart);
+			expect(getInvocationMessageText(part)).toContain('my_server');
+		});
+	});
+
 	describe('process tool execution lifecycle', () => {
 		it('marks tool invocation complete and confirmed on success', () => {
 			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
@@ -945,6 +977,39 @@ describe('CopilotCLITools', () => {
 
 		it('returns false for str_replace_editor view command (not an edit)', () => {
 			expect(isCopilotCLIToolThatCouldRequirePermissions(makeEvent({ toolName: 'str_replace_editor', toolCallId: '13', arguments: { command: 'view', path: '/tmp/a' } }))).toBe(false);
+		});
+	});
+
+	describe('buildChatHistoryFromEvents with mcpGatewayDisplayNames', () => {
+		it('translates gateway name to display name in reconstructed MCP tool invocations', () => {
+			const mapping = new Map([['my_server', 'My Server']]);
+			const events: any[] = [
+				{ type: 'user.message', data: { content: 'Use MCP tool', attachments: [] } },
+				{ type: 'tool.execution_start', data: { toolName: 'custom_mcp_tool', toolCallId: 'mcp-1', mcpServerName: 'my_server', mcpToolName: 'my-tool', arguments: { foo: 'bar' } } },
+				{ type: 'tool.execution_complete', data: { toolCallId: 'mcp-1', toolName: 'custom_mcp_tool', mcpServerName: 'my_server', mcpToolName: 'my-tool', success: true, result: { contents: [] } } },
+			];
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger, undefined, undefined, mapping);
+			expect(turns).toHaveLength(2);
+			const responseTurn = turns[1] as ChatResponseTurn2;
+			const parts: any[] = ((responseTurn as any).response.parts ?? (responseTurn as any).response._parts ?? (responseTurn as any).response);
+			const toolPart = parts.find((p: any) => p instanceof ChatToolInvocationPart) as ChatToolInvocationPart;
+			expect(toolPart).toBeTruthy();
+			expect(getInvocationMessageText(toolPart)).toContain('My Server');
+			expect(getInvocationMessageText(toolPart)).not.toContain('my_server');
+		});
+
+		it('falls back to gateway name when no mapping is provided', () => {
+			const events: any[] = [
+				{ type: 'user.message', data: { content: 'Use MCP tool', attachments: [] } },
+				{ type: 'tool.execution_start', data: { toolName: 'custom_mcp_tool', toolCallId: 'mcp-2', mcpServerName: 'raw_gateway', mcpToolName: 'my-tool', arguments: {} } },
+				{ type: 'tool.execution_complete', data: { toolCallId: 'mcp-2', toolName: 'custom_mcp_tool', mcpServerName: 'raw_gateway', mcpToolName: 'my-tool', success: true, result: { contents: [] } } },
+			];
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
+			const responseTurn = turns[1] as ChatResponseTurn2;
+			const parts: any[] = ((responseTurn as any).response.parts ?? (responseTurn as any).response._parts ?? (responseTurn as any).response);
+			const toolPart = parts.find((p: any) => p instanceof ChatToolInvocationPart) as ChatToolInvocationPart;
+			expect(toolPart).toBeTruthy();
+			expect(getInvocationMessageText(toolPart)).toContain('raw_gateway');
 		});
 	});
 

@@ -109,6 +109,17 @@ export class MockChatSessionMetadataStore implements IChatSessionMetadataStore {
 		this._requestDetails.set(sessionId, existing);
 	}
 
+	private readonly _mcpGatewayDisplayNames = new Map<string, Record<string, string>>();
+
+	async getMcpGatewayDisplayNames(sessionId: string): Promise<Record<string, string> | undefined> {
+		return this._mcpGatewayDisplayNames.get(sessionId);
+	}
+
+	async setMcpGatewayDisplayNames(sessionId: string, mappings: Record<string, string>): Promise<void> {
+		const existing = this._mcpGatewayDisplayNames.get(sessionId) ?? {};
+		this._mcpGatewayDisplayNames.set(sessionId, { ...existing, ...mappings });
+	}
+
 	async getSessionAgent(sessionId: string): Promise<string | undefined> {
 		const details = this._requestDetails.get(sessionId) ?? [];
 		for (let i = details.length - 1; i >= 0; i--) {

@@ -524,7 +524,7 @@ export interface RequestIdDetails {
  * Build chat history from SDK events for VS Code chat session
  * Converts SDKEvents into ChatRequestTurn2 and ChatResponseTurn2 objects
  */
-export function buildChatHistoryFromEvents(sessionId: string, modelId: string | undefined, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => RequestIdDetails | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger, workingDirectory?: URI, defaultModeInstructionsForLastRequest?: StoredModeInstructions): (ChatRequestTurn2 | ChatResponseTurn2)[] {
+export function buildChatHistoryFromEvents(sessionId: string, modelId: string | undefined, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => RequestIdDetails | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger, workingDirectory?: URI, defaultModeInstructionsForLastRequest?: StoredModeInstructions, mcpGatewayDisplayNames?: ReadonlyMap<string, string>): (ChatRequestTurn2 | ChatResponseTurn2)[] {
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
 	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>();
@@ -685,7 +685,7 @@ export function buildChatHistoryFromEvents(sessionId: string, modelId: string | 
 				break;
 			}
 			case 'tool.execution_start': {
-				const responsePart = processToolExecutionStart(event, pendingToolInvocations, workingDirectory);
+				const responsePart = processToolExecutionStart(event, pendingToolInvocations, workingDirectory, mcpGatewayDisplayNames);
 				if (responsePart instanceof ChatResponseThinkingProgressPart) {
 					currentResponseParts.push(responsePart);
 				}
@@ -861,8 +861,8 @@ export function enrichToolInvocationWithSubagentMetadata(
 	}
 }
 
-export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>, workingDirectory?: URI): ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart | undefined {
-	const toolInvocation = createCopilotCLIToolInvocation(event.data as ToolCall, undefined, workingDirectory);
+export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart, toolData: ToolCall, parentToolCallId: string | undefined]>, workingDirectory?: URI, mcpGatewayDisplayNames?: ReadonlyMap<string, string>): ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart | undefined {
+	const toolInvocation = createCopilotCLIToolInvocation(event.data as ToolCall, undefined, workingDirectory, undefined, mcpGatewayDisplayNames);
 	if (toolInvocation) {
 		if (toolInvocation instanceof ChatToolInvocationPart && event.data.parentToolCallId) {
 			// Resolve to the root ancestor so all descendants are grouped under the
@@ -967,10 +967,11 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 export function createCopilotCLIToolInvocation(data: {
 	toolCallId: string; toolName: string; arguments?: unknown; mcpServerName?: string | undefined;
 	mcpToolName?: string | undefined;
-}, editId?: string, workingDirectory?: URI, logger?: ILogger): ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart | undefined {
+}, editId?: string, workingDirectory?: URI, logger?: ILogger, mcpGatewayDisplayNames?: ReadonlyMap<string, string>): ChatToolInvocationPart | ChatResponseMarkdownPart | ChatResponseThinkingProgressPart | undefined {
 	if (!Object.hasOwn(ToolFriendlyNameAndHandlers, data.toolName)) {
 		const mcpServer = l10n.t('MCP Server');
-		const toolName = data.mcpServerName && data.mcpToolName ? `${data.mcpServerName}, ${data.mcpToolName} (${mcpServer})` : data.toolName;
+		const displayServerName = (data.mcpServerName && mcpGatewayDisplayNames?.get(data.mcpServerName)) || data.mcpServerName;
+		const toolName = displayServerName && data.mcpToolName ? `${displayServerName}, ${data.mcpToolName} (${mcpServer})` : data.toolName;
 		const invocation = new ChatToolInvocationPart(toolName ?? 'unknown', data.toolCallId ?? '');
 		invocation.isConfirmed = false;
 		invocation.isComplete = false;
