@@ -417,11 +417,15 @@ class ToolResultElement extends PromptElement<IToolResultElementActualProps & Ba
 }
 
 export function sendInvokedToolTelemetry(tokenizer: ITokenizer, telemetry: ITelemetryService, toolName: string, toolResult: LanguageModelToolResult2) {
+	// Filter out image data parts: this renderer has no IPromptEndpoint registered,
+	// so PrimitiveToolResult.onImage() would crash accessing endpoint.supportsVision.
+	// Image blobs don't contribute to meaningful token counts anyway.
+	const textContent = toolResult.content.filter(part => !isImageDataPart(part));
 	new BasePromptRenderer(
 		{ modelMaxPromptTokens: Infinity },
 		class extends PromptElement {
 			render() {
-				return <UserMessage><PrimitiveToolResult content={toolResult.content} /></UserMessage>;
+				return <UserMessage><PrimitiveToolResult content={textContent} /></UserMessage>;
 			}
 		},
 		{},
