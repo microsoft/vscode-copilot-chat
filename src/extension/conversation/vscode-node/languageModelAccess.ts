@@ -11,7 +11,7 @@ import { CopilotToken } from '../../../platform/authentication/common/copilotTok
 import { IBlockedExtensionService } from '../../../platform/chat/common/blockedExtensionService';
 import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
@@ -159,6 +159,24 @@ function getModelCapabilitiesDescription(endpoint: IChatEndpoint): string | unde
 	return undefined;
 }
 
+/**
+ * Returns a numeric priority for ordering in the model picker.
+ * Lower values appear first. Top-level featuring remains controlled by
+ * VS Code's models control manifest; this priority only affects ordering.
+ */
+function getVendorPriority(modelProvider: string): number {
+	switch (modelProvider.toLowerCase()) {
+		case 'openai':
+			return 0;
+		case 'anthropic':
+			return 1;
+		case 'google':
+			return 2;
+		default:
+			return 3;
+	}
+}
+
 export class LanguageModelAccess extends Disposable implements IExtensionContribution {
 
 	readonly id = 'languageModelAccess';
@@ -180,6 +198,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		@IVSCodeExtensionContext private readonly _vsCodeExtensionContext: IVSCodeExtensionContext,
 		@IAutomodeService private readonly _automodeService: IAutomodeService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super();
 
@@ -236,6 +255,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		}
 
 		const models: vscode.LanguageModelChatInformation[] = [];
+		const vendorOrderingEnabled = this._configurationService.getConfig(ConfigKey.ModelPickerVendorOrdering);
 		const allEndpoints = await this._endpointProvider.getAllChatEndpoints();
 		const chatEndpoints = allEndpoints.filter(e => e.showInModelPicker || e.model === 'gpt-4o-mini');
 		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, allEndpoints);
@@ -344,6 +364,9 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				},
 				...buildConfigurationSchema(endpoint),
 			};
+			if (vendorOrderingEnabled && !(endpoint instanceof AutoChatEndpoint)) {
+				(model as vscode.LanguageModelChatInformation & { vendorPriority?: number }).vendorPriority = getVendorPriority(endpoint.modelProvider);
+			}
 
 			models.push(model);
 

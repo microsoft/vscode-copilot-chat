@@ -877,6 +877,9 @@ export namespace ConfigKey {
 
 	export const RateLimitAutoSwitchToAuto = defineSetting<boolean>('chat.rateLimitAutoSwitchToAuto', ConfigType.Simple, false, vBoolean());
 
+	/** Enable vendor-prioritized ordering in the model picker */
+	export const ModelPickerVendorOrdering = defineSetting<boolean>('chat.modelPickerVendorOrdering', ConfigType.Simple, false, vBoolean());
+
 	/** Use the Messages API instead of Chat Completions when supported */
 	export const UseAnthropicMessagesApi = defineSetting<boolean | undefined>('chat.anthropic.useMessagesApi', ConfigType.ExperimentBased, true);
 	/** Context editing mode for Anthropic Messages API. 'off' disables context editing. */
