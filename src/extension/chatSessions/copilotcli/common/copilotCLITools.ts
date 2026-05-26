@@ -1574,6 +1574,521 @@ interface IManageTodoListToolInputParams {
 	}[];
 }
 
+// ── SQL-based todo tracking ─────────────────────────────────────────────────
+
+type TodoStatus = 'not-started' | 'in-progress' | 'completed';
+interface TrackedTodo {
+	id: string;
+	title: string;
+	description: string;
+	status: TodoStatus;
+}
+
+const SQL_STATUS_MAP: Record<string, TodoStatus> = {
+	'pending': 'not-started',
+	'in_progress': 'in-progress',
+	'done': 'completed',
+	'blocked': 'not-started', // closest VS Code UI equivalent
+};
+
+/**
+ * Parse SQL INSERT into todos and extract todo items.
+ * Handles: INSERT INTO todos (id, title, description) VALUES ('id', 'title', 'desc'), ...
+ * Also handles: INSERT INTO todos (id, title) VALUES ('id', 'title'), ...
+ * Splits compound statements on semicolons so INSERT INTO todo_deps is not misinterpreted.
+ */
+function parseSqlTodoInserts(query: string): TrackedTodo[] {
+	// Split on semicolons to isolate individual statements
+	const statements = query.split(/;\s*/);
+	const allTodos: TrackedTodo[] = [];
+	for (const stmt of statements) {
+		const normalized = stmt.trim().toUpperCase();
+		if (!normalized.startsWith('INSERT INTO TODOS')) {
+			continue;
+		}
+
+		// Extract column names to determine ordering
+		const colMatch = stmt.match(/INSERT\s+INTO\s+todos\s*\(([^)]+)\)/i);
+		if (!colMatch) {
+			continue;
+		}
+		const columns = colMatch[1].split(',').map(c => c.trim().toLowerCase());
+		const idIdx = columns.indexOf('id');
+		const titleIdx = columns.indexOf('title');
+		const descIdx = columns.indexOf('description');
+		const statusIdx = columns.indexOf('status');
+
+		if (idIdx === -1 || titleIdx === -1) {
+			continue;
+		}
+
+		// Extract VALUES tuples using quote-aware parsing (handles parentheses inside quoted strings)
+		const valuesStart = stmt.toUpperCase().indexOf('VALUES');
+		if (valuesStart === -1) {
+			continue;
+		}
+		const valuesStr = stmt.slice(valuesStart + 6);
+		const tuples = extractQuotedTuples(valuesStr);
+
+		for (const raw of tuples) {
+			const values = splitQuotedValues(raw);
+
+			const id = values[idIdx] ?? '';
+			const title = values[titleIdx] ?? '';
+			const desc = descIdx >= 0 ? (values[descIdx] ?? '') : '';
+			const statusRaw = statusIdx >= 0 ? (values[statusIdx] ?? 'pending') : 'pending';
+
+			allTodos.push({
+				id,
+				title,
+				description: desc,
+				status: SQL_STATUS_MAP[statusRaw.toLowerCase()] ?? 'not-started',
+			});
+		}
+	}
+	return allTodos;
+}
+
+/**
+ * Extract the raw content of parenthesized tuples from a VALUES clause,
+ * respecting single-quoted strings (which may contain parentheses).
+ * Returns an array of raw tuple contents (without outer parens).
+ */
+function extractQuotedTuples(valuesStr: string): string[] {
+	const tuples: string[] = [];
+	let inQuote = false;
+	let depth = 0;
+	let current = '';
+
+	for (let i = 0; i < valuesStr.length; i++) {
+		const ch = valuesStr[i];
+
+		if (ch === '\'' && !inQuote) {
+			inQuote = true;
+			current += ch;
+		} else if (ch === '\'' && inQuote) {
+			// Handle escaped quotes ''
+			if (i + 1 < valuesStr.length && valuesStr[i + 1] === '\'') {
+				current += '\'\'';
+				i++;
+			} else {
+				inQuote = false;
+				current += ch;
+			}
+		} else if (ch === '(' && !inQuote) {
+			depth++;
+			if (depth === 1) {
+				current = ''; // start of a new tuple
+			} else {
+				current += ch;
+			}
+		} else if (ch === ')' && !inQuote) {
+			depth--;
+			if (depth === 0) {
+				tuples.push(current);
+				current = '';
+			} else {
+				current += ch;
+			}
+		} else {
+			if (depth > 0) {
+				current += ch;
+			}
+		}
+	}
+
+	return tuples;
+}
+
+/**
+ * Split a comma-separated value list respecting single-quoted strings.
+ * Returns unquoted, unescaped values.
+ */
+function splitQuotedValues(raw: string): string[] {
+	const values: string[] = [];
+	let current = '';
+	let inQuote = false;
+	for (let i = 0; i < raw.length; i++) {
+		const ch = raw[i];
+		if (ch === '\'' && !inQuote) {
+			inQuote = true;
+		} else if (ch === '\'' && inQuote) {
+			if (i + 1 < raw.length && raw[i + 1] === '\'') {
+				current += '\''; // escaped quote
+				i++;
+			} else {
+				inQuote = false;
+			}
+		} else if (ch === ',' && !inQuote) {
+			values.push(current.trim());
+			current = '';
+		} else {
+			current += ch;
+		}
+	}
+	values.push(current.trim());
+	return values;
+}
+
+/**
+ * Parse SQL UPDATE on the todos table to extract status changes.
+ * Handles: UPDATE todos SET status = 'done' WHERE id = 'x'
+ *          UPDATE todos SET status = 'done' WHERE id IN ('x', 'y')
+ * Also handles compound statements separated by semicolons/newlines.
+ */
+function parseSqlTodoUpdates(query: string): Array<{ id: string; status: TodoStatus }> {
+	const updates: Array<{ id: string; status: TodoStatus }> = [];
+
+	// Split on semicolons to handle compound statements
+	const statements = query.split(/;\s*/);
+	for (const stmt of statements) {
+		const normalized = stmt.trim().toUpperCase();
+		if (!normalized.startsWith('UPDATE TODOS')) {
+			continue;
+		}
+
+		// Extract status value
+		const statusMatch = stmt.match(/SET\s+status\s*=\s*'([^']*)'/i);
+		if (!statusMatch) {
+			continue;
+		}
+		const status = SQL_STATUS_MAP[statusMatch[1].toLowerCase()];
+		if (!status) {
+			continue;
+		}
+
+		// Extract single ID: WHERE id = 'x'
+		const singleIdMatch = stmt.match(/WHERE\s+id\s*=\s*'([^']*)'/i);
+		if (singleIdMatch) {
+			updates.push({ id: singleIdMatch[1], status });
+			continue;
+		}
+
+		// Extract multiple IDs: WHERE id IN ('x', 'y')
+		const inMatch = stmt.match(/WHERE\s+id\s+IN\s*\(([^)]+)\)/i);
+		if (inMatch) {
+			const ids = Array.from(inMatch[1].matchAll(/'([^']*)'/g)).map(m => m[1]);
+			for (const id of ids) {
+				updates.push({ id, status });
+			}
+		}
+	}
+
+	return updates;
+}
+
+/**
+ * Parse SQL DELETE on the todos table to determine which todos should be removed.
+ * Returns 'all' if it's a blanket delete (no WHERE or WHERE status = ...), or
+ * an array of specific IDs if WHERE id = / WHERE id IN is used.
+ */
+function parseSqlTodoDeletes(query: string): { type: 'all' | 'by-status' | 'by-ids'; statusFilter?: string; ids?: string[] }[] {
+	const results: { type: 'all' | 'by-status' | 'by-ids'; statusFilter?: string; ids?: string[] }[] = [];
+
+	const statements = query.split(/;\s*/);
+	for (const stmt of statements) {
+		const normalized = stmt.trim().toUpperCase();
+		if (!normalized.startsWith('DELETE FROM TODOS')) {
+			continue;
+		}
+
+		// DELETE FROM todos WHERE status = 'done'
+		const statusMatch = stmt.match(/WHERE\s+status\s*=\s*'([^']*)'/i);
+		if (statusMatch) {
+			results.push({ type: 'by-status', statusFilter: statusMatch[1].toLowerCase() });
+			continue;
+		}
+
+		// DELETE FROM todos WHERE id = 'x'
+		const singleIdMatch = stmt.match(/WHERE\s+id\s*=\s*'([^']*)'/i);
+		if (singleIdMatch) {
+			results.push({ type: 'by-ids', ids: [singleIdMatch[1]] });
+			continue;
+		}
+
+		// DELETE FROM todos WHERE id IN ('x', 'y')
+		const inMatch = stmt.match(/WHERE\s+id\s+IN\s*\(([^)]+)\)/i);
+		if (inMatch) {
+			const ids = Array.from(inMatch[1].matchAll(/'([^']*)'/g)).map(m => m[1]);
+			results.push({ type: 'by-ids', ids });
+			continue;
+		}
+
+		// DELETE FROM todos (no WHERE — delete all)
+		results.push({ type: 'all' });
+	}
+
+	return results;
+}
+
+/**
+ * Tracks SQL-based todo state across a session and syncs to VS Code's todo list UI.
+ * The agent uses `INSERT INTO todos` and `UPDATE todos SET status` via the sql tool;
+ * this class maintains the accumulated state and pushes it to CoreManageTodoList.
+ */
+export class SqlTodoTracker {
+	private readonly _todos = new Map<string, TrackedTodo>();
+	private readonly _instanceId = Math.random().toString(36).substring(2, 8);
+
+	get debugId(): string {
+		return this._instanceId;
+	}
+
+	constructor() {
+		console.log(`[SqlTodoTracker] New tracker instance created: ${this._instanceId}`);
+	}
+
+	/**
+	 * Process a SQL tool call. Returns true if the query modified the todos table
+	 * and the VS Code todo list should be updated.
+	 */
+	processSqlQuery(query: string): boolean {
+		console.log(`[SqlTodoTracker:${this._instanceId}] processSqlQuery called, current map size: ${this._todos.size}, keys: [${Array.from(this._todos.keys()).join(', ')}]`);
+		let changed = false;
+
+		// Try parsing inserts (handles compound statements internally)
+		const inserts = parseSqlTodoInserts(query);
+		if (inserts.length > 0) {
+			for (const todo of inserts) {
+				console.log(`[SqlTodoTracker] Inserting todo: id=${todo.id}, title=${todo.title}, status=${todo.status}`);
+				this._todos.set(todo.id, todo);
+			}
+			console.log(`[SqlTodoTracker] Total tracked todos after insert: ${this._todos.size}`);
+			changed = true;
+		}
+
+		// Try parsing updates (handles compound statements internally)
+		const updates = parseSqlTodoUpdates(query);
+		if (updates.length > 0) {
+			for (const { id, status } of updates) {
+				const existing = this._todos.get(id);
+				if (existing) {
+					console.log(`[SqlTodoTracker] Updating todo: id=${id}, ${existing.status} -> ${status}`);
+					existing.status = status;
+				} else {
+					// We don't know the title, but track the status change anyway
+					console.log(`[SqlTodoTracker] Updating unknown todo (using id as title): id=${id}, status=${status}`);
+					this._todos.set(id, { id, title: id, description: '', status });
+				}
+			}
+			console.log(`[SqlTodoTracker] Total tracked todos after update: ${this._todos.size}`);
+			changed = true;
+		}
+
+		// Try parsing deletes (handles compound statements internally)
+		const deletes = parseSqlTodoDeletes(query);
+		if (deletes.length > 0) {
+			for (const del of deletes) {
+				if (del.type === 'all') {
+					console.log(`[SqlTodoTracker] DELETE all todos, clearing ${this._todos.size} entries`);
+					this._todos.clear();
+				} else if (del.type === 'by-status' && del.statusFilter) {
+					const targetStatus = SQL_STATUS_MAP[del.statusFilter];
+					if (targetStatus) {
+						for (const [id, todo] of this._todos) {
+							if (todo.status === targetStatus) {
+								console.log(`[SqlTodoTracker] DELETE by status: removing id=${id} (status=${todo.status})`);
+								this._todos.delete(id);
+							}
+						}
+					}
+				} else if (del.type === 'by-ids' && del.ids) {
+					for (const id of del.ids) {
+						console.log(`[SqlTodoTracker] DELETE by id: removing id=${id}`);
+						this._todos.delete(id);
+					}
+				}
+			}
+			console.log(`[SqlTodoTracker] Total tracked todos after delete: ${this._todos.size}`);
+			changed = true;
+		}
+
+		return changed;
+	}
+
+	/**
+	 * Rebuild the full todo state from a SELECT result on the todos table.
+	 * This is the authoritative sync point — the SQL database is the source of truth.
+	 * Parses the markdown table format returned by the SQL tool:
+	 *   | id | title | description | status | ... |
+	 */
+	rebuildFromSelectResult(resultContent: string): boolean {
+		const rows = parseSqlTableResult(resultContent);
+
+		// Empty result means all todos were deleted — clear the tracker
+		if (rows.length === 0) {
+			if (this._todos.size > 0) {
+				console.log(`[SqlTodoTracker] SELECT returned 0 rows, clearing ${this._todos.size} tracked todos`);
+				this._todos.clear();
+				return true;
+			}
+			return false;
+		}
+
+		// Check that the result has the expected columns
+		const firstRow = rows[0];
+		if (!('id' in firstRow) || !('title' in firstRow)) {
+			console.log(`[SqlTodoTracker] SELECT result missing id/title columns, skipping rebuild`);
+			return false;
+		}
+
+		this._todos.clear();
+		for (const row of rows) {
+			const id = row['id'] ?? '';
+			const title = row['title'] ?? '';
+			const description = row['description'] ?? '';
+			const statusRaw = row['status'] ?? 'pending';
+			const status = SQL_STATUS_MAP[statusRaw.toLowerCase()] ?? 'not-started';
+
+			console.log(`[SqlTodoTracker] Rebuild from SELECT: id=${id}, title=${title}, status=${status}`);
+			this._todos.set(id, { id, title, description, status });
+		}
+		console.log(`[SqlTodoTracker] Rebuilt ${this._todos.size} todos from SELECT result`);
+		return true;
+	}
+
+	/**
+	 * Get the current todo list formatted for VS Code's CoreManageTodoList tool.
+	 */
+	getTodoList(): IManageTodoListToolInputParams['todoList'] {
+		const todos = Array.from(this._todos.values());
+		return todos.map((todo, i) => ({
+			id: i,
+			title: todo.title,
+			description: todo.description,
+			status: todo.status,
+		}));
+	}
+}
+
+/**
+ * Parse a markdown table from SQL tool output into an array of row objects.
+ * Expected format:
+ *   N row(s) returned:
+ *   | col1 | col2 | ... |
+ *   | --- | --- | ... |
+ *   | val1 | val2 | ... |
+ */
+function parseSqlTableResult(content: string): Array<Record<string, string>> {
+	const lines = content.split('\n').map(l => l.trim()).filter(l => l.startsWith('|'));
+	if (lines.length < 3) {
+		return []; // Need header + separator + at least 1 data row
+	}
+
+	const parseRow = (line: string): string[] =>
+		line.split('|').slice(1, -1).map(cell => cell.trim());
+
+	const headers = parseRow(lines[0]);
+
+	// Skip separator line (lines[1])
+	const rows: Array<Record<string, string>> = [];
+	for (let i = 2; i < lines.length; i++) {
+		const values = parseRow(lines[i]);
+		const row: Record<string, string> = {};
+		for (let j = 0; j < headers.length && j < values.length; j++) {
+			row[headers[j]] = values[j];
+		}
+		rows.push(row);
+	}
+	return rows;
+}
+
+/**
+ * Process a SQL tool execution event and update the VS Code todo list if the
+ * query modifies the todos table.
+ */
+export async function updateTodoListFromSql(
+	event: ToolExecutionStartEvent,
+	tracker: SqlTodoTracker,
+	toolsService: IToolsService,
+	toolInvocationToken: ChatParticipantToolToken,
+	token: CancellationToken
+) {
+	const toolData = event.data as ToolCall;
+
+	if (toolData.toolName !== 'sql') {
+		return;
+	}
+
+	const query = toolData.arguments.query;
+	const database = toolData.arguments.database;
+	if (!query || database === 'session_store') {
+		console.log(`[SqlTodoTracker] Skipping SQL tool call: ${!query ? 'no query' : 'session_store database'}`);
+		return;
+	}
+
+	console.log(`[SqlTodoTracker] Processing SQL query (toolCallId=${event.data.toolCallId}): ${query.substring(0, 200)}`);
+	if (!tracker.processSqlQuery(query)) {
+		console.log(`[SqlTodoTracker] Query did not modify todos table, skipping UI update`);
+		return;
+	}
+
+	const todoList = tracker.getTodoList();
+	if (!todoList.length) {
+		console.log(`[SqlTodoTracker] No todos to push to UI`);
+		return;
+	}
+
+	console.log(`[SqlTodoTracker] Pushing ${todoList.length} todos to VS Code UI: ${JSON.stringify(todoList)}`);
+	await toolsService.invokeTool(ToolName.CoreManageTodoList, {
+		input: {
+			operation: 'write',
+			todoList,
+		} satisfies IManageTodoListToolInputParams,
+		toolInvocationToken,
+	}, token);
+	console.log(`[SqlTodoTracker] Successfully pushed todos to VS Code UI`);
+}
+
+/**
+ * Process a SQL tool.execution_complete event. When the agent runs a SELECT on
+ * the todos table and results come back, rebuild the tracker state from the
+ * authoritative database output and sync to VS Code.
+ */
+export async function syncTodoListFromSqlResult(
+	event: ToolExecutionCompleteEvent,
+	originalQuery: string | undefined,
+	tracker: SqlTodoTracker,
+	toolsService: IToolsService,
+	toolInvocationToken: ChatParticipantToolToken,
+	token: CancellationToken
+) {
+	if (!originalQuery || !event.data.success || !event.data.result?.content) {
+		return;
+	}
+
+	// Only process SELECT queries on the todos table (not subqueries inside DELETE/UPDATE)
+	const normalized = originalQuery.trim().toUpperCase();
+	const firstKeyword = normalized.split(/\s+/)[0];
+	const isSelectOnTodos = (firstKeyword === 'SELECT' || firstKeyword === 'WITH') && normalized.includes('FROM TODOS');
+	if (!isSelectOnTodos) {
+		return;
+	}
+
+	const resultContent = typeof event.data.result.content === 'string'
+		? event.data.result.content
+		: JSON.stringify(event.data.result.content);
+
+	console.log(`[SqlTodoTracker] SELECT on todos completed, rebuilding from result: ${resultContent.substring(0, 200)}`);
+
+	if (!tracker.rebuildFromSelectResult(resultContent)) {
+		console.log(`[SqlTodoTracker] Could not parse SELECT result, skipping UI sync`);
+		return;
+	}
+
+	const todoList = tracker.getTodoList();
+
+	console.log(`[SqlTodoTracker] Syncing ${todoList.length} todos to VS Code UI from SELECT result: ${JSON.stringify(todoList)}`);
+	await toolsService.invokeTool(ToolName.CoreManageTodoList, {
+		input: {
+			operation: 'write',
+			todoList,
+		} satisfies IManageTodoListToolInputParams,
+		toolInvocationToken,
+	}, token);
+	console.log(`[SqlTodoTracker] Successfully synced todos from SELECT result`);
+}
+
 /**
  * No-op formatter for tool invocations that do not require custom formatting.
  * The `toolCall` parameter is unused and present for interface consistency.
