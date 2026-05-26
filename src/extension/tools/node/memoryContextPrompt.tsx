@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
@@ -12,7 +13,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Tag } from '../../prompts/node/base/tag';
-import { IAgentMemoryService, normalizeCitations, RepoMemoryEntry } from '../common/agentMemoryService';
+import { IAgentMemoryService, isCopilotMemoryConfigEnabled, normalizeCitations, RepoMemoryEntry } from '../common/agentMemoryService';
 import { ToolName } from '../common/toolNames';
 import { extractSessionId } from './memoryTool';
 
@@ -27,6 +28,7 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 	constructor(
 		props: any,
 		@IAgentMemoryService private readonly agentMemoryService: IAgentMemoryService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
@@ -37,7 +39,7 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 	}
 
 	async render() {
-		const enableCopilotMemory = this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
+		const enableCopilotMemory = isCopilotMemoryConfigEnabled(this.authenticationService, this.configurationService, this.experimentationService);
 		const enableMemoryTool = this.configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, this.experimentationService);
 
 		const userMemoryContent = enableMemoryTool ? await this.getUserMemoryContent() : undefined;
@@ -250,6 +252,7 @@ export class MemoryContextPrompt extends PromptElement<MemoryContextPromptProps>
 export class MemoryInstructionsPrompt extends PromptElement<BasePromptElementProps> {
 	constructor(
 		props: PromptElementProps<BasePromptElementProps>,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) {
@@ -257,7 +260,7 @@ export class MemoryInstructionsPrompt extends PromptElement<BasePromptElementPro
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const enableCopilotMemory = this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
+		const enableCopilotMemory = isCopilotMemoryConfigEnabled(this.authenticationService, this.configurationService, this.experimentationService);
 		const enableMemoryTool = this.configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, this.experimentationService);
 		if (!enableCopilotMemory && !enableMemoryTool) {
 			return null;
