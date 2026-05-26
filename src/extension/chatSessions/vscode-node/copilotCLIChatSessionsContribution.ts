@@ -6,7 +6,7 @@
 import type { Attachment, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
-import { ChatExtendedRequestHandler, ChatSessionProviderOptionItem, Uri } from 'vscode';
+import { ChatExtendedRequestHandler, ChatRequestTurn2, ChatSessionProviderOptionItem, Uri } from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { INativeEnvService } from '../../../platform/env/common/envService';
@@ -33,6 +33,7 @@ import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../util/vs/base/common/uri';
 import { EXTENSION_ID } from '../../common/constants';
 import { ChatVariablesCollection, extractDebugTargetSessionIds, isPromptFile } from '../../prompt/common/chatVariablesCollection';
+import { GitBranchNameGenerator } from '../../prompt/node/gitBranch';
 import { IToolsService } from '../../tools/common/toolsService';
 import { IChatSessionMetadataStore, RepositoryProperties, StoredModeInstructions } from '../common/chatSessionMetadataStore';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
@@ -1094,6 +1095,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		private readonly promptResolver: CopilotCLIPromptResolver,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
 		private readonly cloudSessionProvider: CopilotCloudSessionsProvider | undefined,
+		private readonly branchNameGenerator: GitBranchNameGenerator | undefined,
 		@IGitService private readonly gitService: IGitService,
 		@ICopilotCLIModels private readonly copilotCLIModels: ICopilotCLIModels,
 		@ICopilotCLIAgents private readonly copilotCLIAgents: ICopilotCLIAgents,
@@ -1302,12 +1304,18 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				return {};
 			}
 
+			const requestTurn = new ChatRequestTurn2(request.prompt ?? '', request.command, [], '', [], [], undefined, undefined, undefined);
+			const fakeContext: vscode.ChatContext = {
+				history: [requestTurn],
+				yieldRequested: false,
+			};
+			const branchNamePromise = (isUntitled && request.prompt && this.branchNameGenerator) ? this.branchNameGenerator.generateBranchName(fakeContext, token) : Promise.resolve(undefined);
 			const [model, agent] = await Promise.all([
 				this.getModelId(request, token),
 				this.getAgent(id, request, token),
 			]);
 
-			const sessionResult = await this.getOrCreateSession(request, chatSessionContext, stream, { model, agent }, disposables, token);
+			const sessionResult = await this.getOrCreateSession(request, chatSessionContext, stream, { model, agent, branchName: branchNamePromise }, disposables, token);
 			const session = sessionResult.session;
 			if (session) {
 				disposables.add(session);
@@ -1365,7 +1373,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			} else {
 				// Construct the full prompt with references to be sent to CLI.
 				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.workspace, [], token);
-				await session.object.handleRequest(request, { prompt }, attachments, model, authInfo, token);
+				const input = (request.command && (copilotCLICommands as readonly string[]).includes(request.command))
+					? { command: request.command as CopilotCLICommand, prompt }
+					: { prompt: prompt };
+				await session.object.handleRequest(request, input, attachments, model, authInfo, token);
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
 			}
 
@@ -1671,13 +1682,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 	}
 
-	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, stream: vscode.ChatResponseStream, options: { model: string | undefined; agent: SweCustomAgent | undefined }, disposables: DisposableStore, token: vscode.CancellationToken): Promise<{ session: IReference<ICopilotCLISession> | undefined; trusted: boolean }> {
+	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, stream: vscode.ChatResponseStream, options: { model: string | undefined; agent: SweCustomAgent | undefined; branchName: Promise<string | undefined> }, disposables: DisposableStore, token: vscode.CancellationToken): Promise<{ session: IReference<ICopilotCLISession> | undefined; trusted: boolean }> {
 		const { resource } = chatSessionContext.chatSessionItem;
 		const existingSessionId = this.sessionItemProvider.untitledSessionIdMapping.get(SessionIdForCLI.parse(resource));
 		const id = existingSessionId ?? SessionIdForCLI.parse(resource);
 		const isNewSession = chatSessionContext.isUntitled && !existingSessionId;
 
-		const { workspaceInfo, cancelled, trusted } = await this.getOrInitializeWorkingDirectory(chatSessionContext, stream, request.toolInvocationToken, token);
+		const { workspaceInfo, cancelled, trusted } = await this.getOrInitializeWorkingDirectory(chatSessionContext, options.branchName, stream, request.toolInvocationToken, token);
 		const workingDirectory = getWorkingDirectory(workspaceInfo);
 		const worktreeProperties = workspaceInfo.worktreeProperties;
 		if (cancelled || token.isCancellationRequested) {
@@ -1752,6 +1763,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 	private async getOrInitializeWorkingDirectory(
 		chatSessionContext: vscode.ChatSessionContext | undefined,
+		branchName: Promise<string | undefined>,
 		stream: vscode.ChatResponseStream,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
@@ -1770,7 +1782,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				// Use FolderRepositoryManager to initialize folder/repository with worktree creation
 				const branch = _sessionBranch.get(id);
 				const isolation = _sessionIsolation.get(id) ?? undefined;
-				folderInfo = await this.folderRepositoryManager.initializeFolderRepository(id, { stream, toolInvocationToken, branch: branch ?? undefined, isolation, folder: undefined }, token);
+				folderInfo = await this.folderRepositoryManager.initializeFolderRepository(id, { stream, toolInvocationToken, branch: branch ?? undefined, isolation, folder: undefined, newBranch: branchName }, token);
 			} else {
 				// Existing session - use getFolderRepository for resolution with trust check
 				folderInfo = await this.folderRepositoryManager.getFolderRepository(id, { promptForTrust: true, stream }, token);
@@ -1821,7 +1833,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		})();
 
 		const [{ workspaceInfo, cancelled }, model, agent] = await Promise.all([
-			this.getOrInitializeWorkingDirectory(undefined, stream, request.toolInvocationToken, token),
+			this.getOrInitializeWorkingDirectory(undefined, Promise.resolve(undefined), stream, request.toolInvocationToken, token),
 			this.getModelId(request, token), // prefer model in request, as we're delegating from another session here.
 			this.getAgent(undefined, undefined, token)
 		]);

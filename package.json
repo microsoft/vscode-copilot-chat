@@ -4540,6 +4540,14 @@
 							"advanced"
 						]
 					},
+					"github.copilot.chat.cli.aiGenerateBranchNames.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.aiGenerateBranchNames.enabled%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.cli.forkSessions.enabled": {
 						"type": "boolean",
 						"default": false,
