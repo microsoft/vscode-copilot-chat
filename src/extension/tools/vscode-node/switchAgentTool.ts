@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { ConfigKey } from '../../../platform/configuration/common/configurationService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { PlanAgentProvider } from '../../agents/vscode-node/planAgentProvider';
@@ -26,7 +27,7 @@ export class SwitchAgentTool implements ICopilotTool<ISwitchAgentParams> {
 			throw new Error(vscode.l10n.t('Only "Plan" agent is supported'));
 		}
 
-		const planAgentBody = PlanAgentProvider.buildAgentBody();
+		const planAgentBody = PlanAgentProvider.buildAgentBody(vscode.workspace.getConfiguration().get<boolean>(ConfigKey.PlanAgentMermaidEnabled.fullyQualifiedId, false));
 
 		// Execute command to switch agent
 		await vscode.commands.executeCommand('workbench.action.chat.toggleAgentMode', {

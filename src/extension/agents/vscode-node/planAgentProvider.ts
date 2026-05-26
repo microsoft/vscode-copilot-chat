@@ -12,6 +12,8 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { AgentConfig, AgentHandoff, buildAgentMarkdown, DEFAULT_READ_TOOLS } from './agentTypes';
 
+const MERMAID_RENDER_TOOL = 'vscode.mermaid-chat-features/renderMermaidDiagram';
+
 /**
  * Base Plan agent configuration - embedded from Plan.agent.md
  * This avoids runtime file loading and YAML parsing dependencies.
@@ -61,6 +63,7 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		// these capture the model at render time.
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(ConfigKey.PlanAgentAdditionalTools.fullyQualifiedId) ||
+				e.affectsConfiguration(ConfigKey.PlanAgentMermaidEnabled.fullyQualifiedId) ||
 				e.affectsConfiguration(ConfigKey.Deprecated.PlanAgentModel.fullyQualifiedId) ||
 				e.affectsConfiguration('chat.planAgent.defaultModel') ||
 				e.affectsConfiguration(ConfigKey.ImplementAgentModel.fullyQualifiedId)) {
@@ -103,12 +106,26 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		return fileUri;
 	}
 
-	static buildAgentBody(): string {
+	static buildAgentBody(planAgentMermaidEnabled = false): string {
 		const discoverySection = `## 1. Discovery
 
 Run the *Explore* subagent to gather context, analogous existing features to use as implementation templates, and potential blockers or ambiguities. When the task spans multiple independent areas (e.g., frontend + backend, different features, separate repos), launch **2-3 *Explore* subagents in parallel** — one per area — to speed up discovery.
 
 Update the plan with your findings.`;
+		const baseRules = [
+			'- STOP if you consider running file editing tools — plans are for others to execute. The only write tool you have is #tool:vscode/memory for persisting plans.',
+			'- Use #tool:vscode/askQuestions freely to clarify requirements — don\'t make large assumptions',
+			'- Present a well-researched plan with loose ends tied BEFORE implementation'
+		];
+		const mermaidRules = [
+			`- When a Mermaid diagram would materially improve the plan, you may include a concise fenced \`mermaid\` block and you MUST use ${MERMAID_RENDER_TOOL} to render it in the same response.`,
+			'- Never inline Mermaid syntax as plain text. Mermaid content must stay inside fenced \`mermaid\` blocks only.'
+		];
+		const rulesSection = [...baseRules, ...(planAgentMermaidEnabled ? mermaidRules : [])].join('\n');
+		const planStyleGuideRules = planAgentMermaidEnabled
+			? `- NO code blocks except relevant Mermaid diagrams when they materially clarify architecture, sequencing, dependencies, or ownership in the plan.
+- If you use Mermaid, keep the diagram concise, preserve the Mermaid source in the plan markdown so it survives persistence and handoff, and always call ${MERMAID_RENDER_TOOL} rather than leaving the syntax unrendered.`
+			: '- NO code blocks — describe changes, link to files and specific symbols/functions';
 
 		return `You are a PLANNING AGENT, pairing with the user to create a detailed, actionable plan.
 
@@ -119,9 +136,7 @@ Your SOLE responsibility is planning. NEVER start implementation.
 **Current plan**: \`/memories/session/plan.md\` - update using #tool:vscode/memory .
 
 <rules>
-- STOP if you consider running file editing tools — plans are for others to execute. The only write tool you have is #tool:vscode/memory for persisting plans.
-- Use #tool:vscode/askQuestions freely to clarify requirements — don't make large assumptions
-- Present a well-researched plan with loose ends tied BEFORE implementation
+${rulesSection}
 </rules>
 
 <workflow>
@@ -189,7 +204,7 @@ Keep iterating until explicit approval or handoff.
 \`\`\`
 
 Rules:
-- NO code blocks — describe changes, link to files and specific symbols/functions
+${planStyleGuideRules}
 - NO blocking questions at the end — ask during workflow via #tool:vscode/askQuestions
 - The plan MUST be presented to the user, don't just mention the plan file.
 </plan_style_guide>`;
@@ -197,6 +212,7 @@ Rules:
 
 	private buildCustomizedConfig(): AgentConfig {
 		const additionalTools = this.configurationService.getConfig(ConfigKey.PlanAgentAdditionalTools);
+		const planAgentMermaidEnabled = this.configurationService.getConfig(ConfigKey.PlanAgentMermaidEnabled);
 		const coreDefaultModel = this.configurationService.getNonExtensionConfig<string>('chat.planAgent.defaultModel');
 		const modelOverride = coreDefaultModel || this.configurationService.getConfig(ConfigKey.Deprecated.PlanAgentModel);
 
@@ -221,6 +237,9 @@ Rules:
 
 		// Collect tools to add
 		const toolsToAdd: string[] = [...additionalTools];
+		if (planAgentMermaidEnabled) {
+			toolsToAdd.push(MERMAID_RENDER_TOOL);
+		}
 
 		// Always include askQuestions tool (now provided by core)
 		toolsToAdd.push('vscode/askQuestions');
@@ -235,7 +254,7 @@ Rules:
 			...BASE_PLAN_AGENT_CONFIG,
 			tools,
 			handoffs: [startImplementationHandoff, openInEditorHandoff, ...(BASE_PLAN_AGENT_CONFIG.handoffs ?? [])],
-			body: PlanAgentProvider.buildAgentBody(),
+			body: PlanAgentProvider.buildAgentBody(planAgentMermaidEnabled),
 			...(modelOverride ? { model: modelOverride } : {}),
 		};
 	}

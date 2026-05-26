@@ -3947,6 +3947,15 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.planAgent.mermaid.enabled": {
+						"type": "boolean",
+						"default": false,
+						"scope": "resource",
+						"markdownDescription": "%github.copilot.config.planAgent.mermaid.enabled%",
+						"tags": [
+							"experimental"
+						]
+					},
 					"github.copilot.chat.implementAgent.model": {
 						"type": "string",
 						"default": "",

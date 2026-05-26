@@ -82,10 +82,23 @@ suite('PlanAgentProvider', () => {
 		assert.ok(content.includes('search'));
 		assert.ok(content.includes('read'));
 		assert.ok(content.includes('memory'));
+		assert.ok(!content.includes('vscode.mermaid-chat-features/renderMermaidDiagram'));
 
 		// Should not have model override (not in base content)
 		assert.ok(content.includes('name: Plan'));
 		assert.ok(content.includes('description: Researches and outlines multi-step plans'));
+	});
+
+	test('includes Mermaid render tool when plan Mermaid setting is enabled', async () => {
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentMermaidEnabled, true);
+
+		const provider = createProvider();
+		const agents = await provider.provideCustomAgents({}, {} as any);
+
+		assert.equal(agents.length, 1);
+		const content = await getAgentContent(agents[0]);
+
+		assert.ok(content.includes('vscode.mermaid-chat-features/renderMermaidDiagram'));
 	});
 
 	test('merges additionalTools setting with base tools', async () => {
@@ -199,6 +212,19 @@ suite('PlanAgentProvider', () => {
 		assert.equal(eventFired, true);
 	});
 
+	test('fires onDidChangeCustomAgents when PlanAgentMermaidEnabled setting changes', async () => {
+		const provider = createProvider();
+
+		let eventFired = false;
+		provider.onDidChangeCustomAgents(() => {
+			eventFired = true;
+		});
+
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentMermaidEnabled, true);
+
+		assert.equal(eventFired, true);
+	});
+
 	test('fires onDidChangeCustomAgents when model setting changes', async () => {
 		const provider = createProvider();
 
@@ -265,6 +291,31 @@ suite('PlanAgentProvider', () => {
 		// Should preserve body content
 		assert.ok(content.includes('You are a PLANNING AGENT, pairing with the user'));
 		assert.ok(content.includes('Your SOLE responsibility is planning. NEVER start implementation.'));
+	});
+
+	test('keeps non-Mermaid code blocks disallowed by default', async () => {
+		const provider = createProvider();
+		const agents = await provider.provideCustomAgents({}, {} as any);
+
+		const content = await getAgentContent(agents[0]);
+
+		assert.ok(content.includes('```markdown'));
+		assert.ok(content.includes('NO code blocks — describe changes, link to files and specific symbols/functions'));
+		assert.ok(!content.includes('NO code blocks except relevant Mermaid diagrams'));
+	});
+
+	test('documents Mermaid exception when plan Mermaid setting is enabled', async () => {
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentMermaidEnabled, true);
+
+		const provider = createProvider();
+		const agents = await provider.provideCustomAgents({}, {} as any);
+
+		const content = await getAgentContent(agents[0]);
+
+		assert.ok(content.includes('When a Mermaid diagram would materially improve the plan, you may include a concise fenced `mermaid` block and you MUST use vscode.mermaid-chat-features/renderMermaidDiagram to render it in the same response.'));
+		assert.ok(content.includes('Never inline Mermaid syntax as plain text. Mermaid content must stay inside fenced `mermaid` blocks only.'));
+		assert.ok(content.includes('NO code blocks except relevant Mermaid diagrams when they materially clarify architecture, sequencing, dependencies, or ownership in the plan.'));
+		assert.ok(content.includes('always call vscode.mermaid-chat-features/renderMermaidDiagram rather than leaving the syntax unrendered'));
 	});
 
 	test('handles empty additionalTools array gracefully', async () => {
