@@ -548,4 +548,50 @@ suite('CodeBlockProcessor', () => {
 
 	});
 
+	test('escapes $$ patterns inside code blocks to prevent math interpretation', () => {
+		const reportedCodeblocks: CodeBlock[] = [];
+		const reportedMarkdown: ReportedMarkdown[] = [];
+
+		const tracker = newCodeBlockProcessor(reportedCodeblocks, reportedMarkdown);
+		tracker.processMarkdown([
+			'```sql\n',
+			'CREATE FUNCTION test()\n',
+			'LANGUAGE plpgsql\n',
+			'as $$\n',
+			'BEGIN\n',
+			'  RETURN 1;\n',
+			'END;\n',
+			'$$;\n',
+			'```'
+		].join(''));
+		tracker.flush();
+
+		// Verify the code block was captured correctly
+		assert.deepEqual(reportedCodeblocks[0], {
+			code: [
+				'CREATE FUNCTION test()\n',
+				'LANGUAGE plpgsql\n',
+				'as $$\n',
+				'BEGIN\n',
+				'  RETURN 1;\n',
+				'END;\n',
+				'$$;\n',
+			].join(''),
+			markdownBeforeBlock: '',
+			language: 'sql',
+			resource: undefined
+		});
+
+		// The codeBlockInfo should be set for lines inside the code block,
+		// which allows the CodeBlockTrackingChatResponseStream to escape $$ patterns
+		const codeBlockLines = reportedMarkdown.filter(m => m.codeBlock !== undefined);
+		assert.ok(codeBlockLines.length > 0, 'Should have code block lines');
+
+		// Lines with $$ should have codeBlock info set
+		const dollarLines = reportedMarkdown.filter(m => m.markdown.includes('$$'));
+		dollarLines.forEach(line => {
+			assert.ok(line.codeBlock !== undefined, `Line "${line.markdown}" should have codeBlock info set`);
+		});
+	});
+
 });
