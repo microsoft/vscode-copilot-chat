@@ -72,12 +72,19 @@ export function toInlineSuggestion(cursorPos: Position, doc: TextDocument, range
 		return undefined;
 	}
 
+	// Strip the common prefix up to the cursor so the inline suggestion range
+	// starts at the cursor position — VS Code requires the ghost text to touch the cursor.
+	if (cursorOffsetInReplacedText > 0) {
+		range = new Range(cursorPos, range.end);
+		newText = newText.substring(cursorOffsetInReplacedText);
+	}
+
 	return { range, newText };
 }
+
 /**
  * a is subword of b if a can be obtained by removing characters from b
-*/
-
+ */
 export function isSubword(a: string, b: string): boolean {
 	for (let aIdx = 0, bIdx = 0; aIdx < a.length; bIdx++) {
 		if (bIdx >= b.length) {
