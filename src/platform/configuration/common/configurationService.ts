@@ -703,6 +703,8 @@ export namespace ConfigKey {
 		export const OTelCaptureContent = defineSetting<boolean>('chat.otel.captureContent', ConfigType.Simple, false);
 		export const OTelOutfile = defineSetting<string>('chat.otel.outfile', ConfigType.Simple, '');
 		export const OTelDbSpanExporter = defineSetting<boolean>('chat.otel.dbSpanExporter.enabled', ConfigType.Simple, false);
+
+		export const AutopilotCodeReviewEnabled = defineSetting<boolean>('chat.autopilot.codeReview.enabled', ConfigType.Simple, false);
 	}
 
 	/**

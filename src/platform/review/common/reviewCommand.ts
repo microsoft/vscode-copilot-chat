@@ -12,6 +12,8 @@ import { ReviewComment, ReviewSuggestion } from './reviewService';
 export interface CodeReviewFileInput {
 	readonly currentUri: vscode.Uri;
 	readonly baseUri?: vscode.Uri;
+	/** Optional pre-resolved base content. When provided, takes precedence over reading from {@link baseUri}. */
+	readonly baseContent?: string;
 }
 
 /**

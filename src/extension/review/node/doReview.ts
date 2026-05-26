@@ -386,6 +386,7 @@ async function review(
 export async function reviewFileChanges(
 	accessor: ServicesAccessor,
 	input: CodeReviewInput,
+	externalToken?: CancellationToken,
 ): Promise<CodeReviewResult> {
 	const logService = accessor.get(ILogService);
 	const authService = accessor.get(IAuthenticationService);
@@ -402,11 +403,11 @@ export async function reviewFileChanges(
 		return { type: 'error', reason: 'Code review is not enabled for this account.' };
 	}
 
-	const tokenSource = new CancellationTokenSource();
+	const tokenSource = new CancellationTokenSource(externalToken);
 	try {
 		const fileInputs = await Promise.all(input.files.map(async file => {
-			let baseContent = '';
-			if (file.baseUri) {
+			let baseContent = file.baseContent ?? '';
+			if (!baseContent && file.baseUri) {
 				const bytes = await fileSystemService.readFile(file.baseUri);
 				baseContent = new TextDecoder().decode(bytes);
 			}
